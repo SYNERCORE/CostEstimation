@@ -1,6 +1,12 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="theme-color" content="#F0A429">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="SHIC CE">
+<link rel="apple-touch-icon" href="icon.svg">
 <title>SHIC Cost Estimator</title>
+<link rel="manifest" href="manifest.json">
 <style>*{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Outfit',sans-serif;background:#0D1117;color:#E6EDF3;font-size:13px;min-height:100vh}
 input,select,textarea,button{font-family:inherit}
@@ -779,16 +785,45 @@ async function checkForUpdate() {
 }
 const SITE_URL = getSiteURL();
 const USE_SP = !!getSiteURL();
+
+/* &#9472;&#9472; SharePoint Config &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472; */
 const SP_CFG_KEY = 'shic_sp_config';
 function getSPConfig(){try{const v=localStorage.getItem(SP_CFG_KEY);return v?JSON.parse(v):{};}catch{return{};}}
 function saveSPConfig(cfg){try{localStorage.setItem(SP_CFG_KEY,JSON.stringify(cfg));}catch{}}
 function getSiteURL(){const cfg=getSPConfig();if(cfg.siteUrl)return cfg.siteUrl.replace(/\/$/,'');const m=window.location.href.match(/(https:\/\/[^\/]+\/sites\/[^\/]+)/);return m?m[1]:null;}
-/* List name prefix &#8212; change to avoid conflicts with other SP apps */
-function spList(name){const cfg=getSPConfig();const pfx=(cfg.listPrefix||'SHICCE').replace(/[^a-zA-Z0-9_]/g,'');return pfx+'_'+name;}
-
+function spList(n){const cfg=getSPConfig();const p=(cfg.listPrefix||'SHICCE').replace(/[^a-zA-Z0-9_]/g,'');return p+'_'+n;}
 let _spMsalApp=null,_spToken=null,_spExpiry=0;
 async function getSPToken(){const cfg=getSPConfig();if(!cfg.clientId)return null;const su=getSiteURL();if(!su)return null;const scope=su.split('/').slice(0,3).join('/')+'/.default';if(_spToken&&Date.now()<_spExpiry-60000)return _spToken;try{if(!_spMsalApp)_spMsalApp=new msal.PublicClientApplication({auth:{clientId:cfg.clientId,authority:'https://login.microsoftonline.com/'+(cfg.tenantId||'common'),redirectUri:window.location.origin+window.location.pathname},cache:{cacheLocation:'localStorage',storeAuthStateInCookie:false}});const accts=_spMsalApp.getAllAccounts();let res;try{res=await _spMsalApp.acquireTokenSilent({scopes:[scope],account:accts[0]});}catch{res=await _spMsalApp.acquireTokenPopup({scopes:[scope]});}  _spToken=res.accessToken;_spExpiry=res.expiresOn?res.expiresOn.getTime():Date.now()+3600000;return _spToken;}catch(e){console.warn('SP token:',e.message);return null;}}
 let FB=null;function fbPath(s){return s;}function getFbNS(){return'shic';}
+
+/* &#9472;&#9472; Offline queue &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472; */
+let _isOnline=navigator.onLine,_spQueue=[],_qRunning=false;
+async function _flushQ(){if(_qRunning||!_isOnline||!_spQueue.length)return;_qRunning=true;while(_spQueue.length&&_isOnline){const{fn,res,rej}=_spQueue.shift();try{res(await fn());}catch(e){rej(e);}}_qRunning=false;}
+window.addEventListener('online',()=>{_isOnline=true;_flushQ();window.dispatchEvent(new Event('shic-online'));});
+window.addEventListener('offline',()=>{_isOnline=false;window.dispatchEvent(new Event('shic-offline'));});
+
+/* &#9472;&#9472; Auto-lock &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472; */
+let _lockTimer=null;
+function resetLockTimer(fn){clearTimeout(_lockTimer);if(fn)_lockTimer=setTimeout(fn,30*60*1000);}
+['click','keydown','touchstart'].forEach(ev=>window.addEventListener(ev,()=>resetLockTimer(window._shicLock),{passive:true}));
+
+/* &#9472;&#9472; Storage obfuscation &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472; */
+const _lsK=()=>{try{let k=localStorage.getItem('shic:_sk');if(!k){k=Math.random().toString(36).slice(2)+Date.now().toString(36);localStorage.setItem('shic:_sk',k);}return k;}catch{return'shic2026';}};
+const _e=(s)=>{try{const k=_lsK();return btoa(Array.from(s,(c,i)=>String.fromCharCode(c.charCodeAt(0)^k.charCodeAt(i%k.length))).join(''));}catch{return s;}};
+const _d=(s)=>{try{const k=_lsK(),b=atob(s);return Array.from(b,(c,i)=>String.fromCharCode(c.charCodeAt(0)^k.charCodeAt(i%k.length))).join('');}catch{return s;}};
+
+/* &#9472;&#9472; localStorage helper &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472; */
+const LS = {
+  get: k => {
+    try {
+      const v = localStorage.getItem('shic:' + k);
+      if (!v) return null;
+      try { return JSON.parse(_d(v)); } catch { try { return JSON.parse(v); } catch { return null; } }
+    } catch { return null; }
+  },
+  set: (k, v) => { try { localStorage.setItem('shic:' + k, _e(JSON.stringify(v))); } catch {} }
+};
+
 async function spDigest(){const su=getSiteURL();const tok=await getSPToken();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json',...(tok?{'Authorization':'Bearer '+tok}:{})};const r=await fetch(`${su}/_api/contextinfo`,{method:'POST',credentials:tok?'omit':'include',headers:h});const d=await r.json();return{digest:d.FormDigestValue,token:tok};}
 const spH = (d, x = {}) => ({
   Accept: 'application/json;odata=nometadata',
@@ -800,8 +835,8 @@ const spH = (d, x = {}) => ({
 });
 async function spGet(l,f='',sel=''){const su=getSiteURL();if(!su)return[];const tok=await getSPToken();const h={'Accept':'application/json;odata=nometadata',...(tok?{'Authorization':'Bearer '+tok}:{})};const qs=[];if(f)qs.push('$filter='+encodeURIComponent(f));if(sel)qs.push('$select='+sel);qs.push('$top=2000');const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items${qs.length?'?'+qs.join('&'):''}`,{credentials:tok?'omit':'include',headers:h});if(!r.ok)throw new Error('SP get '+l+':'+r.status);return(await r.json()).value;}
 async function spPost(l,data){const su=getSiteURL();if(!su)throw new Error('SP not configured');const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items`,{method:'POST',credentials:token?'omit':'include',headers:h,body:JSON.stringify(data)});if(!r.ok){const t=await r.text();throw new Error('SP post '+l+':'+r.status+' '+t.slice(0,100));}return r.json();}
-async function spPatch(l,id,data){const su=getSiteURL();if(!su)throw new Error('SP not configured');const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*','X-HTTP-Method':'MERGE',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'PATCH',credentials:token?'omit':'include',headers:h,body:JSON.stringify(data)});if(!r.ok)throw new Error('SP patch '+l+':'+r.status);}
-async function spDelete(l,id){const su=getSiteURL();if(!su)throw new Error('SP not configured');const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'DELETE',credentials:token?'omit':'include',headers:h});if(!r.ok)throw new Error('SP delete '+l+':'+r.status);}
+async function spPatch(l,id,data){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*','X-HTTP-Method':'MERGE',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'PATCH',credentials:token?'omit':'include',headers:h,body:JSON.stringify(data)});if(!r.ok)throw new Error('SP patch '+l+':'+r.status);}
+async function spDelete(l,id){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'DELETE',credentials:token?'omit':'include',headers:h});if(!r.ok)throw new Error('SP delete '+l+':'+r.status);}
 
 async function dbGetUsers(){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Users'),'','Id,Title,shicName,shicHash,shicRole,shicStatus,shicEmail,Created');return r.filter(u=>u&&u.Title).map(u=>({id:u.Id,username:u.Title,name:u.shicName||'',hash:u.shicHash||'',role:u.shicRole||'user',status:u.shicStatus||'pending',email:u.shicEmail||'',createdAt:u.Created}));}catch(e){console.warn('dbGetUsers:',e.message);}}return(LS.get('users')||[]).filter(u=>u&&u.username);}
 async function dbCreateUser(u){if(USE_SP||getSiteURL()){try{const r=await spPost(spList('Users'),{Title:u.username,shicName:u.name,shicHash:u.hash,shicRole:u.role,shicStatus:u.status,shicEmail:u.email||''});return{...u,id:r.Id};}catch(e){console.warn('dbCreateUser:',e.message);}}const all=LS.get('users')||[];const nu={...u,id:Date.now()};LS.set('users',[...all,nu]);return nu;}
@@ -1139,7 +1174,7 @@ function LoginPage({
       color: MT,
       fontSize: 10
     }
-  }, USE_SP ? 'SharePoint: ' + SITE_URL : 'Offline mode - configure SharePoint in Admin tab to sync')));
+  }, USE_SP ? 'SharePoint: ' + SITE_URL : 'Offline mode - data in this browser only')));
 }
 function RegisterPage({
   onBack
@@ -1409,54 +1444,25 @@ function FbSetupPanel(){
   const handleConnect=async()=>{
     if(!cfg.siteUrl){setStatus('error: Site URL required');return;}
     setBusy(true);setStatus('connecting...');
-    try{
-      saveSPConfig(cfg);_spToken=null;_spExpiry=0;_spMsalApp=null;
-      const tok=cfg.clientId?await getSPToken():null;
-      const h={'Accept':'application/json;odata=nometadata',...(tok?{'Authorization':'Bearer '+tok}:{})};
-      const r=await fetch(cfg.siteUrl.replace(/\/$/,'')+'/_api/web/currentuser',{credentials:tok?'omit':'include',headers:h});
-      if(!r.ok)throw new Error('HTTP '+r.status+' - check URL & permissions');
-      const u=await r.json();setStatus('connected');addLog('Connected as '+(u.Title||u.LoginName||'user'));
-    }catch(e){setStatus('error: '+e.message.slice(0,80));addLog('Failed: '+e.message.slice(0,80));}
+    try{saveSPConfig(cfg);_spToken=null;_spExpiry=0;_spMsalApp=null;const tok=cfg.clientId?await getSPToken():null;const h={'Accept':'application/json;odata=nometadata',...(tok?{'Authorization':'Bearer '+tok}:{})};const r=await fetch(cfg.siteUrl.replace(/\/$/,'')+'/_api/web/currentuser',{credentials:tok?'omit':'include',headers:h});if(!r.ok)throw new Error('HTTP '+r.status);const u=await r.json();setStatus('connected');addLog('Connected as '+(u.Title||u.LoginName||'user'));}
+    catch(e){setStatus('error: '+e.message.slice(0,80));addLog('Failed: '+e.message.slice(0,80));}
     setBusy(false);
   };
-  const stColor=status==='connected'?OK:status.startsWith('error')?ERR:MT;
-  const stBg=status==='connected'?OK+'22':status.startsWith('error')?ERR+'22':'#30363D33';
+  const pfx=cfg.listPrefix||'SHICCE';const stC=status==='connected'?OK:status.startsWith('error')?ERR:MT;
   return React.createElement('div',null,
-    React.createElement('div',{style:{fontWeight:700,marginBottom:12,fontSize:13,display:'flex',alignItems:'center',gap:8}},
-      React.createElement('span',null,'SP'),' SharePoint Sync',
-      React.createElement('span',{style:{fontSize:10,padding:'2px 8px',borderRadius:10,background:stBg,color:stColor,fontWeight:700,marginLeft:4}},status)
-    ),
-    React.createElement('div',{style:{color:MT,fontSize:11,marginBottom:12,lineHeight:1.6}},'Connect to your SharePoint site. CEs are stored across separate lists - no blob limits, supports 20+ concurrent users.'),
+    React.createElement('div',{style:{fontWeight:700,marginBottom:12,fontSize:13,display:'flex',alignItems:'center',gap:8}},'SP SharePoint Sync',React.createElement('span',{style:{fontSize:10,padding:'2px 8px',borderRadius:10,background:stC+'22',color:stC,fontWeight:700,marginLeft:4}},status)),
+    React.createElement('div',{style:{color:MT,fontSize:11,marginBottom:12,lineHeight:1.6}},'Connect to SharePoint. CEs stored across separate lists - no blob limits, 20+ concurrent users.'),
     React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}},
-      React.createElement('div',{style:{gridColumn:'1/-1'}},
-        React.createElement('label',{style:LBL},'SharePoint Site URL ',React.createElement('span',{style:{color:ERR}},'*')),
-        React.createElement('input',{style:INP,value:cfg.siteUrl||'',onChange:e=>setCfg(p=>({...p,siteUrl:e.target.value.trim()})),placeholder:'https://yourcompany.sharepoint.com/sites/SiteName'})
-      ),
-      React.createElement('div',null,
-        React.createElement('label',{style:LBL},'Client ID ',React.createElement('span',{style:{color:MT,fontWeight:400}},'(for local file)')),
-        React.createElement('input',{style:INP,value:cfg.clientId||'',onChange:e=>setCfg(p=>({...p,clientId:e.target.value.trim()})),placeholder:'Azure App Client ID'})
-      ),
-      React.createElement('div',null,
-        React.createElement('label',{style:LBL},'Tenant ID'),
-        React.createElement('input',{style:INP,value:cfg.tenantId||'',onChange:e=>setCfg(p=>({...p,tenantId:e.target.value.trim()})),placeholder:'common  or  tenant-id'})
-      ),
-      React.createElement('div',null,
-        React.createElement('label',{style:LBL},'List Prefix ',React.createElement('span',{style:{color:MT,fontWeight:400}},'(avoids conflicts with other apps)')),
-        React.createElement('input',{style:{...INP,fontFamily:"'JetBrains Mono',monospace"},value:cfg.listPrefix||'SHICCE',onChange:e=>setCfg(p=>({...p,listPrefix:e.target.value.replace(/[^a-zA-Z0-9_]/g,'')})),placeholder:'SHICCE'})
-      )
+      React.createElement('div',{style:{gridColumn:'1/-1'}},React.createElement('label',{style:LBL},'Site URL ',React.createElement('span',{style:{color:ERR}},'*')),React.createElement('input',{style:INP,value:cfg.siteUrl||'',onChange:e=>setCfg(p=>({...p,siteUrl:e.target.value.trim()})),placeholder:'https://yourcompany.sharepoint.com/sites/SiteName'})),
+      React.createElement('div',null,React.createElement('label',{style:LBL},'Client ID'),React.createElement('input',{style:INP,value:cfg.clientId||'',onChange:e=>setCfg(p=>({...p,clientId:e.target.value.trim()})),placeholder:'Azure App Client ID'})),
+      React.createElement('div',null,React.createElement('label',{style:LBL},'Tenant ID'),React.createElement('input',{style:INP,value:cfg.tenantId||'',onChange:e=>setCfg(p=>({...p,tenantId:e.target.value.trim()})),placeholder:'common'})),
+      React.createElement('div',null,React.createElement('label',{style:LBL},'List Prefix'),React.createElement('input',{style:{...INP,fontFamily:"'JetBrains Mono',monospace"},value:cfg.listPrefix||'SHICCE',onChange:e=>setCfg(p=>({...p,listPrefix:e.target.value.replace(/[^a-zA-Z0-9_]/g,'')})),placeholder:'SHICCE'}))
     ),
-    React.createElement('div',{style:{fontSize:10,color:MT,marginBottom:10,padding:'8px 10px',background:SURF,borderRadius:6,lineHeight:1.7}},
-      React.createElement('b',{style:{color:TX}},'Lists that will be created (using your prefix):'),React.createElement('br',null),
-      React.createElement('span',{style:{color:INFO,fontFamily:"'JetBrains Mono',monospace"}},(cfg.listPrefix||'SHICCE')+'_Users | '+(cfg.listPrefix||'SHICCE')+'_CEs | '+(cfg.listPrefix||'SHICCE')+'_CE_MP | '+(cfg.listPrefix||'SHICCE')+'_CE_Resources | ...')
-    ),
+    React.createElement('div',{style:{fontSize:10,color:MT,marginBottom:10,padding:'8px 10px',background:SURF,borderRadius:6,lineHeight:1.7}},React.createElement('b',{style:{color:TX}},'Lists: '),pfx+'_Users | '+pfx+'_CEs | '+pfx+'_CE_MP | '+pfx+'_CE_Resources | '+pfx+'_Masterlist | '+pfx+'_Drafts'),
     React.createElement('div',{style:{display:'flex',gap:8}},
-      status!=='connected'
-        ?React.createElement('button',{style:btn('acc'),disabled:busy||!cfg.siteUrl,onClick:handleConnect},busy?'Connecting...':'Connect & Test')
-        :React.createElement('button',{style:btn('danger'),onClick:()=>{_spToken=null;setStatus('idle');}}, 'Disconnect')
+      status!=='connected'?React.createElement('button',{style:btn('acc'),disabled:busy||!cfg.siteUrl,onClick:handleConnect},busy?'Connecting...':'Connect & Test'):React.createElement('button',{style:btn('danger'),onClick:()=>{_spToken=null;setStatus('idle');}},'Disconnect')
     ),
-    log.length>0&&React.createElement('div',{style:{marginTop:10,maxHeight:80,overflowY:'auto'}},
-      log.map((l,i)=>React.createElement('div',{key:i,style:{fontSize:10,color:MT,fontFamily:"'JetBrains Mono',monospace"}},'['+l.t+'] '+l.msg))
-    )
+    log.length>0&&React.createElement('div',{style:{marginTop:10,maxHeight:80,overflowY:'auto'}},log.map((l,i)=>React.createElement('div',{key:i,style:{fontSize:10,color:MT,fontFamily:"'JetBrains Mono',monospace"}},'['+l.t+'] '+l.msg)))
   );
 }
 
@@ -2443,11 +2449,13 @@ function App({
     label: 'Users'
   }] : [])];
   useEffect(() => {
-    /* Check for updates in background */
-    setTimeout(async () => {
-      const info = await checkForUpdate();
-      if (info.available) setUpdateInfo(info);
-    }, 3000);
+    setTimeout(async()=>{const info=await checkForUpdate();if(info.available)setUpdateInfo(info);},3000);
+    const onKey=e=>{if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();try{handleSave();}catch(ex){}}if((e.ctrlKey||e.metaKey)&&e.key==='n'){e.preventDefault();try{handleNew();}catch(ex){}}};
+    window.addEventListener('keydown',onKey);
+    const onUnload=e=>{e.preventDefault();e.returnValue='';};
+    window.addEventListener('beforeunload',onUnload);
+    const autoTimer=setInterval(()=>{try{saveDraft&&saveDraft();}catch(ex){}},180000);
+    return()=>{window.removeEventListener('keydown',onKey);window.removeEventListener('beforeunload',onUnload);clearInterval(autoTimer);};
     (async () => {
       try {
         const ml = await dbGetML();
@@ -6468,7 +6476,7 @@ function App({
       textTransform: 'uppercase',
       letterSpacing: '0.07em'
     }
-  }, currentUser.role)), /*#__PURE__*/React.createElement("button", {
+  }, currentUser.role)), /*#__PURE__*/React.createElement(OnlinePill,null), /*#__PURE__*/React.createElement("button", {
     onClick: onLogout,
     style: btn('danger', true)
   }, "Sign Out"))), /*#__PURE__*/React.createElement("div", {
@@ -9267,6 +9275,7 @@ class AppBoundary extends React.Component {
     return this.props.children;
   }
 }
+function OnlinePill(){const[on,setOn]=React.useState(navigator.onLine);const[q,setQ]=React.useState(0);React.useEffect(()=>{const a=()=>setOn(true),b=()=>setOn(false);window.addEventListener('shic-online',a);window.addEventListener('shic-offline',b);const t=setInterval(()=>setQ(_spQueue?_spQueue.length:0),2000);return()=>{window.removeEventListener('shic-online',a);window.removeEventListener('shic-offline',b);clearInterval(t);};},[]);const c=on?OK:'#F59E0B';return React.createElement('span',{title:on?(q?q+' writes pending':'Connected'):'Offline',style:{display:'flex',alignItems:'center',gap:4,fontSize:10,padding:'2px 8px',borderRadius:10,background:c+'22',color:c,border:'1px solid '+c+'44',cursor:'default',userSelect:'none',flexShrink:0}},React.createElement('span',{style:{width:6,height:6,borderRadius:'50%',background:c,display:'inline-block'}}),on?(q?q+' pending':'Online'):'Offline');}
 function AuthGate() {
   const [page, setPage] = useState('loading');
   const [currentUser, setCurrentUser] = useState(null);
@@ -9329,6 +9338,10 @@ ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.c
 </script>
 <script>
 
+
+
+
+
 window.SHIC_ML=(function(){
   function tokenize(txt){return(txt||'').toLowerCase().replace(/[^a-z0-9\s]/g,' ').split(/\s+/).filter(Boolean);}
   function cosineSim(a,b){var ta=tokenize(a),tb=tokenize(b);if(!ta.length||!tb.length)return 0;var all=[].concat(ta,tb).filter(function(v,i,s){return s.indexOf(v)===i;});var va=all.map(function(w){return ta.filter(function(x){return x===w;}).length;});var vb=all.map(function(w){return tb.filter(function(x){return x===w;}).length;});var dot=va.reduce(function(s,v,i){return s+v*vb[i];},0);var magA=Math.sqrt(va.reduce(function(s,v){return s+v*v;},0));var magB=Math.sqrt(vb.reduce(function(s,v){return s+v*v;},0));return(magA&&magB)?dot/(magA*magB):0;}
@@ -9339,8 +9352,16 @@ window.SHIC_ML=(function(){
   return{suggestRates:suggestRates,predictCost:predictCost,matchScope:matchScope,detectAnomalies:detectAnomalies,cosineSim:cosineSim};
 })();
 
+
+
+
+
 </script>
 <script>
+
+
+
+
 
 window.SHIC_OD=(function(){
   var msalApp=null;var OD_CFG_KEY='shic_od_config';
@@ -9360,38 +9381,20 @@ window.SHIC_OD=(function(){
   return{initMSAL:initMSAL,scanFolder:scanFolder,getODConfig:getODConfig,saveODConfig:saveODConfig};
 })();
 
+
+
+
+
 </script>
-<div id="shic-ml-panel" style="display:none;position:fixed;top:56px;right:0;width:400px;height:calc(100vh - 56px);background:#161B22;border-left:1px solid #30363D;z-index:200;overflow-y:auto;box-shadow:-4px 0 20px #0008;font-family:'Outfit',sans-serif;color:#E6EDF3;font-size:12px">
-  <div style="padding:12px 14px;border-bottom:1px solid #30363D;display:flex;align-items:center;gap:8px;position:sticky;top:0;background:#161B22;z-index:1">
-    <span style="font-weight:800;font-size:14px;color:#F0A429">&#129504; ML Insights</span>
-    <span style="font-size:10px;color:#7D8590;background:#1C2128;border-radius:10px;padding:1px 8px">Beta</span>
-    <button onclick="document.getElementById('shic-ml-panel').style.display='none'" style="margin-left:auto;background:none;border:none;color:#7D8590;cursor:pointer;font-size:18px">&times;</button>
-  </div>
-  <div style="padding:12px 14px;border-bottom:1px solid #30363D33">
-    <div style="font-weight:700;font-size:10px;color:#7D8590;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">&#128176; Rate Suggester</div>
-    <div style="display:flex;gap:6px;margin-bottom:6px"><input id="ml-role-input" placeholder="Type a role name..." style="flex:1;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:6px 10px;font-size:11px;font-family:inherit;outline:none" onkeydown="if(event.key==='Enter')shicMLRate()"/><button onclick="shicMLRate()" style="background:#F0A429;color:#000;border:none;border-radius:6px;padding:6px 12px;font-weight:700;cursor:pointer;font-size:11px">Check</button></div>
-    <div id="ml-rate-result" style="color:#7D8590;font-size:11px">Enter a role to see historical rates.</div>
-  </div>
-  <div style="padding:12px 14px;border-bottom:1px solid #30363D33">
-    <div style="font-weight:700;font-size:10px;color:#7D8590;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">&#128202; Cost Predictor</div>
-    <textarea id="ml-scope-input" placeholder="Paste project scope..." style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:6px 10px;font-size:11px;font-family:inherit;outline:none;resize:vertical;height:56px;box-sizing:border-box"></textarea>
-    <button onclick="shicMLPredict()" style="margin-top:6px;background:#3B82F6;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-weight:700;cursor:pointer;font-size:11px;width:100%">Predict Cost</button>
-    <div id="ml-predict-result" style="color:#7D8590;font-size:11px;margin-top:6px">Enter scope to predict total CE cost.</div>
-  </div>
-  <div style="padding:12px 14px;border-bottom:1px solid #30363D33">
-    <div style="font-weight:700;font-size:10px;color:#7D8590;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">&#128269; Scope Matcher</div>
-    <div style="display:flex;gap:6px;margin-bottom:6px"><input id="ml-match-input" placeholder="Describe the work..." style="flex:1;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:6px 10px;font-size:11px;font-family:inherit;outline:none" onkeydown="if(event.key==='Enter')shicMLMatch()"/><button onclick="shicMLMatch()" style="background:#8B5CF6;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-weight:700;cursor:pointer;font-size:11px">Match</button></div>
-    <div id="ml-match-result" style="color:#7D8590;font-size:11px">Find similar past CEs.</div>
-  </div>
-  <div style="padding:12px 14px">
-    <div style="font-weight:700;font-size:10px;color:#7D8590;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">&#9888; Anomaly Detection</div>
-    <button onclick="shicMLAnomalies()" style="background:#EF4444;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-weight:700;cursor:pointer;font-size:11px;width:100%">Scan Current CE</button>
-    <div id="ml-anomaly-result" style="color:#7D8590;font-size:11px;margin-top:6px">Compare CE rates vs Masterlist.</div>
-  </div>
-</div>
+<div id="shic-ml-panel" style="display:none;position:fixed;top:56px;right:0;width:400px;height:calc(100vh - 56px);background:#161B22;border-left:1px solid #30363D;z-index:200;overflow-y:auto;box-shadow:-4px 0 20px #0008;font-family:'Outfit',sans-serif;color:#E6EDF3;font-size:12px"><div style="padding:12px 14px;border-bottom:1px solid #30363D;display:flex;align-items:center;gap:8px;position:sticky;top:0;background:#161B22;z-index:1"><span style="font-weight:800;font-size:14px;color:#F0A429">&#129504; ML Insights</span><span style="font-size:10px;color:#7D8590;background:#1C2128;border-radius:10px;padding:1px 8px">Beta</span><button onclick="document.getElementById('shic-ml-panel').style.display='none'" style="margin-left:auto;background:none;border:none;color:#7D8590;cursor:pointer;font-size:18px">&times;</button></div><div style="padding:12px 14px;border-bottom:1px solid #30363D33"><div style="font-weight:700;font-size:10px;color:#7D8590;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">&#128176; Rate Suggester</div><div style="display:flex;gap:6px;margin-bottom:6px"><input id="ml-role-input" placeholder="Type a role name..." style="flex:1;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:6px 10px;font-size:11px;font-family:inherit;outline:none" onkeydown="if(event.key==='Enter')shicMLRate()"/><button onclick="shicMLRate()" style="background:#F0A429;color:#000;border:none;border-radius:6px;padding:6px 12px;font-weight:700;cursor:pointer;font-size:11px">Check</button></div><div id="ml-rate-result" style="color:#7D8590;font-size:11px">Enter a role to see historical rates.</div></div><div style="padding:12px 14px;border-bottom:1px solid #30363D33"><div style="font-weight:700;font-size:10px;color:#7D8590;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">&#128202; Cost Predictor</div><textarea id="ml-scope-input" placeholder="Paste project scope..." style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:6px 10px;font-size:11px;font-family:inherit;outline:none;resize:vertical;height:56px;box-sizing:border-box"></textarea><button onclick="shicMLPredict()" style="margin-top:6px;background:#3B82F6;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-weight:700;cursor:pointer;font-size:11px;width:100%">Predict Cost</button><div id="ml-predict-result" style="color:#7D8590;font-size:11px;margin-top:6px">Enter scope to predict total CE cost.</div></div><div style="padding:12px 14px;border-bottom:1px solid #30363D33"><div style="font-weight:700;font-size:10px;color:#7D8590;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">&#128269; Scope Matcher</div><div style="display:flex;gap:6px;margin-bottom:6px"><input id="ml-match-input" placeholder="Describe the work..." style="flex:1;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:6px 10px;font-size:11px;font-family:inherit;outline:none" onkeydown="if(event.key==='Enter')shicMLMatch()"/><button onclick="shicMLMatch()" style="background:#8B5CF6;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-weight:700;cursor:pointer;font-size:11px">Match</button></div><div id="ml-match-result" style="color:#7D8590;font-size:11px">Find similar past CEs.</div></div><div style="padding:12px 14px"><div style="font-weight:700;font-size:10px;color:#7D8590;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">&#9888; Anomaly Detection</div><button onclick="shicMLAnomalies()" style="background:#EF4444;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-weight:700;cursor:pointer;font-size:11px;width:100%">Scan Current CE</button><div id="ml-anomaly-result" style="color:#7D8590;font-size:11px;margin-top:6px">Compare CE rates vs Masterlist.</div></div></div>
+<button id="pwa-install-btn" onclick="installApp()" title="Install as Desktop App" style="display:none;position:fixed;bottom:140px;right:24px;background:#10B981;color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:20px;cursor:pointer;box-shadow:0 4px 16px #10B98166;z-index:199;align-items:center;justify-content:center;font-weight:700">+</button>
 <button onclick="openODPanel()" title="OneDrive Analyzer" style="position:fixed;bottom:80px;right:24px;background:#0078D4;color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:18px;cursor:pointer;box-shadow:0 4px 16px #0078D466;z-index:199">&#128190;</button>
 <button onclick="shicMLToggle()" title="ML Insights" style="position:fixed;bottom:24px;right:24px;background:#F0A429;color:#000;border:none;border-radius:50%;width:48px;height:48px;font-size:20px;cursor:pointer;box-shadow:0 4px 16px #F0A42966;z-index:199">&#129504;</button>
 <script>
+
+
+
+
 
 function shicMLToggle(){var p=document.getElementById('shic-ml-panel');p.style.display=p.style.display==='none'||!p.style.display?'block':'none';}
 function ph2(n){return 'P'+Number(n).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -9400,41 +9403,45 @@ function shicMLPredict(){var scope=document.getElementById('ml-scope-input').val
 function shicMLMatch(){var scope=document.getElementById('ml-match-input').value.trim();if(!scope)return;var results=window.SHIC_ML&&window.SHIC_ML.matchScope(scope,5);var el=document.getElementById('ml-match-result');if(!results||!results.length){el.innerHTML='<span style="color:#F59E0B">No matching CEs found yet.</span>';return;}el.innerHTML=results.map(function(m){return'<div style="background:#0D1117;border-radius:6px;padding:8px;margin-top:6px;border-left:3px solid #8B5CF6"><div style="display:flex;justify-content:space-between"><span style="font-weight:700;color:#8B5CF6">'+(m.ceNum||'Unknown')+'</span><span style="font-size:10px;color:#7D8590">'+Math.round(m.sim*100)+'% match</span></div><div style="font-size:11px;margin:3px 0">'+(m.description||m.client||'')+'</div><div style="color:#F0A429;font-size:11px;font-weight:700">'+ph2(m.grand)+'</div>'+(m.mp.length?'<div style="color:#7D8590;font-size:10px">Workers: '+m.mp.slice(0,3).join(', ')+(m.mp.length>3?'...':'')+'</div>':'')+'</div>';}).join('');}
 function shicMLAnomalies(){var mp=window.shicCurrentMp||[];var tools=window.shicCurrentTools||[];var mats=window.shicCurrentMats||[];var anomalies=window.SHIC_ML&&window.SHIC_ML.detectAnomalies(mp,tools,mats,window.shicMasterlist);var el=document.getElementById('ml-anomaly-result');if(!anomalies||!anomalies.length){el.innerHTML='<div style="color:#10B981;font-weight:700">No anomalies detected. Rates look normal.</div>';return;}el.innerHTML=anomalies.map(function(a){return'<div style="background:#EF444411;border:1px solid #EF444433;border-radius:6px;padding:8px;margin-top:6px"><div style="color:#EF4444;font-weight:700;font-size:11px">'+(a.type==='rate_high'?'High Rate':a.type==='rate_low'?'Low Rate':'High Cost')+' ('+a.tab+')</div><div style="font-size:11px;margin:2px 0">'+a.item+'</div><div style="color:#7D8590;font-size:10px">Yours: '+ph2(a.value)+' | Expected: '+ph2(a.expected)+' | Ratio: '+a.ratio+'</div></div>';}).join('');}
 
+
+
+
+
 </script>
-<div id="shic-od-panel" style="display:none;position:fixed;inset:0;background:#000c;z-index:400;align-items:center;justify-content:center">
-  <div style="background:#161B22;border:1px solid #30363D;border-radius:12px;width:540px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 8px 40px #0008;font-family:'Outfit',sans-serif;color:#E6EDF3;font-size:13px">
-    <div style="padding:16px 18px;border-bottom:1px solid #30363D;display:flex;align-items:center;gap:10px">
-      <span style="font-size:20px">&#128190;</span><span style="font-weight:800;font-size:15px">OneDrive Project Analyzer</span>
-      <span style="font-size:10px;background:#1C2128;color:#7D8590;border-radius:10px;padding:2px 8px">ML Training</span>
-      <button onclick="document.getElementById('shic-od-panel').style.display='none'" style="margin-left:auto;background:none;border:none;color:#7D8590;cursor:pointer;font-size:20px">&times;</button>
-    </div>
-    <div style="overflow-y:auto;flex:1;padding:16px 18px">
-      <div style="color:#7D8590;font-size:12px;margin-bottom:14px;line-height:1.6;padding:10px;background:#0D1117;border-radius:6px;border-left:3px solid #F0A429">Connect your OneDrive folder of historical project Excel files to train the ML engine.</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-        <div><label style="display:block;font-size:10px;color:#7D8590;margin-bottom:4px">CLIENT ID</label><input id="od-client-id" style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:7px 10px;font-size:11px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box" placeholder="Azure App Client ID"/></div>
-        <div><label style="display:block;font-size:10px;color:#7D8590;margin-bottom:4px">TENANT ID</label><input id="od-tenant-id" style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:7px 10px;font-size:11px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box" placeholder="common"/></div>
-      </div>
-      <div style="font-size:10px;color:#7D8590;margin-bottom:12px">Redirect URI: <code style="color:#F0A429;background:#0D1117;padding:1px 4px;border-radius:3px" id="od-redirect-hint"></code></div>
-      <label style="display:block;font-size:10px;color:#7D8590;margin-bottom:4px">FOLDER PATH</label>
-      <input id="od-folder" style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:7px 10px;font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box;margin-bottom:12px" placeholder="Projects/Cost Estimates  (or / for root)"/>
-      <div style="display:flex;gap:8px;margin-bottom:14px">
-        <button onclick="odSaveConfig()" style="background:#30363D;color:#E6EDF3;border:none;border-radius:6px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:12px;font-family:inherit">Save</button>
-        <button onclick="odScan()" style="background:#F0A429;color:#000;border:none;border-radius:6px;padding:8px 18px;font-weight:700;cursor:pointer;font-size:12px;font-family:inherit;flex:1">&#128190; Scan &amp; Analyze</button>
-      </div>
-      <div id="od-progress" style="display:none;padding:12px;background:#0D1117;border-radius:8px;border:1px solid #30363D">
-        <div id="od-progress-msg" style="font-size:12px;margin-bottom:8px"></div>
-        <div style="background:#1C2128;border-radius:6px;height:6px"><div id="od-progress-bar" style="background:#F0A429;height:6px;border-radius:6px;width:0%;transition:width .3s"></div></div>
-      </div>
-      <div id="od-results" style="display:none;margin-top:10px"></div>
-    </div>
-  </div>
-</div>
+<div id="shic-od-panel" style="display:none;position:fixed;inset:0;background:#000c;z-index:400;align-items:center;justify-content:center"><div style="background:#161B22;border:1px solid #30363D;border-radius:12px;width:540px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 8px 40px #0008;font-family:'Outfit',sans-serif;color:#E6EDF3;font-size:13px"><div style="padding:16px 18px;border-bottom:1px solid #30363D;display:flex;align-items:center;gap:10px"><span style="font-size:20px">&#128190;</span><span style="font-weight:800;font-size:15px">OneDrive Project Analyzer</span><span style="font-size:10px;background:#1C2128;color:#7D8590;border-radius:10px;padding:2px 8px">ML Training</span><button onclick="document.getElementById('shic-od-panel').style.display='none'" style="margin-left:auto;background:none;border:none;color:#7D8590;cursor:pointer;font-size:20px">&times;</button></div><div style="overflow-y:auto;flex:1;padding:16px 18px"><div style="color:#7D8590;font-size:12px;margin-bottom:14px;line-height:1.6;padding:10px;background:#0D1117;border-radius:6px;border-left:3px solid #F0A429">Connect your OneDrive folder of historical Excel files to train the ML engine.</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px"><div><label style="display:block;font-size:10px;color:#7D8590;margin-bottom:4px">CLIENT ID</label><input id="od-client-id" style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:7px 10px;font-size:11px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box" placeholder="Azure App Client ID"/></div><div><label style="display:block;font-size:10px;color:#7D8590;margin-bottom:4px">TENANT ID</label><input id="od-tenant-id" style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:7px 10px;font-size:11px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box" placeholder="common"/></div></div><div style="font-size:10px;color:#7D8590;margin-bottom:12px">Redirect URI: <code style="color:#F0A429;background:#0D1117;padding:1px 4px;border-radius:3px" id="od-redirect-hint"></code></div><label style="display:block;font-size:10px;color:#7D8590;margin-bottom:4px">FOLDER PATH</label><input id="od-folder" style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:7px 10px;font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box;margin-bottom:12px" placeholder="Projects/Cost Estimates"/><div style="display:flex;gap:8px;margin-bottom:14px"><button onclick="odSaveConfig()" style="background:#30363D;color:#E6EDF3;border:none;border-radius:6px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:12px;font-family:inherit">Save</button><button onclick="odScan()" style="background:#F0A429;color:#000;border:none;border-radius:6px;padding:8px 18px;font-weight:700;cursor:pointer;font-size:12px;font-family:inherit;flex:1">&#128190; Scan &amp; Analyze</button></div><div id="od-progress" style="display:none;padding:12px;background:#0D1117;border-radius:8px;border:1px solid #30363D"><div id="od-progress-msg" style="font-size:12px;margin-bottom:8px"></div><div style="background:#1C2128;border-radius:6px;height:6px"><div id="od-progress-bar" style="background:#F0A429;height:6px;border-radius:6px;width:0%;transition:width .3s"></div></div></div><div id="od-results" style="display:none;margin-top:10px"></div></div></div></div>
 <script>
+
+
+
+
 
 document.addEventListener('DOMContentLoaded',function(){var el=document.getElementById('od-redirect-hint');if(el)el.textContent=window.location.origin+window.location.pathname;var cfg=window.SHIC_OD&&window.SHIC_OD.getODConfig();if(cfg){var ci=document.getElementById('od-client-id');var ti=document.getElementById('od-tenant-id');var fo=document.getElementById('od-folder');if(ci&&cfg.clientId)ci.value=cfg.clientId;if(ti&&cfg.tenantId)ti.value=cfg.tenantId;if(fo&&cfg.folderPath)fo.value=cfg.folderPath;}});
 function openODPanel(){var p=document.getElementById('shic-od-panel');p.style.display='flex';}
 function odSaveConfig(){var cfg={clientId:document.getElementById('od-client-id').value.trim(),tenantId:document.getElementById('od-tenant-id').value.trim(),folderPath:document.getElementById('od-folder').value.trim()||'/'};window.SHIC_OD&&window.SHIC_OD.saveODConfig(cfg);document.getElementById('od-results').style.display='block';document.getElementById('od-results').innerHTML='<div style="color:#10B981;font-weight:700">Config saved.</div>';}
 async function odScan(){var clientId=document.getElementById('od-client-id').value.trim();var tenantId=document.getElementById('od-tenant-id').value.trim();var folder=document.getElementById('od-folder').value.trim()||'/';if(!clientId){alert('Please enter your Azure App Client ID.');return;}var cfg={clientId:clientId,tenantId:tenantId,folderPath:folder};window.SHIC_OD&&window.SHIC_OD.saveODConfig(cfg);if(window.SHIC_OD)window.SHIC_OD.initMSAL(clientId,tenantId);var prog=document.getElementById('od-progress');var bar=document.getElementById('od-progress-bar');var msg=document.getElementById('od-progress-msg');var res=document.getElementById('od-results');prog.style.display='block';res.style.display='none';try{var result=await window.SHIC_OD.scanFolder(folder,function(p){msg.textContent=p.msg;bar.style.width=Math.round((p.progress||0)*100)+'%';});bar.style.width='100%';var projects=result.projects;var totalFiles=result.files;res.style.display='block';res.innerHTML='<div style="background:#10B98111;border:1px solid #10B98133;border-radius:8px;padding:12px"><div style="color:#10B981;font-weight:700;font-size:13px;margin-bottom:8px">Analysis Complete!</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px"><div style="text-align:center;background:#0D1117;border-radius:6px;padding:8px"><div style="color:#7D8590;font-size:10px">FILES</div><div style="color:#F0A429;font-weight:700;font-size:16px">'+totalFiles+'</div></div><div style="text-align:center;background:#0D1117;border-radius:6px;padding:8px"><div style="color:#7D8590;font-size:10px">PROJECTS</div><div style="color:#F0A429;font-weight:700;font-size:16px">'+projects.length+'</div></div></div><div style="color:#7D8590;font-size:11px">ML engine now has '+projects.length+' additional reference projects. Open the ML panel to use them.</div></div>';}catch(e){msg.textContent='Error: '+e.message;bar.style.width='0%';res.style.display='block';res.innerHTML='<div style="color:#EF4444;font-size:12px;padding:8px;background:#EF444411;border-radius:6px">'+e.message+'</div>';}}
 
+
+
+
+
+</script>
+<script>
+let _deferredInstall=null;
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('./sw.js').then(r=>console.log('SW ok',r.scope)).catch(e=>console.warn('SW:',e));
+}
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault();_deferredInstall=e;
+  const btn=document.getElementById('pwa-install-btn');
+  if(btn){btn.style.display='flex';}
+});
+window.addEventListener('appinstalled',()=>{
+  const btn=document.getElementById('pwa-install-btn');
+  if(btn)btn.style.display='none';
+});
+function installApp(){
+  if(_deferredInstall){_deferredInstall.prompt();_deferredInstall.userChoice.then(()=>{_deferredInstall=null;});}
+  else{alert('To install: open this app in Chrome, then click the menu (3 dots) > Install SHIC Cost Estimator');}
+}
 </script>
 </body></html>

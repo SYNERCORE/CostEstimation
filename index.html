@@ -793,7 +793,45 @@ function saveSPConfig(cfg){try{localStorage.setItem(SP_CFG_KEY,JSON.stringify(cf
 function getSiteURL(){const cfg=getSPConfig();if(cfg.siteUrl)return cfg.siteUrl.replace(/\/$/,'');const m=window.location.href.match(/(https:\/\/[^\/]+\/sites\/[^\/]+)/);return m?m[1]:null;}
 function spList(n){const cfg=getSPConfig();const p=(cfg.listPrefix||'SHICCE').replace(/[^a-zA-Z0-9_]/g,'');return p+'_'+n;}
 let _spMsalApp=null,_spToken=null,_spExpiry=0;
-async function getSPToken(){const cfg=getSPConfig();if(!cfg.clientId)return null;const su=getSiteURL();if(!su)return null;const scope=su.split('/').slice(0,3).join('/')+'/.default';if(_spToken&&Date.now()<_spExpiry-60000)return _spToken;try{if(!_spMsalApp)_spMsalApp=new msal.PublicClientApplication({auth:{clientId:cfg.clientId,authority:'https://login.microsoftonline.com/'+(cfg.tenantId||'common'),redirectUri:window.location.origin+window.location.pathname},cache:{cacheLocation:'localStorage',storeAuthStateInCookie:false}});const accts=_spMsalApp.getAllAccounts();let res;try{res=await _spMsalApp.acquireTokenSilent({scopes:[scope],account:accts[0]});}catch{res=await _spMsalApp.acquireTokenPopup({scopes:[scope]});}  _spToken=res.accessToken;_spExpiry=res.expiresOn?res.expiresOn.getTime():Date.now()+3600000;return _spToken;}catch(e){console.warn('SP token:',e.message);return null;}}
+async function getSPToken(){
+  const cfg=getSPConfig();
+  if(!cfg.clientId)return null;
+  const su=getSiteURL();if(!su)return null;
+  const scope=su.split('/').slice(0,3).join('/')+'/.default';
+  if(_spToken&&Date.now()<_spExpiry-60000)return _spToken;
+  /* Wait up to 5s for MSAL to load */
+  let attempts=0;
+  while(typeof msal==='undefined'&&attempts<50){await new Promise(r=>setTimeout(r,100));attempts++;}
+  if(typeof msal==='undefined'){console.error('MSAL SDK failed to load. Check network connection.');return null;}
+  try{
+    if(!_spMsalApp){
+      _spMsalApp=new msal.PublicClientApplication({
+        auth:{
+          clientId:cfg.clientId,
+          authority:'https://login.microsoftonline.com/'+(cfg.tenantId||'common'),
+          redirectUri:window.location.origin+window.location.pathname.replace(/\/[^\/]*$/,'/')
+        },
+        cache:{cacheLocation:'localStorage',storeAuthStateInCookie:false}
+      });
+      await _spMsalApp.initialize().catch(()=>{});
+    }
+    const accts=_spMsalApp.getAllAccounts();
+    let res;
+    try{res=await _spMsalApp.acquireTokenSilent({scopes:[scope],account:accts[0]||null});}
+    catch(e){
+      if(e.name==='InteractionRequiredAuthError'||e.errorCode==='no_account_error'||!accts.length){
+        res=await _spMsalApp.acquireTokenPopup({scopes:[scope]});
+      }else{throw e;}
+    }
+    _spToken=res.accessToken;
+    _spExpiry=res.expiresOn?res.expiresOn.getTime():Date.now()+3600000;
+    return _spToken;
+  }catch(e){
+    console.warn('SP token error:',e.message||e);
+    _spMsalApp=null;_spToken=null;
+    return null;
+  }
+}
 let FB=null;function fbPath(s){return s;}function getFbNS(){return'shic';}
 
 /* &#9472;&#9472; Offline queue &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472; */
@@ -824,7 +862,7 @@ const LS = {
   set: (k, v) => { try { localStorage.setItem('shic:' + k, _e(JSON.stringify(v))); } catch {} }
 };
 
-async function spDigest(){const su=getSiteURL();const tok=await getSPToken();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json',...(tok?{'Authorization':'Bearer '+tok}:{})};const r=await fetch(`${su}/_api/contextinfo`,{method:'POST',credentials:tok?'omit':'include',headers:h});const d=await r.json();return{digest:d.FormDigestValue,token:tok};}
+async function spDigest(){const su=getSiteURL();const tok=await getSPToken();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json',...(tok?{'Authorization':'Bearer '+tok}:{})};const r=await fetch(`${su}/_api/contextinfo`,{method:'POST',credentials:'omit',headers:h});const d=await r.json();return{digest:d.FormDigestValue,token:tok};}
 const spH = (d, x = {}) => ({
   Accept: 'application/json;odata=nometadata',
   'Content-Type': 'application/json;odata=nometadata',
@@ -833,10 +871,10 @@ const spH = (d, x = {}) => ({
   } : {}),
   ...x
 });
-async function spGet(l,f='',sel=''){const su=getSiteURL();if(!su)return[];const tok=await getSPToken();const h={'Accept':'application/json;odata=nometadata',...(tok?{'Authorization':'Bearer '+tok}:{})};const qs=[];if(f)qs.push('$filter='+encodeURIComponent(f));if(sel)qs.push('$select='+sel);qs.push('$top=2000');const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items${qs.length?'?'+qs.join('&'):''}`,{credentials:tok?'omit':'include',headers:h});if(!r.ok)throw new Error('SP get '+l+':'+r.status);return(await r.json()).value;}
-async function spPost(l,data){const su=getSiteURL();if(!su)throw new Error('SP not configured');const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items`,{method:'POST',credentials:token?'omit':'include',headers:h,body:JSON.stringify(data)});if(!r.ok){const t=await r.text();throw new Error('SP post '+l+':'+r.status+' '+t.slice(0,100));}return r.json();}
-async function spPatch(l,id,data){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*','X-HTTP-Method':'MERGE',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'PATCH',credentials:token?'omit':'include',headers:h,body:JSON.stringify(data)});if(!r.ok)throw new Error('SP patch '+l+':'+r.status);}
-async function spDelete(l,id){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'DELETE',credentials:token?'omit':'include',headers:h});if(!r.ok)throw new Error('SP delete '+l+':'+r.status);}
+async function spGet(l,f='',sel=''){const su=getSiteURL();if(!su)return[];const tok=await getSPToken();const h={'Accept':'application/json;odata=nometadata',...(tok?{'Authorization':'Bearer '+tok}:{})};const qs=[];if(f)qs.push('$filter='+encodeURIComponent(f));if(sel)qs.push('$select='+sel);qs.push('$top=2000');const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items${qs.length?'?'+qs.join('&'):''}`,{credentials:'omit',headers:h});if(!r.ok)throw new Error('SP get '+l+':'+r.status);return(await r.json()).value;}
+async function spPost(l,data){const su=getSiteURL();if(!su)throw new Error('SP not configured');const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items`,{method:'POST',credentials:'omit',headers:h,body:JSON.stringify(data)});if(!r.ok){const t=await r.text();throw new Error('SP post '+l+':'+r.status+' '+t.slice(0,100));}return r.json();}
+async function spPatch(l,id,data){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*','X-HTTP-Method':'MERGE',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'PATCH',credentials:'omit',headers:h,body:JSON.stringify(data)});if(!r.ok)throw new Error('SP patch '+l+':'+r.status);}
+async function spDelete(l,id){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'DELETE',credentials:'omit',headers:h});if(!r.ok)throw new Error('SP delete '+l+':'+r.status);}
 
 async function dbGetUsers(){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Users'),'','Id,Title,shicName,shicHash,shicRole,shicStatus,shicEmail,Created');return r.filter(u=>u&&u.Title).map(u=>({id:u.Id,username:u.Title,name:u.shicName||'',hash:u.shicHash||'',role:u.shicRole||'user',status:u.shicStatus||'pending',email:u.shicEmail||'',createdAt:u.Created}));}catch(e){console.warn('dbGetUsers:',e.message);}}return(LS.get('users')||[]).filter(u=>u&&u.username);}
 async function dbCreateUser(u){if(USE_SP||getSiteURL()){try{const r=await spPost(spList('Users'),{Title:u.username,shicName:u.name,shicHash:u.hash,shicRole:u.role,shicStatus:u.status,shicEmail:u.email||''});return{...u,id:r.Id};}catch(e){console.warn('dbCreateUser:',e.message);}}const all=LS.get('users')||[];const nu={...u,id:Date.now()};LS.set('users',[...all,nu]);return nu;}
@@ -1444,7 +1482,7 @@ function FbSetupPanel(){
   const handleConnect=async()=>{
     if(!cfg.siteUrl){setStatus('error: Site URL required');return;}
     setBusy(true);setStatus('connecting...');
-    try{saveSPConfig(cfg);_spToken=null;_spExpiry=0;_spMsalApp=null;const tok=cfg.clientId?await getSPToken():null;const h={'Accept':'application/json;odata=nometadata',...(tok?{'Authorization':'Bearer '+tok}:{})};const r=await fetch(cfg.siteUrl.replace(/\/$/,'')+'/_api/web/currentuser',{credentials:tok?'omit':'include',headers:h});if(!r.ok)throw new Error('HTTP '+r.status);const u=await r.json();setStatus('connected');addLog('Connected as '+(u.Title||u.LoginName||'user'));}
+    try{saveSPConfig(cfg);_spToken=null;_spExpiry=0;_spMsalApp=null;const tok=cfg.clientId?await getSPToken():null;const h={'Accept':'application/json;odata=nometadata',...(tok?{'Authorization':'Bearer '+tok}:{})};const r=await fetch(cfg.siteUrl.replace(/\/$/,'')+'/_api/web/currentuser',{credentials:'omit',headers:h});if(!r.ok)throw new Error('HTTP '+r.status);const u=await r.json();setStatus('connected');addLog('Connected as '+(u.Title||u.LoginName||'user'));}
     catch(e){setStatus('error: '+e.message.slice(0,80));addLog('Failed: '+e.message.slice(0,80));}
     setBusy(false);
   };
@@ -1458,7 +1496,12 @@ function FbSetupPanel(){
       React.createElement('div',null,React.createElement('label',{style:LBL},'Tenant ID'),React.createElement('input',{style:INP,value:cfg.tenantId||'',onChange:e=>setCfg(p=>({...p,tenantId:e.target.value.trim()})),placeholder:'common'})),
       React.createElement('div',null,React.createElement('label',{style:LBL},'List Prefix'),React.createElement('input',{style:{...INP,fontFamily:"'JetBrains Mono',monospace"},value:cfg.listPrefix||'SHICCE',onChange:e=>setCfg(p=>({...p,listPrefix:e.target.value.replace(/[^a-zA-Z0-9_]/g,'')})),placeholder:'SHICCE'}))
     ),
-    React.createElement('div',{style:{fontSize:10,color:MT,marginBottom:10,padding:'8px 10px',background:SURF,borderRadius:6,lineHeight:1.7}},React.createElement('b',{style:{color:TX}},'Lists: '),pfx+'_Users | '+pfx+'_CEs | '+pfx+'_CE_MP | '+pfx+'_CE_Resources | '+pfx+'_Masterlist | '+pfx+'_Drafts'),
+    React.createElement('div',{style:{fontSize:10,color:MT,marginBottom:10,padding:'8px 10px',background:SURF,borderRadius:6,lineHeight:1.7}},
+      React.createElement('b',{style:{color:TX}},'Azure Redirect URI (must match exactly): '),React.createElement('br',null),
+      React.createElement('code',{style:{color:'#F0A429',wordBreak:'break-all'}},window.location.origin+window.location.pathname.replace(/\/[^\/]*$/,'/')),
+      React.createElement('hr',{style:{border:'none',borderTop:'1px solid #30363D',margin:'6px 0'}}),
+      React.createElement('b',{style:{color:TX}},'Lists: '),pfx+'_Users | '+pfx+'_CEs | '+pfx+'_CE_MP | '+pfx+'_CE_Resources | '+pfx+'_Masterlist | '+pfx+'_Drafts'
+    ),
     React.createElement('div',{style:{display:'flex',gap:8}},
       status!=='connected'?React.createElement('button',{style:btn('acc'),disabled:busy||!cfg.siteUrl,onClick:handleConnect},busy?'Connecting...':'Connect & Test'):React.createElement('button',{style:btn('danger'),onClick:()=>{_spToken=null;setStatus('idle');}},'Disconnect')
     ),
@@ -9342,6 +9385,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.c
 
 
 
+
 window.SHIC_ML=(function(){
   function tokenize(txt){return(txt||'').toLowerCase().replace(/[^a-z0-9\s]/g,' ').split(/\s+/).filter(Boolean);}
   function cosineSim(a,b){var ta=tokenize(a),tb=tokenize(b);if(!ta.length||!tb.length)return 0;var all=[].concat(ta,tb).filter(function(v,i,s){return s.indexOf(v)===i;});var va=all.map(function(w){return ta.filter(function(x){return x===w;}).length;});var vb=all.map(function(w){return tb.filter(function(x){return x===w;}).length;});var dot=va.reduce(function(s,v,i){return s+v*vb[i];},0);var magA=Math.sqrt(va.reduce(function(s,v){return s+v*v;},0));var magB=Math.sqrt(vb.reduce(function(s,v){return s+v*v;},0));return(magA&&magB)?dot/(magA*magB):0;}
@@ -9356,8 +9400,10 @@ window.SHIC_ML=(function(){
 
 
 
+
 </script>
 <script>
+
 
 
 
@@ -9385,12 +9431,22 @@ window.SHIC_OD=(function(){
 
 
 
+
 </script>
 <div id="shic-ml-panel" style="display:none;position:fixed;top:56px;right:0;width:400px;height:calc(100vh - 56px);background:#161B22;border-left:1px solid #30363D;z-index:200;overflow-y:auto;box-shadow:-4px 0 20px #0008;font-family:'Outfit',sans-serif;color:#E6EDF3;font-size:12px"><div style="padding:12px 14px;border-bottom:1px solid #30363D;display:flex;align-items:center;gap:8px;position:sticky;top:0;background:#161B22;z-index:1"><span style="font-weight:800;font-size:14px;color:#F0A429">&#129504; ML Insights</span><span style="font-size:10px;color:#7D8590;background:#1C2128;border-radius:10px;padding:1px 8px">Beta</span><button onclick="document.getElementById('shic-ml-panel').style.display='none'" style="margin-left:auto;background:none;border:none;color:#7D8590;cursor:pointer;font-size:18px">&times;</button></div><div style="padding:12px 14px;border-bottom:1px solid #30363D33"><div style="font-weight:700;font-size:10px;color:#7D8590;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">&#128176; Rate Suggester</div><div style="display:flex;gap:6px;margin-bottom:6px"><input id="ml-role-input" placeholder="Type a role name..." style="flex:1;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:6px 10px;font-size:11px;font-family:inherit;outline:none" onkeydown="if(event.key==='Enter')shicMLRate()"/><button onclick="shicMLRate()" style="background:#F0A429;color:#000;border:none;border-radius:6px;padding:6px 12px;font-weight:700;cursor:pointer;font-size:11px">Check</button></div><div id="ml-rate-result" style="color:#7D8590;font-size:11px">Enter a role to see historical rates.</div></div><div style="padding:12px 14px;border-bottom:1px solid #30363D33"><div style="font-weight:700;font-size:10px;color:#7D8590;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">&#128202; Cost Predictor</div><textarea id="ml-scope-input" placeholder="Paste project scope..." style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:6px 10px;font-size:11px;font-family:inherit;outline:none;resize:vertical;height:56px;box-sizing:border-box"></textarea><button onclick="shicMLPredict()" style="margin-top:6px;background:#3B82F6;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-weight:700;cursor:pointer;font-size:11px;width:100%">Predict Cost</button><div id="ml-predict-result" style="color:#7D8590;font-size:11px;margin-top:6px">Enter scope to predict total CE cost.</div></div><div style="padding:12px 14px;border-bottom:1px solid #30363D33"><div style="font-weight:700;font-size:10px;color:#7D8590;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">&#128269; Scope Matcher</div><div style="display:flex;gap:6px;margin-bottom:6px"><input id="ml-match-input" placeholder="Describe the work..." style="flex:1;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:6px 10px;font-size:11px;font-family:inherit;outline:none" onkeydown="if(event.key==='Enter')shicMLMatch()"/><button onclick="shicMLMatch()" style="background:#8B5CF6;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-weight:700;cursor:pointer;font-size:11px">Match</button></div><div id="ml-match-result" style="color:#7D8590;font-size:11px">Find similar past CEs.</div></div><div style="padding:12px 14px"><div style="font-weight:700;font-size:10px;color:#7D8590;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">&#9888; Anomaly Detection</div><button onclick="shicMLAnomalies()" style="background:#EF4444;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-weight:700;cursor:pointer;font-size:11px;width:100%">Scan Current CE</button><div id="ml-anomaly-result" style="color:#7D8590;font-size:11px;margin-top:6px">Compare CE rates vs Masterlist.</div></div></div>
 <button id="pwa-install-btn" onclick="installApp()" title="Install as Desktop App" style="display:none;position:fixed;bottom:140px;right:24px;background:#10B981;color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:20px;cursor:pointer;box-shadow:0 4px 16px #10B98166;z-index:199;align-items:center;justify-content:center;font-weight:700">+</button>
 <button onclick="openODPanel()" title="OneDrive Analyzer" style="position:fixed;bottom:80px;right:24px;background:#0078D4;color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:18px;cursor:pointer;box-shadow:0 4px 16px #0078D466;z-index:199">&#128190;</button>
 <button onclick="shicMLToggle()" title="ML Insights" style="position:fixed;bottom:24px;right:24px;background:#F0A429;color:#000;border:none;border-radius:50%;width:48px;height:48px;font-size:20px;cursor:pointer;box-shadow:0 4px 16px #F0A42966;z-index:199">&#129504;</button>
+
+<div id="shic-od-panel" style="display:none;position:fixed;inset:0;background:#000c;z-index:400;align-items:center;justify-content:center"><div style="background:#161B22;border:1px solid #30363D;border-radius:12px;width:540px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 8px 40px #0008;font-family:'Outfit',sans-serif;color:#E6EDF3;font-size:13px"><div style="padding:16px 18px;border-bottom:1px solid #30363D;display:flex;align-items:center;gap:10px"><span style="font-size:20px">&#128190;</span><span style="font-weight:800;font-size:15px">OneDrive Project Analyzer</span><span style="font-size:10px;background:#1C2128;color:#7D8590;border-radius:10px;padding:2px 8px">ML Training</span><button onclick="document.getElementById('shic-od-panel').style.display='none'" style="margin-left:auto;background:none;border:none;color:#7D8590;cursor:pointer;font-size:20px">&times;</button></div><div style="overflow-y:auto;flex:1;padding:16px 18px"><div style="color:#7D8590;font-size:12px;margin-bottom:14px;line-height:1.6;padding:10px;background:#0D1117;border-radius:6px;border-left:3px solid #F0A429">Connect your OneDrive folder of historical Excel files to train the ML engine.</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px"><div><label style="display:block;font-size:10px;color:#7D8590;margin-bottom:4px">CLIENT ID</label><input id="od-client-id" style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:7px 10px;font-size:11px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box" placeholder="Azure App Client ID"/></div><div><label style="display:block;font-size:10px;color:#7D8590;margin-bottom:4px">TENANT ID</label><input id="od-tenant-id" style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:7px 10px;font-size:11px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box" placeholder="common"/></div></div><div style="font-size:10px;color:#7D8590;margin-bottom:12px">Redirect URI: <code style="color:#F0A429;background:#0D1117;padding:1px 4px;border-radius:3px" id="od-redirect-hint"></code></div><label style="display:block;font-size:10px;color:#7D8590;margin-bottom:4px">FOLDER PATH</label><input id="od-folder" style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:7px 10px;font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box;margin-bottom:12px" placeholder="Projects/Cost Estimates"/><div style="display:flex;gap:8px;margin-bottom:14px"><button onclick="odSaveConfig()" style="background:#30363D;color:#E6EDF3;border:none;border-radius:6px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:12px;font-family:inherit">Save</button><button onclick="odScan()" style="background:#F0A429;color:#000;border:none;border-radius:6px;padding:8px 18px;font-weight:700;cursor:pointer;font-size:12px;font-family:inherit;flex:1">&#128190; Scan &amp; Analyze</button></div><div id="od-progress" style="display:none;padding:12px;background:#0D1117;border-radius:8px;border:1px solid #30363D"><div id="od-progress-msg" style="font-size:12px;margin-bottom:8px"></div><div style="background:#1C2128;border-radius:6px;height:6px"><div id="od-progress-bar" style="background:#F0A429;height:6px;border-radius:6px;width:0%;transition:width .3s"></div></div></div><div id="od-results" style="display:none;margin-top:10px"></div></div></div></div>
+
+
+</body></html>
+<button id="pwa-install-btn" onclick="installApp()" title="Install as Desktop App" style="display:none;position:fixed;bottom:140px;right:24px;background:#10B981;color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:20px;cursor:pointer;box-shadow:0 4px 16px #10B98166;z-index:199;align-items:center;justify-content:center;font-weight:700">+</button>
+<button onclick="openODPanel()" title="OneDrive Analyzer" style="position:fixed;bottom:80px;right:24px;background:#0078D4;color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:18px;cursor:pointer;box-shadow:0 4px 16px #0078D466;z-index:199">&#128190;</button>
+<button onclick="shicMLToggle()" title="ML Insights" style="position:fixed;bottom:24px;right:24px;background:#F0A429;color:#000;border:none;border-radius:50%;width:48px;height:48px;font-size:20px;cursor:pointer;box-shadow:0 4px 16px #F0A42966;z-index:199">&#129504;</button>
 <script>
+
 
 
 
@@ -9407,9 +9463,14 @@ function shicMLAnomalies(){var mp=window.shicCurrentMp||[];var tools=window.shic
 
 
 
+
 </script>
 <div id="shic-od-panel" style="display:none;position:fixed;inset:0;background:#000c;z-index:400;align-items:center;justify-content:center"><div style="background:#161B22;border:1px solid #30363D;border-radius:12px;width:540px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 8px 40px #0008;font-family:'Outfit',sans-serif;color:#E6EDF3;font-size:13px"><div style="padding:16px 18px;border-bottom:1px solid #30363D;display:flex;align-items:center;gap:10px"><span style="font-size:20px">&#128190;</span><span style="font-weight:800;font-size:15px">OneDrive Project Analyzer</span><span style="font-size:10px;background:#1C2128;color:#7D8590;border-radius:10px;padding:2px 8px">ML Training</span><button onclick="document.getElementById('shic-od-panel').style.display='none'" style="margin-left:auto;background:none;border:none;color:#7D8590;cursor:pointer;font-size:20px">&times;</button></div><div style="overflow-y:auto;flex:1;padding:16px 18px"><div style="color:#7D8590;font-size:12px;margin-bottom:14px;line-height:1.6;padding:10px;background:#0D1117;border-radius:6px;border-left:3px solid #F0A429">Connect your OneDrive folder of historical Excel files to train the ML engine.</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px"><div><label style="display:block;font-size:10px;color:#7D8590;margin-bottom:4px">CLIENT ID</label><input id="od-client-id" style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:7px 10px;font-size:11px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box" placeholder="Azure App Client ID"/></div><div><label style="display:block;font-size:10px;color:#7D8590;margin-bottom:4px">TENANT ID</label><input id="od-tenant-id" style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:7px 10px;font-size:11px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box" placeholder="common"/></div></div><div style="font-size:10px;color:#7D8590;margin-bottom:12px">Redirect URI: <code style="color:#F0A429;background:#0D1117;padding:1px 4px;border-radius:3px" id="od-redirect-hint"></code></div><label style="display:block;font-size:10px;color:#7D8590;margin-bottom:4px">FOLDER PATH</label><input id="od-folder" style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:7px 10px;font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box;margin-bottom:12px" placeholder="Projects/Cost Estimates"/><div style="display:flex;gap:8px;margin-bottom:14px"><button onclick="odSaveConfig()" style="background:#30363D;color:#E6EDF3;border:none;border-radius:6px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:12px;font-family:inherit">Save</button><button onclick="odScan()" style="background:#F0A429;color:#000;border:none;border-radius:6px;padding:8px 18px;font-weight:700;cursor:pointer;font-size:12px;font-family:inherit;flex:1">&#128190; Scan &amp; Analyze</button></div><div id="od-progress" style="display:none;padding:12px;background:#0D1117;border-radius:8px;border:1px solid #30363D"><div id="od-progress-msg" style="font-size:12px;margin-bottom:8px"></div><div style="background:#1C2128;border-radius:6px;height:6px"><div id="od-progress-bar" style="background:#F0A429;height:6px;border-radius:6px;width:0%;transition:width .3s"></div></div></div><div id="od-results" style="display:none;margin-top:10px"></div></div></div></div>
+
+
+</body></html>
 <script>
+
 
 
 
@@ -9424,24 +9485,21 @@ async function odScan(){var clientId=document.getElementById('od-client-id').val
 
 
 
+
 </script>
 <script>
 let _deferredInstall=null;
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js').then(r=>console.log('SW ok',r.scope)).catch(e=>console.warn('SW:',e));
+  navigator.serviceWorker.register('./sw.js').catch(e=>console.warn('SW:',e));
 }
 window.addEventListener('beforeinstallprompt',e=>{
   e.preventDefault();_deferredInstall=e;
   const btn=document.getElementById('pwa-install-btn');
-  if(btn){btn.style.display='flex';}
-});
-window.addEventListener('appinstalled',()=>{
-  const btn=document.getElementById('pwa-install-btn');
-  if(btn)btn.style.display='none';
+  if(btn)btn.style.display='flex';
 });
 function installApp(){
   if(_deferredInstall){_deferredInstall.prompt();_deferredInstall.userChoice.then(()=>{_deferredInstall=null;});}
-  else{alert('To install: open this app in Chrome, then click the menu (3 dots) > Install SHIC Cost Estimator');}
+  else{alert('Open in Chrome browser, then click menu (3 dots) > Install SHIC Cost Estimator');}
 }
 </script>
 </body></html>

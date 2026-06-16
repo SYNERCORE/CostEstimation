@@ -6019,7 +6019,7 @@ function App({
     }).join('')}
     </div>`;
     const w = window.open('', '_blank');
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>CE ${info.ceNum || ''}</title><style>${pageStyle}</style></head><body>
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>CE ${info.ceNum || ''}<\/title><style>${pageStyle}<\/style><\/head><body>
       <div class="page">
         ${docHdr('COST ESTIMATE SUMMARY')}
         ${infoTable}
@@ -6037,125 +6037,7 @@ function App({
       ${toolsPage}
       ${matsPage}
       ${ppePage}
-    <script>
-
-function switchAnalyzerTab(tab){
-  document.getElementById('analyzer-local').style.display=tab==='local'?'block':'none';
-  document.getElementById('analyzer-od').style.display=tab==='od'?'block':'none';
-  document.getElementById('tab-local').style.background=tab==='local'?'#30363D':'transparent';
-  document.getElementById('tab-local').style.color=tab==='local'?'#E6EDF3':'#7D8590';
-  document.getElementById('tab-od').style.background=tab==='od'?'#30363D':'transparent';
-  document.getElementById('tab-od').style.color=tab==='od'?'#E6EDF3':'#7D8590';
-}
-var _localFiles=[];
-function localFilesSelected(files){
-  _localFiles=Array.from(files).filter(function(f){return /\.(xlsx|xls|pdf|docx|doc)$/i.test(f.name);});
-  var countEl=document.getElementById('local-file-count');
-  var namesEl=document.getElementById('local-file-names');
-  var listEl=document.getElementById('local-file-list');
-  var btn=document.getElementById('local-analyze-btn');
-  if(!_localFiles.length){countEl.textContent='No supported files found.';listEl.style.display='block';btn.disabled=true;btn.style.background='#30363D';btn.style.color='#7D8590';return;}
-  var byType={xlsx:0,pdf:0,docx:0};
-  _localFiles.forEach(function(f){if(/\.xlsx?$/i.test(f.name))byType.xlsx++;else if(/\.pdf$/i.test(f.name))byType.pdf++;else if(/\.docx?$/i.test(f.name))byType.docx++;});
-  var parts=[];if(byType.xlsx)parts.push(byType.xlsx+' Excel');if(byType.pdf)parts.push(byType.pdf+' PDF');if(byType.docx)parts.push(byType.docx+' Word');
-  countEl.textContent=_localFiles.length+' files: '+parts.join(', ');
-  namesEl.innerHTML=_localFiles.slice(0,15).map(function(f){return '<div>'+f.name+'</div>';}).join('');
-  if(_localFiles.length>15)namesEl.innerHTML+='<div>...and '+(_localFiles.length-15)+' more</div>';
-  listEl.style.display='block';
-  btn.disabled=false;btn.style.background='#F0A429';btn.style.color='#000';btn.style.cursor='pointer';
-}
-function ph3(n){return 'P'+Number(n).toLocaleString('en-PH',{minimumFractionDigits:0,maximumFractionDigits:0});}
-function cleanNum3(v){if(typeof v==='number')return v;var s=String(v).replace(/[^0-9.]/g,'');return parseFloat(s)||0;}
-function extractFromText(text,source){
-  var p={source:source,description:'',client:'',ceNum:'',grand:0,mp:[],tools:[],mats:[],ceType:'onsite',savedAt:new Date().toISOString()};
-  var cm=text.match(/([A-Z]{2,6}-CE-\d{4}-\d{3,4})/i);if(cm)p.ceNum=cm[1];
-  var amounts=[];var rx=/(?:grand\s*total|total\s*amount|total\s*cost)[^\d]*([\d,]+(?:\.\d{2})?)/gi;
-  var m;while((m=rx.exec(text))!==null)amounts.push(cleanNum3(m[1]));
-  if(!amounts.length){var rx2=/(?:PHP|PhP|P)\s?([\d,]{4,}(?:\.\d{2})?)/g;while((m=rx2.exec(text))!==null)amounts.push(cleanNum3(m[1]));}
-  if(amounts.length)p.grand=Math.max.apply(null,amounts);
-  var lines=text.split(/[\n\r]+/).map(function(l){return l.trim();}).filter(function(l){return l.length>20&&l.length<200;});
-  if(lines.length)p.description=lines[0].slice(0,120);
-  var cM=text.match(/(?:client|customer|owner)[:\s]+([A-Z][^\n\r]{3,50})/i);
-  if(cM)p.client=cM[1].trim().slice(0,60);
-  var mpRx=/([A-Za-z ]{4,30})\s+(?:PHP|P|PhP)?\s?([\d,]+(?:\.\d{2})?)\s*(?:\/day|\/hr|per day)/gi;
-  while((m=mpRx.exec(text))!==null&&p.mp.length<10){var rate=cleanNum3(m[2]);if(rate>100&&rate<200000)p.mp.push({role:m[1].trim(),rate:rate,shift:'straight',days:1,qty:1});}
-  if(!p.description)p.description=source.replace(/\.[^.]+$/,'');
-  return(p.grand>0||p.mp.length>0||p.ceNum)?p:null;
-}
-function extractFromRows(rows,source){
-  var text=rows.map(function(r){return r.join(' ');}).join('\n');
-  var p=extractFromText(text,source)||{source:source,description:source,client:'',ceNum:'',grand:0,mp:[],mats:[],tools:[],ceType:'onsite',savedAt:new Date().toISOString()};
-  if(!p.mp.length){
-    for(var i=0;i<rows.length;i++){
-      if(rows[i].join(' ').toLowerCase().match(/manpower|labor|personnel/)){
-        for(var j=i+1;j<Math.min(i+30,rows.length);j++){
-          var role=String(rows[j][0]||'').trim();
-          var rate=0;for(var k=1;k<rows[j].length;k++){var n=cleanNum3(rows[j][k]);if(n>100&&n<200000){rate=n;break;}}
-          if(role&&role.length>1&&role.length<50&&!role.toLowerCase().includes('total'))p.mp.push({role:role,rate:rate,shift:'straight',days:1,qty:1});
-        }break;
-      }
-    }
-  }
-  return(p.grand>0||p.mp.length>0)?p:null;
-}
-async function parseLocalFile(file){
-  var n=file.name.toLowerCase();
-  if(/\.xlsx?$/.test(n)){
-    var buf=await file.arrayBuffer();var wb=XLSX.read(buf,{type:'array'});
-    var best=null;var bestG=0;
-    wb.SheetNames.forEach(function(sn){var rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:''});if(rows.length<2)return;var p=extractFromRows(rows,file.name+'>'+sn);if(p&&p.grand>bestG){best=p;bestG=p.grand;}else if(p&&!best)best=p;});
-    return best;
-  }
-  if(/\.pdf$/.test(n)){
-    try{
-      if(typeof pdfjsLib==='undefined')return{source:file.name,description:file.name,client:'',ceNum:'',grand:0,mp:[],tools:[],mats:[],ceType:'onsite',savedAt:new Date().toISOString()};
-      var buf=await file.arrayBuffer();var pdf=await pdfjsLib.getDocument({data:buf}).promise;
-      var text='';var pages=Math.min(pdf.numPages,5);
-      for(var i=1;i<=pages;i++){var pg=await pdf.getPage(i);var ct=await pg.getTextContent();text+=ct.items.map(function(x){return x.str;}).join(' ')+' ';}
-      return extractFromText(text,file.name);
-    }catch(e){console.warn('PDF:',e.message);return null;}
-  }
-  if(/\.docx?$/.test(n)){
-    try{
-      if(typeof mammoth==='undefined')return null;
-      var buf=await file.arrayBuffer();var r=await mammoth.extractRawText({arrayBuffer:buf});
-      return extractFromText(r.value,file.name);
-    }catch(e){console.warn('Word:',e.message);return null;}
-  }
-  return null;
-}
-async function analyzeLocalFiles(){
-  if(!_localFiles.length)return;
-  var prog=document.getElementById('local-progress');var bar=document.getElementById('local-progress-bar');
-  var msg=document.getElementById('local-progress-msg');var res=document.getElementById('local-results');
-  prog.style.display='block';res.style.display='none';
-  var projects=[];
-  for(var i=0;i<_localFiles.length;i++){
-    msg.textContent='Reading '+_localFiles[i].name+' ('+(i+1)+'/'+_localFiles.length+')...';
-    bar.style.width=Math.round((i/_localFiles.length)*100)+'%';
-    try{var p=await parseLocalFile(_localFiles[i]);if(p)projects.push(p);}catch(e){console.warn('File error:',_localFiles[i].name,e);}
-  }
-  bar.style.width='100%';msg.textContent='Done! '+projects.length+' projects extracted.';
-  window.shicHistory=(window.shicHistory||[]).concat(projects);
-  try{localStorage.setItem('shic:local_history',JSON.stringify(projects.slice(0,100)));}catch(e){}
-  var wG=projects.filter(function(p){return p.grand>0;}).length;
-  res.style.display='block';
-  res.innerHTML='<div style="background:#10B98111;border:1px solid #10B98133;border-radius:8px;padding:14px">'
-    +'<div style="color:#10B981;font-weight:700;font-size:13px;margin-bottom:10px">Done! Analysis Complete</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">'
-    +'<div style="text-align:center;background:#0D1117;border-radius:6px;padding:8px"><div style="color:#7D8590;font-size:10px">FILES</div><div style="color:#F0A429;font-weight:700;font-size:16px">'+_localFiles.length+'</div></div>'
-    +'<div style="text-align:center;background:#0D1117;border-radius:6px;padding:8px"><div style="color:#7D8590;font-size:10px">PROJECTS</div><div style="color:#F0A429;font-weight:700;font-size:16px">'+projects.length+'</div></div>'
-    +'<div style="text-align:center;background:#0D1117;border-radius:6px;padding:8px"><div style="color:#7D8590;font-size:10px">WITH COSTS</div><div style="color:#F0A429;font-weight:700;font-size:16px">'+wG+'</div></div>'
-    +'</div><div style="color:#7D8590;font-size:11px;margin-bottom:8px">ML engine updated. Open &#129504; ML panel for predictions.</div>'
-    +'<div style="max-height:120px;overflow-y:auto">'+projects.slice(0,8).map(function(p){return'<div style="font-size:10px;color:#7D8590;padding:3px 0;border-bottom:1px solid #30363D22;display:flex;justify-content:space-between"><span>'+p.source.split('>')[0]+'</span><span style="color:#F0A429">'+(p.grand?ph3(p.grand):'-')+'</span></div>';}).join('')+'</div></div>';
-}
-function odSaveConfig(){var cfg={clientId:(document.getElementById('od-client-id')||{}).value||'',tenantId:(document.getElementById('od-tenant-id')||{}).value||'',folderPath:(document.getElementById('od-folder')||{}).value||'/'};window.SHIC_OD&&window.SHIC_OD.saveODConfig(cfg);}
-async function odScan(){var ci=document.getElementById('od-client-id');var folder=(document.getElementById('od-folder')||{}).value||'/';if(!ci||!ci.value){alert('Enter Client ID');return;}odSaveConfig();window.SHIC_OD&&window.SHIC_OD.initMSAL(ci.value,(document.getElementById('od-tenant-id')||{}).value);var msg=document.getElementById('od-progress-msg');var bar=document.getElementById('od-progress-bar');var res=document.getElementById('od-results');document.getElementById('od-progress').style.display='block';try{var r=await window.SHIC_OD.scanFolder(folder,function(p){msg.textContent=p.msg;bar.style.width=Math.round((p.progress||0)*100)+'%';});bar.style.width='100%';res.style.display='block';res.innerHTML='<div style="color:#10B981;font-weight:700;padding:8px">Done! '+r.files+' files, '+r.projects.length+' projects.</div>';}catch(e){msg.textContent='Error: '+e.message;res.style.display='block';res.innerHTML='<div style="color:#EF4444;padding:8px">'+e.message+'</div>';}}
-function openODPanel(){var p=document.getElementById('shic-od-panel');if(p)p.style.display='flex';}
-(function(){try{var c=localStorage.getItem('shic:local_history');if(c){var d=JSON.parse(c);setTimeout(function(){window.shicHistory=(window.shicHistory||[]).concat(d);},4000);}}catch(e){}})();
-
-</script>
-</body></html>`);
+    <\/body><\/html>`);
     w.document.close();
     setTimeout(() => w.print(), 800);
   };
@@ -9628,6 +9510,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.c
 
 
 
+
 window.SHIC_ML=(function(){
   function tokenize(txt){return(txt||'').toLowerCase().replace(/[^a-z0-9\s]/g,' ').split(/\s+/).filter(Boolean);}
   function cosineSim(a,b){var ta=tokenize(a),tb=tokenize(b);if(!ta.length||!tb.length)return 0;var all=[].concat(ta,tb).filter(function(v,i,s){return s.indexOf(v)===i;});var va=all.map(function(w){return ta.filter(function(x){return x===w;}).length;});var vb=all.map(function(w){return tb.filter(function(x){return x===w;}).length;});var dot=va.reduce(function(s,v,i){return s+v*vb[i];},0);var magA=Math.sqrt(va.reduce(function(s,v){return s+v*v;},0));var magB=Math.sqrt(vb.reduce(function(s,v){return s+v*v;},0));return(magA&&magB)?dot/(magA*magB):0;}
@@ -9645,8 +9528,10 @@ window.SHIC_ML=(function(){
 
 
 
+
 </script>
 <script>
+
 
 
 
@@ -9672,6 +9557,7 @@ window.SHIC_OD=(function(){
   (function(){try{var c=localStorage.getItem('shic:od_history');if(c){var d=JSON.parse(c);window.shicODHistory=d;setTimeout(function(){window.shicHistory=(window.shicHistory||[]).concat(d);},3000);}}catch(e){}})();
   return{initMSAL:initMSAL,scanFolder:scanFolder,getODConfig:getODConfig,saveODConfig:saveODConfig};
 })();
+
 
 
 
@@ -9743,3 +9629,180 @@ window.SHIC_OD=(function(){
     </div>
   </div>
 </div>
+<div id="shic-od-panel" style="display:none;position:fixed;inset:0;background:#000c;z-index:400;align-items:center;justify-content:center">
+  <div style="background:#161B22;border:1px solid #30363D;border-radius:12px;width:580px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 40px #0008;font-family:'Outfit',sans-serif;color:#E6EDF3;font-size:13px">
+    <div style="padding:14px 18px;border-bottom:1px solid #30363D;display:flex;align-items:center;gap:10px">
+      <span style="font-size:20px">&#128193;</span><span style="font-weight:800;font-size:15px">Project File Analyzer</span>
+      <span style="font-size:10px;background:#1C2128;color:#7D8590;border-radius:10px;padding:2px 8px">ML Training</span>
+      <button onclick="document.getElementById('shic-od-panel').style.display='none'" style="margin-left:auto;background:none;border:none;color:#7D8590;cursor:pointer;font-size:20px">&times;</button>
+    </div>
+    <div style="overflow-y:auto;flex:1;padding:16px 18px">
+      <div style="color:#7D8590;font-size:12px;margin-bottom:12px;padding:10px;background:#0D1117;border-radius:6px;border-left:3px solid #F0A429">
+        Read project files from your computer to train the ML engine. Supports <b style="color:#E6EDF3">Excel, PDF, Word</b>. Nothing is uploaded anywhere.
+      </div>
+      <div style="display:flex;gap:4px;margin-bottom:14px;background:#0D1117;border-radius:8px;padding:4px">
+        <button id="tab-local" onclick="switchAnalyzerTab('local')" style="flex:1;background:#30363D;color:#E6EDF3;border:none;border-radius:6px;padding:7px;font-weight:700;cursor:pointer;font-size:12px;font-family:inherit">&#128193; Local Files</button>
+        <button id="tab-od" onclick="switchAnalyzerTab('od')" style="flex:1;background:transparent;color:#7D8590;border:none;border-radius:6px;padding:7px;font-weight:700;cursor:pointer;font-size:12px;font-family:inherit">&#9729; OneDrive</button>
+      </div>
+      <div id="analyzer-local">
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <button onclick="document.getElementById('local-folder-input').click()" style="flex:1;background:#1C2128;border:1px dashed #30363D;color:#E6EDF3;border-radius:8px;padding:16px 8px;font-size:12px;cursor:pointer;font-family:inherit" onmouseover="this.style.borderColor='#F0A429'" onmouseout="this.style.borderColor='#30363D'">
+            &#128193; Select Folder<br><span style="font-size:10px;color:#7D8590">All files in folder</span>
+          </button>
+          <button onclick="document.getElementById('local-file-input').click()" style="flex:1;background:#1C2128;border:1px dashed #30363D;color:#E6EDF3;border-radius:8px;padding:16px 8px;font-size:12px;cursor:pointer;font-family:inherit" onmouseover="this.style.borderColor='#F0A429'" onmouseout="this.style.borderColor='#30363D'">
+            &#128196; Select Files<br><span style="font-size:10px;color:#7D8590">Pick individual files</span>
+          </button>
+        </div>
+        <input type="file" id="local-file-input" multiple accept=".xlsx,.xls,.pdf,.docx,.doc" style="display:none" onchange="localFilesSelected(this.files)"/>
+        <input type="file" id="local-folder-input" webkitdirectory multiple style="display:none" onchange="localFilesSelected(this.files)"/>
+        <div id="local-file-list" style="display:none;margin-bottom:10px;background:#0D1117;border-radius:6px;padding:8px">
+          <div style="font-size:11px;color:#E6EDF3;margin-bottom:4px" id="local-file-count"></div>
+          <div id="local-file-names" style="max-height:70px;overflow-y:auto;font-size:10px;color:#7D8590;font-family:'JetBrains Mono',monospace"></div>
+        </div>
+        <button id="local-analyze-btn" onclick="analyzeLocalFiles()" disabled style="width:100%;background:#30363D;color:#7D8590;border:none;border-radius:6px;padding:10px;font-weight:700;cursor:not-allowed;font-size:12px;font-family:inherit;margin-bottom:10px">Analyze Files</button>
+        <div id="local-progress" style="display:none;padding:10px;background:#0D1117;border-radius:8px;border:1px solid #30363D;margin-bottom:10px">
+          <div id="local-progress-msg" style="font-size:12px;margin-bottom:6px"></div>
+          <div style="background:#1C2128;border-radius:6px;height:6px"><div id="local-progress-bar" style="background:#F0A429;height:6px;border-radius:6px;width:0%;transition:width .3s"></div></div>
+        </div>
+        <div id="local-results" style="display:none"></div>
+      </div>
+      <div id="analyzer-od" style="display:none">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div><label style="display:block;font-size:10px;color:#7D8590;margin-bottom:4px">CLIENT ID</label><input id="od-client-id" style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:7px 10px;font-size:11px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box" placeholder="Azure App Client ID"/></div>
+          <div><label style="display:block;font-size:10px;color:#7D8590;margin-bottom:4px">TENANT ID</label><input id="od-tenant-id" style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:7px 10px;font-size:11px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box" placeholder="common"/></div>
+        </div>
+        <label style="display:block;font-size:10px;color:#7D8590;margin-bottom:4px">FOLDER PATH</label>
+        <input id="od-folder" style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:7px 10px;font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box;margin-bottom:10px" placeholder="Projects/Cost Estimates"/>
+        <div style="display:flex;gap:8px">
+          <button onclick="odSaveConfig()" style="background:#30363D;color:#E6EDF3;border:none;border-radius:6px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:12px;font-family:inherit">Save</button>
+          <button onclick="odScan()" style="background:#F0A429;color:#000;border:none;border-radius:6px;padding:8px 18px;font-weight:700;cursor:pointer;font-size:12px;font-family:inherit;flex:1">&#9729; Scan OneDrive</button>
+        </div>
+        <div id="od-progress" style="display:none;padding:10px;background:#0D1117;border-radius:8px;border:1px solid #30363D;margin-top:10px">
+          <div id="od-progress-msg" style="font-size:12px;margin-bottom:6px"></div>
+          <div style="background:#1C2128;border-radius:6px;height:6px"><div id="od-progress-bar" style="background:#F0A429;height:6px;border-radius:6px;width:0%;transition:width .3s"></div></div>
+        </div>
+        <div id="od-results" style="display:none;margin-top:10px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<button id="pwa-install-btn" onclick="installApp()" title="Install App" style="display:none;position:fixed;bottom:140px;right:24px;background:#10B981;color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:20px;cursor:pointer;box-shadow:0 4px 16px #10B98166;z-index:199;align-items:center;justify-content:center;font-weight:700">+</button>
+<button onclick="openODPanel()" title="Project Analyzer" style="position:fixed;bottom:80px;right:24px;background:#0078D4;color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:18px;cursor:pointer;box-shadow:0 4px 16px #0078D466;z-index:199">&#128193;</button>
+<button onclick="shicMLToggle()" title="ML Insights" style="position:fixed;bottom:24px;right:24px;background:#F0A429;color:#000;border:none;border-radius:50%;width:48px;height:48px;font-size:20px;cursor:pointer;box-shadow:0 4px 16px #F0A42966;z-index:199">&#129504;</button>
+<script>
+function switchAnalyzerTab(t){document.getElementById('analyzer-local').style.display=t==='local'?'block':'none';document.getElementById('analyzer-od').style.display=t==='od'?'block':'none';document.getElementById('tab-local').style.background=t==='local'?'#30363D':'transparent';document.getElementById('tab-local').style.color=t==='local'?'#E6EDF3':'#7D8590';document.getElementById('tab-od').style.background=t==='od'?'#30363D':'transparent';document.getElementById('tab-od').style.color=t==='od'?'#E6EDF3':'#7D8590';}
+var _localFiles=[];
+function localFilesSelected(files){
+  _localFiles=Array.from(files).filter(function(f){return /\.(xlsx|xls|pdf|docx|doc)$/i.test(f.name);});
+  var cE=document.getElementById('local-file-count');
+  var nE=document.getElementById('local-file-names');
+  var lE=document.getElementById('local-file-list');
+  var btn=document.getElementById('local-analyze-btn');
+  if(!_localFiles.length){cE.textContent='No supported files found.';lE.style.display='block';btn.disabled=true;btn.style.background='#30363D';btn.style.color='#7D8590';btn.style.cursor='not-allowed';return;}
+  var bT={xlsx:0,pdf:0,docx:0};
+  _localFiles.forEach(function(f){if(/\.xlsx?$/i.test(f.name))bT.xlsx++;else if(/\.pdf$/i.test(f.name))bT.pdf++;else if(/\.docx?$/i.test(f.name))bT.docx++;});
+  var p=[];if(bT.xlsx)p.push(bT.xlsx+' Excel');if(bT.pdf)p.push(bT.pdf+' PDF');if(bT.docx)p.push(bT.docx+' Word');
+  cE.textContent=_localFiles.length+' files: '+p.join(', ');
+  nE.innerHTML=_localFiles.slice(0,15).map(function(f){return '<div>'+f.name+'</div>';}).join('');
+  if(_localFiles.length>15)nE.innerHTML+='<div>...and '+(_localFiles.length-15)+' more</div>';
+  lE.style.display='block';
+  btn.disabled=false;btn.style.background='#F0A429';btn.style.color='#000';btn.style.cursor='pointer';
+}
+function ph3(n){return 'P'+Number(n).toLocaleString('en-PH',{minimumFractionDigits:0,maximumFractionDigits:0});}
+function cleanNum3(v){if(typeof v==='number')return v;var s=String(v).replace(/[^0-9.]/g,'');return parseFloat(s)||0;}
+function extractFromText(text,src){
+  var p={source:src,description:'',client:'',ceNum:'',grand:0,mp:[],tools:[],mats:[],ceType:'onsite',savedAt:new Date().toISOString()};
+  var cm=text.match(/([A-Z]{2,6}-CE-\d{4}-\d{3,4})/i);if(cm)p.ceNum=cm[1];
+  var amounts=[];var rx=/(?:grand\s*total|total\s*amount|total\s*cost)[^\d]*([\d,]+(?:\.\d{2})?)/gi;
+  var m;while((m=rx.exec(text))!==null)amounts.push(cleanNum3(m[1]));
+  if(!amounts.length){var rx2=/(?:PHP|PhP|P)\s?([\d,]{4,}(?:\.\d{2})?)/g;while((m=rx2.exec(text))!==null)amounts.push(cleanNum3(m[1]));}
+  if(amounts.length)p.grand=Math.max.apply(null,amounts);
+  var lines=text.split(/[\n\r]+/).map(function(l){return l.trim();}).filter(function(l){return l.length>20&&l.length<200;});
+  if(lines.length)p.description=lines[0].slice(0,120);
+  var cM=text.match(/(?:client|customer|owner)[:\s]+([A-Z][^\n\r]{3,50})/i);
+  if(cM)p.client=cM[1].trim().slice(0,60);
+  var mpRx=/([A-Za-z ]{4,30})\s+(?:PHP|P|PhP)?\s?([\d,]+(?:\.\d{2})?)\s*(?:\/day|\/hr|per day)/gi;
+  while((m=mpRx.exec(text))!==null&&p.mp.length<10){var rate=cleanNum3(m[2]);if(rate>100&&rate<200000)p.mp.push({role:m[1].trim(),rate:rate,shift:'straight',days:1,qty:1});}
+  if(!p.description)p.description=src.replace(/\.[^.]+$/,'');
+  return(p.grand>0||p.mp.length>0||p.ceNum)?p:null;
+}
+function extractFromRows(rows,src){
+  var text=rows.map(function(r){return r.join(' ');}).join('\n');
+  var p=extractFromText(text,src)||{source:src,description:src,client:'',ceNum:'',grand:0,mp:[],mats:[],tools:[],ceType:'onsite',savedAt:new Date().toISOString()};
+  if(!p.mp.length){
+    for(var i=0;i<rows.length;i++){
+      if(rows[i].join(' ').toLowerCase().match(/manpower|labor|personnel/)){
+        for(var j=i+1;j<Math.min(i+30,rows.length);j++){
+          var role=String(rows[j][0]||'').trim();var rate=0;
+          for(var k=1;k<rows[j].length;k++){var n=cleanNum3(rows[j][k]);if(n>100&&n<200000){rate=n;break;}}
+          if(role&&role.length>1&&role.length<50&&!role.toLowerCase().includes('total'))p.mp.push({role:role,rate:rate,shift:'straight',days:1,qty:1});
+        }break;
+      }
+    }
+  }
+  return(p.grand>0||p.mp.length>0)?p:null;
+}
+async function parseLocalFile(file){
+  var n=file.name.toLowerCase();
+  if(/\.xlsx?$/.test(n)){
+    var buf=await file.arrayBuffer();var wb=XLSX.read(buf,{type:'array'});
+    var best=null;var bestG=0;
+    wb.SheetNames.forEach(function(sn){var rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:''});if(rows.length<2)return;var p=extractFromRows(rows,file.name+'>'+sn);if(p&&p.grand>bestG){best=p;bestG=p.grand;}else if(p&&!best)best=p;});
+    return best;
+  }
+  if(/\.pdf$/.test(n)){
+    try{
+      if(typeof pdfjsLib==='undefined')return{source:file.name,description:file.name,client:'',ceNum:'',grand:0,mp:[],tools:[],mats:[],ceType:'onsite',savedAt:new Date().toISOString()};
+      var buf=await file.arrayBuffer();var pdf=await pdfjsLib.getDocument({data:buf}).promise;
+      var text='';var pages=Math.min(pdf.numPages,5);
+      for(var i=1;i<=pages;i++){var pg=await pdf.getPage(i);var ct=await pg.getTextContent();text+=ct.items.map(function(x){return x.str;}).join(' ')+' ';}
+      return extractFromText(text,file.name);
+    }catch(e){console.warn('PDF:',e.message);return null;}
+  }
+  if(/\.docx?$/.test(n)){
+    try{
+      if(typeof mammoth==='undefined')return null;
+      var buf=await file.arrayBuffer();var r=await mammoth.extractRawText({arrayBuffer:buf});
+      return extractFromText(r.value,file.name);
+    }catch(e){console.warn('Word:',e.message);return null;}
+  }
+  return null;
+}
+async function analyzeLocalFiles(){
+  if(!_localFiles.length)return;
+  var prog=document.getElementById('local-progress');var bar=document.getElementById('local-progress-bar');
+  var msg=document.getElementById('local-progress-msg');var res=document.getElementById('local-results');
+  prog.style.display='block';res.style.display='none';
+  var projects=[];
+  for(var i=0;i<_localFiles.length;i++){
+    msg.textContent='Reading '+_localFiles[i].name+' ('+(i+1)+'/'+_localFiles.length+')...';
+    bar.style.width=Math.round((i/_localFiles.length)*100)+'%';
+    try{var p=await parseLocalFile(_localFiles[i]);if(p)projects.push(p);}catch(e){console.warn(_localFiles[i].name,e);}
+  }
+  bar.style.width='100%';msg.textContent='Done! '+projects.length+' projects extracted.';
+  window.shicHistory=(window.shicHistory||[]).concat(projects);
+  try{localStorage.setItem('shic:local_history',JSON.stringify(projects.slice(0,100)));}catch(e){}
+  var wG=projects.filter(function(p){return p.grand>0;}).length;
+  res.style.display='block';
+  res.innerHTML='<div style="background:#10B98111;border:1px solid #10B98133;border-radius:8px;padding:14px">'
+    +'<div style="color:#10B981;font-weight:700;font-size:13px;margin-bottom:10px">Analysis Complete!</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">'
+    +'<div style="text-align:center;background:#0D1117;border-radius:6px;padding:8px"><div style="color:#7D8590;font-size:10px">FILES</div><div style="color:#F0A429;font-weight:700;font-size:16px">'+_localFiles.length+'</div></div>'
+    +'<div style="text-align:center;background:#0D1117;border-radius:6px;padding:8px"><div style="color:#7D8590;font-size:10px">PROJECTS</div><div style="color:#F0A429;font-weight:700;font-size:16px">'+projects.length+'</div></div>'
+    +'<div style="text-align:center;background:#0D1117;border-radius:6px;padding:8px"><div style="color:#7D8590;font-size:10px">WITH COSTS</div><div style="color:#F0A429;font-weight:700;font-size:16px">'+wG+'</div></div>'
+    +'</div><div style="color:#7D8590;font-size:11px;margin-bottom:8px">ML engine updated with '+projects.length+' reference projects. Open the ML panel to use predictions.</div>'
+    +'<div style="max-height:120px;overflow-y:auto">'+projects.slice(0,8).map(function(p){return'<div style="font-size:10px;color:#7D8590;padding:3px 0;border-bottom:1px solid #30363D22;display:flex;justify-content:space-between"><span>'+p.source.split('>')[0]+'</span><span style="color:#F0A429">'+(p.grand?ph3(p.grand):'-')+'</span></div>';}).join('')+'</div></div>';
+}
+function odSaveConfig(){var c={clientId:((document.getElementById('od-client-id')||{}).value||'').trim(),tenantId:((document.getElementById('od-tenant-id')||{}).value||'').trim(),folderPath:((document.getElementById('od-folder')||{}).value||'/').trim()};window.SHIC_OD&&window.SHIC_OD.saveODConfig(c);}
+async function odScan(){var ci=document.getElementById('od-client-id');if(!ci||!ci.value.trim()){alert('Enter Client ID');return;}odSaveConfig();if(window.SHIC_OD)window.SHIC_OD.initMSAL(ci.value.trim(),(document.getElementById('od-tenant-id')||{}).value||'common');var prog=document.getElementById('od-progress');var bar=document.getElementById('od-progress-bar');var msg=document.getElementById('od-progress-msg');var res=document.getElementById('od-results');if(prog)prog.style.display='block';try{var r=await window.SHIC_OD.scanFolder(((document.getElementById('od-folder')||{}).value||'/'),function(p){if(msg)msg.textContent=p.msg;if(bar)bar.style.width=Math.round((p.progress||0)*100)+'%';});if(bar)bar.style.width='100%';if(res){res.style.display='block';res.innerHTML='<div style="color:#10B981;font-weight:700;padding:8px">Done! '+r.files+' files, '+r.projects.length+' projects extracted.</div>';}}catch(e){if(msg)msg.textContent='Error: '+e.message;if(res){res.style.display='block';res.innerHTML='<div style="color:#EF4444;padding:8px">'+e.message+'</div>';}}};
+function openODPanel(){var p=document.getElementById('shic-od-panel');if(p)p.style.display='flex';}
+(function(){try{var c=localStorage.getItem('shic:local_history');if(c){var d=JSON.parse(c);setTimeout(function(){window.shicHistory=(window.shicHistory||[]).concat(d);},4000);}}catch(e){}})();
+
+</script>
+<script>
+let _deferredInstall=null;
+if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(e=>console.warn('SW:',e));}
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_deferredInstall=e;const btn=document.getElementById('pwa-install-btn');if(btn)btn.style.display='flex';});
+function installApp(){if(_deferredInstall){_deferredInstall.prompt();_deferredInstall.userChoice.then(()=>{_deferredInstall=null;});}else{alert('Open in Chrome, click menu > Install SHIC Cost Estimator');}}
+</script>
+</body></html>

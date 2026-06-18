@@ -1594,6 +1594,61 @@ async function autoSetupSP(progressCb){
   progressCb&&progressCb({step:'done',msg:'Done! '+created+' lists created, '+skipped+' already existed.',progress:1});
   return{created,skipped};
 }
+function CompanyInfoPanel(){
+  const[cfg,setCfg]=React.useState(()=>{try{return JSON.parse(localStorage.getItem('shic:co_info')||'{}');}catch{return{};}});
+  const[saved,setSaved]=React.useState(false);
+  const handleSave=()=>{
+    try{localStorage.setItem('shic:co_info',JSON.stringify(cfg));setSaved(true);setTimeout(()=>setSaved(false),2000);}catch(e){}
+  };
+  const handleLogo=e=>{
+    const file=e.target.files[0];if(!file)return;
+    if(file.size>200000){alert('Logo too large. Please use an image under 200KB.');return;}
+    const reader=new FileReader();
+    reader.onload=ev=>setCfg(p=>({...p,logo:ev.target.result}));
+    reader.readAsDataURL(file);
+  };
+  return React.createElement('div',null,
+    React.createElement('div',{style:{fontWeight:700,marginBottom:12,fontSize:13,display:'flex',alignItems:'center',gap:8}},
+      React.createElement('span',null,'&#127970;'),' Company Info',
+      saved&&React.createElement('span',{style:{fontSize:10,padding:'2px 8px',borderRadius:10,background:OK+'22',color:OK,fontWeight:700,marginLeft:4}},'Saved')
+    ),
+    React.createElement('div',{style:{color:MT,fontSize:11,marginBottom:12,lineHeight:1.6}},'Customize the company header on generated CE documents. Each company can have its own name and logo.'),
+    React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}},
+      React.createElement('div',{style:{gridColumn:'1/-1'}},
+        React.createElement('label',{style:LBL},'Company Name'),
+        React.createElement('input',{style:INP,value:cfg.name||'',onChange:e=>setCfg(p=>({...p,name:e.target.value})),placeholder:'SYNERCORE'})
+      ),
+      React.createElement('div',{style:{gridColumn:'1/-1'}},
+        React.createElement('label',{style:LBL},'Sub-heading / Division'),
+        React.createElement('input',{style:INP,value:cfg.sub||'',onChange:e=>setCfg(p=>({...p,sub:e.target.value})),placeholder:'HEAVY INDUSTRIES CORP.'})
+      ),
+      React.createElement('div',null,
+        React.createElement('label',{style:LBL},'Document No.'),
+        React.createElement('input',{style:INP,value:cfg.doc||'',onChange:e=>setCfg(p=>({...p,doc:e.target.value})),placeholder:'SHIC-F-TSG025'})
+      ),
+      React.createElement('div',null,
+        React.createElement('label',{style:LBL},'Brand Color'),
+        React.createElement('div',{style:{display:'flex',gap:8,alignItems:'center'}},
+          React.createElement('input',{type:'color',value:cfg.color||'#cc0000',onChange:e=>setCfg(p=>({...p,color:e.target.value})),style:{width:40,height:32,border:'none',borderRadius:4,cursor:'pointer',background:'none'}}),
+          React.createElement('span',{style:{fontSize:11,color:MT}},'Used for company name text')
+        )
+      ),
+      React.createElement('div',{style:{gridColumn:'1/-1'}},
+        React.createElement('label',{style:LBL},'Company Logo'),
+        React.createElement('div',{style:{display:'flex',gap:10,alignItems:'center'}},
+          cfg.logo&&React.createElement('img',{src:cfg.logo,style:{maxWidth:80,maxHeight:40,objectFit:'contain',border:'1px solid '+BDR,borderRadius:4,padding:4,background:'#fff'}}),
+          React.createElement('div',null,
+            React.createElement('input',{type:'file',id:'co-logo-input',accept:'image/*',style:{display:'none'},onChange:handleLogo}),
+            React.createElement('button',{style:btn('acc'),onClick:()=>document.getElementById('co-logo-input').click()},'Upload Logo'),
+            cfg.logo&&React.createElement('button',{style:{...btn('danger'),marginLeft:8},onClick:()=>setCfg(p=>({...p,logo:''}))},'Remove')
+          )
+        ),
+        React.createElement('div',{style:{fontSize:10,color:MT,marginTop:4}},'PNG/JPG/SVG, max 200KB. Will appear on all generated CE documents.')
+      )
+    ),
+    React.createElement('button',{style:btn('acc'),onClick:handleSave},'Save Company Info')
+  );
+}
 function FbSetupPanel(){
   const[cfg,setCfg]=React.useState(()=>getSPConfig()||{});
   const[status,setStatus]=React.useState('idle');
@@ -2445,7 +2500,7 @@ function AdminPanel({
       borderColor: '#F05032' + '44',
       background: '#F05032' + '06'
     }
-  }, /*#__PURE__*/React.createElement(FbSetupPanel, null)), USE_SP && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(CompanyInfoPanel, null), /*#__PURE__*/React.createElement('hr',{style:{border:'none',borderTop:'1px solid '+BDR,margin:'16px 0'}}), React.createElement(FbSetupPanel, null)), USE_SP && /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
       marginTop: 8,
@@ -5844,219 +5899,145 @@ function App({
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     });
+    const coInfo = (() => { try { return JSON.parse(localStorage.getItem('shic:co_info') || '{}'); } catch { return {}; } })();
     const pageStyle = `
-      body{font-family:Arial,sans-serif;font-size:9pt;color:#000;margin:0;padding:0}
+      @page{size:A4 portrait;margin:8mm 10mm}
+      *{box-sizing:border-box}
+      body{font-family:Arial,sans-serif;font-size:8pt;color:#000;margin:0;padding:0}
       table{width:100%;border-collapse:collapse}
-      td,th{border:1px solid #000;padding:2px 5px;font-size:8.5pt}
-      .header-table td,.header-table th{border:none}
-      .no-border td,.no-border th{border:none}
-      .page{page-break-after:always;padding:15mm 12mm}
-      .page:last-child{page-break-after:auto}
-      h2{font-size:14pt;text-align:center;margin:4px 0}
-      .section-title{background:#ddd;font-weight:bold;text-align:center;padding:4px;border:1px solid #000}
-      .subhead{background:#f0f0f0;font-weight:bold;font-size:8pt;padding:2px 5px}
-      .right{text-align:right} .center{text-align:center}
-      .bold{font-weight:bold} .total-row{background:#f5f5f5;font-weight:bold}
-      @media print{body{margin:0} .page{padding:8mm 10mm}}
-      @page{size:A4;margin:12mm}
+      td,th{border:1px solid #555;padding:1.5px 4px;font-size:7.5pt;vertical-align:middle}
+      .nb td,.nb th{border:none} .bdr td,.bdr th{border:1px solid #999}
+      .page{padding:0;margin-bottom:4mm}
+      .page-break{page-break-before:always;padding-top:0}
+      h2{font-size:10pt;text-align:center;margin:2px 0;font-weight:bold}
+      .sec{background:#222;color:#fff;font-weight:bold;text-align:center;padding:3px;font-size:8pt}
+      .sub{background:#eee;font-weight:bold;font-size:7.5pt;padding:2px 4px}
+      .r{text-align:right} .c{text-align:center} .b{font-weight:bold}
+      .tot{background:#f5f5f5;font-weight:bold}
+      .sig td{border:none;text-align:center;padding:0 6px;vertical-align:bottom}
+      @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
     `;
-    /* \u2500\u2500 C.7 Benefits data \u2500\u2500 */
-    const benGrouped = {};
-    mp.forEach(r => {
-      const key = r.role.trim().toUpperCase();
-      const mult = SHIFTS[r.shift]?.mult || 1;
-      const rate = N(r.rate) * mult;
-      const mlItem = masterlist.manpower.find(m => m.role.toUpperCase() === key);
-      const perDiemRate = mlItem ? N(mlItem.perDiem || 0) : 0;
-      if (!benGrouped[key]) {
-        benGrouped[key] = {
-          role: r.role,
-          entries: []
-        };
-      }
-      benGrouped[key].entries.push({
-        rate,
-        pax: N(r.pax),
-        days: N(r.days),
-        perDiemRate
-      });
-    });
-    const benRows = Object.values(benGrouped).map(g => {
-      let thirteenth = 0,
-        sss = 0,
-        hdmf = 0,
-        sil = 0,
-        perdiem = 0,
-        totalPax = 0;
-      g.entries.forEach(e => {
-        thirteenth += e.rate / 12 * e.days * e.pax;
-        sss += e.rate * 0.25 * 0.75 * e.days * e.pax / 26;
-        hdmf += e.rate * 0.16 * e.days * e.pax / 26 * 2;
-        sil += e.rate * e.days * e.pax * 5 / 12 / 26 + e.pax * 30;
-        perdiem += e.perDiemRate * e.days * e.pax;
-        totalPax += e.pax;
-      });
-      const maxDays = Math.max(...g.entries.map(e => e.days));
-      const avgMonthly = g.entries[0].rate * 26;
-      const total = thirteenth + sss + hdmf + sil + perdiem;
-      return {
-        role: g.role,
-        pax: totalPax,
-        days: maxDays,
-        monthly: avgMonthly,
-        thirteenth,
-        sss,
-        hdmf,
-        sil,
-        perdiem,
-        total
-      };
-    });
-    /* \u2500\u2500 Signature block \u2500\u2500 */
-    const sigBlock = `<table style="width:100%;border-collapse:collapse;margin-top:30px">
-      <tr>
-        ${approvers.map(a => `<td style="border:none;text-align:center;padding:0 8px;width:${100 / approvers.length}%;vertical-align:bottom">
-          <div style="font-size:8.5pt;font-weight:bold;margin-bottom:50px">${a.role}${a.role.endsWith(':') ? '' : ':'}</div>
-        </td>`).join('')}
-      </tr>
-      <tr>
-        ${approvers.map(a => `<td style="border:none;text-align:center;padding:0 8px;vertical-align:bottom">
-          <div style="border-top:1.5px solid #000;padding-top:4px;margin:0 10px">
-            <div style="font-size:9pt;font-weight:bold">${a.name || '&nbsp;'}</div>
-            <div style="font-size:8pt">${a.title || '&nbsp;'}</div>
-          </div>
-        </td>`).join('')}
-      </tr>
-    </table>`;
-    /* \u2500\u2500 Shift tables \u2500\u2500 */
-    const shiftKeys = ['regular_day', 'regular_night', 'sunday_day', 'sunday_night', 'holiday_day', 'holiday_night'];
-    const shiftRows = shiftKeys.map(sk => {
-      const rows = mp.filter(r => r.shift === sk);
-      if (!rows.length) return '';
-      const info = SHIFTS[sk];
-      const mult = info?.mult || 1;
-      const subA = rows.reduce((s, r) => s + N(r.pax) * N(r.days) * N(r.rate) * mult, 0);
-      const subB = rows.reduce((s, r) => s + N(r.pax) * (N(r.otHours) / 8) * N(r.rate) * 1.25 * mult, 0);
-      return `<div style="margin-top:10px">
-        <table><tr class="subhead"><td colspan="10">${info?.label || sk}</td></tr>
-        <tr style="background:#eee"><th class="center">ITEM</th><th>MANPOWER LOADING</th><th class="center">QTY</th><th class="center">UOM</th><th class="center">NO. OF DAYS</th><th class="right">RATE PER DAY</th><th class="right">SUB-TOTAL A</th><th class="center">OT HRS/DAY</th><th class="right">RATE OT/HR</th><th class="right">TOTAL</th></tr>
-        ${rows.map((r, i) => {
-        const otRate = N(r.rate) * mult / 8 * 1.25;
-        const subA_r = N(r.pax) * N(r.days) * N(r.rate) * mult;
-        const subB_r = N(r.pax) * (N(r.otHours) / 8) * N(r.rate) * 1.25 * mult;
-        return `<tr><td class="center">${i + 1}</td><td>${r.role}</td><td class="center">${r.pax}</td><td class="center">pax</td><td class="center">${r.days}</td><td class="right">P${ph2(N(r.rate) * mult)}</td><td class="right">P${ph2(subA_r)}</td><td class="center">${r.otHours || 0}</td><td class="right">P${ph2(otRate)}</td><td class="right bold">P${ph2(subA_r + subB_r)}</td></tr>`;
-      }).join('')}
-        <tr class="total-row"><td colspan="9" class="right">SUB TOTAL:</td><td class="right">P${ph2(subA + subB)}</td></tr></table></div>`;
-    }).join('');
-    /* \u2500\u2500 Build HTML \u2500\u2500 */
-    const docHdr = title => `<table style="border:1px solid #000;margin-bottom:6px"><tr>
-      <td style="border:none;width:80px;padding:4px"><div style="font-weight:900;font-size:11pt;color:#c00">SYNERCORE</div><div style="font-size:6pt;color:#c00">HEAVY INDUSTRIES CORP.</div></td>
+    const co = {
+      name:  coInfo.name  || 'SYNERCORE',
+      sub:   coInfo.sub   || 'HEAVY INDUSTRIES CORP.',
+      doc:   coInfo.doc   || 'SHIC-F-TSG025',
+      logo:  coInfo.logo  || '',
+      color: coInfo.color || '#cc0000'
+    };
+    const logoCell = co.logo
+      ? `<img src="${co.logo}" style="max-width:70px;max-height:36px;object-fit:contain">`
+      : `<div style="font-weight:900;font-size:10pt;color:${co.color};line-height:1.1">${co.name}<br><span style="font-size:6pt">${co.sub}</span></div>`;
+
+    const docHdr = title => `<table style="border:1px solid #000;margin-bottom:4px;font-size:7.5pt"><tr>
+      <td style="border:none;width:75px;padding:2px">${logoCell}</td>
       <td style="border:none;text-align:center"><h2>COST ESTIMATE SUMMARY</h2></td>
-      <td style="border:none;width:160px;font-size:7.5pt">
-        <table class="no-border"><tr><td style="border:none;width:60px">Document No.:</td><td style="border:none">SHIC-F-TSG-025</td></tr>
+      <td style="border:none;width:150px;font-size:7pt">
+        <table class="nb"><tr><td style="border:none;width:80px">Document No.:</td><td style="border:none">${co.doc}</td></tr>
         <tr><td style="border:none">Revision No.:</td><td style="border:none">0</td></tr>
         <tr><td style="border:none">Revision Date:</td><td style="border:none"></td></tr></table>
       </td></tr>
-      <tr><td colspan="3" style="text-align:center;background:#000;color:#fff;font-weight:bold;font-size:11pt;padding:5px;border:1px solid #000">${title}</td></tr>
-      <tr><td colspan="3" style="border:none;text-align:right;font-size:8pt;padding:2px 5px"><b>CE No.:</b>&nbsp;&nbsp;${info.ceNum || ''}</td></tr>
+      <tr><td colspan="3" style="text-align:center;background:#000;color:#fff;font-weight:bold;font-size:9pt;padding:3px;border:1px solid #000">${title}</td></tr>
+      <tr><td colspan="3" style="border:none;text-align:right;font-size:7.5pt;padding:1px 4px"><b>CE No.:</b>&nbsp;${info.ceNum || ''}&nbsp;&nbsp;<b>PROJECT TYPE:</b>&nbsp;${ceType.toUpperCase()}&nbsp;&nbsp;<b>DATE:</b>&nbsp;${info.date||''}</td></tr>
     </table>`;
-    const infoTable = `<table style="border:1px solid #000;margin-bottom:8px;font-size:8.5pt">
-      <tr><td style="border:1px solid #999;width:130px;font-weight:bold">PROJECT TYPE:</td><td style="border:1px solid #999">${ceType.toUpperCase()}</td><td style="border:1px solid #999;width:100px;font-weight:bold">DATE:</td><td style="border:1px solid #999">${info.date || ''}</td></tr>
-      <tr><td style="border:1px solid #999;font-weight:bold;width:130px">PROJECT DESCRIPTION:</td><td colspan="3" style="border:1px solid #999;font-weight:bold;text-align:center">${info.description || ''}</td></tr>
-      <tr><td style="border:1px solid #999;font-weight:bold">CLIENT NAME:</td><td colspan="3" style="border:1px solid #999">${info.client || ''}</td></tr>
-      <tr><td style="border:1px solid #999;font-weight:bold">CLIENT LOCATION:</td><td style="border:1px solid #999">${info.location || ''}</td><td style="border:1px solid #999;font-weight:bold">MATERIAL:</td><td style="border:1px solid #999">${info.material || 'N/A'}</td></tr>
-      <tr><td style="border:1px solid #999;font-weight:bold">ATTENTION:</td><td style="border:1px solid #999">${info.attention || 'SALES DEPARTMENT'}</td><td style="border:1px solid #999;font-weight:bold">QUANTITY:</td><td style="border:1px solid #999">${info.qty || 1} LOT</td></tr>
-      <tr><td style="border:1px solid #999;font-weight:bold">END USER:</td><td style="border:1px solid #999">${info.endUser || 'C/O SALES'}</td><td style="border:1px solid #999;font-weight:bold">NO. OF DAYS:</td><td style="border:1px solid #999">${info.days || ''} DAYS</td></tr>
+
+    const infoTable = `<table class="bdr" style="margin-bottom:5px;font-size:7.5pt">
+      <tr><td class="b" style="width:110px">PROJECT DESCRIPTION:</td><td colspan="3" class="b c">${info.description||''}</td></tr>
+      <tr><td class="b">CLIENT NAME:</td><td>${info.client||''}</td><td class="b" style="width:90px">CLIENT LOCATION:</td><td>${info.location||''}</td></tr>
+      <tr><td class="b">ATTENTION:</td><td>${info.attention||'SALES DEPARTMENT'}</td><td class="b">QUANTITY:</td><td>${info.qty||1} LOT</td></tr>
+      <tr><td class="b">END USER:</td><td>${info.endUser||'C/O SALES'}</td><td class="b">NO. OF DAYS:</td><td>${info.days||''} DAYS</td></tr>
     </table>`;
-    const costTable = `<table style="margin-bottom:8px"><tr style="background:#333;color:#fff"><th>ITEM</th><th>DESCRIPTION</th><th class="right">TOTAL COST</th></tr>
-      <tr><td class="center bold">A.</td><td class="bold">MANPOWER COST</td><td class="right">${ph2(mpTot)}</td></tr>
-      <tr><td class="center bold">B.</td><td class="bold">TOOLS AND EQUIPMENTS</td><td class="right">${ph2(toolsT)}</td></tr>
-      <tr><td class="center bold">C.</td><td class="bold">MATERIALS AND CONSUMABLES</td><td class="right">${ph2(matsT)}</td></tr>
-      <tr><td class="center bold">D.</td><td class="bold">PERSONAL PROTECTIVE EQUIPMENT</td><td class="right">${ph2(ppeT)}</td></tr>
-      <tr><td class="center bold">E.</td><td class="bold">MISCELLANEOUS</td><td class="right"></td></tr>
-      ${MISC_DEF[ceType].map(([k, lbl], mi) => {
-      const arr = Array.isArray(misc[k]) ? misc[k] : [];
-      const tot = arr.reduce((s, r) => s + N(r.qty) * N(r.cost), 0);
-      return `<tr><td class="center">E.${mi + 1}</td><td style="padding-left:15px">${lbl}</td><td class="right">${tot > 0 ? ph2(tot) : '-'}</td></tr>`;
-    }).join('')}
-      ${cfg.mobDemob ? `<tr><td class="center bold">F.</td><td class="bold">MOBILIZATION/DEMOBILIZATION</td><td class="right">${ph2(mobT)}</td></tr>` : ''}
-      <tr style="background:#333;color:#fff;font-size:10pt"><td colspan="2" class="right bold">TOTAL AMOUNT:</td><td class="right bold">${ph2(grand)}</td></tr>
-      <tr><td colspan="2" class="right bold">UNIT PRICE:</td><td class="right bold">${ph2(unitP)}</td></tr>
+
+    /* Cost summary &#8212; skip zero rows */
+    const miscItems = [
+      {l:'G.1 Accommodation',v:N(misc.accommodation)},{l:'G.2 Transportation',v:N(misc.transport)},
+      {l:'G.3 Requirements',v:N(misc.requirements)},{l:'G.4 Admin Cost',v:N(misc.adminCost)},
+      {l:'G.5 Third Party',v:N(misc.thirdParty)},{l:'G.6 Insurances',v:N(misc.insurance)}
+    ];
+    const miscActive = miscItems.filter(x=>x.v>0);
+    const miscLetter = ceType==='supply'?'D.':ceType==='onsite'?'G.':'E.';
+    const mpLetter   = 'A.';
+    const toolLetter = ceType==='supply'?'B.':ceType==='onsite'?'B.':'B.';
+    const matLetter  = ceType==='supply'?'C.':'C.';
+    const ppeLetter  = ceType==='supply'?'C.':'D.';
+    const mobLetter  = ceType==='supply'?'E.':'F.';
+    const costRows = [
+      {l:mpLetter+'  MANPOWER COST',               v:mpTot,   always:true},
+      {l:toolLetter+' TOOLS AND EQUIPMENTS',        v:toolsT,  always:false},
+      {l:matLetter+' MATERIALS AND CONSUMABLES',    v:matsT,   always:false},
+      {l:ppeLetter+' PERSONAL PROTECTIVE EQUIPMENT',v:ppeT,    always:false},
+      ...(miscActive.length ? [{l:miscLetter+' MISCELLANEOUS', v:miscT, always:false, sub:miscActive}] : []),
+      {l:mobLetter+' MOBILIZATION/DEMOBILIZATION',  v:mobT,    always:false},
+    ].filter(r=>r.always||r.v>0||r.sub);
+
+    const costTable = `<table style="margin-bottom:5px">
+      <tr style="background:#333;color:#fff"><th class="c" style="width:40px">ITEM</th><th>DESCRIPTION</th><th class="r" style="width:110px">TOTAL COST</th></tr>
+      ${costRows.map(r=>`<tr${r.sub?'':''}>
+        <td class="c b">${r.l.split(' ')[0]}</td>
+        <td class="b">${r.l.split(' ').slice(1).join(' ')}</td>
+        <td class="r">${fmt(r.v)}</td>
+      </tr>${r.sub?r.sub.map(s=>`<tr><td class="c" style="font-size:7pt">${s.l.split(' ')[0]}</td><td style="padding-left:16px;font-size:7pt">${s.l.split(' ').slice(1).join(' ')}</td><td class="r" style="font-size:7pt">${fmt(s.v)}</td></tr>`).join(''):''}
+      `).join('')}
+      <tr class="tot"><td colspan="2" class="b r" style="font-size:9pt">TOTAL AMOUNT:</td><td class="r b" style="font-size:9pt">${fmt(grand)}</td></tr>
+      <tr class="tot"><td colspan="2" class="b r">UNIT PRICE:</td><td class="r b">${fmt(grand)}</td></tr>
     </table>`;
-    const notesList = notes.length ? `<div style="margin-top:6px"><b>NOTE:</b><ol style="margin:2px 0 0 18px;padding:0;font-size:8pt">${notes.map(n => `<li>${n.text}</li>`).join('')}</ol></div>` : '';
-    /* \u2500\u2500 SOW page \u2500\u2500 */
-    const sowPage = sowItems.length ? `<div class="page">
-      ${docHdr('SCOPE OF WORK')}
-      <div style="font-size:9pt;line-height:1.7">
-        ${(() => {
-      let mc = 0,
-        sc = 0;
-      return sowItems.map(item => {
-        if (item.type === 'main') {
-          mc++;
-          sc = 0;
-        } else {
-          sc++;
-        }
-        const lbl = item.type === 'main' ? mc + '.' : String.fromCharCode(96 + sc) + '.';
-        return `<div style="display:flex;gap:8px;padding-left:${item.type === 'main' ? 0 : 20}px;margin-bottom:2px"><span style="min-width:18px;font-weight:${item.type === 'main' ? 'bold' : 'normal'}">${lbl}</span><span style="font-weight:${item.type === 'main' ? 'bold' : 'normal'}">${item.text}</span></div>`;
-      }).join('');
-    })()}
-      </div>
-    </div>` : '';
-    /* \u2500\u2500 Benefits page \u2500\u2500 */
-    const benPage = benRows.length ? `<div class="page">
-      ${docHdr('BILL OF LABOR')}
-      <div class="section-title">C.7 &nbsp;BENEFITS AND OTHERS</div>
-      <table><tr style="background:#eee"><th class="center">ITEM</th><th>MANPOWER LOADING</th><th class="center">QTY</th><th class="center">UOM</th><th class="center">TOTAL DAYS</th><th class="right">MONTHLY RATE</th><th class="right">13TH PAY</th><th class="right">SSS</th><th class="right">HDMF & PHIC</th><th class="right">SIL & ECC</th><th class="right">TOTAL</th></tr>
-      ${benRows.map((r, i) => `<tr><td class="center">${i + 1}</td><td>${r.role}</td><td class="center">${r.pax}</td><td class="center">pax</td><td class="center">${r.days}</td><td class="right">P${ph2(r.monthly)}</td><td class="right">P${ph2(r.thirteenth)}</td><td class="right">P${ph2(r.sss)}</td><td class="right">P${ph2(r.hdmf)}</td><td class="right">P${ph2(r.sil)}</td><td class="right bold">P${ph2(r.total)}</td></tr>`).join('')}
-      <tr class="total-row"><td colspan="10" class="right">BENEFITS & OTHERS SUB TOTAL:</td><td class="right">P${ph2(ben)}</td></tr>
-      <tr class="total-row" style="background:#ddd;font-size:10pt"><td colspan="10" class="right bold">TOTAL MANPOWER COST (C.1-C.7):</td><td class="right bold">P${ph2(mpTot)}</td></tr>
-      </table>
-    </div>` : '';
-    /* \u2500\u2500 Tools page \u2500\u2500 */
-    const toolsPage = tools.length ? `<div class="page">
-      ${docHdr('BILL OF TOOLS AND EQUIPMENT')}
-      <div class="section-title">BILL OF TOOLS AND EQUIPMENT</div>
-      <table><tr style="background:#eee"><th class="center">ITEM NO.</th><th>DESCRIPTION</th><th class="center">QTY</th><th class="center">UOM</th><th class="center">DAYS</th><th class="right">UNIT PRICE</th><th class="right">TOTAL</th></tr>
-      ${tools.map((r, i) => {
-      const tot = N(r.qty) * N(r.cost);
-      return `<tr><td class="center">${i + 1}</td><td>${r.desc}</td><td class="center">${r.qty}</td><td class="center">${r.uom}</td><td class="center">1</td><td class="right">P${ph2(N(r.cost))}</td><td class="right">P${ph2(tot)}</td></tr>`;
-    }).join('')}
-      <tr class="total-row"><td colspan="6" class="right bold">TOTAL:</td><td class="right bold">P${ph2(toolsT)}</td></tr></table>
-    </div>` : '';
-    /* \u2500\u2500 Materials page \u2500\u2500 */
-    const matsPage = mats.length ? `<div class="page">
-      ${docHdr('BILL OF MATERIALS AND CONSUMABLES')}
-      <div class="section-title">BILL OF MATERIALS AND CONSUMABLES</div>
-      <table><tr style="background:#eee"><th class="center">ITEM NO.</th><th>DESCRIPTION</th><th class="center">QTY</th><th class="center">UOM</th><th class="right">UNIT PRICE</th><th class="right">TOTAL</th></tr>
-      ${mats.map((r, i) => {
-      const tot = N(r.qty) * N(r.cost);
-      return `<tr><td class="center">${i + 1}</td><td>${r.desc}</td><td class="center">${r.qty}</td><td class="center">${r.uom}</td><td class="right">P${ph2(N(r.cost))}</td><td class="right">P${ph2(tot)}</td></tr>`;
-    }).join('')}
-      <tr class="total-row"><td colspan="5" class="right bold">TOTAL:</td><td class="right bold">P${ph2(matsT)}</td></tr></table>
-    </div>` : '';
-    /* \u2500\u2500 PPE + Admin page \u2500\u2500 */
-    const ppePage = `<div class="page">
-      ${docHdr('PERSONAL PROTECTIVE EQUIPMENTS')}
-      <div class="section-title">PERSONAL PROTECTIVE EQUIPMENTS</div>
-      <table><tr style="background:#eee"><th class="center">ITEM NO.</th><th>DESCRIPTION</th><th class="center">QTY</th><th class="center">UOM</th><th class="right">UNIT PRICE</th><th class="right">TOTAL</th></tr>
-      ${ppe.map((r, i) => {
-      const tot = N(r.qty) * N(r.cost);
-      return `<tr><td class="center">${i + 1}</td><td>${r.desc}</td><td class="center">${r.qty}</td><td class="center">${r.uom}</td><td class="right">P${ph2(N(r.cost))}</td><td class="right">P${ph2(tot)}</td></tr>`;
-    }).join('')}
-      <tr class="total-row"><td colspan="5" class="right bold">TOTAL:</td><td class="right bold">P${ph2(ppeT)}</td></tr></table>
-      <br/>
-      <div class="section-title">D. ADMIN COST</div>
-      ${MISC_DEF[ceType].map(([k, lbl]) => {
-      const arr = Array.isArray(misc[k]) ? misc[k] : [];
-      if (!arr.length) return '';
-      const tot = arr.reduce((s, r) => s + N(r.qty) * N(r.cost), 0);
-      return `<div style="margin:6px 0"><b style="font-size:8.5pt">${lbl}</b><table><tr style="background:#eee"><th class="center">ITEM NO.</th><th>DESCRIPTION</th><th class="center">QTY</th><th class="center">UOM</th><th class="right">UNIT PRICE</th><th class="right">TOTAL</th></tr>${arr.map((r, i) => `<tr><td class="center">${i + 1}</td><td>${r.desc}</td><td class="center">${r.qty}</td><td class="center">${r.uom}</td><td class="right">P${ph2(N(r.cost))}</td><td class="right">P${ph2(N(r.qty) * N(r.cost))}</td></tr>`).join('')}<tr class="total-row"><td colspan="5" class="right bold">SUB TOTAL:</td><td class="right bold">P${ph2(tot)}</td></tr></table></div>`;
-    }).join('')}
-    </div>`;
-    const w = window.open('', '_blank');
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>CE ${info.ceNum || ''}<\/title><style>${pageStyle}<\/style><\/head><body>
+
+    const notesList = notes.length ? `<div style="margin-top:4px"><b>NOTE:</b><ol style="margin:1px 0 0 14px;padding:0;font-size:7.5pt">${notes.map(n=>`<li>${n.text}</li>`).join('')}</ol></div>` : '';
+    const sigBlock = `<table style="width:100%;border-collapse:collapse;margin-top:20px" class="sig">
+      <tr>${approvers.map(a=>`<td><div style="border-top:1px solid #000;margin-top:24px;padding-top:2px"><b style="font-size:7.5pt">${a.name||''}</b><br><span style="font-size:7pt;color:#555">${a.role||''}</span></div></td>`).join('')}</tr>
+    </table>`;
+
+    /* Manpower &#8212; skip zero-rate rows */
+    const mpActive = mp.filter(r=>N(r.rate)>0||N(r.pax)>0);
+    const shiftKeys = [...new Set(mpActive.map(r=>r.shift||'straight'))];
+    const shiftRows = shiftKeys.map(sk=>{
+      const rows=mpActive.filter(r=>(r.shift||'straight')===sk);
+      if(!rows.length)return'';
+      const info2=SHIFTS[sk];const mult=info2?.mult||1;
+      const subA=rows.reduce((s,r)=>s+N(r.pax)*N(r.days)*N(r.rate)*mult,0);
+      const subB=rows.reduce((s,r)=>s+N(r.pax)*(N(r.otHours)/8)*N(r.rate)*1.25*mult,0);
+      return`<div class="sub">${info2?.label||sk.toUpperCase()}</div>
+      <table><tr style="background:#eee"><th class="c" style="width:28px">ITEM</th><th>MANPOWER LOADING</th><th class="c" style="width:28px">QTY</th><th class="c" style="width:30px">UOM</th><th class="c" style="width:36px">DAYS</th><th class="r" style="width:60px">RATE/DAY</th><th class="r" style="width:70px">SUBTOTAL</th><th class="c" style="width:30px">AOT</th><th class="r" style="width:55px">RATE OT</th><th class="r" style="width:70px">TOTAL</th></tr>
+      ${rows.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${r.role||''}</td><td class="c">${r.pax||1}</td><td class="c">pax</td><td class="c">${r.days||1}</td><td class="r">${fmt(r.rate)}</td><td class="r">${fmt(N(r.pax)*N(r.days)*N(r.rate)*mult)}</td><td class="c">${r.otHours||0}</td><td class="r">${fmt(N(r.rate)/8*1.25*mult)}</td><td class="r b">${fmt(N(r.pax)*N(r.days)*N(r.rate)*mult+N(r.pax)*(N(r.otHours)/8)*N(r.rate)*1.25*mult)}</td></tr>`).join('')}
+      <tr class="tot"><td colspan="9" class="r b">SUB TOTAL:</td><td class="r b">${fmt(subA+subB)}</td></tr></table>`;
+    }).join('');
+
+    /* Benefits &#8212; only active rows */
+    const benRows=mpActive.filter(r=>N(r.monthlyRate)>0||(r.benefits&&Object.values(r.benefits).some(v=>N(v)>0)));
+    const benPage=benRows.length?`<div class="page page-break">${docHdr('BILL OF LABOR')}
+      <div class="sec">C.7 &nbsp;BENEFITS AND OTHERS</div>
+      <table><tr style="background:#eee"><th class="c">ITEM</th><th>MANPOWER LOADING</th><th class="c">QTY</th><th class="c">UOM</th><th class="c">TOTAL DAYS</th><th class="r">MONTHLY RATE</th><th class="r">13TH PAY</th><th class="r">SSS</th><th class="r">HDMF&amp;PHIC</th><th class="r">SIL&amp;ECC</th><th class="r">TOTAL</th></tr>
+      ${benRows.map((r,i)=>{const b=r.benefits||{};const tot=N(b.thirteenth)+N(b.sss)+N(b.hdmf)+N(b.sil);return`<tr><td class="c">${i+1}</td><td>${r.role||''}</td><td class="c">${r.pax||1}</td><td class="c">pax</td><td class="c">${r.days||1}</td><td class="r">${fmt(r.monthlyRate||0)}</td><td class="r">${fmt(b.thirteenth||0)}</td><td class="r">${fmt(b.sss||0)}</td><td class="r">${fmt(b.hdmf||0)}</td><td class="r">${fmt(b.sil||0)}</td><td class="r b">${fmt(tot)}</td></tr>`;}).join('')}
+      <tr class="tot"><td colspan="10" class="r b">BENEFITS &amp; OTHERS SUB TOTAL:</td><td class="r b">${fmt(benRows.reduce((s,r)=>{const b=r.benefits||{};return s+N(b.thirteenth)+N(b.sss)+N(b.hdmf)+N(b.sil);},0))}</td></tr>
+      <tr class="tot"><td colspan="10" class="r b">TOTAL MANPOWER COST (C.1-C.7):</td><td class="r b">${fmt(mpTot)}</td></tr></table></div>` : '';
+
+    /* Tools &#8212; skip zero rows */
+    const toolsActive=tools.filter(r=>r.desc&&(N(r.cost)>0||r.desc.trim()));
+    const toolsPage=toolsActive.length?`<div class="page page-break">${docHdr('BILL OF TOOLS AND EQUIPMENT')}
+      <div class="sec">BILL OF TOOLS AND EQUIPMENT</div>
+      <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:28px">QTY</th><th class="c" style="width:35px">UOM</th><th class="c" style="width:35px">DAYS</th><th class="r" style="width:80px">UNIT PRICE</th><th class="r" style="width:80px">TOTAL</th></tr>
+      ${toolsActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${r.desc||''}</td><td class="c">${r.qty||1}</td><td class="c">${r.uom||'Lot'}</td><td class="c">${r.days||1}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(N(r.qty)*N(r.cost)*N(r.days))}</td></tr>`).join('')}
+      <tr class="tot"><td colspan="6" class="r b">TOTAL:</td><td class="r b">${fmt(toolsT)}</td></tr></table></div>` : '';
+
+    /* Materials &#8212; skip zero rows */
+    const matsActive=mats.filter(r=>r.desc&&(N(r.cost)>0||r.desc.trim()));
+    const matsPage=matsActive.length?`<div class="page page-break">${docHdr('BILL OF MATERIALS AND CONSUMABLES')}
+      <div class="sec">BILL OF MATERIALS AND CONSUMABLES</div>
+      <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:35px">QTY</th><th class="c" style="width:35px">UOM</th><th class="r" style="width:80px">UNIT PRICE</th><th class="r" style="width:80px">TOTAL</th></tr>
+      ${matsActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${r.desc||''}</td><td class="c">${r.qty||1}</td><td class="c">${r.uom||'Lot'}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(N(r.qty)*N(r.cost))}</td></tr>`).join('')}
+      <tr class="tot"><td colspan="5" class="r b">TOTAL:</td><td class="r b">${fmt(matsT)}</td></tr></table></div>` : '';
+
+    /* PPE &#8212; skip zero rows */
+    const ppeActive=ppe.filter(r=>r.desc&&(N(r.cost)>0||r.desc.trim()));
+    const ppePage=ppeActive.length?`<div class="page page-break">${docHdr('PERSONAL PROTECTIVE EQUIPMENTS')}
+      <div class="sec">PERSONAL PROTECTIVE EQUIPMENTS</div>
+      <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:35px">QTY</th><th class="c" style="width:35px">UOM</th><th class="r" style="width:80px">UNIT PRICE</th><th class="r" style="width:80px">TOTAL</th></tr>
+      ${ppeActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${r.desc||''}</td><td class="c">${r.qty||1}</td><td class="c">${r.uom||'Lot'}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(N(r.qty)*N(r.cost))}</td></tr>`).join('')}
+      <tr class="tot"><td colspan="4" class="r b">TOTAL:</td><td class="r b">${fmt(ppeT)}</td></tr></table></div>` : '';
+
+    const sowPage=sowItems.length?`<div class="page page-break">${docHdr('SCOPE OF WORK')}<div style="font-size:8pt;line-height:1.6">${(()=>{let mc=0,sc=0;return sowItems.map(it=>{if(it.type==='main'){mc++;sc=0;return`<div style="margin-top:4px"><b>${mc}. ${it.text}</b></div>`;}else{sc++;return`<div style="margin-left:14px">${mc}.${sc} ${it.text}</div>`;}}).join('');})()}</div></div>`:'';
+
+    const w=window.open('','_blank');
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>CE ${info.ceNum||''}<\/title><style>${pageStyle}<\/style><\/head><body>
       <div class="page">
         ${docHdr('COST ESTIMATE SUMMARY')}
         ${infoTable}
@@ -6064,21 +6045,13 @@ function App({
         ${notesList}
         ${sigBlock}
       </div>
-      ${sowPage}
-      <div class="page">
-        ${docHdr('BILL OF LABOR')}
-        <div class="section-title">MANPOWER COST</div>
-        ${shiftRows}
-      </div>
-      ${benPage}
-      ${toolsPage}
-      ${matsPage}
-      ${ppePage}
+      ${mpActive.length?`<div class="page page-break">${docHdr('BILL OF LABOR')}<div class="sec">MANPOWER COST</div>${shiftRows}<div class="tot" style="text-align:right;padding:3px 4px;font-weight:bold">TOTAL MANPOWER COST: ${fmt(mpTot)}</div></div>`:''}
+      ${benPage}${toolsPage}${matsPage}${ppePage}${sowPage}
     <\/body><\/html>`);
     w.document.close();
     setTimeout(() => w.print(), 800);
   };
-  const [showDraftBanner, setShowDraftBanner] = React.useState(() => hasDraft());
+  const [showDraftBanner] = React.useState(() => hasDraft());
   return /*#__PURE__*/React.createElement("div", {
     style: {
       background: BG,
@@ -9674,7 +9647,7 @@ window.SHIC_OD=(function(){
 
 </script>
 <div id="shic-ml-panel" style="display:none;position:fixed;top:56px;right:0;width:400px;height:calc(100vh - 56px);background:#161B22;border-left:1px solid #30363D;z-index:200;overflow-y:auto;box-shadow:-4px 0 20px #0008"><div style="padding:12px 14px;border-bottom:1px solid #30363D;display:flex;align-items:center;gap:8px;position:sticky;top:0;background:#161B22"><span style="font-weight:800;font-size:14px;color:#F0A429">&#129504; ML Insights</span><span style="font-size:10px;color:#7D8590;background:#1C2128;border-radius:10px;padding:1px 8px">Beta</span><button onclick="document.getElementById('shic-ml-panel').style.display='none'" style="margin-left:auto;background:none;border:none;color:#7D8590;cursor:pointer;font-size:18px">&times;</button></div><div style="padding:12px 14px;border-bottom:1px solid #30363D33"><div style="font-weight:700;font-size:10px;color:#7D8590;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">&#128176; Rate Suggester</div><div style="display:flex;gap:6px;margin-bottom:6px"><input id="ml-role-input" placeholder="Type a role name..." style="flex:1;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:6px 10px;font-size:11px;outline:none" onkeydown="if(event.key==='Enter')shicMLRate()"/><button onclick="shicMLRate()" style="background:#F0A429;color:#000;border:none;border-radius:6px;padding:6px 12px;font-weight:700;cursor:pointer;font-size:11px">Check</button></div><div id="ml-rate-result" style="color:#7D8590;font-size:11px">Enter a role to see historical rates.</div></div><div style="padding:12px 14px;border-bottom:1px solid #30363D33"><div style="font-weight:700;font-size:10px;color:#7D8590;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">&#128202; Cost Predictor</div><textarea id="ml-scope-input" placeholder="Paste project scope..." style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:6px 10px;font-size:11px;outline:none;resize:vertical;height:56px;box-sizing:border-box"></textarea><button onclick="shicMLPredict()" style="margin-top:6px;background:#3B82F6;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-weight:700;cursor:pointer;font-size:11px;width:100%">Predict Cost</button><div id="ml-predict-result" style="color:#7D8590;font-size:11px;margin-top:6px">Enter scope to predict total CE cost.</div></div><div style="padding:12px 14px;border-bottom:1px solid #30363D33"><div style="font-weight:700;font-size:10px;color:#7D8590;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">&#128269; Scope Matcher</div><div style="display:flex;gap:6px;margin-bottom:6px"><input id="ml-match-input" placeholder="Describe the work..." style="flex:1;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:6px 10px;font-size:11px;outline:none" onkeydown="if(event.key==='Enter')shicMLMatch()"/><button onclick="shicMLMatch()" style="background:#8B5CF6;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-weight:700;cursor:pointer;font-size:11px">Match</button></div><div id="ml-match-result" style="color:#7D8590;font-size:11px">Find similar past CEs.</div></div><div style="padding:12px 14px"><div style="font-weight:700;font-size:10px;color:#7D8590;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">&#9888; Anomaly Detection</div><button onclick="shicMLAnomalies()" style="background:#EF4444;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-weight:700;cursor:pointer;font-size:11px;width:100%">Scan Current CE</button><div id="ml-anomaly-result" style="color:#7D8590;font-size:11px;margin-top:6px">Compare CE rates vs Masterlist.</div></div></div>
-<div id="shic-od-panel" style="display:none;position:fixed;inset:0;background:#000c;z-index:400;align-items:center;justify-content:center"><div style="background:#161B22;border:1px solid #30363D;border-radius:12px;width:580px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 40px #0008"><div style="padding:14px 18px;border-bottom:1px solid #30363D;display:flex;align-items:center;gap:10px"><span style="font-size:20px">&#128193;</span><span style="font-weight:800;font-size:15px">Project File Analyzer</span><span style="font-size:10px;background:#1C2128;color:#7D8590;border-radius:10px;padding:2px 8px">ML Training</span><button onclick="document.getElementById('shic-od-panel').style.display='none'" style="margin-left:auto;background:none;border:none;color:#7D8590;cursor:pointer;font-size:20px">&times;</button></div><div style="overflow-y:auto;flex:1;padding:16px 18px"><div style="color:#7D8590;font-size:12px;margin-bottom:12px;padding:10px;background:#0D1117;border-radius:6px;border-left:3px solid #F0A429">Read project files from your desktop. Results are <b style="color:#10B981">saved to SharePoint</b> so all users benefit &#8212; analyze once, works for everyone. Supports <b style="color:#E6EDF3">Excel, PDF, Word</b>.</div><div style="display:flex;gap:4px;margin-bottom:14px;background:#0D1117;border-radius:8px;padding:4px"><button id="tab-local" onclick="switchAnalyzerTab('local')" style="flex:1;background:#30363D;color:#E6EDF3;border:none;border-radius:6px;padding:7px;font-weight:700;cursor:pointer;font-size:12px">&#128193; Local Files</button><button id="tab-od" onclick="switchAnalyzerTab('od')" style="flex:1;background:transparent;color:#7D8590;border:none;border-radius:6px;padding:7px;font-weight:700;cursor:pointer;font-size:12px">&#9729; OneDrive</button></div><div id="analyzer-local"><div style="display:flex;gap:8px;margin-bottom:10px"><button onclick="document.getElementById('local-folder-input').click()" style="flex:1;background:#1C2128;border:1px dashed #30363D;color:#E6EDF3;border-radius:8px;padding:16px 8px;font-size:12px;cursor:pointer" onmouseover="this.style.borderColor='#F0A429'" onmouseout="this.style.borderColor='#30363D'">&#128193; Select Folder<br><span style="font-size:10px;color:#7D8590">All files in folder</span></button><button onclick="document.getElementById('local-file-input').click()" style="flex:1;background:#1C2128;border:1px dashed #30363D;color:#E6EDF3;border-radius:8px;padding:16px 8px;font-size:12px;cursor:pointer" onmouseover="this.style.borderColor='#F0A429'" onmouseout="this.style.borderColor='#30363D'">&#128196; Select Files<br><span style="font-size:10px;color:#7D8590">Individual files</span></button></div><input type="file" id="local-file-input" multiple accept=".xlsx,.xls,.pdf,.docx,.doc" style="display:none" onchange="localFilesSelected(this.files)"/><input type="file" id="local-folder-input" webkitdirectory multiple style="display:none" onchange="localFilesSelected(this.files)"/><div id="local-file-list" style="display:none;margin-bottom:10px;background:#0D1117;border-radius:6px;padding:8px"><div style="font-size:11px;color:#E6EDF3;margin-bottom:4px" id="local-file-count"></div><div id="local-file-names" style="max-height:70px;overflow-y:auto;font-size:10px;color:#7D8590;font-family:monospace"></div></div><button id="local-analyze-btn" onclick="analyzeLocalFiles()" disabled style="width:100%;background:#30363D;color:#7D8590;border:none;border-radius:6px;padding:10px;font-weight:700;cursor:not-allowed;font-size:12px;margin-bottom:10px">Analyze &amp; Save to SharePoint</button><div id="local-progress" style="display:none;padding:10px;background:#0D1117;border-radius:8px;border:1px solid #30363D;margin-bottom:10px"><div id="local-progress-msg" style="font-size:12px;margin-bottom:6px"></div><div style="background:#1C2128;border-radius:6px;height:6px"><div id="local-progress-bar" style="background:#F0A429;height:6px;border-radius:6px;width:0%;transition:width .3s"></div></div></div><div id="local-results" style="display:none"></div></div><div id="analyzer-od" style="display:none"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px"><div><label style="display:block;font-size:10px;color:#7D8590;margin-bottom:4px">CLIENT ID</label><input id="od-client-id" style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:7px 10px;font-size:11px;outline:none;box-sizing:border-box" placeholder="Azure App Client ID"/></div><div><label style="display:block;font-size:10px;color:#7D8590;margin-bottom:4px">TENANT ID</label><input id="od-tenant-id" style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:7px 10px;font-size:11px;outline:none;box-sizing:border-box" placeholder="common"/></div></div><label style="display:block;font-size:10px;color:#7D8590;margin-bottom:4px">FOLDER PATH</label><input id="od-folder" style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:7px 10px;font-size:12px;outline:none;box-sizing:border-box;margin-bottom:10px" placeholder="Projects/Cost Estimates"/><div style="display:flex;gap:8px"><button onclick="odSaveConfig()" style="background:#30363D;color:#E6EDF3;border:none;border-radius:6px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:12px">Save</button><button onclick="odScan()" style="background:#F0A429;color:#000;border:none;border-radius:6px;padding:8px 18px;font-weight:700;cursor:pointer;font-size:12px;flex:1">&#9729; Scan OneDrive</button></div><div id="od-progress" style="display:none;padding:10px;background:#0D1117;border-radius:8px;border:1px solid #30363D;margin-top:10px"><div id="od-progress-msg" style="font-size:12px;margin-bottom:6px"></div><div style="background:#1C2128;border-radius:6px;height:6px"><div id="od-progress-bar" style="background:#F0A429;height:6px;border-radius:6px;width:0%;transition:width .3s"></div></div></div><div id="od-results" style="display:none;margin-top:10px"></div></div></div></div></div>
+<div id="shic-od-panel" style="display:none;position:fixed;inset:0;background:#000c;z-index:400;align-items:center;justify-content:center"><div style="background:#161B22;border:1px solid #30363D;border-radius:12px;width:580px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 40px #0008"><div style="padding:14px 18px;border-bottom:1px solid #30363D;display:flex;align-items:center;gap:10px"><span style="font-size:20px">&#128193;</span><span style="font-weight:800;font-size:15px">Project File Analyzer</span><span style="font-size:10px;background:#1C2128;color:#7D8590;border-radius:10px;padding:2px 8px">ML Training</span><button onclick="document.getElementById('shic-od-panel').style.display='none'" style="margin-left:auto;background:none;border:none;color:#7D8590;cursor:pointer;font-size:20px">&times;</button></div><div style="overflow-y:auto;flex:1;padding:16px 18px"><div style="color:#7D8590;font-size:12px;margin-bottom:12px;padding:10px;background:#0D1117;border-radius:6px;border-left:3px solid #F0A429">Read project files from your desktop. Results are <b style="color:#10B981">saved to SharePoint</b> so all users benefit. Supports <b style="color:#E6EDF3">Excel, PDF, Word</b>.</div><div style="display:flex;gap:4px;margin-bottom:14px;background:#0D1117;border-radius:8px;padding:4px"><button id="tab-local" onclick="switchAnalyzerTab('local')" style="flex:1;background:#30363D;color:#E6EDF3;border:none;border-radius:6px;padding:7px;font-weight:700;cursor:pointer;font-size:12px">&#128193; Local Files</button><button id="tab-od" onclick="switchAnalyzerTab('od')" style="flex:1;background:transparent;color:#7D8590;border:none;border-radius:6px;padding:7px;font-weight:700;cursor:pointer;font-size:12px">&#9729; OneDrive</button></div><div id="analyzer-local"><div style="display:flex;gap:8px;margin-bottom:10px"><button onclick="document.getElementById('local-folder-input').click()" style="flex:1;background:#1C2128;border:1px dashed #30363D;color:#E6EDF3;border-radius:8px;padding:16px 8px;font-size:12px;cursor:pointer" onmouseover="this.style.borderColor='#F0A429'" onmouseout="this.style.borderColor='#30363D'">&#128193; Select Folder<br><span style="font-size:10px;color:#7D8590">All files in folder</span></button><button onclick="document.getElementById('local-file-input').click()" style="flex:1;background:#1C2128;border:1px dashed #30363D;color:#E6EDF3;border-radius:8px;padding:16px 8px;font-size:12px;cursor:pointer" onmouseover="this.style.borderColor='#F0A429'" onmouseout="this.style.borderColor='#30363D'">&#128196; Select Files<br><span style="font-size:10px;color:#7D8590">Individual files</span></button></div><input type="file" id="local-file-input" multiple accept=".xlsx,.xls,.pdf,.docx,.doc" style="display:none" onchange="localFilesSelected(this.files)"/><input type="file" id="local-folder-input" webkitdirectory multiple style="display:none" onchange="localFilesSelected(this.files)"/><div id="local-file-list" style="display:none;margin-bottom:10px;background:#0D1117;border-radius:6px;padding:8px"><div style="font-size:11px;color:#E6EDF3;margin-bottom:4px" id="local-file-count"></div><div id="local-file-names" style="max-height:70px;overflow-y:auto;font-size:10px;color:#7D8590;font-family:monospace"></div></div><button id="local-analyze-btn" onclick="analyzeLocalFiles()" disabled style="width:100%;background:#30363D;color:#7D8590;border:none;border-radius:6px;padding:10px;font-weight:700;cursor:not-allowed;font-size:12px;margin-bottom:10px">Analyze &amp; Save to SharePoint</button><div id="local-progress" style="display:none;padding:10px;background:#0D1117;border-radius:8px;border:1px solid #30363D;margin-bottom:10px"><div id="local-progress-msg" style="font-size:12px;margin-bottom:6px"></div><div style="background:#1C2128;border-radius:6px;height:6px"><div id="local-progress-bar" style="background:#F0A429;height:6px;border-radius:6px;width:0%;transition:width .3s"></div></div></div><div id="local-results" style="display:none"></div></div><div id="analyzer-od" style="display:none"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px"><div><label style="display:block;font-size:10px;color:#7D8590;margin-bottom:4px">CLIENT ID</label><input id="od-client-id" style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:7px 10px;font-size:11px;outline:none;box-sizing:border-box" placeholder="Azure App Client ID"/></div><div><label style="display:block;font-size:10px;color:#7D8590;margin-bottom:4px">TENANT ID</label><input id="od-tenant-id" style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:7px 10px;font-size:11px;outline:none;box-sizing:border-box" placeholder="common"/></div></div><label style="display:block;font-size:10px;color:#7D8590;margin-bottom:4px">FOLDER PATH</label><input id="od-folder" style="width:100%;background:#0D1117;border:1px solid #30363D;color:#E6EDF3;border-radius:6px;padding:7px 10px;font-size:12px;outline:none;box-sizing:border-box;margin-bottom:10px" placeholder="Projects/Cost Estimates"/><div style="display:flex;gap:8px"><button onclick="odSaveConfig()" style="background:#30363D;color:#E6EDF3;border:none;border-radius:6px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:12px">Save</button><button onclick="odScan()" style="background:#F0A429;color:#000;border:none;border-radius:6px;padding:8px 18px;font-weight:700;cursor:pointer;font-size:12px;flex:1">&#9729; Scan OneDrive</button></div><div id="od-progress" style="display:none;padding:10px;background:#0D1117;border-radius:8px;border:1px solid #30363D;margin-top:10px"><div id="od-progress-msg" style="font-size:12px;margin-bottom:6px"></div><div style="background:#1C2128;border-radius:6px;height:6px"><div id="od-progress-bar" style="background:#F0A429;height:6px;border-radius:6px;width:0%;transition:width .3s"></div></div></div><div id="od-results" style="display:none;margin-top:10px"></div></div></div></div></div>
 <button id="pwa-install-btn" onclick="installApp()" style="display:none;position:fixed;bottom:140px;right:24px;background:#10B981;color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:20px;cursor:pointer;box-shadow:0 4px 16px #10B98166;z-index:199;align-items:center;justify-content:center;font-weight:700" title="Install App">+</button>
 <button onclick="openODPanel()" style="position:fixed;bottom:80px;right:24px;background:#0078D4;color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:18px;cursor:pointer;box-shadow:0 4px 16px #0078D466;z-index:199" title="Project Analyzer">&#128193;</button>
 <button onclick="shicMLToggle()" style="position:fixed;bottom:24px;right:24px;background:#F0A429;color:#000;border:none;border-radius:50%;width:48px;height:48px;font-size:20px;cursor:pointer;box-shadow:0 4px 16px #F0A42966;z-index:199" title="ML Insights">&#129504;</button>

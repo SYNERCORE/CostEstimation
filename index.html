@@ -828,13 +828,24 @@ async function getSPToken(){
         cache:{cacheLocation:'localStorage',storeAuthStateInCookie:false}
       });
       try{await _spMsalApp.initialize();}catch(e){}
+      /* Handle redirect response (from acquireTokenRedirect) */
+      try{const redirectResult=await _spMsalApp.handleRedirectPromise();if(redirectResult){_spToken=redirectResult.accessToken;_spExpiry=redirectResult.expiresOn?redirectResult.expiresOn.getTime():Date.now()+3600000;}}catch(e){}
     }
     const accts=_spMsalApp.getAllAccounts();
     let res;
     try{
       res=await _spMsalApp.acquireTokenSilent({scopes:[scope],account:accts[0]||null});
     }catch(e){
-      res=await _spMsalApp.acquireTokenPopup({scopes:[scope]});
+      try{
+        res=await _spMsalApp.acquireTokenPopup({scopes:[scope]});
+      }catch(popErr){
+        /* GitHub Pages COOP blocks popups &#8212; fall back to redirect */
+        if(popErr.errorCode==='popup_window_error'||popErr.message?.includes('window.closed')||popErr.message?.includes('interaction_in_progress')){
+          await _spMsalApp.acquireTokenRedirect({scopes:[scope]});
+          return null;
+        }
+        throw popErr;
+      }
     }
     _spToken=res.accessToken;
     _spExpiry=res.expiresOn?res.expiresOn.getTime():Date.now()+3600000;
@@ -3324,7 +3335,7 @@ function App({
   const handleExport = () => {
     const wb = XLSX.utils.book_new();
     const cl = ceType === 'onsite' ? 'Onsite' : ceType === 'shopworks' ? 'Shopwork' : 'Supply';
-    const s1 = [['COST ESTIMATE SUMMARY', '', '', '', '', '', '', '', '', '', '', 'Document No.:', cfg.docNo], ['', '', '', '', '', '', '', '', '', '', '', 'Revision No.:', '0'], ['PROJECT TYPE:', '', '', '', info.projType === 'electrical' ? 'TRUE' : 'FALSE', 'Electrical ' + cl, '', info.projType === 'mechanical' ? 'TRUE' : 'FALSE', 'Mechanical ' + cl], ['PROJECT DESCRIPTION:', info.description, '', '', '', '', '', '', '', '', 'DATE:', info.date], ['CE NUMBER:', info.ceNum], ['CLIENT:', info.client, '', '', '', '', '', '', '', '', '', '', '', 'CE:', info.ceNum], ['LOCATION:', info.location, '', '', '', '', '', 'MATERIAL:', info.material], ['ATTENTION:', info.attention, '', '', '', '', '', 'QTY:', info.qty, '', '', 'STATUS:', info.status], ['END USER:', info.endUser, '', '', '', '', '', 'DAYS:', info.days], [], ['ITEM', 'DESCRIPTION', '', '', '', '', '', '', '', '', 'TOTAL COST'], ...(cfg.mobDemob ? [['', 'MOBILIZATION', '', '', '', '', '', '', '', '', N(mob)], ['', 'DEMOBILIZATION', '', '', '', '', '', '', '', '', N(demob)]] : []), ['A.', 'MANPOWER COST', '', '', '', '', '', '', '', '', mpTot], [ceType === 'supply' ? 'B.' : 'D.', 'TOOLS AND EQUIPMENT', '', '', '', '', '', '', '', '', toolsT], [ceType === 'supply' ? 'B.' : 'E.', 'MATERIALS AND CONSUMABLES', '', '', '', '', '', '', '', '', matsT], [ceType === 'supply' ? 'C.' : 'F.', 'PERSONAL PROTECTIVE EQUIPMENT', '', '', '', '', '', '', '', '', ppeT], [ceType === 'supply' ? 'D.' : ceType === 'onsite' ? 'G.' : 'E.', 'MISCELLANEOUS', '', '', '', '', '', '', '', '', miscT], [], ['TOTAL AMOUNT:', '', '', '', '', '', '', '', '', '', grand], [], ['UNIT PRICE:', '', '', '', '', '', '', '', '', '', unitP], [], ['NOTE:'], ['1. CE covers ' + ceType + ' work for ' + info.description], ['2. Additional scope not in original SOW is excluded.'], ['3. Lead time assumes no interruptions or hold points.'], [], ['Prepared By:', '', '', '', 'Checked By:', '', '', 'Noted By:', '', '', '', 'Approved By:'], ['', '', '', '', 'Mr. Jhuniel Ubana', '', '', 'Mr. Fernando Bautista', '', '', '', 'Mr. Warren Maralit'], ['Cost Estimator', '', '', '', 'TSG - Head', '', '', 'Operations Director', '', '', '', 'Dir. Sales & Technical'], [], ['Reviewed By:', '', '', '', '', '', '', cfg.hasConc ? 'Concurred By:' : ''], ['Kenneth Mendoza', '', '', '', '', '', '', cfg.hasConc ? 'RADIM ASAULA' : ''], ['Cost Supervisor', '', '', '', '', '', '', cfg.hasConc ? 'FS MANAGER' : '']];
+    const s1 = [['COST ESTIMATE SUMMARY', '', '', '', '', '', '', '', '', '', '', 'Document No.:', cfg.docNo], ['', '', '', '', '', '', '', '', '', '', '', 'Revision No.:', '0'], ['PROJECT TYPE:', '', '', '', info.projType === 'electrical' ? 'TRUE' : 'FALSE', 'Electrical ' + cl, '', info.projType === 'mechanical' ? 'TRUE' : 'FALSE', 'Mechanical ' + cl], ['PROJECT DESCRIPTION:', info.description, '', '', '', '', '', '', '', '', 'DATE:', info.date], ['CE NUMBER:', info.ceNum], ['CLIENT:', info.client, '', '', '', '', '', '', '', '', '', '', '', 'CE:', info.ceNum], ['LOCATION:', info.location, '', '', '', '', '', 'MATERIAL:', info.material], ['ATTENTION:', info.attention, '', '', '', '', '', 'QTY:', info.qty, '', '', 'STATUS:', info.status], ['END USER:', info.endUser, '', '', '', '', '', 'DAYS:', info.days], [], ['ITEM', 'DESCRIPTION', '', '', '', '', '', '', '', '', 'TOTAL COST'], ...(cfg.mobDemob ? [['', 'MOBILIZATION', '', '', '', '', '', '', '', '', N(mobSubT)], ['', 'DEMOBILIZATION', '', '', '', '', '', '', '', '', N(demobSubT)]] : []), ['A.', 'MANPOWER COST', '', '', '', '', '', '', '', '', mpTot], [ceType === 'supply' ? 'B.' : 'D.', 'TOOLS AND EQUIPMENT', '', '', '', '', '', '', '', '', toolsT], [ceType === 'supply' ? 'B.' : 'E.', 'MATERIALS AND CONSUMABLES', '', '', '', '', '', '', '', '', matsT], [ceType === 'supply' ? 'C.' : 'F.', 'PERSONAL PROTECTIVE EQUIPMENT', '', '', '', '', '', '', '', '', ppeT], [ceType === 'supply' ? 'D.' : ceType === 'onsite' ? 'G.' : 'E.', 'MISCELLANEOUS', '', '', '', '', '', '', '', '', miscT], [], ['TOTAL AMOUNT:', '', '', '', '', '', '', '', '', '', grand], [], ['UNIT PRICE:', '', '', '', '', '', '', '', '', '', unitP], [], ['NOTE:'], ['1. CE covers ' + ceType + ' work for ' + info.description], ['2. Additional scope not in original SOW is excluded.'], ['3. Lead time assumes no interruptions or hold points.'], [], ['Prepared By:', '', '', '', 'Checked By:', '', '', 'Noted By:', '', '', '', 'Approved By:'], ['', '', '', '', 'Mr. Jhuniel Ubana', '', '', 'Mr. Fernando Bautista', '', '', '', 'Mr. Warren Maralit'], ['Cost Estimator', '', '', '', 'TSG - Head', '', '', 'Operations Director', '', '', '', 'Dir. Sales & Technical'], [], ['Reviewed By:', '', '', '', '', '', '', cfg.hasConc ? 'Concurred By:' : ''], ['Kenneth Mendoza', '', '', '', '', '', '', cfg.hasConc ? 'RADIM ASAULA' : ''], ['Cost Supervisor', '', '', '', '', '', '', cfg.hasConc ? 'FS MANAGER' : '']];
     const ws1 = XLSX.utils.aoa_to_sheet(s1);
     ws1['!cols'] = [{
       wch: 8

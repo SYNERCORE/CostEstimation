@@ -957,8 +957,40 @@ async function spLoadMLImports(){
 }
 
 async function dbSaveML(data){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Masterlist'),"Title eq 'config'",'Id');if(r.length)await spPatch(spList('Masterlist'),r[0].Id,{shicData:JSON.stringify(data)});else await spPost(spList('Masterlist'),{Title:'config',shicData:JSON.stringify(data)});return;}catch(e){console.warn('dbSaveML:',e.message);}}LS.set('masterlist',data);}
-async function dbSaveSowLib(lib){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('SowLib'),"Title eq 'config'",'Id');if(r.length)await spPatch(spList('SowLib'),r[0].Id,{shicData:JSON.stringify(lib)});else await spPost(spList('SowLib'),{Title:'config',shicData:JSON.stringify(lib)});return true;}catch(e){console.warn('dbSaveSowLib:',e.message);}}LS.set('sy3:sowlib',lib);return false;}
-async function dbGetSowLib(){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('SowLib'),"Title eq 'config'",'Id,shicData');if(r.length&&r[0].shicData)return JSON.parse(r[0].shicData);}catch(e){console.warn('dbGetSowLib:',e.message);}}try{const s=localStorage.getItem('sy3:sowlib');return s?JSON.parse(s):null;}catch{return null;}}
+async function dbSaveSowLib(lib){
+  if(USE_SP||getSiteURL()){
+    try{
+      /* Fetch all existing rows — parse their shicData to get the internal id for upsert keying */
+      const existing=await spGet(spList('SowLib'),'','Id,shicData');
+      const existMap={};/* svc.id → SP row Id */
+      existing.forEach(r=>{try{const d=JSON.parse(r.shicData||'{}');if(d&&d.id!=null)existMap[d.id]=r.Id;}catch{}});
+      const libIds=new Set(lib.map(s=>s.id));
+      /* Upsert each service as its own row; Title = readable "Cat | Name" */
+      for(const svc of lib){
+        const data={Title:(svc.cat||'')+(svc.cat&&svc.title?' | ':'')+svc.title,shicData:JSON.stringify(svc)};
+        if(existMap[svc.id]!=null)await spPatch(spList('SowLib'),existMap[svc.id],data);
+        else await spPost(spList('SowLib'),data);
+      }
+      /* Delete rows for services no longer in the library */
+      const toDelete=existing.filter(r=>{try{const d=JSON.parse(r.shicData||'{}');return d&&!libIds.has(d.id);}catch{return false;}});
+      for(const r of toDelete)await spDelete(spList('SowLib'),r.Id).catch(()=>{});
+      return true;
+    }catch(e){console.warn('dbSaveSowLib:',e.message);}
+  }
+  LS.set('sy3:sowlib',lib);return false;
+}
+async function dbGetSowLib(){
+  if(USE_SP||getSiteURL()){
+    try{
+      const rows=await spGet(spList('SowLib'),'','Id,Title,shicData');
+      if(rows.length){
+        const parsed=rows.filter(r=>r.shicData).map(r=>{try{return JSON.parse(r.shicData);}catch{return null;}}).filter(Boolean);
+        if(parsed.length)return parsed.sort((a,b)=>(a.id||0)-(b.id||0));
+      }
+    }catch(e){console.warn('dbGetSowLib:',e.message);}
+  }
+  try{const s=localStorage.getItem('sy3:sowlib');return s?JSON.parse(s):null;}catch{return null;}
+}
 async function ensureAdmin() {
   try {
     /* Migrate data from old sy3: prefix to shic: prefix */

@@ -104,6 +104,19 @@ const ph = n => (n || 0).toLocaleString("en-PH", {
 });
 let _uid = 1000;
 const uid = () => String(++_uid);
+function nextCeNum(history) {
+  const yr = new Date().getFullYear();
+  const prefix = 'SHIC-CE-' + yr + '-';
+  let max = 0;
+  (history || []).forEach(h => {
+    const n = ((h.info && h.info.ceNum) || '').toUpperCase().replace(/-R\d+$/i, '');
+    if (n.startsWith(prefix.toUpperCase())) {
+      const num = parseInt(n.slice(prefix.length)) || 0;
+      if (num > max) max = num;
+    }
+  });
+  return prefix + String(max + 1).padStart(4, '0');
+}
 const mkMP = () => ({
   id: uid(),
   role: "",
@@ -130,7 +143,7 @@ const mkRes = () => ({
   cost: 0
 });
 const BLANK_INFO = {
-  ceNum: "SHIC-CE-2026-0001",
+  ceNum: "SHIC-CE-" + new Date().getFullYear() + "-0001",
   date: new Date().toISOString().slice(0, 10),
   client: "",
   location: "",
@@ -164,8 +177,10 @@ async function sha256(s) {
   const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s + 'sy3_salt_2026'));
   return Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2, '0')).join('');
 }
-const getApiKey = () => localStorage.getItem('sy3:apikey') || '';
-const setApiKey = k => localStorage.setItem('sy3:apikey', k);
+const getRememberKey = () => localStorage.getItem('sy3:rememberkey') === '1';
+const setRememberKey = v => v ? localStorage.setItem('sy3:rememberkey','1') : localStorage.removeItem('sy3:rememberkey');
+const getApiKey = () => sessionStorage.getItem('sy3:apikey') || (getRememberKey() ? localStorage.getItem('sy3:apikey') || '' : '');
+const setApiKey = (k, remember) => { sessionStorage.setItem('sy3:apikey', k); if(remember){ localStorage.setItem('sy3:apikey', k); setRememberKey(true); } else { localStorage.removeItem('sy3:apikey'); setRememberKey(false); } };
 
 /* === MULTI-PROVIDER AI =====================================================
    Providers: Gemini (free) \xb7 Groq (free) \xb7 Kimi (free tier) \xb7
@@ -358,7 +373,7 @@ async function callAI(prompt, maxTokens) {
       'anthropic-dangerous-direct-browser-access': 'true'
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: maxTokens,
       messages: [{
         role: 'user',
@@ -437,37 +452,37 @@ const DEFAULT_ML={
     {id:"m11",code:"SHIC-MP-011",category:"General",role:"Painter / Blaster",rate:850,perDiem:0,uom:"Day"},
     {id:"m12",code:"SHIC-MP-012",category:"Civil",role:"Civil Worker",rate:750,perDiem:0,uom:"Day"}
   ,
-    {id:"mp13",code:"SHIC-MP-013",category:"General",role:"ADMIN",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp14",code:"SHIC-MP-014",category:"Electrical",role:"AUTOCAD OPERATOR",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp15",code:"SHIC-MP-015",category:"Mechanical",role:"BALANCING SUPERVISOR",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp16",code:"SHIC-MP-016",category:"Mechanical",role:"BALANCING TECHNICIAN",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp17",code:"SHIC-MP-017",category:"General",role:"BOILER INSPECTOR",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp18",code:"SHIC-MP-018",category:"Mechanical",role:"BOILER WELDER",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp19",code:"SHIC-MP-019",category:"General",role:"DOCUMENT CONTROLLER",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp20",code:"SHIC-MP-020",category:"General",role:"DRIVER",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp21",code:"SHIC-MP-021",category:"Electrical",role:"ELECTRICAL ENGINEER",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp22",code:"SHIC-MP-022",category:"General",role:"FIRE WATCHER",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp23",code:"SHIC-MP-023",category:"Electrical",role:"INSTRUMENT TECHNICIAN",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp24",code:"SHIC-MP-024",category:"Mechanical",role:"MACHINIST",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp25",code:"SHIC-MP-025",category:"Mechanical",role:"MECHANICAL FITTER",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp26",code:"SHIC-MP-026",category:"Mechanical",role:"MECHANICAL TECHNICIAN",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp27",code:"SHIC-MP-027",category:"Mechanical",role:"MILLWRIGHT",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp28",code:"SHIC-MP-028",category:"General",role:"NDT TECHNICIAN",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp29",code:"SHIC-MP-029",category:"General",role:"OVERHEAD CRANE OPERATOR",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp30",code:"SHIC-MP-030",category:"General",role:"PROCUREMENT OFFICER",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp31",code:"SHIC-MP-031",category:"General",role:"PROJECT MANAGER",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp32",code:"SHIC-MP-032",category:"General",role:"QA/QC",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp33",code:"SHIC-MP-033",category:"Mechanical",role:"RIGGER",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp34",code:"SHIC-MP-034",category:"General",role:"ROBOTIC OPERATOR",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp35",code:"SHIC-MP-035",category:"General",role:"SAFETY OFFICER 3",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp36",code:"SHIC-MP-036",category:"General",role:"SANDBLASTER",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp37",code:"SHIC-MP-037",category:"General",role:"SANDBLASTING SUPERVISOR",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp38",code:"SHIC-MP-038",category:"Mechanical",role:"SCAFFOLDER",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp39",code:"SHIC-MP-039",category:"General",role:"SUPERVISOR",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp40",code:"SHIC-MP-040",category:"General",role:"TOOL KEEPER",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp41",code:"SHIC-MP-041",category:"General",role:"TRADE ASSISTANT",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp42",code:"SHIC-MP-042",category:"General",role:"TRADE BLASTER",rate:0,perDiem:0,uom:"Day"},
-    {id:"mp43",code:"SHIC-MP-043",category:"Mechanical",role:"TRADE MACHINIST",rate:0,perDiem:0,uom:"Day"}],
+    {id:"mp13",code:"SHIC-MP-013",category:"General",role:"ADMIN",rate:850,perDiem:0,uom:"Day"},
+    {id:"mp14",code:"SHIC-MP-014",category:"Electrical",role:"AUTOCAD OPERATOR",rate:900,perDiem:0,uom:"Day"},
+    {id:"mp15",code:"SHIC-MP-015",category:"Mechanical",role:"BALANCING SUPERVISOR",rate:1500,perDiem:0,uom:"Day"},
+    {id:"mp16",code:"SHIC-MP-016",category:"Mechanical",role:"BALANCING TECHNICIAN",rate:1200,perDiem:0,uom:"Day"},
+    {id:"mp17",code:"SHIC-MP-017",category:"General",role:"BOILER INSPECTOR",rate:1400,perDiem:0,uom:"Day"},
+    {id:"mp18",code:"SHIC-MP-018",category:"Mechanical",role:"BOILER WELDER",rate:1100,perDiem:0,uom:"Day"},
+    {id:"mp19",code:"SHIC-MP-019",category:"General",role:"DOCUMENT CONTROLLER",rate:850,perDiem:0,uom:"Day"},
+    {id:"mp20",code:"SHIC-MP-020",category:"General",role:"DRIVER",rate:750,perDiem:0,uom:"Day"},
+    {id:"mp21",code:"SHIC-MP-021",category:"Electrical",role:"ELECTRICAL ENGINEER",rate:1500,perDiem:0,uom:"Day"},
+    {id:"mp22",code:"SHIC-MP-022",category:"General",role:"FIRE WATCHER",rate:650,perDiem:0,uom:"Day"},
+    {id:"mp23",code:"SHIC-MP-023",category:"Electrical",role:"INSTRUMENT TECHNICIAN",rate:1000,perDiem:0,uom:"Day"},
+    {id:"mp24",code:"SHIC-MP-024",category:"Mechanical",role:"MACHINIST",rate:1050,perDiem:0,uom:"Day"},
+    {id:"mp25",code:"SHIC-MP-025",category:"Mechanical",role:"MECHANICAL FITTER",rate:950,perDiem:0,uom:"Day"},
+    {id:"mp26",code:"SHIC-MP-026",category:"Mechanical",role:"MECHANICAL TECHNICIAN",rate:1000,perDiem:0,uom:"Day"},
+    {id:"mp27",code:"SHIC-MP-027",category:"Mechanical",role:"MILLWRIGHT",rate:1000,perDiem:0,uom:"Day"},
+    {id:"mp28",code:"SHIC-MP-028",category:"General",role:"NDT TECHNICIAN",rate:1200,perDiem:0,uom:"Day"},
+    {id:"mp29",code:"SHIC-MP-029",category:"General",role:"OVERHEAD CRANE OPERATOR",rate:900,perDiem:0,uom:"Day"},
+    {id:"mp30",code:"SHIC-MP-030",category:"General",role:"PROCUREMENT OFFICER",rate:900,perDiem:0,uom:"Day"},
+    {id:"mp31",code:"SHIC-MP-031",category:"General",role:"PROJECT MANAGER",rate:1800,perDiem:0,uom:"Day"},
+    {id:"mp32",code:"SHIC-MP-032",category:"General",role:"QA/QC",rate:1200,perDiem:0,uom:"Day"},
+    {id:"mp33",code:"SHIC-MP-033",category:"Mechanical",role:"RIGGER",rate:800,perDiem:0,uom:"Day"},
+    {id:"mp34",code:"SHIC-MP-034",category:"General",role:"ROBOTIC OPERATOR",rate:1500,perDiem:0,uom:"Day"},
+    {id:"mp35",code:"SHIC-MP-035",category:"General",role:"SAFETY OFFICER 3",rate:1050,perDiem:0,uom:"Day"},
+    {id:"mp36",code:"SHIC-MP-036",category:"General",role:"SANDBLASTER",rate:850,perDiem:0,uom:"Day"},
+    {id:"mp37",code:"SHIC-MP-037",category:"General",role:"SANDBLASTING SUPERVISOR",rate:1100,perDiem:0,uom:"Day"},
+    {id:"mp38",code:"SHIC-MP-038",category:"Mechanical",role:"SCAFFOLDER",rate:800,perDiem:0,uom:"Day"},
+    {id:"mp39",code:"SHIC-MP-039",category:"General",role:"SUPERVISOR",rate:1300,perDiem:0,uom:"Day"},
+    {id:"mp40",code:"SHIC-MP-040",category:"General",role:"TOOL KEEPER",rate:700,perDiem:0,uom:"Day"},
+    {id:"mp41",code:"SHIC-MP-041",category:"General",role:"TRADE ASSISTANT",rate:700,perDiem:0,uom:"Day"},
+    {id:"mp42",code:"SHIC-MP-042",category:"General",role:"TRADE BLASTER",rate:750,perDiem:0,uom:"Day"},
+    {id:"mp43",code:"SHIC-MP-043",category:"Mechanical",role:"TRADE MACHINIST",rate:1000,perDiem:0,uom:"Day"}],
   tools:[
     {id:"t1",code:"SHIC-TL-001",category:"Electrical",desc:"Multimeter / Clamp Meter",cost:500,uom:"Day"},
     {id:"t2",code:"SHIC-TL-002",category:"Electrical",desc:"Megger / Insulation Tester",cost:800,uom:"Day"},
@@ -482,114 +497,114 @@ const DEFAULT_ML={
     {id:"t11",code:"SHIC-TL-011",category:"Mechanical",desc:"Pipe Threader",cost:800,uom:"Day"},
     {id:"t12",code:"SHIC-TL-012",category:"Electrical",desc:"Conduit Bender",cost:600,uom:"Day"}
   ,
-    {id:"tl13",code:"SHIC-TL-013",category:"General",desc:"AIR CARBON ARC GOUGING SET",cost:0,uom:"Day"},
-    {id:"tl14",code:"SHIC-TL-014",category:"General",desc:"AIR COMPRESSOR 3HP",cost:0,uom:"Day"},
-    {id:"tl15",code:"SHIC-TL-015",category:"Mechanical",desc:"ANGLE GRINDER 4\"",cost:0,uom:"Day"},
-    {id:"tl16",code:"SHIC-TL-016",category:"Mechanical",desc:"ANGLE GRINDER 7\"",cost:0,uom:"Day"},
-    {id:"tl17",code:"SHIC-TL-017",category:"General",desc:"BABBITT CASTING CENTRIFUGE",cost:0,uom:"Day"},
-    {id:"tl18",code:"SHIC-TL-018",category:"General",desc:"BABBITT MELTER POT",cost:0,uom:"Day"},
-    {id:"tl19",code:"SHIC-TL-019",category:"Mechanical",desc:"BALANCING MACHINE",cost:0,uom:"Day"},
-    {id:"tl20",code:"SHIC-TL-020",category:"Mechanical",desc:"BLASTING NOZZLE 6 3/8\"",cost:0,uom:"Day"},
-    {id:"tl21",code:"SHIC-TL-021",category:"Mechanical",desc:"BORE GAUGE 50-150MM",cost:0,uom:"Day"},
-    {id:"tl22",code:"SHIC-TL-022",category:"General",desc:"CERAMIC COATING SPRAY EQUIPMENT",cost:0,uom:"Day"},
-    {id:"tl23",code:"SHIC-TL-023",category:"Mechanical",desc:"CHAIN BLOCK 10T",cost:0,uom:"Day"},
-    {id:"tl24",code:"SHIC-TL-024",category:"Mechanical",desc:"CHAIN BLOCK 5T",cost:0,uom:"Day"},
-    {id:"tl25",code:"SHIC-TL-025",category:"General",desc:"CHIPPING HAMMER",cost:0,uom:"Day"},
-    {id:"tl26",code:"SHIC-TL-026",category:"Electrical",desc:"CLAMP TESTER",cost:0,uom:"Day"},
-    {id:"tl27",code:"SHIC-TL-027",category:"General",desc:"COLD METAL TRANSFER (CMT)",cost:0,uom:"Day"},
-    {id:"tl28",code:"SHIC-TL-028",category:"General",desc:"COMBINATION PLIER 8\"",cost:0,uom:"Day"},
-    {id:"tl29",code:"SHIC-TL-029",category:"Mechanical",desc:"COMBINATION WRENCH (8-32MM)",cost:0,uom:"Day"},
-    {id:"tl30",code:"SHIC-TL-030",category:"Mechanical",desc:"DEMAGNETIZATION MACHINE",cost:0,uom:"Day"},
-    {id:"tl31",code:"SHIC-TL-031",category:"Mechanical",desc:"DEWPOINT METER",cost:0,uom:"Day"},
-    {id:"tl32",code:"SHIC-TL-032",category:"Mechanical",desc:"DIAL INDICATOR W/ MAGNETIC STAND",cost:0,uom:"Day"},
-    {id:"tl33",code:"SHIC-TL-033",category:"Mechanical",desc:"DIESEL WELDING MACHINE",cost:0,uom:"Day"},
-    {id:"tl34",code:"SHIC-TL-034",category:"General",desc:"DIGITAL CAMERA",cost:0,uom:"Day"},
-    {id:"tl35",code:"SHIC-TL-035",category:"General",desc:"DIGITAL PSYCHROMETER",cost:0,uom:"Day"},
-    {id:"tl36",code:"SHIC-TL-036",category:"General",desc:"DIGITAL SURFACE PROFILE GAUGE",cost:0,uom:"Day"},
-    {id:"tl37",code:"SHIC-TL-037",category:"Mechanical",desc:"DIGITAL VERNIER CALIPER 0-300MM",cost:0,uom:"Day"},
-    {id:"tl38",code:"SHIC-TL-038",category:"Electrical",desc:"ELCID TEST EQUIPMENT",cost:0,uom:"Day"},
-    {id:"tl39",code:"SHIC-TL-039",category:"Mechanical",desc:"ELCOMETER THICKNESS GAUGE",cost:0,uom:"Day"},
-    {id:"tl40",code:"SHIC-TL-040",category:"General",desc:"ELECTROMAGNETIC YOKE",cost:0,uom:"Day"},
-    {id:"tl41",code:"SHIC-TL-041",category:"General",desc:"FABRICATED JIGS",cost:0,uom:"Day"},
-    {id:"tl42",code:"SHIC-TL-042",category:"Mechanical",desc:"FEELER GAUGE LONG SERIES",cost:0,uom:"Day"},
-    {id:"tl43",code:"SHIC-TL-043",category:"General",desc:"FLOOD LIGHT 1000W",cost:0,uom:"Day"},
-    {id:"tl44",code:"SHIC-TL-044",category:"General",desc:"FLOOD LIGHT 100W",cost:0,uom:"Day"},
-    {id:"tl45",code:"SHIC-TL-045",category:"General",desc:"GAUSS METER",cost:0,uom:"Day"},
-    {id:"tl46",code:"SHIC-TL-046",category:"Mechanical",desc:"HARDNESS TESTER",cost:0,uom:"Day"},
-    {id:"tl47",code:"SHIC-TL-047",category:"Mechanical",desc:"HARDNESS TESTER (PORTABLE)",cost:0,uom:"Day"},
-    {id:"tl48",code:"SHIC-TL-048",category:"General",desc:"HEAT GUN",cost:0,uom:"Day"},
-    {id:"tl49",code:"SHIC-TL-049",category:"General",desc:"HEATING TORCH",cost:0,uom:"Day"},
-    {id:"tl50",code:"SHIC-TL-050",category:"Mechanical",desc:"HYDRAULIC JACK 20T",cost:0,uom:"Day"},
-    {id:"tl51",code:"SHIC-TL-051",category:"Mechanical",desc:"HYDRAULIC JACK 50T",cost:0,uom:"Day"},
-    {id:"tl52",code:"SHIC-TL-052",category:"Mechanical",desc:"HYDRAULIC TORQUE WRENCH",cost:0,uom:"Day"},
-    {id:"tl53",code:"SHIC-TL-053",category:"General",desc:"HYDROSTATIC PRESSURE TEST PUMP",cost:0,uom:"Day"},
-    {id:"tl54",code:"SHIC-TL-054",category:"General",desc:"INDUCTION HEATER",cost:0,uom:"Day"},
-    {id:"tl55",code:"SHIC-TL-055",category:"General",desc:"INDUSTRIAL BLOWER WITH DUCTING",cost:0,uom:"Day"},
-    {id:"tl56",code:"SHIC-TL-056",category:"Mechanical",desc:"INSIDE MICROMETER 50-1500MM",cost:0,uom:"Day"},
-    {id:"tl57",code:"SHIC-TL-057",category:"Mechanical",desc:"INVERTER WELDING MACHINE",cost:0,uom:"Day"},
-    {id:"tl58",code:"SHIC-TL-058",category:"General",desc:"LAPTOP / DATA LOGGER",cost:0,uom:"Day"},
-    {id:"tl59",code:"SHIC-TL-059",category:"Electrical",desc:"LASER ALIGNMENT",cost:0,uom:"Day"},
-    {id:"tl60",code:"SHIC-TL-060",category:"Mechanical",desc:"LATHE MACHINE",cost:0,uom:"Day"},
-    {id:"tl61",code:"SHIC-TL-061",category:"Mechanical",desc:"LINE BORING MACHINE",cost:0,uom:"Day"},
-    {id:"tl62",code:"SHIC-TL-062",category:"General",desc:"MAGNETIC DRILL",cost:0,uom:"Day"},
-    {id:"tl63",code:"SHIC-TL-063",category:"General",desc:"METER TAPE",cost:0,uom:"Day"},
-    {id:"tl64",code:"SHIC-TL-064",category:"General",desc:"METER TAPE 8M",cost:0,uom:"Day"},
-    {id:"tl65",code:"SHIC-TL-065",category:"Mechanical",desc:"MILLER 300 / TIG WELD",cost:0,uom:"Day"},
-    {id:"tl66",code:"SHIC-TL-066",category:"Mechanical",desc:"MILLING MACHINE",cost:0,uom:"Day"},
-    {id:"tl67",code:"SHIC-TL-067",category:"Mechanical",desc:"MILLING MACHINE SMALL",cost:0,uom:"Day"},
-    {id:"tl68",code:"SHIC-TL-068",category:"Mechanical",desc:"MPI MACHINE",cost:0,uom:"Day"},
-    {id:"tl69",code:"SHIC-TL-069",category:"Electrical",desc:"MULTI TESTER",cost:0,uom:"Day"},
-    {id:"tl70",code:"SHIC-TL-070",category:"General",desc:"NYLON SLING 10T X 8M",cost:0,uom:"Day"},
-    {id:"tl71",code:"SHIC-TL-071",category:"General",desc:"NYLON SLING 5T X 5M",cost:0,uom:"Day"},
-    {id:"tl72",code:"SHIC-TL-072",category:"Mechanical",desc:"OUTSIDE MICROMETER 0-150MM",cost:0,uom:"Day"},
-    {id:"tl73",code:"SHIC-TL-073",category:"Mechanical",desc:"OUTSIDE MICROMETER 0-25MM",cost:0,uom:"Day"},
-    {id:"tl74",code:"SHIC-TL-074",category:"Mechanical",desc:"OVERHEAD CRANE 40T",cost:0,uom:"Day"},
-    {id:"tl75",code:"SHIC-TL-075",category:"General",desc:"PI TAPE",cost:0,uom:"Day"},
-    {id:"tl76",code:"SHIC-TL-076",category:"General",desc:"PLASMA CUTTER",cost:0,uom:"Day"},
-    {id:"tl77",code:"SHIC-TL-077",category:"Mechanical",desc:"PMI MACHINE",cost:0,uom:"Day"},
-    {id:"tl78",code:"SHIC-TL-078",category:"Mechanical",desc:"PMI MACHINE (XRF ANALYZER)",cost:0,uom:"Day"},
-    {id:"tl79",code:"SHIC-TL-079",category:"Mechanical",desc:"PNEUMATIC ANGLE GRINDER 4\"",cost:0,uom:"Day"},
-    {id:"tl80",code:"SHIC-TL-080",category:"General",desc:"PNEUMATIC CHIPPING HAMMER",cost:0,uom:"Day"},
-    {id:"tl81",code:"SHIC-TL-081",category:"Mechanical",desc:"PORTABLE LATHE / TURNING DEVICE",cost:0,uom:"Day"},
-    {id:"tl82",code:"SHIC-TL-082",category:"General",desc:"PRESSURE GAUGE",cost:0,uom:"Day"},
-    {id:"tl83",code:"SHIC-TL-083",category:"General",desc:"PWHT MACHINE",cost:0,uom:"Day"},
-    {id:"tl84",code:"SHIC-TL-084",category:"General",desc:"REFERENCE BLOCK SET",cost:0,uom:"Day"},
-    {id:"tl85",code:"SHIC-TL-085",category:"Electrical",desc:"ROBOTIC INSPECTION CRAWLER",cost:0,uom:"Day"},
-    {id:"tl86",code:"SHIC-TL-086",category:"Mechanical",desc:"ROTOR STAND",cost:0,uom:"Day"},
-    {id:"tl87",code:"SHIC-TL-087",category:"Mechanical",desc:"ROUGHNESS TESTER",cost:0,uom:"Day"},
-    {id:"tl88",code:"SHIC-TL-088",category:"Mechanical",desc:"ROUGHNESS TESTER (PORTABLE)",cost:0,uom:"Day"},
-    {id:"tl89",code:"SHIC-TL-089",category:"General",desc:"RUBBER MALLET 32 OZ",cost:0,uom:"Day"},
-    {id:"tl90",code:"SHIC-TL-090",category:"Mechanical",desc:"SANDBLASTING AIR COMPRESSOR",cost:0,uom:"Day"},
-    {id:"tl91",code:"SHIC-TL-091",category:"Mechanical",desc:"SANDBLASTING AIR MANIFOLD",cost:0,uom:"Day"},
-    {id:"tl92",code:"SHIC-TL-092",category:"Mechanical",desc:"SANDBLASTING AIR TANK",cost:0,uom:"Day"},
-    {id:"tl93",code:"SHIC-TL-093",category:"Mechanical",desc:"SANDBLASTING BLASTING POT",cost:0,uom:"Day"},
-    {id:"tl94",code:"SHIC-TL-094",category:"Mechanical",desc:"SANDBLASTING BLOWER 24\" WITH DUCT",cost:0,uom:"Day"},
-    {id:"tl95",code:"SHIC-TL-095",category:"Mechanical",desc:"SANDBLASTING MACHINE",cost:0,uom:"Day"},
-    {id:"tl96",code:"SHIC-TL-096",category:"Mechanical",desc:"SANDBLASTING PNEUMATIC VACUUM",cost:0,uom:"Day"},
-    {id:"tl97",code:"SHIC-TL-097",category:"General",desc:"SCAFFOLDING ADJUSTABLE BASE JACK",cost:0,uom:"Day"},
-    {id:"tl98",code:"SHIC-TL-098",category:"General",desc:"SCAFFOLDING H-FRAME",cost:0,uom:"Day"},
-    {id:"tl99",code:"SHIC-TL-099",category:"General",desc:"SCAFFOLDING PIPE SCH 40 1-1/2\"",cost:0,uom:"Day"},
-    {id:"tl100",code:"SHIC-TL-100",category:"General",desc:"SCREW EXTRACTOR SET",cost:0,uom:"Day"},
-    {id:"tl101",code:"SHIC-TL-101",category:"General",desc:"SHACKLE 1\"",cost:0,uom:"Day"},
-    {id:"tl102",code:"SHIC-TL-102",category:"General",desc:"SINGLE CRYSTAL PROBE 10MHZ",cost:0,uom:"Day"},
-    {id:"tl103",code:"SHIC-TL-103",category:"General",desc:"SINGLE CRYSTAL PROBE 2.25MHZ",cost:0,uom:"Day"},
-    {id:"tl104",code:"SHIC-TL-104",category:"General",desc:"SINGLE CRYSTAL PROBE 5MHZ",cost:0,uom:"Day"},
-    {id:"tl105",code:"SHIC-TL-105",category:"General",desc:"SINGLE CRYSTAL PROBE SET",cost:0,uom:"Day"},
-    {id:"tl106",code:"SHIC-TL-106",category:"Mechanical",desc:"STATIC BALANCING STAND",cost:0,uom:"Day"},
-    {id:"tl107",code:"SHIC-TL-107",category:"General",desc:"SURFACE COMPARATOR",cost:0,uom:"Day"},
-    {id:"tl108",code:"SHIC-TL-108",category:"Mechanical",desc:"SURFACE GRINDER",cost:0,uom:"Day"},
-    {id:"tl109",code:"SHIC-TL-109",category:"General",desc:"TEMPERATURE GUN",cost:0,uom:"Day"},
-    {id:"tl110",code:"SHIC-TL-110",category:"Mechanical",desc:"THERMAL SPRAY MACHINE",cost:0,uom:"Day"},
-    {id:"tl111",code:"SHIC-TL-111",category:"General",desc:"THERMOCOUPLE READER",cost:0,uom:"Day"},
-    {id:"tl112",code:"SHIC-TL-112",category:"General",desc:"TIN MELTER POT",cost:0,uom:"Day"},
-    {id:"tl113",code:"SHIC-TL-113",category:"Mechanical",desc:"TORQUE WRENCH 1/2\"",cost:0,uom:"Day"},
-    {id:"tl114",code:"SHIC-TL-114",category:"Mechanical",desc:"TORQUE WRENCH 3/4\"",cost:0,uom:"Day"},
-    {id:"tl115",code:"SHIC-TL-115",category:"General",desc:"ULTRASONIC THICKNESS GAUGE",cost:0,uom:"Day"},
-    {id:"tl116",code:"SHIC-TL-116",category:"Mechanical",desc:"UT MACHINE",cost:0,uom:"Day"},
-    {id:"tl117",code:"SHIC-TL-117",category:"General",desc:"UV FLASHLIGHT",cost:0,uom:"Day"},
-    {id:"tl118",code:"SHIC-TL-118",category:"General",desc:"UV LAMP",cost:0,uom:"Day"},
-    {id:"tl119",code:"SHIC-TL-119",category:"Mechanical",desc:"VERNIER CALIPER 0 -150 MM",cost:0,uom:"Day"},
-    {id:"tl120",code:"SHIC-TL-120",category:"General",desc:"VIBRATION ANALYZER",cost:0,uom:"Day"}],
+    {id:"tl13",code:"SHIC-TL-013",category:"General",desc:"AIR CARBON ARC GOUGING SET",cost:500,uom:"Day"},
+    {id:"tl14",code:"SHIC-TL-014",category:"General",desc:"AIR COMPRESSOR 3HP",cost:600,uom:"Day"},
+    {id:"tl15",code:"SHIC-TL-015",category:"Mechanical",desc:"ANGLE GRINDER 4\"",cost:200,uom:"Day"},
+    {id:"tl16",code:"SHIC-TL-016",category:"Mechanical",desc:"ANGLE GRINDER 7\"",cost:300,uom:"Day"},
+    {id:"tl17",code:"SHIC-TL-017",category:"General",desc:"BABBITT CASTING CENTRIFUGE",cost:2000,uom:"Day"},
+    {id:"tl18",code:"SHIC-TL-018",category:"General",desc:"BABBITT MELTER POT",cost:500,uom:"Day"},
+    {id:"tl19",code:"SHIC-TL-019",category:"Mechanical",desc:"BALANCING MACHINE",cost:5000,uom:"Day"},
+    {id:"tl20",code:"SHIC-TL-020",category:"Mechanical",desc:"BLASTING NOZZLE 6 3/8\"",cost:200,uom:"Day"},
+    {id:"tl21",code:"SHIC-TL-021",category:"Mechanical",desc:"BORE GAUGE 50-150MM",cost:300,uom:"Day"},
+    {id:"tl22",code:"SHIC-TL-022",category:"General",desc:"CERAMIC COATING SPRAY EQUIPMENT",cost:3000,uom:"Day"},
+    {id:"tl23",code:"SHIC-TL-023",category:"Mechanical",desc:"CHAIN BLOCK 10T",cost:500,uom:"Day"},
+    {id:"tl24",code:"SHIC-TL-024",category:"Mechanical",desc:"CHAIN BLOCK 5T",cost:300,uom:"Day"},
+    {id:"tl25",code:"SHIC-TL-025",category:"General",desc:"CHIPPING HAMMER",cost:100,uom:"Day"},
+    {id:"tl26",code:"SHIC-TL-026",category:"Electrical",desc:"CLAMP TESTER",cost:300,uom:"Day"},
+    {id:"tl27",code:"SHIC-TL-027",category:"General",desc:"COLD METAL TRANSFER (CMT)",cost:5000,uom:"Day"},
+    {id:"tl28",code:"SHIC-TL-028",category:"General",desc:"COMBINATION PLIER 8\"",cost:100,uom:"Day"},
+    {id:"tl29",code:"SHIC-TL-029",category:"Mechanical",desc:"COMBINATION WRENCH (8-32MM)",cost:150,uom:"Day"},
+    {id:"tl30",code:"SHIC-TL-030",category:"Mechanical",desc:"DEMAGNETIZATION MACHINE",cost:1500,uom:"Day"},
+    {id:"tl31",code:"SHIC-TL-031",category:"Mechanical",desc:"DEWPOINT METER",cost:800,uom:"Day"},
+    {id:"tl32",code:"SHIC-TL-032",category:"Mechanical",desc:"DIAL INDICATOR W/ MAGNETIC STAND",cost:300,uom:"Day"},
+    {id:"tl33",code:"SHIC-TL-033",category:"Mechanical",desc:"DIESEL WELDING MACHINE",cost:1500,uom:"Day"},
+    {id:"tl34",code:"SHIC-TL-034",category:"General",desc:"DIGITAL CAMERA",cost:300,uom:"Day"},
+    {id:"tl35",code:"SHIC-TL-035",category:"General",desc:"DIGITAL PSYCHROMETER",cost:500,uom:"Day"},
+    {id:"tl36",code:"SHIC-TL-036",category:"General",desc:"DIGITAL SURFACE PROFILE GAUGE",cost:800,uom:"Day"},
+    {id:"tl37",code:"SHIC-TL-037",category:"Mechanical",desc:"DIGITAL VERNIER CALIPER 0-300MM",cost:300,uom:"Day"},
+    {id:"tl38",code:"SHIC-TL-038",category:"Electrical",desc:"ELCID TEST EQUIPMENT",cost:8000,uom:"Day"},
+    {id:"tl39",code:"SHIC-TL-039",category:"Mechanical",desc:"ELCOMETER THICKNESS GAUGE",cost:800,uom:"Day"},
+    {id:"tl40",code:"SHIC-TL-040",category:"General",desc:"ELECTROMAGNETIC YOKE",cost:800,uom:"Day"},
+    {id:"tl41",code:"SHIC-TL-041",category:"General",desc:"FABRICATED JIGS",cost:500,uom:"Day"},
+    {id:"tl42",code:"SHIC-TL-042",category:"Mechanical",desc:"FEELER GAUGE LONG SERIES",cost:200,uom:"Day"},
+    {id:"tl43",code:"SHIC-TL-043",category:"General",desc:"FLOOD LIGHT 1000W",cost:500,uom:"Day"},
+    {id:"tl44",code:"SHIC-TL-044",category:"General",desc:"FLOOD LIGHT 100W",cost:200,uom:"Day"},
+    {id:"tl45",code:"SHIC-TL-045",category:"General",desc:"GAUSS METER",cost:800,uom:"Day"},
+    {id:"tl46",code:"SHIC-TL-046",category:"Mechanical",desc:"HARDNESS TESTER",cost:1000,uom:"Day"},
+    {id:"tl47",code:"SHIC-TL-047",category:"Mechanical",desc:"HARDNESS TESTER (PORTABLE)",cost:1000,uom:"Day"},
+    {id:"tl48",code:"SHIC-TL-048",category:"General",desc:"HEAT GUN",cost:300,uom:"Day"},
+    {id:"tl49",code:"SHIC-TL-049",category:"General",desc:"HEATING TORCH",cost:300,uom:"Day"},
+    {id:"tl50",code:"SHIC-TL-050",category:"Mechanical",desc:"HYDRAULIC JACK 20T",cost:600,uom:"Day"},
+    {id:"tl51",code:"SHIC-TL-051",category:"Mechanical",desc:"HYDRAULIC JACK 50T",cost:1000,uom:"Day"},
+    {id:"tl52",code:"SHIC-TL-052",category:"Mechanical",desc:"HYDRAULIC TORQUE WRENCH",cost:1500,uom:"Day"},
+    {id:"tl53",code:"SHIC-TL-053",category:"General",desc:"HYDROSTATIC PRESSURE TEST PUMP",cost:1500,uom:"Day"},
+    {id:"tl54",code:"SHIC-TL-054",category:"General",desc:"INDUCTION HEATER",cost:2000,uom:"Day"},
+    {id:"tl55",code:"SHIC-TL-055",category:"General",desc:"INDUSTRIAL BLOWER WITH DUCTING",cost:800,uom:"Day"},
+    {id:"tl56",code:"SHIC-TL-056",category:"Mechanical",desc:"INSIDE MICROMETER 50-1500MM",cost:400,uom:"Day"},
+    {id:"tl57",code:"SHIC-TL-057",category:"Mechanical",desc:"INVERTER WELDING MACHINE",cost:1000,uom:"Day"},
+    {id:"tl58",code:"SHIC-TL-058",category:"General",desc:"LAPTOP / DATA LOGGER",cost:500,uom:"Day"},
+    {id:"tl59",code:"SHIC-TL-059",category:"Electrical",desc:"LASER ALIGNMENT",cost:3000,uom:"Day"},
+    {id:"tl60",code:"SHIC-TL-060",category:"Mechanical",desc:"LATHE MACHINE",cost:3000,uom:"Day"},
+    {id:"tl61",code:"SHIC-TL-061",category:"Mechanical",desc:"LINE BORING MACHINE",cost:5000,uom:"Day"},
+    {id:"tl62",code:"SHIC-TL-062",category:"General",desc:"MAGNETIC DRILL",cost:800,uom:"Day"},
+    {id:"tl63",code:"SHIC-TL-063",category:"General",desc:"METER TAPE",cost:50,uom:"Day"},
+    {id:"tl64",code:"SHIC-TL-064",category:"General",desc:"METER TAPE 8M",cost:50,uom:"Day"},
+    {id:"tl65",code:"SHIC-TL-065",category:"Mechanical",desc:"MILLER 300 / TIG WELD",cost:1500,uom:"Day"},
+    {id:"tl66",code:"SHIC-TL-066",category:"Mechanical",desc:"MILLING MACHINE",cost:3000,uom:"Day"},
+    {id:"tl67",code:"SHIC-TL-067",category:"Mechanical",desc:"MILLING MACHINE SMALL",cost:1500,uom:"Day"},
+    {id:"tl68",code:"SHIC-TL-068",category:"Mechanical",desc:"MPI MACHINE",cost:2000,uom:"Day"},
+    {id:"tl69",code:"SHIC-TL-069",category:"Electrical",desc:"MULTI TESTER",cost:200,uom:"Day"},
+    {id:"tl70",code:"SHIC-TL-070",category:"General",desc:"NYLON SLING 10T X 8M",cost:300,uom:"Day"},
+    {id:"tl71",code:"SHIC-TL-071",category:"General",desc:"NYLON SLING 5T X 5M",cost:200,uom:"Day"},
+    {id:"tl72",code:"SHIC-TL-072",category:"Mechanical",desc:"OUTSIDE MICROMETER 0-150MM",cost:300,uom:"Day"},
+    {id:"tl73",code:"SHIC-TL-073",category:"Mechanical",desc:"OUTSIDE MICROMETER 0-25MM",cost:200,uom:"Day"},
+    {id:"tl74",code:"SHIC-TL-074",category:"Mechanical",desc:"OVERHEAD CRANE 40T",cost:5000,uom:"Day"},
+    {id:"tl75",code:"SHIC-TL-075",category:"General",desc:"PI TAPE",cost:200,uom:"Day"},
+    {id:"tl76",code:"SHIC-TL-076",category:"General",desc:"PLASMA CUTTER",cost:1500,uom:"Day"},
+    {id:"tl77",code:"SHIC-TL-077",category:"Mechanical",desc:"PMI MACHINE",cost:3000,uom:"Day"},
+    {id:"tl78",code:"SHIC-TL-078",category:"Mechanical",desc:"PMI MACHINE (XRF ANALYZER)",cost:3000,uom:"Day"},
+    {id:"tl79",code:"SHIC-TL-079",category:"Mechanical",desc:"PNEUMATIC ANGLE GRINDER 4\"",cost:400,uom:"Day"},
+    {id:"tl80",code:"SHIC-TL-080",category:"General",desc:"PNEUMATIC CHIPPING HAMMER",cost:300,uom:"Day"},
+    {id:"tl81",code:"SHIC-TL-081",category:"Mechanical",desc:"PORTABLE LATHE / TURNING DEVICE",cost:5000,uom:"Day"},
+    {id:"tl82",code:"SHIC-TL-082",category:"General",desc:"PRESSURE GAUGE",cost:200,uom:"Day"},
+    {id:"tl83",code:"SHIC-TL-083",category:"General",desc:"PWHT MACHINE",cost:3000,uom:"Day"},
+    {id:"tl84",code:"SHIC-TL-084",category:"General",desc:"REFERENCE BLOCK SET",cost:500,uom:"Day"},
+    {id:"tl85",code:"SHIC-TL-085",category:"Electrical",desc:"ROBOTIC INSPECTION CRAWLER",cost:10000,uom:"Day"},
+    {id:"tl86",code:"SHIC-TL-086",category:"Mechanical",desc:"ROTOR STAND",cost:500,uom:"Day"},
+    {id:"tl87",code:"SHIC-TL-087",category:"Mechanical",desc:"ROUGHNESS TESTER",cost:800,uom:"Day"},
+    {id:"tl88",code:"SHIC-TL-088",category:"Mechanical",desc:"ROUGHNESS TESTER (PORTABLE)",cost:800,uom:"Day"},
+    {id:"tl89",code:"SHIC-TL-089",category:"General",desc:"RUBBER MALLET 32 OZ",cost:100,uom:"Day"},
+    {id:"tl90",code:"SHIC-TL-090",category:"Mechanical",desc:"SANDBLASTING AIR COMPRESSOR",cost:2000,uom:"Day"},
+    {id:"tl91",code:"SHIC-TL-091",category:"Mechanical",desc:"SANDBLASTING AIR MANIFOLD",cost:300,uom:"Day"},
+    {id:"tl92",code:"SHIC-TL-092",category:"Mechanical",desc:"SANDBLASTING AIR TANK",cost:300,uom:"Day"},
+    {id:"tl93",code:"SHIC-TL-093",category:"Mechanical",desc:"SANDBLASTING BLASTING POT",cost:1000,uom:"Day"},
+    {id:"tl94",code:"SHIC-TL-094",category:"Mechanical",desc:"SANDBLASTING BLOWER 24\" WITH DUCT",cost:800,uom:"Day"},
+    {id:"tl95",code:"SHIC-TL-095",category:"Mechanical",desc:"SANDBLASTING MACHINE",cost:2000,uom:"Day"},
+    {id:"tl96",code:"SHIC-TL-096",category:"Mechanical",desc:"SANDBLASTING PNEUMATIC VACUUM",cost:800,uom:"Day"},
+    {id:"tl97",code:"SHIC-TL-097",category:"General",desc:"SCAFFOLDING ADJUSTABLE BASE JACK",cost:100,uom:"Day"},
+    {id:"tl98",code:"SHIC-TL-098",category:"General",desc:"SCAFFOLDING H-FRAME",cost:150,uom:"Day"},
+    {id:"tl99",code:"SHIC-TL-099",category:"General",desc:"SCAFFOLDING PIPE SCH 40 1-1/2\"",cost:100,uom:"Day"},
+    {id:"tl100",code:"SHIC-TL-100",category:"General",desc:"SCREW EXTRACTOR SET",cost:200,uom:"Day"},
+    {id:"tl101",code:"SHIC-TL-101",category:"General",desc:"SHACKLE 1\"",cost:100,uom:"Day"},
+    {id:"tl102",code:"SHIC-TL-102",category:"General",desc:"SINGLE CRYSTAL PROBE 10MHZ",cost:500,uom:"Day"},
+    {id:"tl103",code:"SHIC-TL-103",category:"General",desc:"SINGLE CRYSTAL PROBE 2.25MHZ",cost:500,uom:"Day"},
+    {id:"tl104",code:"SHIC-TL-104",category:"General",desc:"SINGLE CRYSTAL PROBE 5MHZ",cost:500,uom:"Day"},
+    {id:"tl105",code:"SHIC-TL-105",category:"General",desc:"SINGLE CRYSTAL PROBE SET",cost:1500,uom:"Day"},
+    {id:"tl106",code:"SHIC-TL-106",category:"Mechanical",desc:"STATIC BALANCING STAND",cost:2000,uom:"Day"},
+    {id:"tl107",code:"SHIC-TL-107",category:"General",desc:"SURFACE COMPARATOR",cost:300,uom:"Day"},
+    {id:"tl108",code:"SHIC-TL-108",category:"Mechanical",desc:"SURFACE GRINDER",cost:2000,uom:"Day"},
+    {id:"tl109",code:"SHIC-TL-109",category:"General",desc:"TEMPERATURE GUN",cost:200,uom:"Day"},
+    {id:"tl110",code:"SHIC-TL-110",category:"Mechanical",desc:"THERMAL SPRAY MACHINE",cost:5000,uom:"Day"},
+    {id:"tl111",code:"SHIC-TL-111",category:"General",desc:"THERMOCOUPLE READER",cost:500,uom:"Day"},
+    {id:"tl112",code:"SHIC-TL-112",category:"General",desc:"TIN MELTER POT",cost:300,uom:"Day"},
+    {id:"tl113",code:"SHIC-TL-113",category:"Mechanical",desc:"TORQUE WRENCH 1/2\"",cost:300,uom:"Day"},
+    {id:"tl114",code:"SHIC-TL-114",category:"Mechanical",desc:"TORQUE WRENCH 3/4\"",cost:500,uom:"Day"},
+    {id:"tl115",code:"SHIC-TL-115",category:"General",desc:"ULTRASONIC THICKNESS GAUGE",cost:1000,uom:"Day"},
+    {id:"tl116",code:"SHIC-TL-116",category:"Mechanical",desc:"UT MACHINE",cost:2000,uom:"Day"},
+    {id:"tl117",code:"SHIC-TL-117",category:"General",desc:"UV FLASHLIGHT",cost:200,uom:"Day"},
+    {id:"tl118",code:"SHIC-TL-118",category:"General",desc:"UV LAMP",cost:500,uom:"Day"},
+    {id:"tl119",code:"SHIC-TL-119",category:"Mechanical",desc:"VERNIER CALIPER 0 -150 MM",cost:150,uom:"Day"},
+    {id:"tl120",code:"SHIC-TL-120",category:"General",desc:"VIBRATION ANALYZER",cost:2000,uom:"Day"}],
   materials:[
     {id:"mat1",code:"SHIC-MT-001",category:"Electrical",desc:"THHN Wire #14 AWG",cost:18,uom:"M"},
     {id:"mat2",code:"SHIC-MT-002",category:"Electrical",desc:"THHN Wire #12 AWG",cost:25,uom:"M"},
@@ -604,75 +619,75 @@ const DEFAULT_ML={
     {id:"mat11",code:"SHIC-MT-011",category:"Mechanical",desc:"Bolt & Nut Set",cost:250,uom:"Set"},
     {id:"mat12",code:"SHIC-MT-012",category:"General",desc:"Paint & Primer Set",cost:800,uom:"Set"}
   ,
-    {id:"mt13",code:"SHIC-MT-013",category:"Mechanical",desc:"ACETYLENE",cost:0,uom:"Lot"},
-    {id:"mt14",code:"SHIC-MT-014",category:"Mechanical",desc:"ALUMINUM OXIDE #180",cost:0,uom:"Lot"},
-    {id:"mt15",code:"SHIC-MT-015",category:"Mechanical",desc:"ARALDITE 2014-2 / ADHESIVE EPOXY",cost:0,uom:"Lot"},
-    {id:"mt16",code:"SHIC-MT-016",category:"Mechanical",desc:"ARGON",cost:0,uom:"Lot"},
-    {id:"mt17",code:"SHIC-MT-017",category:"Mechanical",desc:"BABBITT METAL",cost:0,uom:"Lot"},
-    {id:"mt18",code:"SHIC-MT-018",category:"Mechanical",desc:"BRASS BRUSH",cost:0,uom:"Lot"},
-    {id:"mt19",code:"SHIC-MT-019",category:"Mechanical",desc:"BROWN FUSE ALUMINA #180",cost:0,uom:"Lot"},
-    {id:"mt20",code:"SHIC-MT-020",category:"Mechanical",desc:"CARBON ELECTRODE RODS",cost:0,uom:"Lot"},
-    {id:"mt21",code:"SHIC-MT-021",category:"Mechanical",desc:"CAUTION TAPE",cost:0,uom:"Lot"},
-    {id:"mt22",code:"SHIC-MT-022",category:"Mechanical",desc:"CEMENT",cost:0,uom:"Lot"},
-    {id:"mt23",code:"SHIC-MT-023",category:"Mechanical",desc:"CERAMIC COATING MATERIAL",cost:0,uom:"Lot"},
-    {id:"mt24",code:"SHIC-MT-024",category:"Mechanical",desc:"CERAMIC PAPER",cost:0,uom:"Lot"},
-    {id:"mt25",code:"SHIC-MT-025",category:"Mechanical",desc:"CLEANER",cost:0,uom:"Lot"},
-    {id:"mt26",code:"SHIC-MT-026",category:"Mechanical",desc:"CLEANER (MR. CHEMIE)",cost:0,uom:"Lot"},
-    {id:"mt27",code:"SHIC-MT-027",category:"Mechanical",desc:"CMT ACCESSORIES",cost:0,uom:"Lot"},
-    {id:"mt28",code:"SHIC-MT-028",category:"Mechanical",desc:"COOLANT CUTTING OIL",cost:0,uom:"Lot"},
-    {id:"mt29",code:"SHIC-MT-029",category:"Mechanical",desc:"COPPER PLATE(*Size)",cost:0,uom:"Lot"},
-    {id:"mt30",code:"SHIC-MT-030",category:"Mechanical",desc:"COUPLANT GEL",cost:0,uom:"Lot"},
-    {id:"mt31",code:"SHIC-MT-031",category:"Mechanical",desc:"CUTTING DISC 4\"",cost:0,uom:"Lot"},
-    {id:"mt32",code:"SHIC-MT-032",category:"Mechanical",desc:"DEGREASER",cost:0,uom:"Lot"},
-    {id:"mt33",code:"SHIC-MT-033",category:"Mechanical",desc:"DEVELOPER",cost:0,uom:"Lot"},
-    {id:"mt34",code:"SHIC-MT-034",category:"Mechanical",desc:"DEVELOPER (MR. CHEMIE)",cost:0,uom:"Lot"},
-    {id:"mt35",code:"SHIC-MT-035",category:"Mechanical",desc:"DUCT TAPE 2\"",cost:0,uom:"Lot"},
-    {id:"mt36",code:"SHIC-MT-036",category:"Mechanical",desc:"EMERY CLOTH 1000 GRIT",cost:0,uom:"Lot"},
-    {id:"mt37",code:"SHIC-MT-037",category:"Mechanical",desc:"EMERY CLOTH 400 GRIT",cost:0,uom:"Lot"},
-    {id:"mt38",code:"SHIC-MT-038",category:"Mechanical",desc:"EMERY CLOTH 600 GRIT",cost:0,uom:"Lot"},
-    {id:"mt39",code:"SHIC-MT-039",category:"Mechanical",desc:"EMERY CLOTH 800 GRIT",cost:0,uom:"Lot"},
-    {id:"mt40",code:"SHIC-MT-040",category:"Mechanical",desc:"EPOXY REDUCER",cost:0,uom:"Lot"},
-    {id:"mt41",code:"SHIC-MT-041",category:"Mechanical",desc:"FIRE BLANKET 1.2X1.2M",cost:0,uom:"Lot"},
-    {id:"mt42",code:"SHIC-MT-042",category:"Mechanical",desc:"FLEXIBLE DISC 4\"",cost:0,uom:"Lot"},
-    {id:"mt43",code:"SHIC-MT-043",category:"Mechanical",desc:"GLASS BEAD #5",cost:0,uom:"Lot"},
-    {id:"mt44",code:"SHIC-MT-044",category:"Mechanical",desc:"GRINDING DISC 4\"",cost:0,uom:"Lot"},
-    {id:"mt45",code:"SHIC-MT-045",category:"Mechanical",desc:"HARDFACING WELDING ROD",cost:0,uom:"Lot"},
-    {id:"mt46",code:"SHIC-MT-046",category:"Mechanical",desc:"HYDRAULIC OIL 68",cost:0,uom:"Lot"},
-    {id:"mt47",code:"SHIC-MT-047",category:"Mechanical",desc:"ISOWOOL",cost:0,uom:"Lot"},
-    {id:"mt48",code:"SHIC-MT-048",category:"Mechanical",desc:"ITEM TO BE SUPPLIED",cost:0,uom:"Lot"},
-    {id:"mt49",code:"SHIC-MT-049",category:"Mechanical",desc:"LOCTITE ANTI-SEIZE",cost:0,uom:"Lot"},
-    {id:"mt50",code:"SHIC-MT-050",category:"Mechanical",desc:"LPG",cost:0,uom:"Lot"},
-    {id:"mt51",code:"SHIC-MT-051",category:"Mechanical",desc:"MAGNAFLUX 20B",cost:0,uom:"Lot"},
-    {id:"mt52",code:"SHIC-MT-052",category:"Mechanical",desc:"MAGNAFLUX 20B (MAGNETIC PARTICLE POWDER)",cost:0,uom:"Lot"},
-    {id:"mt53",code:"SHIC-MT-053",category:"Mechanical",desc:"MARFAK GREASE 500G",cost:0,uom:"Lot"},
-    {id:"mt54",code:"SHIC-MT-054",category:"Mechanical",desc:"MARPAK",cost:0,uom:"Lot"},
-    {id:"mt55",code:"SHIC-MT-055",category:"Mechanical",desc:"MASKING TAPE 2\"",cost:0,uom:"Lot"},
-    {id:"mt56",code:"SHIC-MT-056",category:"Mechanical",desc:"OXYGEN",cost:0,uom:"Lot"},
-    {id:"mt57",code:"SHIC-MT-057",category:"Mechanical",desc:"PAINT MARKER (YELLOW/WHITE)",cost:0,uom:"Lot"},
-    {id:"mt58",code:"SHIC-MT-058",category:"Mechanical",desc:"PENETRANT",cost:0,uom:"Lot"},
-    {id:"mt59",code:"SHIC-MT-059",category:"Mechanical",desc:"PENETRANT (MR. CHEMIE)",cost:0,uom:"Lot"},
-    {id:"mt60",code:"SHIC-MT-060",category:"Mechanical",desc:"PENETRANT CARRIER OIL",cost:0,uom:"Lot"},
-    {id:"mt61",code:"SHIC-MT-061",category:"Mechanical",desc:"PLASTER OF PARIS",cost:0,uom:"Lot"},
-    {id:"mt62",code:"SHIC-MT-062",category:"Mechanical",desc:"QUICK CHANGE DISC GRIT 80 3\"",cost:0,uom:"Lot"},
-    {id:"mt63",code:"SHIC-MT-063",category:"Mechanical",desc:"RAGS ASSORTED",cost:0,uom:"Lot"},
-    {id:"mt64",code:"SHIC-MT-064",category:"Mechanical",desc:"RAGS ROUND WHITE",cost:0,uom:"Lot"},
-    {id:"mt65",code:"SHIC-MT-065",category:"Mechanical",desc:"ROLOC 3M 777F 80G",cost:0,uom:"Lot"},
-    {id:"mt66",code:"SHIC-MT-066",category:"Mechanical",desc:"SACK BIG",cost:0,uom:"Lot"},
-    {id:"mt67",code:"SHIC-MT-067",category:"Mechanical",desc:"SANDPAPER 120G",cost:0,uom:"Lot"},
-    {id:"mt68",code:"SHIC-MT-068",category:"Mechanical",desc:"SOLDERING FLUX",cost:0,uom:"Lot"},
-    {id:"mt69",code:"SHIC-MT-069",category:"Mechanical",desc:"STEEL BRUSH MEDIUM",cost:0,uom:"Lot"},
-    {id:"mt70",code:"SHIC-MT-070",category:"Mechanical",desc:"STELLITE 6 ROD / WIRE",cost:0,uom:"Lot"},
-    {id:"mt71",code:"SHIC-MT-071",category:"Mechanical",desc:"STRETCH FILM",cost:0,uom:"Lot"},
-    {id:"mt72",code:"SHIC-MT-072",category:"Mechanical",desc:"THERMAL SPRAY WIRE/POWEDER",cost:0,uom:"Lot"},
-    {id:"mt73",code:"SHIC-MT-073",category:"Mechanical",desc:"THERMOCOUPLE WIRE",cost:0,uom:"Lot"},
-    {id:"mt74",code:"SHIC-MT-074",category:"Electrical",desc:"TIE WIRE #18",cost:0,uom:"Lot"},
-    {id:"mt75",code:"SHIC-MT-075",category:"Mechanical",desc:"TIN INGGOT",cost:0,uom:"Lot"},
-    {id:"mt76",code:"SHIC-MT-076",category:"Mechanical",desc:"TIN PASTE",cost:0,uom:"Lot"},
-    {id:"mt77",code:"SHIC-MT-077",category:"Mechanical",desc:"TUNGATIP",cost:0,uom:"Lot"},
-    {id:"mt78",code:"SHIC-MT-078",category:"Mechanical",desc:"WD-40 382ML",cost:0,uom:"Lot"},
-    {id:"mt79",code:"SHIC-MT-079",category:"Mechanical",desc:"WELDING ROD 6013 3.2MM",cost:0,uom:"Lot"},
-    {id:"mt80",code:"SHIC-MT-080",category:"Mechanical",desc:"WELDING ROD 7018 3.2MM",cost:0,uom:"Lot"},
-    {id:"mt81",code:"SHIC-MT-081",category:"Mechanical",desc:"WELDING WIRE ER120S",cost:0,uom:"Lot"}],
+    {id:"mt13",code:"SHIC-MT-013",category:"Mechanical",desc:"ACETYLENE",cost:800,uom:"Lot"},
+    {id:"mt14",code:"SHIC-MT-014",category:"Mechanical",desc:"ALUMINUM OXIDE #180",cost:600,uom:"Lot"},
+    {id:"mt15",code:"SHIC-MT-015",category:"Mechanical",desc:"ARALDITE 2014-2 / ADHESIVE EPOXY",cost:500,uom:"Lot"},
+    {id:"mt16",code:"SHIC-MT-016",category:"Mechanical",desc:"ARGON",cost:700,uom:"Lot"},
+    {id:"mt17",code:"SHIC-MT-017",category:"Mechanical",desc:"BABBITT METAL",cost:3000,uom:"Lot"},
+    {id:"mt18",code:"SHIC-MT-018",category:"Mechanical",desc:"BRASS BRUSH",cost:150,uom:"Lot"},
+    {id:"mt19",code:"SHIC-MT-019",category:"Mechanical",desc:"BROWN FUSE ALUMINA #180",cost:500,uom:"Lot"},
+    {id:"mt20",code:"SHIC-MT-020",category:"Mechanical",desc:"CARBON ELECTRODE RODS",cost:400,uom:"Lot"},
+    {id:"mt21",code:"SHIC-MT-021",category:"Mechanical",desc:"CAUTION TAPE",cost:80,uom:"Lot"},
+    {id:"mt22",code:"SHIC-MT-022",category:"Mechanical",desc:"CEMENT",cost:300,uom:"Lot"},
+    {id:"mt23",code:"SHIC-MT-023",category:"Mechanical",desc:"CERAMIC COATING MATERIAL",cost:5000,uom:"Lot"},
+    {id:"mt24",code:"SHIC-MT-024",category:"Mechanical",desc:"CERAMIC PAPER",cost:800,uom:"Lot"},
+    {id:"mt25",code:"SHIC-MT-025",category:"Mechanical",desc:"CLEANER",cost:300,uom:"Lot"},
+    {id:"mt26",code:"SHIC-MT-026",category:"Mechanical",desc:"CLEANER (MR. CHEMIE)",cost:400,uom:"Lot"},
+    {id:"mt27",code:"SHIC-MT-027",category:"Mechanical",desc:"CMT ACCESSORIES",cost:2000,uom:"Lot"},
+    {id:"mt28",code:"SHIC-MT-028",category:"Mechanical",desc:"COOLANT CUTTING OIL",cost:500,uom:"Lot"},
+    {id:"mt29",code:"SHIC-MT-029",category:"Mechanical",desc:"COPPER PLATE(*Size)",cost:1500,uom:"Lot"},
+    {id:"mt30",code:"SHIC-MT-030",category:"Mechanical",desc:"COUPLANT GEL",cost:350,uom:"Lot"},
+    {id:"mt31",code:"SHIC-MT-031",category:"Mechanical",desc:"CUTTING DISC 4\"",cost:120,uom:"Lot"},
+    {id:"mt32",code:"SHIC-MT-032",category:"Mechanical",desc:"DEGREASER",cost:400,uom:"Lot"},
+    {id:"mt33",code:"SHIC-MT-033",category:"Mechanical",desc:"DEVELOPER",cost:500,uom:"Lot"},
+    {id:"mt34",code:"SHIC-MT-034",category:"Mechanical",desc:"DEVELOPER (MR. CHEMIE)",cost:600,uom:"Lot"},
+    {id:"mt35",code:"SHIC-MT-035",category:"Mechanical",desc:"DUCT TAPE 2\"",cost:100,uom:"Lot"},
+    {id:"mt36",code:"SHIC-MT-036",category:"Mechanical",desc:"EMERY CLOTH 1000 GRIT",cost:200,uom:"Lot"},
+    {id:"mt37",code:"SHIC-MT-037",category:"Mechanical",desc:"EMERY CLOTH 400 GRIT",cost:150,uom:"Lot"},
+    {id:"mt38",code:"SHIC-MT-038",category:"Mechanical",desc:"EMERY CLOTH 600 GRIT",cost:150,uom:"Lot"},
+    {id:"mt39",code:"SHIC-MT-039",category:"Mechanical",desc:"EMERY CLOTH 800 GRIT",cost:150,uom:"Lot"},
+    {id:"mt40",code:"SHIC-MT-040",category:"Mechanical",desc:"EPOXY REDUCER",cost:400,uom:"Lot"},
+    {id:"mt41",code:"SHIC-MT-041",category:"Mechanical",desc:"FIRE BLANKET 1.2X1.2M",cost:800,uom:"Lot"},
+    {id:"mt42",code:"SHIC-MT-042",category:"Mechanical",desc:"FLEXIBLE DISC 4\"",cost:150,uom:"Lot"},
+    {id:"mt43",code:"SHIC-MT-043",category:"Mechanical",desc:"GLASS BEAD #5",cost:500,uom:"Lot"},
+    {id:"mt44",code:"SHIC-MT-044",category:"Mechanical",desc:"GRINDING DISC 4\"",cost:100,uom:"Lot"},
+    {id:"mt45",code:"SHIC-MT-045",category:"Mechanical",desc:"HARDFACING WELDING ROD",cost:1500,uom:"Lot"},
+    {id:"mt46",code:"SHIC-MT-046",category:"Mechanical",desc:"HYDRAULIC OIL 68",cost:600,uom:"Lot"},
+    {id:"mt47",code:"SHIC-MT-047",category:"Mechanical",desc:"ISOWOOL",cost:1000,uom:"Lot"},
+    {id:"mt48",code:"SHIC-MT-048",category:"Mechanical",desc:"ITEM TO BE SUPPLIED",cost:500,uom:"Lot"},
+    {id:"mt49",code:"SHIC-MT-049",category:"Mechanical",desc:"LOCTITE ANTI-SEIZE",cost:400,uom:"Lot"},
+    {id:"mt50",code:"SHIC-MT-050",category:"Mechanical",desc:"LPG",cost:600,uom:"Lot"},
+    {id:"mt51",code:"SHIC-MT-051",category:"Mechanical",desc:"MAGNAFLUX 20B",cost:800,uom:"Lot"},
+    {id:"mt52",code:"SHIC-MT-052",category:"Mechanical",desc:"MAGNAFLUX 20B (MAGNETIC PARTICLE POWDER)",cost:1200,uom:"Lot"},
+    {id:"mt53",code:"SHIC-MT-053",category:"Mechanical",desc:"MARFAK GREASE 500G",cost:400,uom:"Lot"},
+    {id:"mt54",code:"SHIC-MT-054",category:"Mechanical",desc:"MARPAK",cost:300,uom:"Lot"},
+    {id:"mt55",code:"SHIC-MT-055",category:"Mechanical",desc:"MASKING TAPE 2\"",cost:80,uom:"Lot"},
+    {id:"mt56",code:"SHIC-MT-056",category:"Mechanical",desc:"OXYGEN",cost:600,uom:"Lot"},
+    {id:"mt57",code:"SHIC-MT-057",category:"Mechanical",desc:"PAINT MARKER (YELLOW/WHITE)",cost:100,uom:"Lot"},
+    {id:"mt58",code:"SHIC-MT-058",category:"Mechanical",desc:"PENETRANT",cost:500,uom:"Lot"},
+    {id:"mt59",code:"SHIC-MT-059",category:"Mechanical",desc:"PENETRANT (MR. CHEMIE)",cost:600,uom:"Lot"},
+    {id:"mt60",code:"SHIC-MT-060",category:"Mechanical",desc:"PENETRANT CARRIER OIL",cost:400,uom:"Lot"},
+    {id:"mt61",code:"SHIC-MT-061",category:"Mechanical",desc:"PLASTER OF PARIS",cost:200,uom:"Lot"},
+    {id:"mt62",code:"SHIC-MT-062",category:"Mechanical",desc:"QUICK CHANGE DISC GRIT 80 3\"",cost:200,uom:"Lot"},
+    {id:"mt63",code:"SHIC-MT-063",category:"Mechanical",desc:"RAGS ASSORTED",cost:200,uom:"Lot"},
+    {id:"mt64",code:"SHIC-MT-064",category:"Mechanical",desc:"RAGS ROUND WHITE",cost:200,uom:"Lot"},
+    {id:"mt65",code:"SHIC-MT-065",category:"Mechanical",desc:"ROLOC 3M 777F 80G",cost:300,uom:"Lot"},
+    {id:"mt66",code:"SHIC-MT-066",category:"Mechanical",desc:"SACK BIG",cost:100,uom:"Lot"},
+    {id:"mt67",code:"SHIC-MT-067",category:"Mechanical",desc:"SANDPAPER 120G",cost:100,uom:"Lot"},
+    {id:"mt68",code:"SHIC-MT-068",category:"Mechanical",desc:"SOLDERING FLUX",cost:200,uom:"Lot"},
+    {id:"mt69",code:"SHIC-MT-069",category:"Mechanical",desc:"STEEL BRUSH MEDIUM",cost:150,uom:"Lot"},
+    {id:"mt70",code:"SHIC-MT-070",category:"Mechanical",desc:"STELLITE 6 ROD / WIRE",cost:3000,uom:"Lot"},
+    {id:"mt71",code:"SHIC-MT-071",category:"Mechanical",desc:"STRETCH FILM",cost:200,uom:"Lot"},
+    {id:"mt72",code:"SHIC-MT-072",category:"Mechanical",desc:"THERMAL SPRAY WIRE/POWEDER",cost:3000,uom:"Lot"},
+    {id:"mt73",code:"SHIC-MT-073",category:"Mechanical",desc:"THERMOCOUPLE WIRE",cost:500,uom:"Lot"},
+    {id:"mt74",code:"SHIC-MT-074",category:"Electrical",desc:"TIE WIRE #18",cost:100,uom:"Lot"},
+    {id:"mt75",code:"SHIC-MT-075",category:"Mechanical",desc:"TIN INGGOT",cost:1500,uom:"Lot"},
+    {id:"mt76",code:"SHIC-MT-076",category:"Mechanical",desc:"TIN PASTE",cost:400,uom:"Lot"},
+    {id:"mt77",code:"SHIC-MT-077",category:"Mechanical",desc:"TUNGATIP",cost:300,uom:"Lot"},
+    {id:"mt78",code:"SHIC-MT-078",category:"Mechanical",desc:"WD-40 382ML",cost:250,uom:"Lot"},
+    {id:"mt79",code:"SHIC-MT-079",category:"Mechanical",desc:"WELDING ROD 6013 3.2MM",cost:500,uom:"Lot"},
+    {id:"mt80",code:"SHIC-MT-080",category:"Mechanical",desc:"WELDING ROD 7018 3.2MM",cost:600,uom:"Lot"},
+    {id:"mt81",code:"SHIC-MT-081",category:"Mechanical",desc:"WELDING WIRE ER120S",cost:800,uom:"Lot"}],
   ppe:[
     {id:"p1",code:"SHIC-PP-001",category:"General",desc:"Hard Hat",cost:280,uom:"Pcs"},
     {id:"p2",code:"SHIC-PP-002",category:"General",desc:"Safety Shoes",cost:950,uom:"Pair"},
@@ -687,22 +702,22 @@ const DEFAULT_ML={
     {id:"p11",code:"SHIC-PP-011",category:"General",desc:"Dust Mask N95",cost:45,uom:"Pcs"},
     {id:"p12",code:"SHIC-PP-012",category:"General",desc:"Full Body Harness",cost:2200,uom:"Pcs"}
   ,
-    {id:"pp13",code:"SHIC-PP-013",category:"General",desc:"BLASTING HOOD",cost:0,uom:"Pcs"},
-    {id:"pp14",code:"SHIC-PP-014",category:"General",desc:"BLASTING SUIT",cost:0,uom:"Pcs"},
-    {id:"pp15",code:"SHIC-PP-015",category:"General",desc:"CHEMICAL GLOVES",cost:0,uom:"Pcs"},
-    {id:"pp16",code:"SHIC-PP-016",category:"General",desc:"COTTON HAND GLOVES",cost:0,uom:"Pcs"},
-    {id:"pp17",code:"SHIC-PP-017",category:"General",desc:"COVERALL REFLECTORIZED",cost:0,uom:"Pcs"},
-    {id:"pp18",code:"SHIC-PP-018",category:"General",desc:"EARPLUGS",cost:0,uom:"Pcs"},
-    {id:"pp19",code:"SHIC-PP-019",category:"General",desc:"FIRST AID KIT",cost:0,uom:"Pcs"},
-    {id:"pp20",code:"SHIC-PP-020",category:"General",desc:"FULL BODY HARNESS W/ LANYARD",cost:0,uom:"Pcs"},
-    {id:"pp21",code:"SHIC-PP-021",category:"General",desc:"HEAT-RESISTANT GLOVES",cost:0,uom:"Pcs"},
-    {id:"pp22",code:"SHIC-PP-022",category:"General",desc:"HIGH VISIBILITY VEST",cost:0,uom:"Pcs"},
-    {id:"pp23",code:"SHIC-PP-023",category:"General",desc:"RESPIRATOR FILTER",cost:0,uom:"Pcs"},
-    {id:"pp24",code:"SHIC-PP-024",category:"General",desc:"SAFETY CLEAR GOGGLES",cost:0,uom:"Pcs"},
-    {id:"pp25",code:"SHIC-PP-025",category:"General",desc:"SAFETY HELMET W/ CHIN STRAP",cost:0,uom:"Pcs"},
-    {id:"pp26",code:"SHIC-PP-026",category:"General",desc:"TIG GLOVES",cost:0,uom:"Pcs"},
-    {id:"pp27",code:"SHIC-PP-027",category:"General",desc:"WELDING APRON",cost:0,uom:"Pcs"},
-    {id:"pp28",code:"SHIC-PP-028",category:"General",desc:"WELDING MASK",cost:0,uom:"Pcs"}],
+    {id:"pp13",code:"SHIC-PP-013",category:"General",desc:"BLASTING HOOD",cost:2500,uom:"Pcs"},
+    {id:"pp14",code:"SHIC-PP-014",category:"General",desc:"BLASTING SUIT",cost:1800,uom:"Pcs"},
+    {id:"pp15",code:"SHIC-PP-015",category:"General",desc:"CHEMICAL GLOVES",cost:350,uom:"Pcs"},
+    {id:"pp16",code:"SHIC-PP-016",category:"General",desc:"COTTON HAND GLOVES",cost:80,uom:"Pcs"},
+    {id:"pp17",code:"SHIC-PP-017",category:"General",desc:"COVERALL REFLECTORIZED",cost:600,uom:"Pcs"},
+    {id:"pp18",code:"SHIC-PP-018",category:"General",desc:"EARPLUGS",cost:30,uom:"Pcs"},
+    {id:"pp19",code:"SHIC-PP-019",category:"General",desc:"FIRST AID KIT",cost:800,uom:"Pcs"},
+    {id:"pp20",code:"SHIC-PP-020",category:"General",desc:"FULL BODY HARNESS W/ LANYARD",cost:2500,uom:"Pcs"},
+    {id:"pp21",code:"SHIC-PP-021",category:"General",desc:"HEAT-RESISTANT GLOVES",cost:400,uom:"Pcs"},
+    {id:"pp22",code:"SHIC-PP-022",category:"General",desc:"HIGH VISIBILITY VEST",cost:250,uom:"Pcs"},
+    {id:"pp23",code:"SHIC-PP-023",category:"General",desc:"RESPIRATOR FILTER",cost:200,uom:"Pcs"},
+    {id:"pp24",code:"SHIC-PP-024",category:"General",desc:"SAFETY CLEAR GOGGLES",cost:150,uom:"Pcs"},
+    {id:"pp25",code:"SHIC-PP-025",category:"General",desc:"SAFETY HELMET W/ CHIN STRAP",cost:350,uom:"Pcs"},
+    {id:"pp26",code:"SHIC-PP-026",category:"General",desc:"TIG GLOVES",cost:300,uom:"Pcs"},
+    {id:"pp27",code:"SHIC-PP-027",category:"General",desc:"WELDING APRON",cost:500,uom:"Pcs"},
+    {id:"pp28",code:"SHIC-PP-028",category:"General",desc:"WELDING MASK",cost:800,uom:"Pcs"}],
   vehicles:[
     {id:"v1",code:"SHIC-VH-001",category:"Light Vehicle",desc:"Pickup Truck / Van",rate:2500,uom:"Day"},
     {id:"v2",code:"SHIC-VH-002",category:"Light Vehicle",desc:"Service Vehicle (Car)",rate:1800,uom:"Day"},
@@ -1227,17 +1242,16 @@ function LoginPage({
     style: {
       color: TX
     }
-  }, "Default admin credentials:"), /*#__PURE__*/React.createElement("br", null), "Username: ", /*#__PURE__*/React.createElement("b", {
+  }, "Admin access reset:"), /*#__PURE__*/React.createElement("br", null), "Default username: ", /*#__PURE__*/React.createElement("b", {
     style: {
       color: INFO,
       fontFamily: "'JetBrains Mono',monospace"
     }
-  }, "admin"), /*#__PURE__*/React.createElement("br", null), "Password: ", /*#__PURE__*/React.createElement("b", {
+  }, "admin"), /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
     style: {
-      color: INFO,
-      fontFamily: "'JetBrains Mono',monospace"
+      color: MT
     }
-  }, "ShicAdmin2026!"), /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("hr", {
+  }, "Contact your system administrator to retrieve the default password, or use the reset button below."), /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("hr", {
     style: {
       border: 'none',
       borderTop: `1px solid ${BDR}`,
@@ -1255,7 +1269,7 @@ function LoginPage({
       fontSize: 11
     },
     onClick: () => {
-      if (confirm('Reset all local user data? This removes all locally stored accounts and recreates the default admin (admin / ShicAdmin2026!). Click OK to confirm.')) {
+      if (confirm('Reset all local user data? This removes all locally stored accounts and recreates the default admin account. Click OK to confirm.')) {
         /* Remove all sy3: and shic: prefixed keys */
         Object.keys(localStorage).filter(k => k.startsWith('sy3:') || k.startsWith('shic') || k.includes('user') || k.includes('session')).forEach(k => localStorage.removeItem(k));
         sessionStorage.clear();
@@ -2605,6 +2619,7 @@ function App({
   }]);
   ;
   const [aiLoad, setAiLoad] = useState(false);
+  const [margin, setMargin] = useState(0);
   const [toast, setToast] = useState('');
   const [toastErr, setToastErr] = useState(false);
   const [masterlist, setMasterlist] = useState(DEFAULT_ML);
@@ -3289,9 +3304,30 @@ function App({
     setTab('info');
     showToast('Loaded: ' + (d.info?.ceNum || ''));
   };
+  const handleClone = (e) => {
+    const d = e.data || e;
+    handleLoad({...d, info: {...(d.info || {}), ceNum: nextCeNum(history), date: new Date().toISOString().slice(0,10)}});
+    showToast('Cloned — assigned new CE number.');
+  };
+  const handleRevise = (e) => {
+    const d = e.data || e;
+    const base = (d.info?.ceNum || '').replace(/-R\d+$/i, '');
+    let maxR = 0;
+    (history || []).forEach(h => {
+      const n = (h.info?.ceNum || '');
+      if (n.replace(/-R\d+$/i,'').toUpperCase() === base.toUpperCase()) {
+        const m = n.match(/-R(\d+)$/i);
+        if (m) maxR = Math.max(maxR, parseInt(m[1]));
+      }
+    });
+    const newCeNum = base + '-R' + (maxR + 1);
+    handleLoad({...d, info: {...(d.info || {}), ceNum: newCeNum, date: new Date().toISOString().slice(0,10)}});
+    showToast('Revision ' + newCeNum + ' loaded — review & save when ready.');
+  };
   const handleNew = () => {
     setInfo({
       ...BLANK_INFO,
+      ceNum: nextCeNum(history),
       date: new Date().toISOString().slice(0, 10)
     });
     setMp([mkMP()]);
@@ -3974,6 +4010,17 @@ function App({
       ...masterlist,
       [mlTab]: (masterlist[mlTab] || []).filter(r => r.id !== id)
     });
+    const [escPct, setEscPct] = useState('');
+    const applyEscalation = () => {
+      const pct = parseFloat(escPct);
+      if (isNaN(pct) || pct === 0) { showToast('Enter a non-zero %', true); return; }
+      const costKey = (mlTab === 'manpower' || mlTab === 'vehicles') ? 'rate' : 'cost';
+      const count = (masterlist[mlTab] || []).length;
+      if (!window.confirm('Apply ' + (pct > 0 ? '+' : '') + pct + '% to all ' + count + ' ' + mlTab + ' rates?')) return;
+      saveML({...masterlist, [mlTab]: (masterlist[mlTab] || []).map(r => ({...r, [costKey]: Math.round(N(r[costKey]) * (1 + pct / 100))}))});
+      showToast('Applied ' + (pct > 0 ? '+' : '') + pct + '% to ' + count + ' ' + mlTab + ' items.');
+      setEscPct('');
+    };
     const ks = colK[mlTab],
       ls = colL[mlTab];
     return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
@@ -4087,7 +4134,20 @@ function App({
     })), /*#__PURE__*/React.createElement("button", {
       style: btn('acc', true),
       onClick: addML
-    }, "+ Add Item"))), /*#__PURE__*/React.createElement("div", {
+    }, "+ Add Item"), /*#__PURE__*/React.createElement("div", {
+      style: {display:'flex', alignItems:'center', gap:4, marginLeft:8, borderLeft:`1px solid ${BDR}`, paddingLeft:8}
+    }, /*#__PURE__*/React.createElement("input", {
+      style: {...INP, width:70, fontSize:11},
+      type: "number",
+      placeholder: "% e.g. 5",
+      value: escPct,
+      onChange: e => setEscPct(e.target.value),
+      title: "Enter a percentage to apply to all rates in this tab (positive = increase, negative = decrease)"
+    }), /*#__PURE__*/React.createElement("button", {
+      style: btn('def', true),
+      onClick: applyEscalation,
+      title: "Apply % adjustment to all rates in current tab"
+    }, "Apply %")))), /*#__PURE__*/React.createElement("div", {
       style: {
         overflowX: 'auto'
       }
@@ -4762,6 +4822,7 @@ function App({
         showToast('Deleted.');
       }
     }, confirmDel === e.id ? 'Sure?' : 'Del'))));
+  }), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{...btn('ok',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleClone(e.data||e),title:"Clone with new CE number"},"Clone"), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{...btn('info',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleRevise(e.data||e),title:"Revision copy (-R1, -R2...)"},"Revise"))));
   })))));
   /* ---- Scope Library Editor (Scope Library tab) ---- */
   const ScopeLibraryEditor = () => {
@@ -6062,6 +6123,64 @@ function App({
     w.document.close();
     setTimeout(() => w.print(), 800);
   };
+  const handleGenerateCEWithCheck = () => {
+    const zeroCost = [];
+    mp.forEach(r => { if (!N(r.rate) && (r.role||r.desc)) zeroCost.push('Manpower: ' + (r.role||r.desc)); });
+    tools.forEach(r => { if (!N(r.cost) && r.desc) zeroCost.push('Tool: ' + r.desc); });
+    mats.forEach(r => { if (!N(r.cost) && r.desc) zeroCost.push('Material: ' + r.desc); });
+    ppe.forEach(r => { if (!N(r.cost) && r.desc) zeroCost.push('PPE: ' + r.desc); });
+    if (zeroCost.length > 0) {
+      const preview = zeroCost.slice(0,10).join('\n') + (zeroCost.length > 10 ? '\n... and ' + (zeroCost.length-10) + ' more' : '');
+      if (!window.confirm(zeroCost.length + ' item(s) have ₱0 cost and will not contribute to the total:\n\n' + preview + '\n\nProceed with generating CE?')) return;
+    }
+    handleGenerateCE();
+  };
+  const handleExportXLSX = () => {
+    const wb = XLSX.utils.book_new();
+    const aoa = (rows) => XLSX.utils.aoa_to_sheet(rows);
+    const shiftLabel = {regular_day:'Regular Day',regular_night:'Regular Night',sunday:'Sunday',holiday:'Holiday'};
+    const shiftMult = {regular_day:1,regular_night:1.25,sunday:1.3,holiday:2};
+    /* Summary */
+    const sumRows = [
+      ['SHIC COST ESTIMATE'],[''],
+      ['CE Number:', info.ceNum], ['Date:', info.date], ['Client:', info.client||''], ['Location:', info.location||''], ['Description:', info.description||''],
+      [''],['SECTION','AMOUNT (₱)'],
+      ...summaryRows.map(([l,v])=>[l, v]),
+      [''],['GRAND TOTAL (Cost)', grand],
+      ['Margin %', margin+'%'],
+      ['SELLING PRICE', grand*(1+margin/100)]
+    ];
+    XLSX.utils.book_append_sheet(wb, aoa(sumRows), 'Summary');
+    /* Manpower */
+    if (mp.filter(r=>r.role||r.desc).length) {
+      const mpRows = [['Role','Pax','Days','OT Hours','Shift','Rate (₱/Day)','Per Diem (₱)','Total (₱)'],
+        ...mp.filter(r=>r.role||r.desc).map(r=>{
+          const sm=shiftMult[r.shift]||1;
+          const base=N(r.pax)*N(r.days)*N(r.rate)*sm;
+          const ot=N(r.pax)*N(r.otHours)*(N(r.rate)/8)*1.25;
+          const pd=N(r.pax)*N(r.days)*N(r.perDiem);
+          return[r.role||r.desc,N(r.pax),N(r.days),N(r.otHours),shiftLabel[r.shift]||r.shift,N(r.rate),N(r.perDiem),base+ot+pd];
+        })];
+      XLSX.utils.book_append_sheet(wb, aoa(mpRows), 'Manpower');
+    }
+    /* Tools */
+    if (tools.filter(r=>r.desc).length) {
+      const tRows=[['Description','Qty','UOM','Cost (₱)','Total (₱)'],...tools.filter(r=>r.desc).map(r=>[r.desc,N(r.qty),r.uom,N(r.cost),N(r.qty)*N(r.cost)])];
+      XLSX.utils.book_append_sheet(wb, aoa(tRows), 'Tools');
+    }
+    /* Materials */
+    if (mats.filter(r=>r.desc).length) {
+      const mRows=[['Description','Qty','UOM','Cost (₱)','Total (₱)'],...mats.filter(r=>r.desc).map(r=>[r.desc,N(r.qty),r.uom,N(r.cost),N(r.qty)*N(r.cost)])];
+      XLSX.utils.book_append_sheet(wb, aoa(mRows), 'Materials');
+    }
+    /* PPE */
+    if (ppe.filter(r=>r.desc).length) {
+      const pRows=[['Description','Qty','UOM','Cost (₱)','Total (₱)'],...ppe.filter(r=>r.desc).map(r=>[r.desc,N(r.qty),r.uom,N(r.cost),N(r.qty)*N(r.cost)])];
+      XLSX.utils.book_append_sheet(wb, aoa(pRows), 'PPE');
+    }
+    XLSX.writeFile(wb, (info.ceNum||'CE') + '_' + (info.client||'export').replace(/[^a-z0-9]/gi,'_') + '.xlsx');
+    showToast('Exported to Excel.');
+  };
   const [showDraftBanner] = React.useState(() => hasDraft());
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -6497,7 +6616,16 @@ function App({
       style: {
         color: INFO
       }
-    }, "console.anthropic.com"), " - pay-per-use, no monthly fee")), /*#__PURE__*/React.createElement("div", {
+    }, "console.anthropic.com"), " - pay-per-use, no monthly fee")), /*#__PURE__*/React.createElement("label", {
+      style: {display:'flex', alignItems:'center', gap:7, marginBottom:14, cursor:'pointer', userSelect:'none'}
+    }, /*#__PURE__*/React.createElement("input", {
+      id: "rememberApiKey",
+      type: "checkbox",
+      defaultChecked: getRememberKey(),
+      style: {accentColor: ACC, width:14, height:14, cursor:'pointer'}
+    }), /*#__PURE__*/React.createElement("span", {style:{fontSize:11, color:MT}},
+      "Remember key across sessions ", /*#__PURE__*/React.createElement("span", {style:{color:ERR+'cc', fontSize:10}}, "(uncheck on shared computers)")
+    )), /*#__PURE__*/React.createElement("div", {
       style: {
         display: 'flex',
         gap: 8,
@@ -6526,9 +6654,10 @@ function App({
           }
           setAzureEndpoint(ep);
         }
+        const remember = document.getElementById('rememberApiKey')?.checked || false;
         setProvider(selP);
-        setApiKey(newKey);
-        showToast((PROVIDERS[selP]?.label || selP) + ' key saved!');
+        setApiKey(newKey, remember);
+        showToast((PROVIDERS[selP]?.label || selP) + ' key saved!' + (remember ? ' (remembered)' : ' (session only)'));
         setShowApiKey(false);
         setApiKeyInput('');
       }
@@ -6538,7 +6667,9 @@ function App({
         marginLeft: 'auto'
       },
       onClick: () => {
+        sessionStorage.removeItem('sy3:apikey');
         localStorage.removeItem('sy3:apikey');
+        localStorage.removeItem('sy3:rememberkey');
         localStorage.removeItem('sy3:provider');
         localStorage.removeItem('sy3:azureEndpoint');
         showToast('AI config cleared.');
@@ -8902,8 +9033,11 @@ function App({
     }
   }, sharedDrafts.length)), /*#__PURE__*/React.createElement("button", {
     style: btn('info'),
-    onClick: handleGenerateCE
+    onClick: handleGenerateCEWithCheck
   }, "Generate CE"), /*#__PURE__*/React.createElement("button", {
+    style: btn('ok'),
+    onClick: handleExportXLSX
+  }, "Export XLSX"), /*#__PURE__*/React.createElement("button", {
     style: btn('acc'),
     onClick: handleExport
   }, "Export XLS"))), /*#__PURE__*/React.createElement("table", {
@@ -8988,7 +9122,31 @@ function App({
     }
   }, "P", ph(unitP)), /*#__PURE__*/React.createElement("td", {
     style: TDS
-  }))))), /*#__PURE__*/React.createElement("div", {
+  })), /*#__PURE__*/React.createElement("tr", {
+    style: {background: '#3FB95008', borderTop: `1px dashed ${BDR}`}
+  }, /*#__PURE__*/React.createElement("td", {
+    style: {...TDS, color: MT}
+  }, /*#__PURE__*/React.createElement("span", {style:{marginRight:8}}, "Margin / Markup"), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    min: 0,
+    max: 999,
+    step: 0.5,
+    value: margin,
+    onChange: e => setMargin(Math.max(0, parseFloat(e.target.value) || 0)),
+    style: {...INP, width: 65, display:'inline-block', padding:'2px 6px', fontSize:11, ...MONO}
+  }), /*#__PURE__*/React.createElement("span", {style:{marginLeft:4, color:MT, fontSize:11}}, "%")), /*#__PURE__*/React.createElement("td", {
+    style: {...TDS, ...MONO, textAlign:'right', color: OK}
+  }, margin > 0 ? "+" + ph(grand * margin / 100) : "--"), /*#__PURE__*/React.createElement("td", {
+    style: {...TDS, textAlign:'right', color: MT, fontSize:11}
+  }, margin > 0 ? margin.toFixed(1)+"%" : "")), /*#__PURE__*/React.createElement("tr", {
+    style: {background: OK+'10', borderTop: `2px solid ${OK}44`}
+  }, /*#__PURE__*/React.createElement("td", {
+    style: {...TDS, fontWeight:800, color: OK, paddingTop:10, paddingBottom:10}
+  }, "SELLING PRICE"), /*#__PURE__*/React.createElement("td", {
+    style: {...TDS, ...MONO, textAlign:'right', fontSize:15, fontWeight:800, color: OK, paddingTop:10, paddingBottom:10}
+  }, "P", ph(grand * (1 + margin / 100))), /*#__PURE__*/React.createElement("td", {
+    style: {...TDS, textAlign:'right', color: MT, fontSize:11, paddingTop:10}
+  }, margin > 0 ? (100+margin).toFixed(1)+"%" : "0% margin"))))), /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
       borderColor: INFO + '44'

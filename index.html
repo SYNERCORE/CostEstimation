@@ -957,6 +957,8 @@ async function spLoadMLImports(){
 }
 
 async function dbSaveML(data){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Masterlist'),"Title eq 'config'",'Id');if(r.length)await spPatch(spList('Masterlist'),r[0].Id,{shicData:JSON.stringify(data)});else await spPost(spList('Masterlist'),{Title:'config',shicData:JSON.stringify(data)});return;}catch(e){console.warn('dbSaveML:',e.message);}}LS.set('masterlist',data);}
+async function dbSaveSowLib(lib){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('SowLib'),"Title eq 'config'",'Id');if(r.length)await spPatch(spList('SowLib'),r[0].Id,{shicData:JSON.stringify(lib)});else await spPost(spList('SowLib'),{Title:'config',shicData:JSON.stringify(lib)});return true;}catch(e){console.warn('dbSaveSowLib:',e.message);}}LS.set('sy3:sowlib',lib);return false;}
+async function dbGetSowLib(){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('SowLib'),"Title eq 'config'",'Id,shicData');if(r.length&&r[0].shicData)return JSON.parse(r[0].shicData);}catch(e){console.warn('dbGetSowLib:',e.message);}}try{const s=localStorage.getItem('sy3:sowlib');return s?JSON.parse(s):null;}catch{return null;}}
 async function ensureAdmin() {
   try {
     /* Migrate data from old sy3: prefix to shic: prefix */
@@ -1594,6 +1596,7 @@ async function autoSetupSP(progressCb){
     [spList('CE_Documents')]:[[9,'shicCEId'],[2,'shicFileName'],[2,'shicFileType'],[3,'shicFileData']],
     [spList('Monitoring')]:  [[9,'shicCEId'],[3,'shicMonData']],
     [spList('Masterlist')]:  [[3,'shicData']],
+    [spList('SowLib')]:      [[3,'shicData']],
     [spList('Drafts')]:      [[2,'shicSavedBy'],[3,'shicData']]
   };
 
@@ -2696,10 +2699,13 @@ function App({
   });
   const saveSowLib = lib => {
     setSowLib(lib);
-    try {
-      localStorage.setItem('sy3:sowlib', JSON.stringify(lib));
-    } catch {}
+    try { localStorage.setItem('sy3:sowlib', JSON.stringify(lib)); } catch {}
+    if (USE_SP || getSiteURL()) dbSaveSowLib(lib).catch(()=>{});
   };
+  useEffect(() => {
+    if (!(USE_SP || getSiteURL())) return;
+    dbGetSowLib().then(lib => { if (lib && lib.length) setSowLib(lib); }).catch(()=>{});
+  }, []);
   const [sowSearch, setSowSearch] = useState('');
   const [sowCat, setSowCat] = useState('All');
   const [sowSel, setSowSel] = useState({}); /* {id:qty} */
@@ -3463,16 +3469,20 @@ function App({
         const qty = sowSel[svc.id] || 1;
         scopeParts.push('[x' + qty + '] ' + svc.title + ': ' + (svc.scope[0] || ''));
         for (let i = 0; i < qty; i++) {
-          /* Manpower: merge by role \u2014 add pax */
-          svc.mp.forEach(role => {
+          /* Helper: resolve item \u2014 accepts string or {name,qty} */
+          const resolve = item => typeof item === 'string' ? {name: item, qty: 1} : {name: item.name||'', qty: item.qty||1};
+          /* Manpower: merge by role \u2014 add pax (multiplied by item qty) */
+          svc.mp.forEach(raw => {
+            const {name: role, qty: iq} = resolve(raw);
+            if (!role) return;
             const key = role.toUpperCase().trim();
             if (mpMap[key]) {
-              mpMap[key].pax += 1;
+              mpMap[key].pax += iq;
             } else {
               mpMap[key] = {
                 id: uid(),
                 role,
-                pax: 1,
+                pax: iq,
                 days: N(info.days) || 1,
                 shift: 'regular_day',
                 rate: findRate(role),
@@ -3481,45 +3491,51 @@ function App({
             }
           });
           /* Tools: merge by description \u2014 add qty */
-          svc.tools.forEach(desc => {
+          svc.tools.forEach(raw => {
+            const {name: desc, qty: iq} = resolve(raw);
+            if (!desc) return;
             const key = desc.toUpperCase().trim();
             if (toolMap[key]) {
-              toolMap[key].qty += 1;
+              toolMap[key].qty += iq;
             } else {
               toolMap[key] = {
                 id: uid(),
                 desc,
-                qty: 1,
+                qty: iq,
                 uom: 'Lot',
                 cost: findToolCost(desc)
               };
             }
           });
           /* Materials: merge by description \u2014 add qty */
-          svc.mats.forEach(desc => {
+          svc.mats.forEach(raw => {
+            const {name: desc, qty: iq} = resolve(raw);
+            if (!desc) return;
             const key = desc.toUpperCase().trim();
             if (matMap[key]) {
-              matMap[key].qty += 1;
+              matMap[key].qty += iq;
             } else {
               matMap[key] = {
                 id: uid(),
                 desc,
-                qty: 1,
+                qty: iq,
                 uom: 'Lot',
                 cost: findMatCost(desc)
               };
             }
           });
           /* PPE: merge by description \u2014 add qty */
-          svc.ppe.forEach(desc => {
+          svc.ppe.forEach(raw => {
+            const {name: desc, qty: iq} = resolve(raw);
+            if (!desc) return;
             const key = desc.toUpperCase().trim();
             if (ppeMap[key]) {
-              ppeMap[key].qty += 1;
+              ppeMap[key].qty += iq;
             } else {
               ppeMap[key] = {
                 id: uid(),
                 desc,
-                qty: 1,
+                qty: iq,
                 uom: 'Pcs',
                 cost: findPpeCost(desc)
               };
@@ -4830,6 +4846,46 @@ function App({
     const [editSvc, setEditSvc] = useState(null);
     const [editDraft, setEditDraft] = useState(null);
     const [resTab, setResTab] = useState('mp');
+    const [showSpWiz, setShowSpWiz] = useState(false);
+    const [spWizLog, setSpWizLog] = useState('');
+    const [spWizBusy, setSpWizBusy] = useState(false);
+    const spConnected = !!(USE_SP || getSiteURL());
+    const spPublish = async () => {
+      setSpWizBusy(true);
+      setSpWizLog('Publishing scope library to SharePoint…');
+      try {
+        const ok = await dbSaveSowLib(sowLib);
+        setSpWizLog(ok ? '✅ Published successfully! All users will see the updated library.' : '⚠️ Saved to local storage only (SP not connected).');
+      } catch(e) { setSpWizLog('❌ Error: ' + e.message); }
+      setSpWizBusy(false);
+    };
+    const spPull = async () => {
+      setSpWizBusy(true);
+      setSpWizLog('Loading scope library from SharePoint…');
+      try {
+        const lib = await dbGetSowLib();
+        if (lib && lib.length) { setSowLib(lib); setSpWizLog('✅ Loaded ' + lib.length + ' services from SharePoint.'); }
+        else setSpWizLog('⚠️ No data found on SharePoint yet. Publish first.');
+      } catch(e) { setSpWizLog('❌ Error: ' + e.message); }
+      setSpWizBusy(false);
+    };
+    const spSetupList = async () => {
+      setSpWizBusy(true);
+      setSpWizLog('Creating SharePoint list…');
+      try {
+        const tok = await getSPToken();
+        if (!tok) throw new Error('Not authenticated. Log in first.');
+        const {digest} = await spDigest();
+        const wasCreated = await spCreateList(spList('SowLib'), tok, digest);
+        if (wasCreated) {
+          await spAddField(spList('SowLib'), 'shicData', 3, tok, digest);
+          setSpWizLog('✅ List "' + spList('SowLib') + '" created. You can now Publish.');
+        } else {
+          setSpWizLog('✅ List already exists. You can Publish.');
+        }
+      } catch(e) { setSpWizLog('❌ ' + e.message); }
+      setSpWizBusy(false);
+    };
     const cats = ['All', ...[...new Set(sowLib.map(s => s.cat))].sort()];
     const filtered = sowLib.filter(s => {
       const matchCat = libCat === 'All' || s.cat === libCat;
@@ -4849,6 +4905,7 @@ function App({
             code: match ? match.code || '' : '',
             cat: match ? match.category || 'General' : 'General',
             name: r,
+            qty: 1,
             cost: match ? match.rate || match.cost || 0 : 0,
             uom: match ? match.uom || 'Lot' : 'Lot'
           };
@@ -4858,12 +4915,13 @@ function App({
           code: r.code || '',
           cat: r.cat || 'General',
           name: r.name || r.role || r.desc || '',
+          qty: r.qty || 1,
           cost: r.cost || r.rate || 0,
           uom: r.uom || 'Lot'
         };
       });
     };
-    const serialise = rows => rows.map(r => r.name).filter(Boolean);
+    const serialise = rows => rows.map(r => r.name ? {name: r.name, qty: r.qty || 1} : null).filter(Boolean);
     const startEdit = svc => {
       setEditSvc(svc);
       setEditDraft({
@@ -4948,6 +5006,7 @@ function App({
         code: '',
         cat: 'General',
         name: '',
+        qty: 1,
         cost: 0,
         uom: type === 'mp' ? 'Day' : 'Lot'
       }]);
@@ -4998,7 +5057,7 @@ function App({
           borderCollapse: 'collapse',
           fontSize: 11
         }
-      }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Item Code', 'Category', 'Role / Description', 'Cost (PHP)', 'UOM', ''].map(h => /*#__PURE__*/React.createElement("th", {
+      }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Item Code', 'Category', 'Role / Description', 'Qty', 'Cost (PHP)', 'UOM', ''].map(h => /*#__PURE__*/React.createElement("th", {
         key: h,
         style: {
           ...THS,
@@ -5048,6 +5107,14 @@ function App({
       })))), /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, /*#__PURE__*/React.createElement("input", {
+        style: {...INP, ...MONO, width: 52},
+        type: "number", min: 1,
+        value: r.qty || 1,
+        onChange: e => upd(r.id, 'qty', Math.max(1, parseInt(e.target.value) || 1)),
+        title: "Quantity of this item per service application"
+      })), /*#__PURE__*/React.createElement("td", {
+        style: TDS
+      }, /*#__PURE__*/React.createElement("input", {
         style: {
           ...INP,
           ...MONO,
@@ -5082,7 +5149,48 @@ function App({
         }
       }, "x"))))))));
     };
-    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    const SpWizModal = () => showSpWiz && /*#__PURE__*/React.createElement("div", {
+      style: {position:'fixed',inset:0,background:'#000a',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {background:BG,border:`1px solid ${BDR}`,borderRadius:10,padding:28,width:440,maxWidth:'95vw',boxShadow:'0 8px 40px #0008'}
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {fontWeight:700,fontSize:15,marginBottom:4,color:'#A78BFA'}
+    }, "☁ SharePoint Sync — Scope Library"),
+    /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,marginBottom:18}},
+      spConnected
+        ? 'Connected to: ' + getSiteURL()
+        : 'SharePoint not configured. Set your Site URL in Admin → Settings first.'
+    ),
+    /*#__PURE__*/React.createElement("div", {style:{display:'flex',flexDirection:'column',gap:10,marginBottom:16}},
+      /*#__PURE__*/React.createElement("div", {style:{background:'#A78BFA11',border:'1px solid #A78BFA33',borderRadius:7,padding:12}},
+        /*#__PURE__*/React.createElement("div", {style:{fontWeight:600,fontSize:12,marginBottom:4}}, "Step 1 — Create List (first time only)"),
+        /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,marginBottom:8}}, 'Creates the "' + spList('SowLib') + '" list in SharePoint with the required column. Skip if already set up.'),
+        /*#__PURE__*/React.createElement("button", {
+          style:btn('def',true), onClick: spSetupList, disabled: spWizBusy || !spConnected
+        }, spWizBusy ? '…' : 'Create SP List')
+      ),
+      /*#__PURE__*/React.createElement("div", {style:{background:'#22c55e11',border:'1px solid #22c55e33',borderRadius:7,padding:12}},
+        /*#__PURE__*/React.createElement("div", {style:{fontWeight:600,fontSize:12,marginBottom:4}}, "Step 2 — Publish to SharePoint"),
+        /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,marginBottom:8}}, 'Saves your current scope library (' + sowLib.length + ' services) to SharePoint so all users can access it.'),
+        /*#__PURE__*/React.createElement("button", {
+          style:btn('ok',true), onClick: spPublish, disabled: spWizBusy || !spConnected
+        }, spWizBusy ? 'Publishing…' : '↑ Publish to SharePoint')
+      ),
+      /*#__PURE__*/React.createElement("div", {style:{background:'#3b82f611',border:'1px solid #3b82f633',borderRadius:7,padding:12}},
+        /*#__PURE__*/React.createElement("div", {style:{fontWeight:600,fontSize:12,marginBottom:4}}, "Step 3 — Load from SharePoint"),
+        /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,marginBottom:8}}, 'Fetches the latest shared library from SharePoint and replaces your local copy.'),
+        /*#__PURE__*/React.createElement("button", {
+          style:btn('info',true), onClick: spPull, disabled: spWizBusy || !spConnected
+        }, spWizBusy ? 'Loading…' : '↓ Load from SharePoint')
+      )
+    ),
+    spWizLog && /*#__PURE__*/React.createElement("div", {
+      style: {background:'#ffffff0a',border:`1px solid ${BDR}`,borderRadius:6,padding:'8px 12px',fontSize:12,marginBottom:14,whiteSpace:'pre-wrap'}
+    }, spWizLog),
+    /*#__PURE__*/React.createElement("div", {style:{display:'flex',justifyContent:'flex-end'}},
+      /*#__PURE__*/React.createElement("button", {style:btn('def',true), onClick:()=>setShowSpWiz(false)}, "Close")
+    )));
+    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SpWizModal, null), /*#__PURE__*/React.createElement("div", {
       style: {
         ...CS,
         borderColor: '#A78BFA44'
@@ -5160,7 +5268,11 @@ function App({
         XLSX.writeFile(wb, 'SY3_ScopeLibrary.xlsx');
         showToast('Exported ' + sowLib.length + ' services to Excel.');
       }
-    }, "Export Library (XLS)"), /*#__PURE__*/React.createElement("label", {
+    }, "Export Library (XLS)"), /*#__PURE__*/React.createElement("button", {
+      style: {...btn(spConnected ? 'ok' : 'def', true), position: 'relative'},
+      onClick: () => { setSpWizLog(''); setShowSpWiz(true); },
+      title: spConnected ? 'SharePoint connected — sync scope library' : 'SharePoint not configured'
+    }, (spConnected ? '☁ ' : '○ ') + "SharePoint Sync"), /*#__PURE__*/React.createElement("label", {
       style: {
         ...btn('info', true),
         cursor: 'pointer'

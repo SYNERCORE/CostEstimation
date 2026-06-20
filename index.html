@@ -3499,7 +3499,7 @@ function App({
       const scopeParts = [];
       selected.forEach(svc => {
         const qty = sowSel[svc.id] || 1;
-        scopeParts.push('[x' + qty + '] ' + svc.title + ': ' + (svc.scope[0] || ''));
+        scopeParts.push('[x' + qty + '] ' + svc.title + ': ' + ((svc.scope||[])[0] || ''));
         for (let i = 0; i < qty; i++) {
           /* Helper: resolve item \u2014 accepts string or {name,qty} */
           const resolve = item => typeof item === 'string' ? {name: item, qty: 1} : {name: item.name||'', qty: item.qty||1};
@@ -5682,7 +5682,7 @@ function App({
         whiteSpace: 'nowrap',
         maxWidth: 320
       }
-    }, (svc.scope[0] || '').slice(0, 90), (svc.scope[0] || '').length > 90 ? '...' : '')), /*#__PURE__*/React.createElement("td", {
+    }, ((svc.scope||[])[0] || '').slice(0, 90), ((svc.scope||[])[0] || '').length > 90 ? '...' : '')), /*#__PURE__*/React.createElement("td", {
       style: TDS
     }, /*#__PURE__*/React.createElement("span", {
       style: {

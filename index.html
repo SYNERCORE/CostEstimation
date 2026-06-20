@@ -960,20 +960,26 @@ async function dbSaveML(data){if(USE_SP||getSiteURL()){try{const r=await spGet(s
 async function dbSaveSowLib(lib){
   if(USE_SP||getSiteURL()){
     try{
-      /* Fetch all existing rows — parse their shicData to get the internal id for upsert keying */
+      /* Fetch current SP state first */
       const existing=await spGet(spList('SowLib'),'','Id,shicData');
-      const existMap={};/* svc.id → SP row Id */
-      existing.forEach(r=>{try{const d=JSON.parse(r.shicData||'{}');if(d&&d.id!=null)existMap[d.id]=r.Id;}catch{}});
-      const libIds=new Set(lib.map(s=>s.id));
-      /* Upsert each service as its own row; Title = readable "Cat | Name" */
-      for(const svc of lib){
+      /* Build SP map: svc.id (string) → {spRowId, svc} */
+      const spMap={};
+      existing.forEach(r=>{
+        try{const d=JSON.parse(r.shicData||'{}');if(d&&d.id!=null)spMap[String(d.id)]={spId:r.Id,svc:d};}catch{}
+      });
+      /* Build local map: svc.id (string) → svc */
+      const localMap={};
+      lib.forEach(s=>localMap[String(s.id)]=s);
+      /* MERGE: SP-only services are preserved; local wins on same id */
+      const merged={...spMap};
+      lib.forEach(s=>{ merged[String(s.id)]={spId:(spMap[String(s.id)]||{}).spId,svc:s}; });
+      /* Upsert merged result; Title = readable "Cat | Name" */
+      for(const key of Object.keys(merged)){
+        const{spId,svc}=merged[key];
         const data={Title:(svc.cat||'')+(svc.cat&&svc.title?' | ':'')+svc.title,shicData:JSON.stringify(svc)};
-        if(existMap[svc.id]!=null)await spPatch(spList('SowLib'),existMap[svc.id],data);
+        if(spId!=null)await spPatch(spList('SowLib'),spId,data);
         else await spPost(spList('SowLib'),data);
       }
-      /* Delete rows for services no longer in the library */
-      const toDelete=existing.filter(r=>{try{const d=JSON.parse(r.shicData||'{}');return d&&!libIds.has(d.id);}catch{return false;}});
-      for(const r of toDelete)await spDelete(spList('SowLib'),r.Id).catch(()=>{});
       return true;
     }catch(e){console.warn('dbSaveSowLib:',e.message);}
   }
@@ -985,7 +991,7 @@ async function dbGetSowLib(){
       const rows=await spGet(spList('SowLib'),'','Id,Title,shicData');
       if(rows.length){
         const parsed=rows.filter(r=>r.shicData).map(r=>{try{return JSON.parse(r.shicData);}catch{return null;}}).filter(Boolean);
-        if(parsed.length)return parsed.sort((a,b)=>(a.id||0)-(b.id||0));
+        if(parsed.length)return parsed.sort((a,b)=>String(a.id||'').localeCompare(String(b.id||''),undefined,{numeric:true}));
       }
     }catch(e){console.warn('dbGetSowLib:',e.message);}
   }
@@ -4995,9 +5001,8 @@ function App({
       showToast('Deleted.');
     };
     const addSvc = () => {
-      const maxId = Math.max(0, ...sowLib.map(s => s.id)) + 1;
       const blank = {
-        id: maxId,
+        id: uid(),
         cat: 'On-Site Services',
         title: 'New Service',
         scope: ['Describe the scope here.'],

@@ -3810,7 +3810,7 @@ function App({
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap'
         }
-      }, svc.scope[0] || '')), isSel && /*#__PURE__*/React.createElement("div", {
+      }, (svc.scope||[])[0] || '')), isSel && /*#__PURE__*/React.createElement("div", {
         style: {
           display: 'flex',
           alignItems: 'center',

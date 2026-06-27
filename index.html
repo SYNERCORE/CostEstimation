@@ -4589,6 +4589,108 @@ function App({
       marginLeft: 3
     }
   }, monSortCol === col ? monSortDir === 'asc' ? '\u25b2' : '\u25bc' : '\u21c5');
+  /* ── Import monitoring from Excel (CE Tracking spreadsheet) ── */
+  const importMonitoringXLSX = async (file) => {
+    try {
+      const ab = await file.arrayBuffer();
+      const wb = XLSX.read(ab, {type:'array', cellDates:true});
+      let ws = null;
+      for (const name of wb.SheetNames) {
+        const s = wb.Sheets[name];
+        const csv = XLSX.utils.sheet_to_csv(s);
+        if (csv.includes('CE No.')) { ws = s; break; }
+      }
+      if (!ws) ws = wb.Sheets[wb.SheetNames[0]];
+
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:false, dateNF:'yyyy-mm-dd'});
+      let headerIdx = rows.findIndex(r => Array.isArray(r) && r.some(c => c && String(c).trim() === 'CE No.'));
+      if (headerIdx < 0) headerIdx = 2;
+      const headers = rows[headerIdx].map(h => h ? String(h).trim() : '');
+      const col = n => headers.findIndex(h => h.toLowerCase().includes(n.toLowerCase()));
+
+      const iCeNum=col('CE No.'), iCeName=col('CE Name'), iComp=col('Company Designation'),
+            iDate=col('CE Date'), iDisc=col('Designation'), iClient=col('Customer'),
+            iTitle=col('Job Title'), iRecvDate=col('Recieved'), iDeadline=col('Deadline'),
+            iSubmDate=col('Date Submitted'), iStatus=col('Column 12'),
+            iRecvBy=col('Recieved By'), iRemarks=col('Remarks'), iStanding=col('Standing');
+
+      const statusMap = {'done':'Submitted','cancelled':'Cancelled','no quote':'On Hold',
+        'ongoing':'Ongoing','pending':'Pending','for site insp':'For site insp.',
+        'for approval':'For Approval','submitted':'Submitted'};
+
+      const dataRows = rows.slice(headerIdx + 1).filter(r =>
+        r && r[iCeNum] && String(r[iCeNum]).trim().match(/CE-\d{4}-\d+/i));
+      if (!dataRows.length) { showToast('No CE rows found in the file.', true); return; }
+
+      const existing = await dbGetHistory(null, true).catch(() => []);
+      const existingNums = new Set(existing.map(h => (h.info?.ceNum||h.ceNum||'').toUpperCase().trim()));
+
+      // monData keyed by ceNum temporarily; after reload we remap to real IDs
+      const monByCeNum = {};
+      let imported = 0, skipped = 0;
+
+      for (const r of dataRows) {
+        const ceNum = String(r[iCeNum]||'').trim().toUpperCase();
+        if (!ceNum) continue;
+        if (existingNums.has(ceNum)) { skipped++; continue; }
+
+        const rawStatus = String(r[iStatus]||'').trim().toLowerCase();
+        const appStatus = Object.entries(statusMap).find(([k]) => rawStatus.startsWith(k))?.[1] || 'Pending';
+
+        const entry = {
+          ceType: String(r[iDisc]||'').toLowerCase().includes('elec') ? 'electrical' : 'mechanical',
+          info: {
+            ceNum,
+            client: String(r[iClient]||'').trim(),
+            description: String(r[iTitle]||'').trim(),
+            company: String(r[iComp]||'').trim(),
+            discipline: String(r[iDisc]||'').trim(),
+          },
+          mp:[], tools:[], mats:[], ppe:[], misc:{}, notes:[], sowItems:[],
+          approvers:[], mobVehicles:[], demobVehicles:[],
+          grand:0, unitP:0,
+          savedBy: String(r[iCeName]||'').trim(),
+          savedAt: r[iDate] ? new Date(r[iDate]).toISOString() : new Date().toISOString(),
+          _imported: true,
+        };
+
+        monByCeNum[ceNum] = {
+          status: appStatus,
+          standing: String(r[iStanding]||'').trim(),
+          deadline: r[iDeadline] ? String(r[iDeadline]).slice(0,10) : '',
+          dateSubmitted: r[iSubmDate] ? String(r[iSubmDate]).slice(0,10) : '',
+          dateReceived: r[iRecvDate] ? String(r[iRecvDate]).slice(0,10) : '',
+          receivedBy: String(r[iRecvBy]||'').trim(),
+          remarks: String(r[iRemarks]||'').trim(),
+          preparedBy: String(r[iCeName]||'').trim(),
+        };
+
+        await dbSaveHistory(entry).catch(()=>{});
+        existingNums.add(ceNum);
+        imported++;
+      }
+
+      // Reload history to get real IDs (SP returns numeric Id), then remap monData
+      if (imported > 0) {
+        const fresh = await dbGetHistory(null, true).catch(() => []);
+        const merged = {...monData};
+        for (const h of fresh) {
+          const key = (h.info?.ceNum || h.ceNum || '').toUpperCase().trim();
+          if (monByCeNum[key]) merged[h.id] = monByCeNum[key];
+        }
+        setMonData(merged);
+        try { localStorage.setItem(MON_KEY, JSON.stringify(merged)); } catch {}
+        await dbSaveMon(merged).catch(()=>{});
+        setHistory(fresh);
+      }
+
+      showToast(`Import complete: ${imported} CEs added, ${skipped} already existed.`);
+    } catch(e) {
+      showToast('Import failed: ' + e.message, true);
+      console.error('importMonitoringXLSX', e);
+    }
+  };
+
   const HistPanel = () => /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
@@ -4640,7 +4742,15 @@ function App({
       loadHist();
       loadMonData();
     }
-  }, "\u21BB Refresh"), /*#__PURE__*/React.createElement("button", {
+  }, "\u21BB Refresh"), /*#__PURE__*/React.createElement("label", {
+    title: "Import CE Tracking spreadsheet (.xlsx)",
+    style: {...btn('def', true), cursor:'pointer', display:'inline-flex', alignItems:'center', gap:4}
+  }, "\u2B06 Import xlsx", /*#__PURE__*/React.createElement("input", {
+    type: "file",
+    accept: ".xlsx",
+    style: {display:'none'},
+    onChange: e => { if(e.target.files[0]) { importMonitoringXLSX(e.target.files[0]); e.target.value=''; } }
+  })), /*#__PURE__*/React.createElement("button", {
     style: btn('acc'),
     onClick: handleSave
   }, "+ Save Current CE"))), showStatusMgr && /*#__PURE__*/React.createElement("div", {

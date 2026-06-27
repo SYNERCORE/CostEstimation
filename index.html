@@ -4668,6 +4668,7 @@ function App({
           _imported: true,
         });
 
+        const estimatorName = String(r[iCeName]||'').trim();
         monByCeNum[ceNum] = {
           status: appStatus,
           standing: String(r[iStanding]||'').trim(),
@@ -4676,7 +4677,8 @@ function App({
           dateReceived: parseDate(r[iRecvDate]),
           receivedBy: String(r[iRecvBy]||'').trim(),
           remarks: String(r[iRemarks]||'').trim(),
-          preparedBy: String(r[iCeName]||'').trim(),
+          preparedBy: estimatorName,
+          ceeName: estimatorName,
         };
         existingNums.add(ceNum);
       }
@@ -4906,7 +4908,7 @@ function App({
       top: 0,
       zIndex: 2
     }
-  }, [['ceeName', 'CE Name', 80], ['companyDesig', 'Co.', 60], ['ceNum', 'CE No.', 120], ['designation', 'Discipline', 90], ['customer', 'Customer', 100], ['jobTitle', 'Job Title', 200], ['dateRecv', 'Date Recv.', 95], ['deadline', 'Deadline', 95], ['deadlineDays', 'Days Left', 65], ['dateSubmitted', 'Date Submitted', 105], ['status', 'Status', 120], ['receivedBy', 'Received By', 100], ['remarks', 'Remarks', 160]].map(([col, label, w]) => /*#__PURE__*/React.createElement("th", {
+  }, [['ceeName', 'Estimator', 80], ['companyDesig', 'Co.', 60], ['ceNum', 'CE No.', 120], ['designation', 'Discipline', 90], ['customer', 'Customer', 100], ['jobTitle', 'Job Title', 200], ['dateRecv', 'Date Recv.', 95], ['deadline', 'Deadline', 95], ['deadlineDays', 'Days Left', 65], ['dateSubmitted', 'Date Submitted', 105], ['status', 'Status', 120], ['receivedBy', 'Received By', 100], ['remarks', 'Remarks', 160]].map(([col, label, w]) => /*#__PURE__*/React.createElement("th", {
     key: col,
     onClick: () => ['ceNum', 'deadline', 'status'].includes(col) && toggleSort(col),
     style: {
@@ -4967,11 +4969,11 @@ function App({
         color: CE_CFG[e.ceType]?.color || ACC
       },
       key: e.id + 'ceeName',
-      defaultValue: m.ceeName || ceNum,
+      defaultValue: m.ceeName || m.preparedBy || e.savedBy || '',
       onBlur: ev => {
-        if (ev.target.value !== String(m.ceeName || ceNum)) updateMon(e.id, 'ceeName', ev.target.value);
+        if (ev.target.value !== String(m.ceeName || m.preparedBy || e.savedBy || '')) updateMon(e.id, 'ceeName', ev.target.value);
       },
-      placeholder: ceNum
+      placeholder: "Estimator"
     })), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,

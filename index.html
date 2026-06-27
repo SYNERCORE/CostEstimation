@@ -4542,6 +4542,8 @@ function App({
   const [monSortCol, setMonSortCol] = useState('savedAt');
   const [monSortDir, setMonSortDir] = useState('desc');
   const [showStatusMgr, setShowStatusMgr] = useState(false);
+  const [monPage, setMonPage] = useState(0);
+  const MON_PAGE_SIZE = 20;
   const sortedHistory = useMemo(() => {
     const filtered = history.filter(e => {
       if (!monSearch) return true;
@@ -4590,6 +4592,7 @@ function App({
     }
   }, monSortCol === col ? monSortDir === 'asc' ? '\u25b2' : '\u25bc' : '\u21c5');
   /* ── Import monitoring from Excel (CE Tracking spreadsheet) ── */
+  const [importProgress, setImportProgress] = React.useState(null); // null | {done,total}
   const importMonitoringXLSX = async (file) => {
     try {
       const ab = await file.arrayBuffer();
@@ -4606,17 +4609,20 @@ function App({
       let headerIdx = rows.findIndex(r => Array.isArray(r) && r.some(c => c && String(c).trim() === 'CE No.'));
       if (headerIdx < 0) headerIdx = 2;
       const headers = rows[headerIdx].map(h => h ? String(h).trim() : '');
-      const col = n => headers.findIndex(h => h.toLowerCase().includes(n.toLowerCase()));
+      const col = n => headers.findIndex(h => h.toLowerCase().replace(/\s+/g,'').includes(n.toLowerCase().replace(/\s+/g,'')));
 
-      const iCeNum=col('CE No.'), iCeName=col('CE Name'), iComp=col('Company Designation'),
-            iDate=col('CE Date'), iDisc=col('Designation'), iClient=col('Customer'),
-            iTitle=col('Job Title'), iRecvDate=col('Recieved'), iDeadline=col('Deadline'),
-            iSubmDate=col('Date Submitted'), iStatus=col('Column 12'),
-            iRecvBy=col('Recieved By'), iRemarks=col('Remarks'), iStanding=col('Standing');
+      // Column indices — robust to files with or without CE Date
+      const iCeNum=col('CENo'), iCeName=col('CEName'), iComp=col('CompanyDesignation'),
+            iDisc=col('Designation'), iClient=col('Customer'),
+            iTitle=col('JobTitle'), iRecvDate=col('DateRecieved'), iDeadline=col('Deadline'),
+            iSubmDate=col('DateSubmitted'), iStatus=col('Column12'),
+            iRecvBy=col('RecievedBy'), iRemarks=col('Remarks'), iStanding=col('Standing');
+      // CE Date optional — fall back to Date Received
+      const iDate = col('CEDate') >= 0 ? col('CEDate') : iRecvDate;
 
       const statusMap = {'done':'Submitted','cancelled':'Cancelled','no quote':'On Hold',
         'ongoing':'Ongoing','pending':'Pending','for site insp':'For site insp.',
-        'for approval':'For Approval','submitted':'Submitted'};
+        'for approval':'For Approval','submitted':'Submitted','no access':'No Access'};
 
       const dataRows = rows.slice(headerIdx + 1).filter(r =>
         r && r[iCeNum] && String(r[iCeNum]).trim().match(/CE-\d{4}-\d+/i));
@@ -4625,9 +4631,10 @@ function App({
       const existing = await dbGetHistory(null, true).catch(() => []);
       const existingNums = new Set(existing.map(h => (h.info?.ceNum||h.ceNum||'').toUpperCase().trim()));
 
-      // monData keyed by ceNum temporarily; after reload we remap to real IDs
+      // Build entries to insert
+      const toInsert = [];
       const monByCeNum = {};
-      let imported = 0, skipped = 0;
+      let skipped = 0;
 
       for (const r of dataRows) {
         const ceNum = String(r[iCeNum]||'').trim().toUpperCase();
@@ -4637,7 +4644,14 @@ function App({
         const rawStatus = String(r[iStatus]||'').trim().toLowerCase();
         const appStatus = Object.entries(statusMap).find(([k]) => rawStatus.startsWith(k))?.[1] || 'Pending';
 
-        const entry = {
+        // Parse deadline date robustly
+        const parseDate = v => {
+          if (!v) return '';
+          const d = new Date(v);
+          return isNaN(d) ? '' : d.toISOString().slice(0,10);
+        };
+
+        toInsert.push({
           ceType: String(r[iDisc]||'').toLowerCase().includes('elec') ? 'electrical' : 'mechanical',
           info: {
             ceNum,
@@ -4652,40 +4666,54 @@ function App({
           savedBy: String(r[iCeName]||'').trim(),
           savedAt: r[iDate] ? new Date(r[iDate]).toISOString() : new Date().toISOString(),
           _imported: true,
-        };
+        });
 
         monByCeNum[ceNum] = {
           status: appStatus,
           standing: String(r[iStanding]||'').trim(),
-          deadline: r[iDeadline] ? String(r[iDeadline]).slice(0,10) : '',
-          dateSubmitted: r[iSubmDate] ? String(r[iSubmDate]).slice(0,10) : '',
-          dateReceived: r[iRecvDate] ? String(r[iRecvDate]).slice(0,10) : '',
+          deadline: parseDate(r[iDeadline]),
+          dateSubmitted: parseDate(r[iSubmDate]),
+          dateReceived: parseDate(r[iRecvDate]),
           receivedBy: String(r[iRecvBy]||'').trim(),
           remarks: String(r[iRemarks]||'').trim(),
           preparedBy: String(r[iCeName]||'').trim(),
         };
-
-        await dbSaveHistory(entry).catch(()=>{});
         existingNums.add(ceNum);
-        imported++;
       }
 
-      // Reload history to get real IDs (SP returns numeric Id), then remap monData
-      if (imported > 0) {
-        const fresh = await dbGetHistory(null, true).catch(() => []);
-        const merged = {...monData};
-        for (const h of fresh) {
-          const key = (h.info?.ceNum || h.ceNum || '').toUpperCase().trim();
-          if (monByCeNum[key]) merged[h.id] = monByCeNum[key];
-        }
-        setMonData(merged);
-        try { localStorage.setItem(MON_KEY, JSON.stringify(merged)); } catch {}
-        await dbSaveMon(merged).catch(()=>{});
-        setHistory(fresh);
+      if (!toInsert.length) {
+        showToast(`Nothing new to import. ${skipped} CEs already existed.`);
+        return;
       }
 
-      showToast(`Import complete: ${imported} CEs added, ${skipped} already existed.`);
+      // Batch insert — 5 at a time to avoid SP throttling
+      const BATCH = 5;
+      setImportProgress({done:0, total:toInsert.length});
+      let imported = 0;
+      for (let i = 0; i < toInsert.length; i += BATCH) {
+        const chunk = toInsert.slice(i, i + BATCH);
+        await Promise.all(chunk.map(e => dbSaveHistory(e).catch(()=>{})));
+        imported += chunk.length;
+        setImportProgress({done: imported, total: toInsert.length});
+        // Small delay to avoid SP throttle
+        if (i + BATCH < toInsert.length) await new Promise(res => setTimeout(res, 300));
+      }
+
+      // Reload history to get real IDs, remap monData
+      const fresh = await dbGetHistory(null, true).catch(() => []);
+      const merged = {...monData};
+      for (const h of fresh) {
+        const key = (h.info?.ceNum || h.ceNum || '').toUpperCase().trim();
+        if (monByCeNum[key]) merged[h.id] = monByCeNum[key];
+      }
+      setMonData(merged);
+      try { localStorage.setItem(MON_KEY, JSON.stringify(merged)); } catch {}
+      await dbSaveMon(merged).catch(()=>{});
+      setHistory(fresh);
+      setImportProgress(null);
+      showToast(`Import complete: ${imported} CEs added, ${skipped} skipped.`);
     } catch(e) {
+      setImportProgress(null);
       showToast('Import failed: ' + e.message, true);
       console.error('importMonitoringXLSX', e);
     }
@@ -4725,7 +4753,7 @@ function App({
     },
     placeholder: "Search CE#, client, customer...",
     value: monSearch,
-    onChange: e => setMonSearch(e.target.value)
+    onChange: e => { setMonSearch(e.target.value); setMonPage(0); }
   }), /*#__PURE__*/React.createElement("div", {
     style: {
       marginLeft: 'auto',
@@ -4745,12 +4773,20 @@ function App({
   }, "\u21BB Refresh"), /*#__PURE__*/React.createElement("label", {
     title: "Import CE Tracking spreadsheet (.xlsx)",
     style: {...btn('def', true), cursor:'pointer', display:'inline-flex', alignItems:'center', gap:4}
-  }, "\u2B06 Import xlsx", /*#__PURE__*/React.createElement("input", {
+  }, importProgress ? `Importing\u2026 ${importProgress.done}/${importProgress.total}` : "\u2B06 Import xlsx", /*#__PURE__*/React.createElement("input", {
     type: "file",
     accept: ".xlsx",
     style: {display:'none'},
+    disabled: !!importProgress,
     onChange: e => { if(e.target.files[0]) { importMonitoringXLSX(e.target.files[0]); e.target.value=''; } }
-  })), /*#__PURE__*/React.createElement("button", {
+  })), importProgress && /*#__PURE__*/React.createElement("div", {
+    style: {display:'flex', alignItems:'center', gap:6, fontSize:10, color:ACC}
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {width:80, height:4, background:BDR, borderRadius:4, overflow:'hidden'}
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {width:`${Math.round(importProgress.done/importProgress.total*100)}%`,
+            height:'100%', background:ACC, borderRadius:4, transition:'width .2s'}
+  })), `${Math.round(importProgress.done/importProgress.total*100)}%`), /*#__PURE__*/React.createElement("button", {
     style: btn('acc'),
     onClick: handleSave
   }, "+ Save Current CE"))), showStatusMgr && /*#__PURE__*/React.createElement("div", {
@@ -4861,7 +4897,7 @@ function App({
       width: '100%',
       borderCollapse: 'collapse',
       fontSize: 11,
-      minWidth: 1400
+      minWidth: 1200
     }
   }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", {
     style: {
@@ -4870,7 +4906,7 @@ function App({
       top: 0,
       zIndex: 2
     }
-  }, [['ceeName', 'CE Name', 80], ['companyDesig', 'Co. Desig.', 80], ['ceNum', 'CE No.', 120], ['designation', 'Designation', 100], ['customer', 'Customer', 100], ['jobTitle', 'Job Title', 200], ['dateRecv', 'Date Received', 100], ['deadline', 'Deadline', 100], ['deadlineDays', 'Days', 60], ['dateSubmitted', 'Date Submitted', 110], ['status', 'Status', 120], ['receivedBy', 'Received By', 110], ['remarks', 'Remarks', 160], ['col1', 'Column 1', 100]].map(([col, label, w]) => /*#__PURE__*/React.createElement("th", {
+  }, [['ceeName', 'CE Name', 80], ['companyDesig', 'Co.', 60], ['ceNum', 'CE No.', 120], ['designation', 'Discipline', 90], ['customer', 'Customer', 100], ['jobTitle', 'Job Title', 200], ['dateRecv', 'Date Recv.', 95], ['deadline', 'Deadline', 95], ['deadlineDays', 'Days Left', 65], ['dateSubmitted', 'Date Submitted', 105], ['status', 'Status', 120], ['receivedBy', 'Received By', 100], ['remarks', 'Remarks', 160]].map(([col, label, w]) => /*#__PURE__*/React.createElement("th", {
     key: col,
     onClick: () => ['ceNum', 'deadline', 'status'].includes(col) && toggleSort(col),
     style: {
@@ -4893,7 +4929,7 @@ function App({
       padding: '6px 8px',
       fontSize: 10
     }
-  }, "Actions"))), /*#__PURE__*/React.createElement("tbody", null, sortedHistory.map((e, rowIdx) => {
+  }, "Actions"))), /*#__PURE__*/React.createElement("tbody", null, sortedHistory.slice(monPage * MON_PAGE_SIZE, (monPage + 1) * MON_PAGE_SIZE).map((e, rowIdx) => {
     const m = monData[e.id] || {};
     const ceNum = e.info?.ceNum || e.ceNum || '';
     const jobTitle = e.info?.description || '';
@@ -5063,7 +5099,7 @@ function App({
         fontWeight: 700,
         color: daysColor
       }
-    }, deadlineDays === null ? '\u2014' : deadlineDays), /*#__PURE__*/React.createElement("td", {
+    }, deadlineDays === null ? '\u2014' : deadlineDays < 0 ? `${Math.abs(deadlineDays)}d OD` : `${deadlineDays}d`), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
         padding: '4px 6px'
@@ -5161,25 +5197,6 @@ function App({
         ...TDS,
         padding: '4px 6px'
       }
-    }, /*#__PURE__*/React.createElement("input", {
-      style: {
-        ...INP,
-        border: 'none',
-        background: 'transparent',
-        padding: '2px 4px',
-        fontSize: 11,
-        width: '100%'
-      },
-      key: e.id + 'col1',
-      defaultValue: m.col1 || '',
-      onBlur: ev => {
-        if (ev.target.value !== String(m.col1 || '')) updateMon(e.id, 'col1', ev.target.value);
-      }
-    })), /*#__PURE__*/React.createElement("td", {
-      style: {
-        ...TDS,
-        padding: '4px 6px'
-      }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
         display: 'flex',
@@ -5213,7 +5230,56 @@ function App({
     /* Feature 3: Compare button for revisions */
     (()=>{const cn=(e.info?.ceNum||e.ceNum||'');const isRev=/-R\d+$/i.test(cn);if(!isRev)return null;return/*#__PURE__*/React.createElement("button",{style:{...btn('def',true),fontSize:10,padding:'2px 8px'},title:"Compare with base CE",onClick:()=>{const base=cn.replace(/-R\d+$/i,'').toUpperCase();const baseEntry=history.find(h=>(h.info?.ceNum||h.ceNum||'').toUpperCase()===base);setDiffModal({base:baseEntry||null,rev:e.data||e});}},"⚖ Diff");})()
     )));
-  })))));
+  })))),
+  /* Pagination bar */
+  (() => {
+    const totalPages = Math.ceil(sortedHistory.length / MON_PAGE_SIZE);
+    if (totalPages <= 1) return null;
+    const start = monPage * MON_PAGE_SIZE + 1;
+    const end = Math.min((monPage + 1) * MON_PAGE_SIZE, sortedHistory.length);
+    return /*#__PURE__*/React.createElement('div', {
+      style: {display:'flex', alignItems:'center', gap:8, padding:'8px 14px',
+              background:CARD, borderTop:`1px solid ${BDR}`, borderRadius:'0 0 8px 8px',
+              fontSize:11, color:MT}
+    },
+      /*#__PURE__*/React.createElement('span', null, `Showing ${start}–${end} of ${sortedHistory.length}`),
+      /*#__PURE__*/React.createElement('div', {style:{marginLeft:'auto', display:'flex', gap:4}},
+        /*#__PURE__*/React.createElement('button', {
+          style:{...btn('def',true), padding:'2px 10px', fontSize:11},
+          disabled: monPage === 0,
+          onClick: () => setMonPage(0)
+        }, '«'),
+        /*#__PURE__*/React.createElement('button', {
+          style:{...btn('def',true), padding:'2px 10px', fontSize:11},
+          disabled: monPage === 0,
+          onClick: () => setMonPage(p => p - 1)
+        }, '‹'),
+        ...[...Array(totalPages)].map((_,i) => {
+          if (totalPages > 7 && Math.abs(i - monPage) > 2 && i !== 0 && i !== totalPages-1) {
+            if (i === 1 && monPage > 3) return /*#__PURE__*/React.createElement('span',{key:i,style:{color:MT,padding:'0 2px'}},'…');
+            if (i === totalPages-2 && monPage < totalPages-4) return /*#__PURE__*/React.createElement('span',{key:i,style:{color:MT,padding:'0 2px'}},'…');
+            if (Math.abs(i - monPage) > 2) return null;
+          }
+          return /*#__PURE__*/React.createElement('button', {
+            key: i,
+            style:{...btn(i===monPage?'acc':'def',true), padding:'2px 8px', fontSize:11, minWidth:28},
+            onClick: () => setMonPage(i)
+          }, i+1);
+        }),
+        /*#__PURE__*/React.createElement('button', {
+          style:{...btn('def',true), padding:'2px 10px', fontSize:11},
+          disabled: monPage >= totalPages-1,
+          onClick: () => setMonPage(p => p + 1)
+        }, '›'),
+        /*#__PURE__*/React.createElement('button', {
+          style:{...btn('def',true), padding:'2px 10px', fontSize:11},
+          disabled: monPage >= totalPages-1,
+          onClick: () => setMonPage(totalPages - 1)
+        }, '»')
+      )
+    );
+  })()
+  )));
   /* ---- Scope Library Editor (Scope Library tab) ---- */
   const ScopeLibraryEditor = () => {
     const [libSearch, setLibSearch] = useState('');

@@ -457,7 +457,7 @@ const MISC_DEF = {
   shopworks: [["accommodation", "E.1 Accommodation"], ["transportation", "E.2 Transportation"], ["requirements", "E.3 Requirements"], ["adminCost", "E.4 Admin Cost"], ["thirdParty", "E.5 Third Party"], ["insurance", "E.6 Insurances"]],
   supply: [["allowance", "D.1 Allowance"], ["transportation", "D.2 Transportation"], ["requirements", "E.3 Requirements"], ["adminCost", "E.4 Admin Cost"], ["thirdParty", "E.5 Third Party"], ["insurance", "E.6 Insurances"]]
 };
-const CE_TABS=[{id:"info",label:"Project Info"},{id:"manpower",label:"Manpower"},{id:"tools",label:"Tools & Equip"},{id:"materials",label:"Materials"},{id:"ppe",label:"PPE"},{id:"misc",label:"Miscellaneous"},{id:"summary",label:"Summary"},{id:"sow",label:"Scope of Work"},{id:"scopelib",label:"Scope Library"},{id:"masterlist",label:"Masterlist"},{id:"history",label:"CE Monitoring"}];
+const CE_TABS=[{id:"info",label:"Project Info"},{id:"sow",label:"Scope of Work"},{id:"manpower",label:"Manpower"},{id:"tools",label:"Tools & Equip"},{id:"materials",label:"Materials"},{id:"ppe",label:"PPE"},{id:"misc",label:"Miscellaneous"},{id:"summary",label:"Summary"},{id:"scopelib",label:"Scope Library"},{id:"masterlist",label:"Masterlist"},{id:"history",label:"CE Monitoring"}];
 const DEFAULT_ML={
   manpower:[
     {id:"m1",code:"SHIC-MP-001",category:"Electrical",role:"Electrical Supervisor",rate:1200,perDiem:0,uom:"Day"},
@@ -1755,14 +1755,14 @@ function CompanyDBPanel(){
         '☁ SP Connected'),
       React.createElement('button',{style:{...btn('acc'),marginLeft:'auto',fontSize:11},onClick:addCo},'+ Add Company')
     ),
-    spStatus&&React.createElement('div',{style:{fontSize:11,color:MT,marginBottom:8,padding:'4px 8px',background:BG2,borderRadius:5,border:'1px solid '+BDR}},spStatus),
+    spStatus&&React.createElement('div',{style:{fontSize:11,color:MT,marginBottom:8,padding:'4px 8px',background:SURF,borderRadius:5,border:'1px solid '+BDR}},spStatus),
     React.createElement('div',{style:{fontSize:11,color:MT,marginBottom:12}},'Each company has its own CE prefix, logo, document number, revision number and date. Changes are '+(spConnected?'auto-synced to SharePoint for all users.':'saved locally only — connect SharePoint to share across users.')),
 
     /* Company cards */
     companies.map(co=>React.createElement('div',{key:co.id,style:{border:'1px solid '+(editId===co.id?'#A78BFA':BDR),borderRadius:8,marginBottom:10,overflow:'hidden'}},
 
       /* Card header */
-      React.createElement('div',{style:{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:editId===co.id?'#A78BFA11':BG2}},
+      React.createElement('div',{style:{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:editId===co.id?'#A78BFA11':SURF}},
         co.logo
           ?React.createElement('img',{src:co.logo,style:{width:48,height:28,objectFit:'contain',background:'#fff',borderRadius:3,padding:2}})
           :React.createElement('div',{style:{width:48,height:28,background:co.color||'#cc0000',borderRadius:3,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'#fff',fontWeight:700,textAlign:'center',lineHeight:1.1}},
@@ -2906,16 +2906,16 @@ function App({
     window.addEventListener('keydown',onKey);
     const onUnload=e=>{e.preventDefault();e.returnValue='';};
     window.addEventListener('beforeunload',onUnload);
-    const autoTimer=setInterval(()=>{try{saveDraft&&saveDraft();}catch(ex){}},180000);
-    return()=>{window.removeEventListener('keydown',onKey);window.removeEventListener('beforeunload',onUnload);clearInterval(autoTimer);};
+    const autoTimer=setInterval(()=>{try{saveDraft&&saveDraft();showToast('Draft auto-saved.');}catch(ex){}},180000);
     (async () => {
       try {
         const ml = await dbGetML();
         if (ml) setMasterlist(ml);
-      } catch {}
+      } catch(ex) { console.warn('Masterlist load failed:', ex.message); }
       loadHist();
       loadMonData();
     })();
+    return()=>{window.removeEventListener('keydown',onKey);window.removeEventListener('beforeunload',onUnload);clearInterval(autoTimer);};
   }, []);
   const loadHist = async () => {
     setHistBusy(true);
@@ -3224,7 +3224,7 @@ function App({
       ...BLANK_MISC,
       ...migratedMisc
     });
-    setNotes((d.notes || []).map((n, i) => ({
+    setNotes(JSON.parse(JSON.stringify(d.notes || [])).map((n, i) => ({
       ...n,
       id: uid(),
       seq: n.seq || i + 1
@@ -3360,7 +3360,8 @@ function App({
     } catch {}
   };
   const handleSave = async () => {
-    const ceNum = (info.ceNum || '').trim();
+    const ceNum = (info.ceNum || '').trim().toUpperCase();
+    if (ceNum !== (info.ceNum || '').trim()) setInfo(p => ({...p, ceNum}));
     if (!ceNum) {
       showToast('Please enter a CE Number before saving.', true);
       return;
@@ -3456,8 +3457,8 @@ function App({
       ...s,
       id: uid()
     })));
-    if (d.approvers) setApprovers(d.approvers);
-    setNotes((d.notes || []).map((n, i) => ({
+    if (d.approvers) setApprovers(JSON.parse(JSON.stringify(d.approvers)));
+    setNotes(JSON.parse(JSON.stringify(d.notes || [])).map((n, i) => ({
       ...n,
       id: uid(),
       seq: n.seq || i + 1
@@ -3603,23 +3604,23 @@ function App({
       setSowSel(m);
     };
     const findRate = role => {
-      const m = masterlist.manpower.find(r => r.role.toUpperCase() === role.toUpperCase());
+      const m = (masterlist?.manpower || []).find(r => r.role.toUpperCase() === role.toUpperCase());
       return m ? m.rate : 0;
     };
     const findPerDiem = role => {
-      const m = masterlist.manpower.find(r => r.role.toUpperCase() === role.toUpperCase());
+      const m = (masterlist?.manpower || []).find(r => r.role.toUpperCase() === role.toUpperCase());
       return m ? m.perDiem || 0 : 0;
     };
     const findToolCost = desc => {
-      const t = masterlist.tools.find(r => r.desc.toUpperCase() === desc.toUpperCase());
+      const t = (masterlist?.tools || []).find(r => r.desc.toUpperCase() === desc.toUpperCase());
       return t ? t.cost : 0;
     };
     const findMatCost = desc => {
-      const m = masterlist.materials.find(r => r.desc.toUpperCase() === desc.toUpperCase());
+      const m = (masterlist?.materials || []).find(r => r.desc.toUpperCase() === desc.toUpperCase());
       return m ? m.cost : 0;
     };
     const findPpeCost = desc => {
-      const p = masterlist.ppe.find(r => r.desc.toUpperCase() === desc.toUpperCase());
+      const p = (masterlist?.ppe || []).find(r => r.desc.toUpperCase() === desc.toUpperCase());
       return p ? p.cost : 0;
     };
     const applySelected = () => {
@@ -3656,6 +3657,7 @@ function App({
                 days: N(info.days) || 1,
                 shift: 'regular_day',
                 rate: findRate(role),
+                otHours: 0,
                 perDiem: findPerDiem(role)
               };
             }
@@ -7276,7 +7278,7 @@ function App({
         onClick: () => setSowItems(p => p.filter(s => s.id !== item.id))
       }, "x")));
     });
-  })()))), tab === 'scopelib' && /*#__PURE__*/React.createElement(ScopeLibraryEditor, null), tab === 'masterlist' && /*#__PURE__*/React.createElement(MlEditor, null), tab === 'history' && /*#__PURE__*/React.createElement(HistPanel, null), tab === 'info' && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  })()))), tab === 'scopelib' && /*#__PURE__*/React.createElement(ScopeLibraryEditor, null), tab === 'masterlist' && /*#__PURE__*/React.createElement(MlEditor, null), tab === 'history' && /*#__PURE__*/React.createElement(HistPanel, null), tab === 'info' && /*#__PURE__*/React.createElement("div", null, companies.length === 0 && /*#__PURE__*/React.createElement("div", {style: {margin: '0 0 14px 0', padding: '12px 16px', background: '#F8514920', border: '1px solid #F85149', borderRadius: 8, color: ERR, fontSize: 12, fontWeight: 600}}, "⚠ No companies configured. Go to the Admin → Users tab and set up at least one company before creating a CE."), /*#__PURE__*/React.createElement("div", {
     style: CS
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -7297,8 +7299,12 @@ function App({
       onChange: e => {
         const rawId = e.target.value === '' ? null : (isNaN(e.target.value) ? e.target.value : Number(e.target.value));
         const selCo = companies.find(c => String(c.id) === String(rawId)) || companies[0];
-        const newCeNum = nextCeNumForCompany(history, selCo);
-        setInfo(p => ({...p, companyId: rawId, ceNum: newCeNum}));
+        setInfo(p => {
+          const pfx = ((selCo?.cePrefix || 'SHIC') + '-CE-').toUpperCase();
+          const isDefault = !p.ceNum || p.ceNum.toUpperCase().startsWith(pfx) || /^[A-Z0-9]+-CE-\d{4}-\d+$/i.test(p.ceNum);
+          const newCeNum = isDefault ? nextCeNumForCompany(history, selCo) : p.ceNum;
+          return {...p, companyId: rawId, ceNum: newCeNum};
+        });
       }
     }, companies.map(c => /*#__PURE__*/React.createElement("option", {key: c.id, value: c.id}, c.name + (c.sub ? ' — ' + c.sub : ''))))
   ), (() => {
@@ -7306,8 +7312,8 @@ function App({
     return /*#__PURE__*/React.createElement("div", {style: {display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0}},
       selCo.logo && /*#__PURE__*/React.createElement("img", {src: selCo.logo, style: {maxWidth: 64, maxHeight: 32, objectFit: 'contain', background: '#fff', borderRadius: 4, padding: 3, border: `1px solid ${BDR}`}}),
       /*#__PURE__*/React.createElement("div", {style: {fontSize: 11, color: MT, lineHeight: 1.5}},
-        /*#__PURE__*/React.createElement("div", null, "CE Prefix: ", /*#__PURE__*/React.createElement("b", {style: {color: TXT}}, selCo.cePrefix || 'SHIC'), " → ", /*#__PURE__*/React.createElement("b", {style: {color: '#A78BFA'}}, (selCo.cePrefix||'SHIC')+'-CE-'+new Date().getFullYear()+'-XXXX')),
-        /*#__PURE__*/React.createElement("div", null, "Doc No: ", /*#__PURE__*/React.createElement("b", {style: {color: TXT}}, selCo.docNo || '—'), "  Rev: ", /*#__PURE__*/React.createElement("b", {style: {color: TXT}}, selCo.revNo || '0'))
+        /*#__PURE__*/React.createElement("div", null, "CE Prefix: ", /*#__PURE__*/React.createElement("b", {style: {color: TX}}, selCo.cePrefix || 'SHIC'), " → ", /*#__PURE__*/React.createElement("b", {style: {color: '#A78BFA'}}, (selCo.cePrefix||'SHIC')+'-CE-'+new Date().getFullYear()+'-XXXX')),
+        /*#__PURE__*/React.createElement("div", null, "Doc No: ", /*#__PURE__*/React.createElement("b", {style: {color: TX}}, selCo.docNo || '—'), "  Rev: ", /*#__PURE__*/React.createElement("b", {style: {color: TX}}, selCo.revNo || '0'))
       )
     );
   })()), /*#__PURE__*/React.createElement("div", {
@@ -8321,7 +8327,7 @@ function App({
         type: "number",
         min: 1,
         value: r.pax,
-        onChange: e => updRow(setMp, r.id, 'pax', e.target.value)
+        onChange: e => updRow(setMp, r.id, 'pax', Math.max(1, parseInt(e.target.value) || 1))
       })), /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, /*#__PURE__*/React.createElement("input", {
@@ -8333,7 +8339,7 @@ function App({
         type: "number",
         min: 1,
         value: r.days,
-        onChange: e => updRow(setMp, r.id, 'days', e.target.value)
+        onChange: e => updRow(setMp, r.id, 'days', Math.max(1, parseInt(e.target.value) || 1))
       })), /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, /*#__PURE__*/React.createElement("input", {
@@ -8347,7 +8353,7 @@ function App({
         min: 0,
         step: 0.5,
         value: r.otHours || 0,
-        onChange: e => updRow(setMp, r.id, 'otHours', e.target.value),
+        onChange: e => updRow(setMp, r.id, 'otHours', Math.max(0, parseFloat(e.target.value) || 0)),
         title: "Overtime hours (1 day = 8 hrs, charged at 1.25x day rate)"
       })), /*#__PURE__*/React.createElement("td", {
         style: TDS
@@ -8360,7 +8366,7 @@ function App({
         type: "number",
         min: 0,
         value: r.rate,
-        onChange: e => updRow(setMp, r.id, 'rate', e.target.value)
+        onChange: e => updRow(setMp, r.id, 'rate', Math.max(0, parseFloat(e.target.value) || 0))
       })), /*#__PURE__*/React.createElement("td", {
         style: {
           ...TDS,
@@ -8894,7 +8900,7 @@ function App({
         type: "number",
         min: 0,
         value: r.qty || 1,
-        onChange: e => updItem(r.id, 'qty', e.target.value)
+        onChange: e => updItem(r.id, 'qty', Math.max(1, parseInt(e.target.value) || 1))
       })), /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, /*#__PURE__*/React.createElement("select", {
@@ -8917,7 +8923,7 @@ function App({
         type: "number",
         min: 0,
         value: r.cost || 0,
-        onChange: e => updItem(r.id, 'cost', e.target.value)
+        onChange: e => updItem(r.id, 'cost', Math.max(0, parseFloat(e.target.value) || 0))
       })), /*#__PURE__*/React.createElement("td", {
         style: {
           ...TDS,
@@ -9429,22 +9435,6 @@ function App({
   }, "P", ph(unitP)), /*#__PURE__*/React.createElement("td", {
     style: TDS
   })), /*#__PURE__*/React.createElement("tr", {
-    style: {background: '#3FB95008', borderTop: `1px dashed ${BDR}`}
-  }, /*#__PURE__*/React.createElement("td", {
-    style: {...TDS, color: MT}
-  }, /*#__PURE__*/React.createElement("span", {style:{marginRight:8}}, "Margin / Markup"), /*#__PURE__*/React.createElement("input", {
-    type: "number",
-    min: 0,
-    max: 999,
-    step: 0.5,
-    value: margin,
-    onChange: e => setMargin(Math.max(0, parseFloat(e.target.value) || 0)),
-    style: {...INP, width: 65, display:'inline-block', padding:'2px 6px', fontSize:11, ...MONO}
-  }), /*#__PURE__*/React.createElement("span", {style:{marginLeft:4, color:MT, fontSize:11}}, "%")), /*#__PURE__*/React.createElement("td", {
-    style: {...TDS, ...MONO, textAlign:'right', color: OK}
-  }, margin > 0 ? "+" + ph(grand * margin / 100) : "--"), /*#__PURE__*/React.createElement("td", {
-    style: {...TDS, textAlign:'right', color: MT, fontSize:11}
-  }, margin > 0 ? margin.toFixed(1)+"%" : "")), /*#__PURE__*/React.createElement("tr", {
     style: {background: OK+'10', borderTop: `2px solid ${OK}44`}
   }, /*#__PURE__*/React.createElement("td", {
     style: {...TDS, fontWeight:800, color: OK, paddingTop:10, paddingBottom:10}

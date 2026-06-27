@@ -9,7 +9,17 @@ input,select,textarea,button{font-family:inherit}
 ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:#0D1117}::-webkit-scrollbar-thumb{background:#30363D;border-radius:3px}
 input:focus,select:focus,textarea:focus{outline:2px solid #F0A42966}
 @keyframes spin{to{transform:rotate(360deg)}}.spin{animation:spin .7s linear infinite;display:inline-block}
-@keyframes fadein{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}.fadein{animation:fadein .22s ease}</style>
+@keyframes fadein{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}.fadein{animation:fadein .22s ease}
+@media(max-width:768px){
+  .shic-tabs{overflow-x:auto!important;flex-wrap:nowrap!important;white-space:nowrap}
+  .shic-card{padding:10px 8px!important}
+  .shic-toolbar{flex-wrap:wrap!important;gap:4px!important}
+  table{font-size:10px!important}
+  input,select{max-width:100%!important}
+  .shic-header{flex-direction:column!important;align-items:flex-start!important;gap:6px!important}
+  .shic-grid-2{grid-template-columns:1fr!important}
+  .shic-hide-mobile{display:none!important}
+}</style>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 </head><body>
 <div id="root"><div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#7D8590;gap:10px"><span style="background:#F0A429;color:#000;font-weight:800;padding:4px 10px;border-radius:5px;font-size:11px">SHIC</span>Loading...</div></div>
@@ -457,7 +467,7 @@ const MISC_DEF = {
   shopworks: [["accommodation", "E.1 Accommodation"], ["transportation", "E.2 Transportation"], ["requirements", "E.3 Requirements"], ["adminCost", "E.4 Admin Cost"], ["thirdParty", "E.5 Third Party"], ["insurance", "E.6 Insurances"]],
   supply: [["allowance", "D.1 Allowance"], ["transportation", "D.2 Transportation"], ["requirements", "E.3 Requirements"], ["adminCost", "E.4 Admin Cost"], ["thirdParty", "E.5 Third Party"], ["insurance", "E.6 Insurances"]]
 };
-const CE_TABS=[{id:"info",label:"Project Info"},{id:"sow",label:"Scope of Work"},{id:"manpower",label:"Manpower"},{id:"tools",label:"Tools & Equip"},{id:"materials",label:"Materials"},{id:"ppe",label:"PPE"},{id:"misc",label:"Miscellaneous"},{id:"summary",label:"Summary"},{id:"scopelib",label:"Scope Library"},{id:"masterlist",label:"Masterlist"},{id:"history",label:"CE Monitoring"}];
+const CE_TABS=[{id:"info",label:"Project Info"},{id:"sow",label:"Scope of Work"},{id:"manpower",label:"Manpower"},{id:"tools",label:"Tools & Equip"},{id:"materials",label:"Materials"},{id:"ppe",label:"PPE"},{id:"misc",label:"Miscellaneous"},{id:"summary",label:"Summary"},{id:"scopelib",label:"Scope Library"},{id:"masterlist",label:"Masterlist"},{id:"history",label:"CE Monitoring"},{id:"dashboard",label:"📊 Dashboard"}];
 const DEFAULT_ML={
   manpower:[
     {id:"m1",code:"SHIC-MP-001",category:"Electrical",role:"Electrical Supervisor",rate:1200,perDiem:0,uom:"Day"},
@@ -2782,6 +2792,11 @@ function App({
   const [aiLoad, setAiLoad] = useState(false);
   const [margin, setMargin] = useState(0);
   const [toast, setToast] = useState('');
+  const [signatures, setSignatures] = useState({});
+  const [sigModal, setSigModal] = useState(null);
+  const [diffModal, setDiffModal] = useState(null);
+  const [aiSuggest, setAiSuggest] = useState(null);
+  const [printPreviewWin, setPrintPreviewWin] = useState(null);
   const [toastErr, setToastErr] = useState(false);
   const [masterlist, setMasterlist] = useState(DEFAULT_ML);
   const [history, setHistory] = useState([]);
@@ -2825,11 +2840,17 @@ function App({
     } catch {}
   };
   const updateMon = (ceId, field, val) => setMonData(prev => {
+    const extra = {};
+    if (field === 'status' && ['Approved','Issued','For Review','On Hold','Cancelled'].includes(val)) {
+      extra.statusChangedAt = new Date().toISOString();
+      extra.statusChangedBy = currentUser?.name || currentUser?.username || '';
+    }
     const n = {
       ...prev,
       [ceId]: {
         ...prev[ceId],
-        [field]: val
+        [field]: val,
+        ...extra
       }
     };
     try {
@@ -2914,6 +2935,17 @@ function App({
       } catch(ex) { console.warn('Masterlist load failed:', ex.message); }
       loadHist();
       loadMonData();
+      /* Feature 7: load shared draft from URL ?draft= param */
+      try {
+        const urlDraft = new URLSearchParams(window.location.search).get('draft');
+        if (urlDraft) {
+          const d = JSON.parse(atob(urlDraft));
+          if (d && d.info) {
+            setTimeout(() => { try { applyDraftData(d); showToast('Shared draft loaded from link!'); } catch(e){} }, 800);
+            window.history.replaceState({}, '', window.location.pathname);
+          }
+        }
+      } catch(e) { console.warn('Draft URL parse failed:', e.message); }
     })();
     return()=>{window.removeEventListener('keydown',onKey);window.removeEventListener('beforeunload',onUnload);clearInterval(autoTimer);};
   }, []);
@@ -4907,15 +4939,19 @@ function App({
       },
       key: e.id + 'status',
       defaultValue: m.status || '',
-      onBlur: ev => {
-        if (ev.target.value !== String(m.status || '')) updateMon(e.id, 'status', ev.target.value);
-      }
+      onChange: ev => { updateMon(e.id, 'status', ev.target.value); }
     }, /*#__PURE__*/React.createElement("option", {
       value: ""
     }, "\u2014"), allStatuses.map(s => /*#__PURE__*/React.createElement("option", {
       key: s,
       value: s
-    }, s)))), /*#__PURE__*/React.createElement("td", {
+    }, s))),
+    m.statusChangedAt && /*#__PURE__*/React.createElement("div", {
+      style: {fontSize: 9, color: MT, marginTop: 2, lineHeight: 1.3},
+      title: 'Changed by ' + (m.statusChangedBy || 'unknown')
+    }, new Date(m.statusChangedAt).toLocaleDateString('en-PH', {month:'short',day:'numeric',year:'numeric'}),
+      m.statusChangedBy ? ' \u00b7 ' + m.statusChangedBy.split(' ')[0] : ''
+    )), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
         padding: '4px 6px'
@@ -5009,7 +5045,10 @@ function App({
         loadHist();
         showToast('Deleted.');
       }
-    }, confirmDel === e.id ? 'Sure?' : 'Del'), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{...btn('ok',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleClone(e.data||e),title:"Clone with new CE number"},"Clone"), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{...btn('info',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleRevise(e.data||e),title:"Revision copy (-R1, -R2...)"},"Revise"))));
+    }, confirmDel === e.id ? 'Sure?' : 'Del'), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{...btn('ok',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleClone(e.data||e),title:"Clone with new CE number"},"Clone"), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{...btn('info',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleRevise(e.data||e),title:"Revision copy (-R1, -R2...)"},"Revise"),
+    /* Feature 3: Compare button for revisions */
+    (()=>{const cn=(e.info?.ceNum||e.ceNum||'');const isRev=/-R\d+$/i.test(cn);if(!isRev)return null;return/*#__PURE__*/React.createElement("button",{style:{...btn('def',true),fontSize:10,padding:'2px 8px'},title:"Compare with base CE",onClick:()=>{const base=cn.replace(/-R\d+$/i,'').toUpperCase();const baseEntry=history.find(h=>(h.info?.ceNum||h.ceNum||'').toUpperCase()===base);setDiffModal({base:baseEntry||null,rev:e.data||e});}},"⚖ Diff");})()
+    )));
   })))));
   /* ---- Scope Library Editor (Scope Library tab) ---- */
   const ScopeLibraryEditor = () => {
@@ -6115,7 +6154,35 @@ function App({
   }, "From Masterlist"), /*#__PURE__*/React.createElement("button", {
     style: btn('def', true),
     onClick: () => set(p => [...p, mkRes()])
-  }, "+ Add"))), /*#__PURE__*/React.createElement("div", {
+  }, "+ Add"), /*#__PURE__*/React.createElement("label", {
+    style: {...btn('def', true), cursor: 'pointer'},
+    title: "Import from Excel — columns: Description, Qty, UOM, Unit Cost"
+  }, "📥 Import XLS", /*#__PURE__*/React.createElement("input", {
+    type: "file", accept: ".xlsx,.xls", style: {display: 'none'},
+    onChange: e => {
+      const file = e.target.files[0]; if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        try {
+          const wb = XLSX.read(new Uint8Array(ev.target.result), {type: 'array'});
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(ws, {defval: ''});
+          const imported = rows.map(r => ({
+            id: uid(),
+            desc: String(r['Description'] || r['DESCRIPTION'] || r['desc'] || '').trim(),
+            qty: Math.max(1, parseInt(r['Qty'] || r['QTY'] || r['qty'] || 1) || 1),
+            uom: String(r['UOM'] || r['uom'] || 'Lot').trim(),
+            cost: parseFloat(r['Unit Cost'] || r['UNIT COST'] || r['cost'] || 0) || 0
+          })).filter(r => r.desc);
+          if (!imported.length) { showToast('No valid rows found. Check columns: Description, Qty, UOM, Unit Cost', true); return; }
+          set(p => [...p, ...imported]);
+          showToast('Imported ' + imported.length + ' rows from Excel.');
+        } catch(ex) { showToast('Excel parse failed: ' + ex.message, true); }
+      };
+      reader.readAsArrayBuffer(file);
+      e.target.value = '';
+    }
+  })))), /*#__PURE__*/React.createElement("div", {
     style: {
       overflowX: 'auto'
     }
@@ -6139,6 +6206,7 @@ function App({
         ...INP,
         minWidth: 190
       },
+      list: 'dl_' + mlType + '_' + r.id,
       value: r.desc,
       onChange: e => {
         const d = e.target.value;
@@ -6153,7 +6221,9 @@ function App({
         } : x));
       },
       placeholder: "Item description..."
-    })), /*#__PURE__*/React.createElement("td", {
+    }), /*#__PURE__*/React.createElement("datalist", {id: 'dl_' + mlType + '_' + r.id},
+      (masterlist[mlType] || []).map(x => /*#__PURE__*/React.createElement("option", {key: x.id, value: x.desc}))
+    )), /*#__PURE__*/React.createElement("td", {
       style: TDS
     }, /*#__PURE__*/React.createElement("input", {
       style: {
@@ -6340,7 +6410,7 @@ function App({
 
     const notesList = notes.length ? `<div style="margin-top:4px"><b>NOTE:</b><ol style="margin:1px 0 0 14px;padding:0;font-size:7.5pt">${notes.map(n=>`<li>${n.text}</li>`).join('')}</ol></div>` : '';
     const sigBlock = `<table style="width:100%;border-collapse:collapse;margin-top:20px" class="sig">
-      <tr>${approvers.map(a=>`<td><div style="border-top:1px solid #000;margin-top:24px;padding-top:2px"><b style="font-size:7.5pt">${a.name||''}</b><br><span style="font-size:7pt;color:#555">${a.role||''}</span></div></td>`).join('')}</tr>
+      <tr>${approvers.map((a,i)=>{const sigImg=signatures[a.id||i]?`<img src="${signatures[a.id||i]}" style="height:30px;max-width:100%;display:block;margin-bottom:2px"/>`:'<div style="height:30px"></div>';return`<td><div style="text-align:center">${sigImg}<div style="border-top:1px solid #000;padding-top:2px"><b style="font-size:7.5pt">${a.name||''}</b><br><span style="font-size:7pt;color:#555">${a.role||''}</span></div></div></td>`;}).join('')}</tr>
     </table>`;
 
     /* Manpower &#8212; skip zero-rate rows */
@@ -6393,8 +6463,7 @@ function App({
 
     const sowPage=sowItems.length?`<div class="page page-break">${docHdr('SCOPE OF WORK')}<div style="font-size:8pt;line-height:1.6">${(()=>{let mc=0,sc=0;return sowItems.map(it=>{if(it.type==='main'){mc++;sc=0;return`<div style="margin-top:4px"><b>${mc}. ${it.text}</b></div>`;}else{sc++;return`<div style="margin-left:14px">${mc}.${sc} ${it.text}</div>`;}}).join('');})()}</div></div>`:'';
 
-    const w=window.open('','_blank');
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>CE ${info.ceNum||''}<\/title><style>${pageStyle}<\/style><\/head><body>
+    const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>CE ${info.ceNum||''}<\/title><style>${pageStyle}<\/style><\/head><body>
       <div class="page">
         ${docHdr('COST ESTIMATE SUMMARY')}
         ${infoTable}
@@ -6404,9 +6473,25 @@ function App({
       </div>
       ${mpActive.length?`<div class="page page-break">${docHdr('BILL OF LABOR')}<div class="sec">MANPOWER COST</div>${shiftRows}<div class="tot" style="text-align:right;padding:3px 4px;font-weight:bold">TOTAL MANPOWER COST: ${fmt(mpTot)}</div></div>`:''}
       ${benPage}${toolsPage}${matsPage}${ppePage}${sowPage}
-    <\/body><\/html>`);
+    <\/body><\/html>`;
+    const w=window.open('','_blank');
+    w.document.write(fullHtml);
     w.document.close();
     setTimeout(() => w.print(), 800);
+    window.__lastCEHtml = fullHtml;
+  };
+  /* Feature 1: Print Preview (no auto-print) */
+  const handlePrintPreview = () => {
+    window.__lastCEHtml = null;
+    handleGenerateCE();
+    setTimeout(() => {
+      const html = window.__lastCEHtml;
+      if (!html) return;
+      const previewHtml = html.replace('</body>', `<div class="no-print" style="position:fixed;top:0;left:0;right:0;background:#1a1a2e;color:#fff;padding:10px 16px;display:flex;gap:10px;align-items:center;z-index:9999;font-family:sans-serif;font-size:13px"><b>👁 CE Preview</b><button onclick="window.print()" style="background:#F0A429;color:#000;border:none;padding:5px 14px;border-radius:4px;font-weight:700;cursor:pointer">🖨 Print</button><button onclick="window.close()" style="background:#333;color:#fff;border:1px solid #555;padding:5px 14px;border-radius:4px;cursor:pointer">✕ Close</button><span style="margin-left:auto;color:#aaa;font-size:11px">Use Ctrl+P to print</span></div></body>`);
+      const w = window.open('','_blank');
+      w.document.write(previewHtml.replace('@page{', '@page{ margin-top:20mm;'));
+      w.document.close();
+    }, 900);
   };
   const handleGenerateCEWithCheck = () => {
     const zeroCost = [];
@@ -7278,7 +7363,123 @@ function App({
         onClick: () => setSowItems(p => p.filter(s => s.id !== item.id))
       }, "x")));
     });
-  })()))), tab === 'scopelib' && /*#__PURE__*/React.createElement(ScopeLibraryEditor, null), tab === 'masterlist' && /*#__PURE__*/React.createElement(MlEditor, null), tab === 'history' && /*#__PURE__*/React.createElement(HistPanel, null), tab === 'info' && /*#__PURE__*/React.createElement("div", null, companies.length === 0 && /*#__PURE__*/React.createElement("div", {style: {margin: '0 0 14px 0', padding: '12px 16px', background: '#F8514920', border: '1px solid #F85149', borderRadius: 8, color: ERR, fontSize: 12, fontWeight: 600}}, "⚠ No companies configured. Go to the Admin → Users tab and set up at least one company before creating a CE."), /*#__PURE__*/React.createElement("div", {
+  })()))), tab === 'scopelib' && /*#__PURE__*/React.createElement(ScopeLibraryEditor, null), tab === 'masterlist' && /*#__PURE__*/React.createElement(MlEditor, null), tab === 'history' && /*#__PURE__*/React.createElement(HistPanel, null),
+
+/* ── Feature 3: Revision Diff Modal ── */
+diffModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset:0,background:'#000a',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center'},onClick:()=>setDiffModal(null)},
+  /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:24,minWidth:480,maxWidth:640,maxHeight:'80vh',overflowY:'auto'},onClick:e=>e.stopPropagation()},
+    /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}},
+      /*#__PURE__*/React.createElement("b", null, "⚖ Revision Comparison"),
+      /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setDiffModal(null)}, "✕ Close")),
+    diffModal.base ? /*#__PURE__*/React.createElement("table", {style:{width:'100%',borderCollapse:'collapse',fontSize:12}},
+      /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null,
+        /*#__PURE__*/React.createElement("th", {style:THS}, "Section"),
+        /*#__PURE__*/React.createElement("th", {style:{...THS,color:INFO}}, "Base: "+diffModal.base.info?.ceNum),
+        /*#__PURE__*/React.createElement("th", {style:{...THS,color:ACC}}, "Revision: "+diffModal.rev.info?.ceNum),
+        /*#__PURE__*/React.createElement("th", {style:THS}, "Δ Change"))),
+      /*#__PURE__*/React.createElement("tbody", null, [
+        ['Manpower','mpTot'],['Tools','toolsT'],['Materials','matsT'],['PPE','ppeT'],['Misc','miscT'],['Grand Total','grand']
+      ].map(([label, key]) => {
+        const bv = N(diffModal.base[key]||0), rv = N(diffModal.rev[key]||0), delta = rv - bv;
+        return /*#__PURE__*/React.createElement("tr", {key:label},
+          /*#__PURE__*/React.createElement("td", {style:TDS}, label),
+          /*#__PURE__*/React.createElement("td", {style:{...TDS,...MONO,textAlign:'right'}}, "P"+ph(bv)),
+          /*#__PURE__*/React.createElement("td", {style:{...TDS,...MONO,textAlign:'right'}}, "P"+ph(rv)),
+          /*#__PURE__*/React.createElement("td", {style:{...TDS,...MONO,textAlign:'right',color:delta>0?ERR:delta<0?OK:MT}},
+            (delta>=0?'+':'')+ph(delta)));
+      }))) :
+      /*#__PURE__*/React.createElement("div", {style:{color:MT,padding:16,textAlign:'center'}}, "No base CE found to compare against.")),
+  ),
+
+/* ── Feature 11: E-Signature Modal ── */
+sigModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset:0,background:'#000b',zIndex:3100,display:'flex',alignItems:'center',justifyContent:'center'},onClick:()=>setSigModal(null)},
+  /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid #A78BFA',borderRadius:10,padding:20,width:460},onClick:e=>e.stopPropagation()},
+    /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}},
+      /*#__PURE__*/React.createElement("b", null, "✍ Signature — ", sigModal.name||sigModal.role),
+      /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setSigModal(null)}, "✕")),
+    /*#__PURE__*/React.createElement("div", {style:{background:'#fff',borderRadius:6,marginBottom:10,overflow:'hidden',border:'1px solid #ccc'}},
+      /*#__PURE__*/React.createElement("canvas", {
+        id:'sigCanvas', width:420, height:140, style:{display:'block',cursor:'crosshair'},
+        ref: el => {
+          if(!el||el.__sigReady) return; el.__sigReady=true;
+          const ctx=el.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,420,140);
+          ctx.strokeStyle='#111'; ctx.lineWidth=2; ctx.lineCap='round'; ctx.lineJoin='round';
+          let drawing=false;
+          const pos=e=>{const r=el.getBoundingClientRect();const t=e.touches?e.touches[0]:e;return{x:t.clientX-r.left,y:t.clientY-r.top};};
+          el.onmousedown=el.ontouchstart=e=>{e.preventDefault();drawing=true;const p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);};
+          el.onmousemove=el.ontouchmove=e=>{e.preventDefault();if(!drawing)return;const p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();};
+          el.onmouseup=el.ontouchend=()=>{drawing=false;};
+          if(signatures[sigModal.id]){const img=new Image();img.onload=()=>ctx.drawImage(img,0,0);img.src=signatures[sigModal.id];}
+        }
+      })),
+    /*#__PURE__*/React.createElement("div", {style:{display:'flex',gap:8}},
+      /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>{const el=document.getElementById('sigCanvas');const ctx=el.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,420,140);}}, "🗑 Clear"),
+      /*#__PURE__*/React.createElement("button", {style:{...btn('ok'),flex:1},onClick:()=>{
+        const el=document.getElementById('sigCanvas');
+        setSignatures(p=>({...p,[sigModal.id]:el.toDataURL('image/png')}));
+        setSigModal(null); showToast('Signature saved.');
+      }}, "💾 Save Signature")))),
+
+/* ── Feature 9: Dashboard Tab ── */
+tab === 'dashboard' && (() => {
+  const now = new Date(); const thisMonth = now.getMonth(); const thisYear = now.getFullYear();
+  const monthHist = history.filter(h => { const d=new Date(h.savedAt||h.createdAt||0); return d.getMonth()===thisMonth&&d.getFullYear()===thisYear; });
+  const totalThis = monthHist.reduce((s,h)=>s+N(h.grand||0),0);
+  const avgVal = history.length ? history.reduce((s,h)=>s+N(h.grand||0),0)/history.length : 0;
+  const statuses = history.map(h=>(monData[h.id]||{}).status||'Draft');
+  const statusCount = statuses.reduce((m,s)=>{m[s]=(m[s]||0)+1;return m;},{});
+  const clients = {}; history.forEach(h=>{const c=h.info?.client||h.client||'Unknown';clients[c]=(clients[c]||{count:0,total:0});clients[c].count++;clients[c].total+=N(h.grand||0);});
+  const top5 = Object.entries(clients).sort((a,b)=>b[1].total-a[1].total).slice(0,5);
+  const prefixMap = {}; history.forEach(h=>{const cn=(h.info?.ceNum||'').toUpperCase();const pfx=cn.split('-CE-')[0]||'?';prefixMap[pfx]=(prefixMap[pfx]||{count:0,total:0});prefixMap[pfx].count++;prefixMap[pfx].total+=N(h.grand||0);});
+  const months=[]; for(let i=5;i>=0;i--){const d=new Date(thisYear,thisMonth-i,1);months.push({label:d.toLocaleString('default',{month:'short'})+' '+d.getFullYear().toString().slice(2),month:d.getMonth(),year:d.getFullYear()});}
+  const monthTotals = months.map(m=>({...m,total:history.filter(h=>{const d=new Date(h.savedAt||0);return d.getMonth()===m.month&&d.getFullYear()===m.year;}).reduce((s,h)=>s+N(h.grand||0),0)}));
+  const maxBar = Math.max(...monthTotals.map(m=>m.total),1);
+  const kpiCard = (label,value,color) => /*#__PURE__*/React.createElement("div",{style:{background:SURF,border:'1px solid '+BDR,borderRadius:8,padding:'14px 18px',flex:1,minWidth:140}},
+    /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT,marginBottom:4}},label),
+    /*#__PURE__*/React.createElement("div",{style:{fontSize:20,fontWeight:800,color:color||TX,...MONO}},value));
+  return /*#__PURE__*/React.createElement("div",{style:{padding:'0 0 24px'}},
+    /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:15,marginBottom:16,color:ACC}}, "📊 Dashboard"),
+    /* KPI row */
+    /*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:12,flexWrap:'wrap',marginBottom:20}},
+      kpiCard('CEs This Month', monthHist.length, INFO),
+      kpiCard('Value This Month', '₱'+ph(totalThis), OK),
+      kpiCard('Avg CE Value', '₱'+ph(avgVal), ACC),
+      kpiCard('Total CEs', history.length, MT)),
+    /* Monthly trend */
+    /*#__PURE__*/React.createElement("div",{style:{...CS,marginBottom:16}},
+      /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,marginBottom:12,fontSize:12}}, "📈 Monthly Trend (Last 6 Months)"),
+      /*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:8,alignItems:'flex-end',height:80}},
+        monthTotals.map(m => {
+          const pct = maxBar>0?(m.total/maxBar):0;
+          return /*#__PURE__*/React.createElement("div",{key:m.label,style:{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:3}},
+            /*#__PURE__*/React.createElement("div",{style:{fontSize:9,color:MT,...MONO}}, m.total>0?'₱'+ph(m.total):'—'),
+            /*#__PURE__*/React.createElement("div",{style:{width:'100%',background:ACC+(m.total>0?'cc':'22'),borderRadius:'3px 3px 0 0',height:Math.max(4,pct*60)+'px',transition:'height .3s'}}),
+            /*#__PURE__*/React.createElement("div",{style:{fontSize:9,color:MT,whiteSpace:'nowrap'}},m.label));
+        }))),
+    /* Bottom row: by company + by status + top clients */
+    /*#__PURE__*/React.createElement("div",{style:{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,flexWrap:'wrap'}},
+      /* By company */
+      /*#__PURE__*/React.createElement("div",{style:CS},
+        /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,marginBottom:10,fontSize:12}}, "🏢 By Company Prefix"),
+        Object.entries(prefixMap).map(([pfx,d])=>/*#__PURE__*/React.createElement("div",{key:pfx,style:{display:'flex',justifyContent:'space-between',marginBottom:6,fontSize:12}},
+          /*#__PURE__*/React.createElement("span",{style:{color:INFO,fontWeight:600}},pfx),
+          /*#__PURE__*/React.createElement("span",{style:{color:MT}},d.count,' CE · '),
+          /*#__PURE__*/React.createElement("span",{style:{...MONO,fontSize:11}}, '₱'+ph(d.total))))),
+      /* By status */
+      /*#__PURE__*/React.createElement("div",{style:CS},
+        /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,marginBottom:10,fontSize:12}}, "🏷 By Status"),
+        Object.entries(statusCount).sort((a,b)=>b[1]-a[1]).map(([s,c])=>/*#__PURE__*/React.createElement("div",{key:s,style:{display:'flex',justifyContent:'space-between',marginBottom:6,fontSize:12}},
+          /*#__PURE__*/React.createElement("span",null,s),
+          /*#__PURE__*/React.createElement("span",{style:{background:ACC+'33',color:ACC,borderRadius:4,padding:'0 6px',fontWeight:700}},c)))),
+      /* Top clients */
+      /*#__PURE__*/React.createElement("div",{style:CS},
+        /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,marginBottom:10,fontSize:12}}, "🏆 Top 5 Clients"),
+        top5.map(([name,d],i)=>/*#__PURE__*/React.createElement("div",{key:name,style:{marginBottom:6,fontSize:11}},
+          /*#__PURE__*/React.createElement("div",{style:{display:'flex',justifyContent:'space-between'}},
+            /*#__PURE__*/React.createElement("span",{style:{color:i===0?ACC:TX}}, (i+1)+'. '+name),
+            /*#__PURE__*/React.createElement("span",{style:{color:MT}},d.count,' CE')),
+          /*#__PURE__*/React.createElement("div",{style:{...MONO,fontSize:10,color:OK}},'₱'+ph(d.total)))))));
+})(), tab === 'info' && /*#__PURE__*/React.createElement("div", null, companies.length === 0 && /*#__PURE__*/React.createElement("div", {style: {margin: '0 0 14px 0', padding: '12px 16px', background: '#F8514920', border: '1px solid #F85149', borderRadius: 8, color: ERR, fontSize: 12, fontWeight: 600}}, "⚠ No companies configured. Go to the Admin → Users tab and set up at least one company before creating a CE."), /*#__PURE__*/React.createElement("div", {
     style: CS
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -8177,7 +8378,36 @@ function App({
     }, "ML"), /*#__PURE__*/React.createElement("button", {
       style: btn('def', true),
       onClick: addRow
-    }, "+ Add"), rows.length > 0 && /*#__PURE__*/React.createElement("div", {
+    }, "+ Add"), /*#__PURE__*/React.createElement("label", {
+      style: {...btn('def', true), cursor: 'pointer'},
+      title: "Import from Excel — columns: Role, PAX, Days, Rate"
+    }, "📥 XLS", /*#__PURE__*/React.createElement("input", {
+      type: "file", accept: ".xlsx,.xls", style: {display: 'none'},
+      onChange: ev => {
+        const file = ev.target.files[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = e2 => {
+          try {
+            const wb = XLSX.read(new Uint8Array(e2.target.result), {type: 'array'});
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const rows2 = XLSX.utils.sheet_to_json(ws, {defval: ''});
+            const imported = rows2.map(r => ({
+              id: uid(), shift: shiftKey,
+              role: String(r['Role'] || r['ROLE'] || r['role'] || '').trim(),
+              pax: Math.max(1, parseInt(r['PAX'] || r['pax'] || r['Pax'] || 1) || 1),
+              days: Math.max(1, parseInt(r['Days'] || r['DAYS'] || r['days'] || N(info.days) || 1) || 1),
+              rate: parseFloat(r['Rate'] || r['RATE'] || r['rate'] || 0) || 0,
+              otHours: 0, perDiem: 0
+            })).filter(r => r.role);
+            if (!imported.length) { showToast('No valid rows. Columns needed: Role, PAX, Days, Rate', true); return; }
+            setMp(p => [...p, ...imported]);
+            showToast('Imported ' + imported.length + ' manpower rows.');
+          } catch(ex) { showToast('Excel parse failed: ' + ex.message, true); }
+        };
+        reader.readAsArrayBuffer(file);
+        ev.target.value = '';
+      }
+    })), rows.length > 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         position: 'relative'
       }
@@ -8367,7 +8597,19 @@ function App({
         min: 0,
         value: r.rate,
         onChange: e => updRow(setMp, r.id, 'rate', Math.max(0, parseFloat(e.target.value) || 0))
-      })), /*#__PURE__*/React.createElement("td", {
+      }),
+      /* Feature 12: AI rate hint from history */
+      (() => {
+        if (!r.role || !history.length) return null;
+        const roleUpper = r.role.toUpperCase();
+        const rates = history.flatMap(h => (h.mp||[]).filter(m=>(m.role||'').toUpperCase()===roleUpper&&N(m.rate)>0).map(m=>N(m.rate)));
+        if (!rates.length) return null;
+        const avg = rates.reduce((a,b)=>a+b,0)/rates.length;
+        return /*#__PURE__*/React.createElement("div",{style:{fontSize:9,color:MT,marginTop:2,whiteSpace:'nowrap'}},
+          "Avg: ₱"+ph(avg)+" ("+rates.length+" CE"+(rates.length>1?"s":"")+")"
+        );
+      })()
+      ), /*#__PURE__*/React.createElement("td", {
         style: {
           ...TDS,
           ...MONO,
@@ -8966,7 +9208,35 @@ function App({
     }
   }, "Miscellaneous Total: ", /*#__PURE__*/React.createElement("span", {
     style: MONO
-  }, "P", ph(miscT)))))), tab === 'summary' && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, "P", ph(miscT)))))), tab === 'summary' && /*#__PURE__*/React.createElement("div", null,
+  /* Feature 12: AI Cost Suggestion banner */
+  /*#__PURE__*/React.createElement("div", {style:{marginBottom:12,display:'flex',gap:8,alignItems:'flex-start',flexWrap:'wrap'}},
+    /*#__PURE__*/React.createElement("button", {
+      style:{...btn('def',true),borderColor:'#A78BFA55',color:'#A78BFA'},
+      onClick:()=>{
+        const similar = history.filter(h=>h.ceType===ceType&&h.grand>0);
+        if(similar.length<2){showToast('Not enough history to suggest (need 2+ similar CEs).',true);setAiSuggest(null);return;}
+        const vals={grand:[],mp:[],tools:[],mats:[],ppe:[]};
+        similar.forEach(h=>{vals.grand.push(N(h.grand||0));vals.mp.push(N(h.mpTot||0));vals.tools.push(N(h.toolsT||0));vals.mats.push(N(h.matsT||0));vals.ppe.push(N(h.ppeT||0));});
+        const avg=arr=>arr.reduce((a,b)=>a+b,0)/arr.length;
+        setAiSuggest({n:similar.length,grand:avg(vals.grand),mp:avg(vals.mp),tools:avg(vals.tools),mats:avg(vals.mats),ppe:avg(vals.ppe)});
+      }
+    }, "💡 AI Suggest"),
+    aiSuggest && /*#__PURE__*/React.createElement("div", {style:{flex:1,background:'#A78BFA11',border:'1px solid #A78BFA44',borderRadius:8,padding:'10px 14px',fontSize:11}},
+      /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,color:'#A78BFA',marginBottom:6}}, "💡 Based on "+aiSuggest.n+" similar "+ceType+" CEs:"),
+      /*#__PURE__*/React.createElement("div", {style:{display:'flex',gap:16,flexWrap:'wrap'}},
+        [['Grand Total','grand',ACC],['Manpower','mp',INFO],['Tools','tools',OK],['Materials','mats','#F0A429'],['PPE','ppe',ERR]].map(([label,key,color])=>
+          /*#__PURE__*/React.createElement("div", {key:key},
+            /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:10}}, label),
+            /*#__PURE__*/React.createElement("div", {style:{color:color,fontWeight:700,...MONO}}, "₱"+ph(aiSuggest[key]*0.8)+" – ₱"+ph(aiSuggest[key]*1.2))
+          )
+        )),
+      /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:10,marginTop:6}}, "Typical range ±20%. Your current grand total: ",
+        /*#__PURE__*/React.createElement("b", {style:{color:grand<aiSuggest.grand*0.8?ERR:grand>aiSuggest.grand*1.2?ERR:OK}}, "₱"+ph(grand)),
+        grand>0&&(grand<aiSuggest.grand*0.8||grand>aiSuggest.grand*1.2)?" — outside typical range ⚠":" — within typical range ✓"),
+      /*#__PURE__*/React.createElement("button", {style:{...btn('def',true),fontSize:9,marginTop:6},onClick:()=>setAiSuggest(null)}, "✕ Dismiss")
+    )),
+  /*#__PURE__*/React.createElement("div", {
     style: CS
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -9346,7 +9616,21 @@ function App({
   }, sharedDrafts.length)), /*#__PURE__*/React.createElement("button", {
     style: btn('info'),
     onClick: handleGenerateCEWithCheck
-  }, "Generate CE"), /*#__PURE__*/React.createElement("button", {
+  }, "🖨 Generate CE"), /*#__PURE__*/React.createElement("button", {
+    style: {...btn('def'), borderColor: '#58A6FF55', color: INFO},
+    onClick: handlePrintPreview,
+    title: "Preview CE before printing"
+  }, "👁 Preview"), /*#__PURE__*/React.createElement("button", {
+    style: {...btn('def'), borderColor: '#3FB95055', color: OK},
+    onClick: () => {
+      try {
+        const d = {info, ceType, mp, tools, mats, ppe, misc, notes, approvers, sowItems, mobVehicles, demobVehicles};
+        const url = window.location.href.split('?')[0] + '?draft=' + btoa(JSON.stringify(d));
+        navigator.clipboard.writeText(url).then(() => showToast('🔗 Share link copied to clipboard!')).catch(() => { prompt('Copy this link:', url); });
+      } catch(e) { showToast('Failed to generate share link.', true); }
+    },
+    title: "Copy shareable link to this draft"
+  }, "🔗 Share"), /*#__PURE__*/React.createElement("button", {
     style: btn('ok'),
     onClick: handleExportXLSX
   }, "Export XLSX"), /*#__PURE__*/React.createElement("button", {
@@ -9650,7 +9934,15 @@ function App({
       ...x,
       title: e.target.value
     } : x))
-  }), approvers.length > 1 && /*#__PURE__*/React.createElement("button", {
+  }),
+  /* Feature 11: signature thumbnail + sign button */
+  signatures[a.id||i] && /*#__PURE__*/React.createElement("div",{style:{margin:'4px 0'}},
+    /*#__PURE__*/React.createElement("img",{src:signatures[a.id||i],style:{width:'100%',height:36,objectFit:'contain',background:'#fff',borderRadius:3,border:'1px solid '+BDR}})),
+  /*#__PURE__*/React.createElement("button",{
+    style:{...btn(signatures[a.id||i]?'ok':'def',true),fontSize:9,padding:'2px 6px',width:'100%',marginTop:4},
+    onClick:()=>setSigModal({...a,id:a.id||i})
+  }, signatures[a.id||i]?'✅ Re-sign':'✍ Sign'),
+  approvers.length > 1 && /*#__PURE__*/React.createElement("button", {
     onClick: () => setApprovers(p => p.filter((_, j) => j !== i)),
     style: {
       position: 'absolute',

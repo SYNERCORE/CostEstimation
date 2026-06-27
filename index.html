@@ -938,25 +938,69 @@ async function dbDeleteDraft(draftId){
   try{localStorage.removeItem('shic_draft_'+draftId);}catch{}
 }
 
-/* ── SP Monitoring persistence ── */
-async function dbSaveMon(data){
-  if(USE_SP||getSiteURL()){
-    try{
-      const r=await spGet(spList('Monitoring'),"Title eq 'config'",'Id');
-      if(r.length)await spPatch(spList('Monitoring'),r[0].Id,{shicMonData:JSON.stringify(data)});
-      else await spPost(spList('Monitoring'),{Title:'config',shicMonData:JSON.stringify(data)});
-      return true;
-    }catch(e){console.warn('dbSaveMon:',e.message);}
-  }
-  return false;
+/* ── SP Monitoring persistence — one item per CE ── */
+/* Cache of ceId → SP item Id to avoid repeated GET lookups */
+const _monSpIdCache = {};
+
+async function dbSaveMonEntry(ceId, ceNum, monFields){
+  if(!(USE_SP||getSiteURL()))return false;
+  try{
+    const numId=Number(ceId);
+    let spId=_monSpIdCache[ceId];
+    if(!spId){
+      const r=await spGet(spList('Monitoring'),`shicCEId eq ${numId}`,'Id');
+      if(r.length){spId=r[0].Id;_monSpIdCache[ceId]=spId;}
+    }
+    const payload={shicMonData:JSON.stringify(monFields)};
+    if(spId){
+      await spPatch(spList('Monitoring'),spId,payload);
+    }else{
+      const created=await spPost(spList('Monitoring'),{Title:ceNum||String(ceId),shicCEId:numId,...payload});
+      if(created&&created.Id)_monSpIdCache[ceId]=created.Id;
+    }
+    return true;
+  }catch(e){console.warn('dbSaveMonEntry:',e.message);return false;}
 }
-async function dbGetMon(){
-  if(USE_SP||getSiteURL()){
-    try{
-      const r=await spGet(spList('Monitoring'),"Title eq 'config'",'Id,shicMonData,Modified');
-      if(r.length&&r[0].shicMonData)return{data:JSON.parse(r[0].shicMonData),modifiedAt:r[0].Modified};
-    }catch(e){console.warn('dbGetMon:',e.message);}
+
+/* Batch-save all entries (import / migration). histItems needed for ceNum lookup. */
+async function dbSaveMonAll(monData, histItems){
+  if(!(USE_SP||getSiteURL()))return;
+  const ceNumMap={};
+  for(const h of(histItems||[])){ceNumMap[h.id]=h.info?.ceNum||h.ceNum||String(h.id);}
+  const entries=Object.entries(monData);
+  const BATCH=3;
+  for(let i=0;i<entries.length;i+=BATCH){
+    const chunk=entries.slice(i,i+BATCH);
+    await Promise.all(chunk.map(([ceId,fields])=>dbSaveMonEntry(ceId,ceNumMap[ceId]||String(ceId),fields).catch(()=>{})));
+    if(i+BATCH<entries.length)await new Promise(r=>setTimeout(r,500));
   }
+}
+
+/* Legacy: old single-blob save — kept for migration only */
+async function dbSaveMon(data){return dbSaveMonAll(data,[]);}
+
+async function dbGetMon(){
+  if(!(USE_SP||getSiteURL()))return null;
+  try{
+    /* Fetch all per-CE items */
+    const r=await spGet(spList('Monitoring'),"Title ne 'config'",'Id,Title,shicCEId,shicMonData,Modified');
+    if(r.length){
+      const data={};let latest=null;
+      for(const item of r){
+        const cid=String(item.shicCEId);
+        if(cid&&cid!=='null'&&cid!=='0'&&item.shicMonData){
+          try{data[cid]=JSON.parse(item.shicMonData);_monSpIdCache[cid]=item.Id;}catch{}
+        }
+        if(!latest||item.Modified>latest)latest=item.Modified;
+      }
+      if(Object.keys(data).length)return{data,modifiedAt:latest};
+    }
+    /* Fall back to legacy blob */
+    const legacy=await spGet(spList('Monitoring'),"Title eq 'config'",'Id,shicMonData,Modified');
+    if(legacy.length&&legacy[0].shicMonData){
+      try{return{data:JSON.parse(legacy[0].shicMonData),modifiedAt:legacy[0].Modified,legacy:true};}catch{}
+    }
+  }catch(e){console.warn('dbGetMon:',e.message);}
   return null;
 }
 
@@ -2888,6 +2932,11 @@ function App({
         setMonData(r.data);
         localStorage.setItem(MON_KEY, JSON.stringify(r.data));
         setSyncStatus({monitoring:'synced', lastSyncAt: new Date().toISOString(), sp: 'connected'});
+        /* Migrate legacy single-blob to per-CE items in the background */
+        if (r.legacy) {
+          console.log('Migrating monitoring data to itemized SP storage…');
+          dbSaveMonAll(r.data, []).catch(() => {});
+        }
       } else {
         setSyncStatus({monitoring:'local'});
       }
@@ -2909,7 +2958,10 @@ function App({
     };
     try {
       localStorage.setItem(MON_KEY, JSON.stringify(n));
-      dbSaveMon(n).then(ok=>{ if(ok) setSyncStatus({lastSyncAt:new Date().toISOString(),sp:'connected',dirty:false}); }).catch(()=>{});
+      /* Save only the one changed CE entry, not the whole blob */
+      const h = history.find(x => String(x.id) === String(ceId));
+      const ceNum = h?.info?.ceNum || h?.ceNum || String(ceId);
+      dbSaveMonEntry(ceId, ceNum, n[ceId]).then(ok=>{ if(ok) setSyncStatus({lastSyncAt:new Date().toISOString(),sp:'connected',dirty:false}); }).catch(()=>{});
     } catch {}
     return n;
   });
@@ -4718,7 +4770,7 @@ function App({
       }
       setMonData(merged);
       try { localStorage.setItem(MON_KEY, JSON.stringify(merged)); } catch {}
-      await dbSaveMon(merged).catch(()=>{});
+      await dbSaveMonAll(merged, fresh).catch(()=>{});
       setHistory(fresh);
       setImportProgress(null);
       showToast(`Import complete: ${imported} CEs added, ${skipped} skipped.`);

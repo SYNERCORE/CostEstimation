@@ -104,18 +104,21 @@ const ph = n => (n || 0).toLocaleString("en-PH", {
 });
 let _uid = 1000;
 const uid = () => String(++_uid);
-function nextCeNum(history) {
+function nextCeNum(history, cePrefix) {
   const yr = new Date().getFullYear();
-  const prefix = 'SHIC-CE-' + yr + '-';
+  const pfx = ((cePrefix || 'SHIC') + '-CE-' + yr + '-').toUpperCase();
   let max = 0;
   (history || []).forEach(h => {
     const n = ((h.info && h.info.ceNum) || '').toUpperCase().replace(/-R\d+$/i, '');
-    if (n.startsWith(prefix.toUpperCase())) {
-      const num = parseInt(n.slice(prefix.length)) || 0;
+    if (n.startsWith(pfx)) {
+      const num = parseInt(n.slice(pfx.length)) || 0;
       if (num > max) max = num;
     }
   });
-  return prefix + String(max + 1).padStart(4, '0');
+  return pfx + String(max + 1).padStart(4, '0');
+}
+function nextCeNumForCompany(history, company) {
+  return nextCeNum(history, (company && company.cePrefix) ? company.cePrefix : 'SHIC');
 }
 const mkMP = () => ({
   id: uid(),
@@ -155,7 +158,8 @@ const BLANK_INFO = {
   status: "FOR REVIEW",
   material: "",
   qty: "1",
-  days: ""
+  days: "",
+  companyId: null
 };
 const BLANK_MISC = {
   accommodation: [],
@@ -181,6 +185,23 @@ const getRememberKey = () => localStorage.getItem('sy3:rememberkey') === '1';
 const setRememberKey = v => v ? localStorage.setItem('sy3:rememberkey','1') : localStorage.removeItem('sy3:rememberkey');
 const getApiKey = () => sessionStorage.getItem('sy3:apikey') || (getRememberKey() ? localStorage.getItem('sy3:apikey') || '' : '');
 const setApiKey = (k, remember) => { sessionStorage.setItem('sy3:apikey', k); if(remember){ localStorage.setItem('sy3:apikey', k); setRememberKey(true); } else { localStorage.removeItem('sy3:apikey'); setRememberKey(false); } };
+
+/* === COMPANY DATABASE ======================================================= */
+function getCompanies(){
+  try{
+    const cs=localStorage.getItem('shic:companies');
+    if(cs){const p=JSON.parse(cs);if(p&&p.length)return p;}
+    /* Migrate old single company config */
+    const old=JSON.parse(localStorage.getItem('shic:co_info')||'{}');
+    return [{id:1,name:old.name||'SYNERCORE',sub:old.sub||'HEAVY INDUSTRIES CORP.',
+      color:old.color||'#cc0000',logo:old.logo||'',
+      cePrefix:'SHIC',docNo:old.doc||'SHIC-F-TSG025',revNo:'0',revDate:''}];
+  }catch{return[{id:1,name:'SYNERCORE',sub:'HEAVY INDUSTRIES CORP.',color:'#cc0000',logo:'',cePrefix:'SHIC',docNo:'SHIC-F-TSG025',revNo:'0',revDate:''}];}
+}
+function saveCompanies(list){
+  try{localStorage.setItem('shic:companies',JSON.stringify(list));window.dispatchEvent(new Event('shic:companies:updated'));}catch{}
+  if(USE_SP||getSiteURL())dbSaveCompanies(list).catch(()=>{});
+}
 
 /* === MULTI-PROVIDER AI =====================================================
    Providers: Gemini (free) \xb7 Groq (free) \xb7 Kimi (free tier) \xb7
@@ -956,6 +977,27 @@ async function spLoadMLImports(){
   }catch(e){console.warn('spLoadMLImports:',e.message);return[];}
 }
 
+async function dbSaveCompanies(list){
+  if(USE_SP||getSiteURL()){
+    try{
+      const r=await spGet(spList('Companies'),"Title eq 'config'",'Id');
+      if(r.length)await spPatch(spList('Companies'),r[0].Id,{shicData:JSON.stringify(list)});
+      else await spPost(spList('Companies'),{Title:'config',shicData:JSON.stringify(list)});
+      return true;
+    }catch(e){console.warn('dbSaveCompanies:',e.message);}
+  }
+  try{localStorage.setItem('shic:companies',JSON.stringify(list));}catch{}
+  return false;
+}
+async function dbGetCompanies(){
+  if(USE_SP||getSiteURL()){
+    try{
+      const r=await spGet(spList('Companies'),"Title eq 'config'",'Id,shicData');
+      if(r.length&&r[0].shicData)return JSON.parse(r[0].shicData);
+    }catch(e){console.warn('dbGetCompanies:',e.message);}
+  }
+  try{const s=localStorage.getItem('shic:companies');return s?JSON.parse(s):null;}catch{return null;}
+}
 async function dbSaveML(data){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Masterlist'),"Title eq 'config'",'Id');if(r.length)await spPatch(spList('Masterlist'),r[0].Id,{shicData:JSON.stringify(data)});else await spPost(spList('Masterlist'),{Title:'config',shicData:JSON.stringify(data)});return;}catch(e){console.warn('dbSaveML:',e.message);}}LS.set('masterlist',data);}
 async function dbSaveSowLib(lib){
   if(USE_SP||getSiteURL()){
@@ -1635,6 +1677,7 @@ async function autoSetupSP(progressCb){
     [spList('Monitoring')]:  [[9,'shicCEId'],[3,'shicMonData']],
     [spList('Masterlist')]:  [[3,'shicData']],
     [spList('SowLib')]:      [[3,'shicData']],
+    [spList('Companies')]:   [[3,'shicData']],
     [spList('Drafts')]:      [[2,'shicSavedBy'],[3,'shicData']]
   };
 
@@ -1660,59 +1703,136 @@ async function autoSetupSP(progressCb){
   progressCb&&progressCb({step:'done',msg:'Done! '+created+' lists created, '+skipped+' already existed.',progress:1});
   return{created,skipped};
 }
-function CompanyInfoPanel(){
-  const[cfg,setCfg]=React.useState(()=>{try{return JSON.parse(localStorage.getItem('shic:co_info')||'{}');}catch{return{};}});
-  const[saved,setSaved]=React.useState(false);
-  const handleSave=()=>{
-    try{localStorage.setItem('shic:co_info',JSON.stringify(cfg));setSaved(true);setTimeout(()=>setSaved(false),2000);}catch(e){}
+function CompanyDBPanel(){
+  const[companies,setCompanies]=React.useState(()=>getCompanies());
+  const[editId,setEditId]=React.useState(null);
+  const[draft,setDraft]=React.useState(null);
+  const[spStatus,setSpStatus]=React.useState('');
+  const spConnected=!!(USE_SP||getSiteURL());
+
+  React.useEffect(()=>{
+    if(!spConnected)return;
+    setSpStatus('Loading from SharePoint…');
+    dbGetCompanies().then(list=>{
+      if(list&&list.length){setCompanies(list);saveCompanies(list);setSpStatus('✅ Loaded from SharePoint.');}
+      else setSpStatus('No company data on SP yet — save to publish.');
+    }).catch(e=>setSpStatus('⚠️ SP load failed: '+e.message));
+  },[]);
+
+  const persist=list=>{setCompanies(list);saveCompanies(list);};
+
+  const startEdit=co=>{setEditId(co.id);setDraft({...co});};
+  const cancelEdit=()=>{setEditId(null);setDraft(null);};
+  const saveEdit=()=>{
+    const list=companies.map(c=>c.id===draft.id?draft:c);
+    persist(list);setEditId(null);setDraft(null);
+  };
+  const addCo=()=>{
+    const id=Date.now();
+    const blank={id,name:'New Company',sub:'',color:'#cc0000',logo:'',docNo:'',revNo:'0',revDate:''};
+    persist([...companies,blank]);
+    startEdit(blank);
+  };
+  const delCo=id=>{
+    if(companies.length<=1){alert('At least one company is required.');return;}
+    if(!confirm('Delete this company?'))return;
+    persist(companies.filter(c=>c.id!==id));
   };
   const handleLogo=e=>{
     const file=e.target.files[0];if(!file)return;
-    if(file.size>200000){alert('Logo too large. Please use an image under 200KB.');return;}
+    if(file.size>300000){alert('Logo too large. Use an image under 300KB.');return;}
     const reader=new FileReader();
-    reader.onload=ev=>setCfg(p=>({...p,logo:ev.target.result}));
+    reader.onload=ev=>setDraft(p=>({...p,logo:ev.target.result}));
     reader.readAsDataURL(file);
   };
+
+  const G={display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10};
   return React.createElement('div',null,
-    React.createElement('div',{style:{fontWeight:700,marginBottom:12,fontSize:13,display:'flex',alignItems:'center',gap:8}},
-      React.createElement('span',null,'&#127970;'),' Company Info',
-      saved&&React.createElement('span',{style:{fontSize:10,padding:'2px 8px',borderRadius:10,background:OK+'22',color:OK,fontWeight:700,marginLeft:4}},'Saved')
+    React.createElement('div',{style:{fontWeight:700,marginBottom:8,fontSize:13,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}},
+      '🏢 Company Database',
+      React.createElement('span',{style:{fontSize:10,color:MT,fontWeight:400,marginLeft:4}},companies.length+' compan'+(companies.length===1?'y':'ies')),
+      spConnected&&React.createElement('span',{style:{fontSize:10,padding:'2px 8px',borderRadius:10,background:'#22c55e22',color:'#22c55e',fontWeight:600}},
+        '☁ SP Connected'),
+      React.createElement('button',{style:{...btn('acc'),marginLeft:'auto',fontSize:11},onClick:addCo},'+ Add Company')
     ),
-    React.createElement('div',{style:{color:MT,fontSize:11,marginBottom:12,lineHeight:1.6}},'Customize the company header on generated CE documents. Each company can have its own name and logo.'),
-    React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}},
-      React.createElement('div',{style:{gridColumn:'1/-1'}},
-        React.createElement('label',{style:LBL},'Company Name'),
-        React.createElement('input',{style:INP,value:cfg.name||'',onChange:e=>setCfg(p=>({...p,name:e.target.value})),placeholder:'SYNERCORE'})
-      ),
-      React.createElement('div',{style:{gridColumn:'1/-1'}},
-        React.createElement('label',{style:LBL},'Sub-heading / Division'),
-        React.createElement('input',{style:INP,value:cfg.sub||'',onChange:e=>setCfg(p=>({...p,sub:e.target.value})),placeholder:'HEAVY INDUSTRIES CORP.'})
-      ),
-      React.createElement('div',null,
-        React.createElement('label',{style:LBL},'Document No.'),
-        React.createElement('input',{style:INP,value:cfg.doc||'',onChange:e=>setCfg(p=>({...p,doc:e.target.value})),placeholder:'SHIC-F-TSG025'})
-      ),
-      React.createElement('div',null,
-        React.createElement('label',{style:LBL},'Brand Color'),
-        React.createElement('div',{style:{display:'flex',gap:8,alignItems:'center'}},
-          React.createElement('input',{type:'color',value:cfg.color||'#cc0000',onChange:e=>setCfg(p=>({...p,color:e.target.value})),style:{width:40,height:32,border:'none',borderRadius:4,cursor:'pointer',background:'none'}}),
-          React.createElement('span',{style:{fontSize:11,color:MT}},'Used for company name text')
+    spStatus&&React.createElement('div',{style:{fontSize:11,color:MT,marginBottom:8,padding:'4px 8px',background:BG2,borderRadius:5,border:'1px solid '+BDR}},spStatus),
+    React.createElement('div',{style:{fontSize:11,color:MT,marginBottom:12}},'Each company has its own CE prefix, logo, document number, revision number and date. Changes are '+(spConnected?'auto-synced to SharePoint for all users.':'saved locally only — connect SharePoint to share across users.')),
+
+    /* Company cards */
+    companies.map(co=>React.createElement('div',{key:co.id,style:{border:'1px solid '+(editId===co.id?'#A78BFA':BDR),borderRadius:8,marginBottom:10,overflow:'hidden'}},
+
+      /* Card header */
+      React.createElement('div',{style:{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:editId===co.id?'#A78BFA11':BG2}},
+        co.logo
+          ?React.createElement('img',{src:co.logo,style:{width:48,height:28,objectFit:'contain',background:'#fff',borderRadius:3,padding:2}})
+          :React.createElement('div',{style:{width:48,height:28,background:co.color||'#cc0000',borderRadius:3,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'#fff',fontWeight:700,textAlign:'center',lineHeight:1.1}},
+            (co.name||'').split(' ').map(w=>w[0]||'').slice(0,3).join('')),
+        React.createElement('div',{style:{flex:1,minWidth:0}},
+          React.createElement('div',{style:{fontWeight:700,fontSize:12,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},co.name||'—'),
+          React.createElement('div',{style:{fontSize:10,color:MT}},co.sub||''),
+          React.createElement('div',{style:{fontSize:10,color:MT,marginTop:2}},
+            'CE Prefix: ',React.createElement('b',null,co.cePrefix||'SHIC'),
+            '  Doc No: ',React.createElement('b',null,co.docNo||'—'),
+            '  Rev: ',React.createElement('b',null,co.revNo||'0'))
+        ),
+        editId!==co.id&&React.createElement('div',{style:{display:'flex',gap:6,flexShrink:0}},
+          React.createElement('button',{style:btn('def',true),onClick:()=>startEdit(co)},'Edit'),
+          companies.length>1&&React.createElement('button',{style:btn('danger',true),onClick:()=>delCo(co.id)},'Del')
         )
       ),
-      React.createElement('div',{style:{gridColumn:'1/-1'}},
-        React.createElement('label',{style:LBL},'Company Logo'),
-        React.createElement('div',{style:{display:'flex',gap:10,alignItems:'center'}},
-          cfg.logo&&React.createElement('img',{src:cfg.logo,style:{maxWidth:80,maxHeight:40,objectFit:'contain',border:'1px solid '+BDR,borderRadius:4,padding:4,background:'#fff'}}),
+
+      /* Inline editor */
+      editId===co.id&&draft&&React.createElement('div',{style:{padding:14,borderTop:'1px solid '+BDR}},
+        React.createElement('div',{style:G},
+          React.createElement('div',{style:{gridColumn:'1/-1'}},
+            React.createElement('label',{style:LBL},'Company Name'),
+            React.createElement('input',{style:INP,value:draft.name||'',onChange:e=>setDraft(p=>({...p,name:e.target.value})),placeholder:'SYNERCORE'})
+          ),
+          React.createElement('div',{style:{gridColumn:'1/-1'}},
+            React.createElement('label',{style:LBL},'Sub-heading / Division'),
+            React.createElement('input',{style:INP,value:draft.sub||'',onChange:e=>setDraft(p=>({...p,sub:e.target.value})),placeholder:'HEAVY INDUSTRIES CORP.'})
+          ),
           React.createElement('div',null,
-            React.createElement('input',{type:'file',id:'co-logo-input',accept:'image/*',style:{display:'none'},onChange:handleLogo}),
-            React.createElement('button',{style:btn('acc'),onClick:()=>document.getElementById('co-logo-input').click()},'Upload Logo'),
-            cfg.logo&&React.createElement('button',{style:{...btn('danger'),marginLeft:8},onClick:()=>setCfg(p=>({...p,logo:''}))},'Remove')
+            React.createElement('label',{style:LBL},'CE Number Prefix'),
+            React.createElement('input',{style:INP,value:draft.cePrefix||'',onChange:e=>setDraft(p=>({...p,cePrefix:e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g,'')})),placeholder:'SHIC'}),
+            React.createElement('div',{style:{fontSize:10,color:MT,marginTop:3}},'CE numbers: '+(draft.cePrefix||'SHIC')+'-CE-'+new Date().getFullYear()+'-0001')
+          ),
+          React.createElement('div',null,
+            React.createElement('label',{style:LBL},'Document No.'),
+            React.createElement('input',{style:INP,value:draft.docNo||'',onChange:e=>setDraft(p=>({...p,docNo:e.target.value})),placeholder:'SHIC-F-TSG025'})
+          ),
+          React.createElement('div',null,
+            React.createElement('label',{style:LBL},'Revision No.'),
+            React.createElement('input',{style:INP,value:draft.revNo||'',onChange:e=>setDraft(p=>({...p,revNo:e.target.value})),placeholder:'0'})
+          ),
+          React.createElement('div',null,
+            React.createElement('label',{style:LBL},'Revision Date'),
+            React.createElement('input',{style:{...INP,colorScheme:'dark'},type:'date',value:draft.revDate||'',onChange:e=>setDraft(p=>({...p,revDate:e.target.value}))})
+          ),
+          React.createElement('div',null,
+            React.createElement('label',{style:LBL},'Brand Color'),
+            React.createElement('div',{style:{display:'flex',gap:8,alignItems:'center'}},
+              React.createElement('input',{type:'color',value:draft.color||'#cc0000',onChange:e=>setDraft(p=>({...p,color:e.target.value})),style:{width:40,height:32,border:'none',borderRadius:4,cursor:'pointer'}}),
+              React.createElement('span',{style:{fontSize:11,color:MT}},'Company name color')
+            )
+          ),
+          React.createElement('div',{style:{gridColumn:'1/-1'}},
+            React.createElement('label',{style:LBL},'Company Logo'),
+            React.createElement('div',{style:{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}},
+              draft.logo&&React.createElement('img',{src:draft.logo,style:{maxWidth:80,maxHeight:36,objectFit:'contain',border:'1px solid '+BDR,borderRadius:4,padding:4,background:'#fff'}}),
+              React.createElement('input',{type:'file',id:'co-logo-'+co.id,accept:'image/*',style:{display:'none'},onChange:handleLogo}),
+              React.createElement('button',{style:btn('acc',true),onClick:()=>document.getElementById('co-logo-'+co.id).click()},'Upload Logo'),
+              draft.logo&&React.createElement('button',{style:{...btn('danger',true),marginLeft:4},onClick:()=>setDraft(p=>({...p,logo:''}))},'Remove')
+            ),
+            React.createElement('div',{style:{fontSize:10,color:MT,marginTop:4}},'PNG/JPG/SVG, max 300KB.')
           )
         ),
-        React.createElement('div',{style:{fontSize:10,color:MT,marginTop:4}},'PNG/JPG/SVG, max 200KB. Will appear on all generated CE documents.')
+        React.createElement('div',{style:{display:'flex',gap:8,marginTop:4}},
+          React.createElement('button',{style:btn('acc'),onClick:saveEdit},'Save'),
+          React.createElement('button',{style:btn('def'),onClick:cancelEdit},'Cancel')
+        )
       )
-    ),
-    React.createElement('button',{style:btn('acc'),onClick:handleSave},'Save Company Info')
+    ))
   );
 }
 function FbSetupPanel(){
@@ -2566,7 +2686,7 @@ function AdminPanel({
       borderColor: '#F05032' + '44',
       background: '#F05032' + '06'
     }
-  }, /*#__PURE__*/React.createElement(CompanyInfoPanel, null), /*#__PURE__*/React.createElement('hr',{style:{border:'none',borderTop:'1px solid '+BDR,margin:'16px 0'}}), React.createElement(FbSetupPanel, null)), USE_SP && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(CompanyDBPanel, null), /*#__PURE__*/React.createElement('hr',{style:{border:'none',borderTop:'1px solid '+BDR,margin:'16px 0'}}), React.createElement(FbSetupPanel, null)), USE_SP && /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
       marginTop: 8,
@@ -2735,6 +2855,18 @@ function App({
       return window.SOW_LIBRARY;
     }
   });
+  const [companies, setCompanies] = useState(() => getCompanies());
+  /* Re-sync when admin panel saves, and load from SP on startup */
+  useEffect(() => {
+    const onStorage = () => setCompanies(getCompanies());
+    window.addEventListener('shic:companies:updated', onStorage);
+    if (USE_SP || getSiteURL()) {
+      dbGetCompanies().then(list => {
+        if (list && list.length) { saveCompanies(list); setCompanies(list); }
+      }).catch(() => {});
+    }
+    return () => window.removeEventListener('shic:companies:updated', onStorage);
+  }, []);
   const saveSowLib = lib => {
     setSowLib(lib);
     try { localStorage.setItem('sy3:sowlib', JSON.stringify(lib)); } catch {}
@@ -6119,7 +6251,8 @@ function App({
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     });
-    const coInfo = (() => { try { return JSON.parse(localStorage.getItem('shic:co_info') || '{}'); } catch { return {}; } })();
+    const allCos = getCompanies();
+    const coInfo = allCos.find(c => String(c.id) === String(info.companyId)) || allCos[0] || {};
     const pageStyle = `
       @page{size:A4 portrait;margin:8mm 10mm}
       *{box-sizing:border-box}
@@ -6138,11 +6271,13 @@ function App({
       @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
     `;
     const co = {
-      name:  coInfo.name  || 'SYNERCORE',
-      sub:   coInfo.sub   || 'HEAVY INDUSTRIES CORP.',
-      doc:   coInfo.doc   || 'SHIC-F-TSG025',
-      logo:  coInfo.logo  || '',
-      color: coInfo.color || '#cc0000'
+      name:    coInfo.name    || 'SYNERCORE',
+      sub:     coInfo.sub     || 'HEAVY INDUSTRIES CORP.',
+      doc:     coInfo.docNo   || coInfo.doc || 'SHIC-F-TSG025',
+      revNo:   coInfo.revNo   || '0',
+      revDate: coInfo.revDate || '',
+      logo:    coInfo.logo    || '',
+      color:   coInfo.color   || '#cc0000'
     };
     const logoCell = co.logo
       ? `<img src="${co.logo}" style="max-width:70px;max-height:36px;object-fit:contain">`
@@ -6153,8 +6288,8 @@ function App({
       <td style="border:none;text-align:center"><h2>COST ESTIMATE SUMMARY</h2></td>
       <td style="border:none;width:150px;font-size:7pt">
         <table class="nb"><tr><td style="border:none;width:80px">Document No.:</td><td style="border:none">${co.doc}</td></tr>
-        <tr><td style="border:none">Revision No.:</td><td style="border:none">0</td></tr>
-        <tr><td style="border:none">Revision Date:</td><td style="border:none"></td></tr></table>
+        <tr><td style="border:none">Revision No.:</td><td style="border:none">${co.revNo}</td></tr>
+        <tr><td style="border:none">Revision Date:</td><td style="border:none">${co.revDate}</td></tr></table>
       </td></tr>
       <tr><td colspan="3" style="text-align:center;background:#000;color:#fff;font-weight:bold;font-size:9pt;padding:3px;border:1px solid #000">${title}</td></tr>
       <tr><td colspan="3" style="border:none;text-align:right;font-size:7.5pt;padding:1px 4px"><b>CE No.:</b>&nbsp;${info.ceNum || ''}&nbsp;&nbsp;<b>PROJECT TYPE:</b>&nbsp;${ceType.toUpperCase()}&nbsp;&nbsp;<b>DATE:</b>&nbsp;${info.date||''}</td></tr>
@@ -7153,6 +7288,29 @@ function App({
       color: MT
     }
   }, "Project Details"), /*#__PURE__*/React.createElement("div", {
+    style: {marginBottom: 16, padding: '12px 14px', background: '#A78BFA11', borderRadius: 8, border: '2px solid #A78BFA44', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap'}
+  }, /*#__PURE__*/React.createElement("div", {style: {flex: 1, minWidth: 200}},
+    /*#__PURE__*/React.createElement("label", {style: {...LBL, color: '#A78BFA', fontWeight: 700, fontSize: 11, letterSpacing: '0.05em'}}, "🏢 Issuing Company"),
+    /*#__PURE__*/React.createElement("select", {
+      style: INP,
+      value: info.companyId != null ? info.companyId : (companies[0]||{}).id || '',
+      onChange: e => {
+        const rawId = e.target.value === '' ? null : (isNaN(e.target.value) ? e.target.value : Number(e.target.value));
+        const selCo = companies.find(c => String(c.id) === String(rawId)) || companies[0];
+        const newCeNum = nextCeNumForCompany(history, selCo);
+        setInfo(p => ({...p, companyId: rawId, ceNum: newCeNum}));
+      }
+    }, companies.map(c => /*#__PURE__*/React.createElement("option", {key: c.id, value: c.id}, c.name + (c.sub ? ' — ' + c.sub : ''))))
+  ), (() => {
+    const selCo = companies.find(c => String(c.id) === String(info.companyId != null ? info.companyId : (companies[0]||{}).id)) || companies[0] || {};
+    return /*#__PURE__*/React.createElement("div", {style: {display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0}},
+      selCo.logo && /*#__PURE__*/React.createElement("img", {src: selCo.logo, style: {maxWidth: 64, maxHeight: 32, objectFit: 'contain', background: '#fff', borderRadius: 4, padding: 3, border: `1px solid ${BDR}`}}),
+      /*#__PURE__*/React.createElement("div", {style: {fontSize: 11, color: MT, lineHeight: 1.5}},
+        /*#__PURE__*/React.createElement("div", null, "CE Prefix: ", /*#__PURE__*/React.createElement("b", {style: {color: TXT}}, selCo.cePrefix || 'SHIC'), " → ", /*#__PURE__*/React.createElement("b", {style: {color: '#A78BFA'}}, (selCo.cePrefix||'SHIC')+'-CE-'+new Date().getFullYear()+'-XXXX')),
+        /*#__PURE__*/React.createElement("div", null, "Doc No: ", /*#__PURE__*/React.createElement("b", {style: {color: TXT}}, selCo.docNo || '—'), "  Rev: ", /*#__PURE__*/React.createElement("b", {style: {color: TXT}}, selCo.revNo || '0'))
+      )
+    );
+  })()), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: '1fr 1fr',

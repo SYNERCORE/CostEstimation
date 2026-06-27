@@ -3033,7 +3033,9 @@ function App({
     setToast(msg);
     setToastErr(err);
     setTimeout(() => setToast(''), 3200);
+    window._shicToast = showToast;
   };
+  window._shicToast = showToast;
   const prov = getProvider();
   const provInfo = PROVIDERS[prov];
   const mpSub = useMemo(() => mp.reduce((s, r) => {
@@ -10280,10 +10282,10 @@ function SyncStatusBar() {
         try {
           const [mon] = await Promise.all([dbGetMon()]);
           setSyncStatus({sp:'connected', lastSyncAt: new Date().toISOString(), dirty:false});
-          showToast('Sync refreshed from SharePoint.');
+          (window._shicToast||console.log)('Sync refreshed from SharePoint.');
         } catch(e) {
           setSyncStatus({sp:'error'});
-          showToast('SharePoint sync failed.', true);
+          (window._shicToast||console.log)('SharePoint sync failed.', true);
         }
       },
       title: 'Refresh from SharePoint',

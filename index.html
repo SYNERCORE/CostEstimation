@@ -809,7 +809,7 @@ async function checkForUpdate() {
     }).then(r => r.json()).catch(() => null));
     tasks.push((async () => {
       try {
-        return await fbGet(fbPath('_update'));
+        return null; /* Firebase removed */
       } catch {
         return null;
       }
@@ -902,7 +902,68 @@ async function getSPToken(){
     return null;
   }
 }
-let FB=null;function fbPath(s){return s;}function getFbNS(){return'shic';}
+/* Firebase removed — all persistence via SharePoint */
+
+/* ── SP Draft persistence ── */
+async function dbSaveDraft(d){
+  if(USE_SP||getSiteURL()){
+    try{
+      const existing=await spGet(spList('Drafts'),`Title eq '${(d.draftId||'').replace(/'/g,"''")}' `,'Id');
+      const payload={Title:d.draftId,shicSavedBy:d.savedByName||'',shicData:JSON.stringify(d)};
+      if(existing.length)await spPatch(spList('Drafts'),existing[0].Id,payload);
+      else await spPost(spList('Drafts'),payload);
+      return true;
+    }catch(e){console.warn('dbSaveDraft:',e.message);}
+  }
+  try{localStorage.setItem('shic_draft_'+d.draftId,JSON.stringify(d));}catch{}
+  return false;
+}
+async function dbGetDrafts(){
+  if(USE_SP||getSiteURL()){
+    try{
+      const r=await spGet(spList('Drafts'),'','Id,Title,shicSavedBy,shicData,Modified');
+      return r.map(x=>{try{return JSON.parse(x.shicData||'{}');}catch{return null;}}).filter(Boolean)
+               .sort((a,b)=>new Date(b.savedAt)-new Date(a.savedAt));
+    }catch(e){console.warn('dbGetDrafts:',e.message);}
+  }
+  return [];
+}
+async function dbDeleteDraft(draftId){
+  if(USE_SP||getSiteURL()){
+    try{
+      const r=await spGet(spList('Drafts'),`Title eq '${draftId}'`,'Id');
+      if(r.length)await spDelete(spList('Drafts'),r[0].Id);
+    }catch(e){console.warn('dbDeleteDraft:',e.message);}
+  }
+  try{localStorage.removeItem('shic_draft_'+draftId);}catch{}
+}
+
+/* ── SP Monitoring persistence ── */
+async function dbSaveMon(data){
+  if(USE_SP||getSiteURL()){
+    try{
+      const r=await spGet(spList('Monitoring'),"Title eq 'config'",'Id');
+      if(r.length)await spPatch(spList('Monitoring'),r[0].Id,{shicMonData:JSON.stringify(data)});
+      else await spPost(spList('Monitoring'),{Title:'config',shicMonData:JSON.stringify(data)});
+      return true;
+    }catch(e){console.warn('dbSaveMon:',e.message);}
+  }
+  return false;
+}
+async function dbGetMon(){
+  if(USE_SP||getSiteURL()){
+    try{
+      const r=await spGet(spList('Monitoring'),"Title eq 'config'",'Id,shicMonData,Modified');
+      if(r.length&&r[0].shicMonData)return{data:JSON.parse(r[0].shicMonData),modifiedAt:r[0].Modified};
+    }catch(e){console.warn('dbGetMon:',e.message);}
+  }
+  return null;
+}
+
+/* ── Sync status helpers ── */
+let _syncStatus={sp:'unknown',lastSyncAt:null,dirty:false,stale:false};
+function getSyncStatus(){return _syncStatus;}
+function setSyncStatus(patch){_syncStatus={..._syncStatus,...patch};window.dispatchEvent(new Event('shic:sync:updated'));}
 
 /* &#9472;&#9472; Offline queue &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472; */
 let _isOnline=navigator.onLine,_spQueue=[],_qRunning=false;
@@ -1932,20 +1993,9 @@ function UpdatePublisher({
       urgent: upd.urgent,
       publishedAt: new Date().toISOString()
     };
-    if (FB) {
-      try {
-        await fbSet(fbPath('_update'), payload);
-        showToast('Update v' + upd.version + ' pushed to all team!');
-        addLog && addLog('Pushed v' + upd.version + '.');
-        return;
-      } catch (e) {}
-    }
-    showToast('Firebase not connected \u2014 update not pushed.', true);
+    showToast('Update push via Firebase removed. Distribute the new index.html directly.', true);
   };
   const clearNotice = async () => {
-    if (FB) try {
-      await fbRemove(fbPath('_update'));
-    } catch (e) {}
     showToast('Update notice cleared.');
     addLog && addLog('Notice cleared.');
   };
@@ -2833,9 +2883,11 @@ function App({
       if (v) setMonData(JSON.parse(v));
     } catch {}
     try {
-      if (FB) {
-        const d = await fbGet(fbPath('monitoring'));
-        if (d) setMonData(d);
+      const r = await dbGetMon();
+      if (r && r.data) {
+        setMonData(r.data);
+        localStorage.setItem(MON_KEY, JSON.stringify(r.data));
+        setSyncStatus({lastSyncAt: new Date().toISOString(), sp: 'connected'});
       }
     } catch {}
   };
@@ -2855,7 +2907,7 @@ function App({
     };
     try {
       localStorage.setItem(MON_KEY, JSON.stringify(n));
-      if (FB) fbSet(fbPath('monitoring'), n).catch(() => {});
+      dbSaveMon(n).then(ok=>{ if(ok) setSyncStatus({lastSyncAt:new Date().toISOString(),sp:'connected',dirty:false}); }).catch(()=>{});
     } catch {}
     return n;
   });
@@ -3278,7 +3330,7 @@ function App({
     setTab('info');
   };
 
-  /* \u2500\u2500 Save draft \u2014 local + Firebase shared \u2500\u2500 */
+  /* \u2500\u2500 Save draft \u2014 local + SharePoint shared \u2500\u2500 */
   const saveDraft = async () => {
     const draftId = 'draft_' + (info.ceNum || 'untitled').replace(/[^a-zA-Z0-9_-]/g, '_') + '_' + currentUser.username;
     const d = {
@@ -3304,37 +3356,29 @@ function App({
       savedByName: currentUser.name || currentUser.username,
       savedAt: new Date().toISOString()
     };
-    /* Always save locally */
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
     } catch (e) {}
-    /* Save to Firebase if connected (shared with team) */
-    if (FB) {
-      try {
-        await fbSet(fbPath('drafts/' + draftId), d);
-        showToast('Draft shared with team. Others can resume from the Drafts panel.');
-        return;
-      } catch (e) {
-        console.warn('FB draft save failed', e);
+    setSyncStatus({dirty: true});
+    try {
+      const ok = await dbSaveDraft(d);
+      if (ok) {
+        setSyncStatus({lastSyncAt: new Date().toISOString(), sp: 'connected', dirty: false});
+        showToast('Draft saved and shared with team via SharePoint.');
+      } else {
+        showToast('Draft saved locally (SharePoint unavailable).');
       }
+    } catch (e) {
+      showToast('Draft saved locally.');
     }
-    showToast('Draft saved locally. Connect Firebase to share with team.');
   };
 
-  /* \u2500\u2500 Load shared drafts list from Firebase \u2500\u2500 */
+  /* \u2500\u2500 Load shared drafts list from SharePoint \u2500\u2500 */
   const loadSharedDrafts = async () => {
-    if (!FB) {
-      setSharedDrafts([]);
-      return;
-    }
     try {
-      const data = await fbGet(fbPath('drafts'));
-      if (!data) {
-        setSharedDrafts([]);
-        return;
-      }
-      const list = Object.values(data).sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
+      const list = await dbGetDrafts();
       setSharedDrafts(list);
+      if (list.length === 0) showToast('No shared drafts found.');
     } catch (e) {
       setSharedDrafts([]);
     }
@@ -3342,8 +3386,8 @@ function App({
 
   /* \u2500\u2500 Delete a shared draft \u2500\u2500 */
   const deleteDraft = async draftId => {
-    if (FB) try {
-      await fbRemove(fbPath('drafts/' + draftId));
+    try {
+      await dbDeleteDraft(draftId);
     } catch (e) {}
     try {
       const loc = localStorage.getItem(DRAFT_KEY);
@@ -6560,7 +6604,7 @@ function App({
       fontSize: 13
     },
     onClick: () => copyMenu && setCopyMenu(null)
-  }, updateInfo?.available && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(SyncStatusBar, null), updateInfo?.available && /*#__PURE__*/React.createElement("div", {
     style: {
       background: updateInfo.urgent ? ERR + '22' : '#22C55E22',
       borderBottom: `1px solid ${updateInfo.urgent ? ERR : OK}44`,
@@ -6684,7 +6728,7 @@ function App({
       fontSize: 11,
       flex: 1
     }
-  }, FB ? 'Synced with team via Firebase' : 'Connect Firebase to share drafts'), /*#__PURE__*/React.createElement("button", {
+  }, 'Shared via SharePoint'), /*#__PURE__*/React.createElement("button", {
     onClick: () => loadSharedDrafts(),
     style: btn('def', true),
     title: "Refresh"
@@ -6704,17 +6748,7 @@ function App({
       flex: 1,
       padding: 12
     }
-  }, !FB && /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: 20,
-      textAlign: 'center',
-      color: MT,
-      fontSize: 12,
-      borderRadius: 8,
-      border: `1px dashed ${BDR}`,
-      margin: 8
-    }
-  }, "Connect Firebase in Admin \u2192 Team Sync to enable shared drafts visible to all team members."), sharedDrafts.length === 0 && FB && /*#__PURE__*/React.createElement("div", {
+  }, sharedDrafts.length === 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: 20,
       textAlign: 'center',
@@ -9583,7 +9617,7 @@ tab === 'dashboard' && (() => {
       color: '#A78BFA'
     },
     onClick: saveDraft,
-    title: "Save draft \u2014 shared with team via Firebase"
+    title: "Save draft \u2014 shared with team via SharePoint"
   }, "\u2B07 Draft"), /*#__PURE__*/React.createElement("button", {
     style: {
       ...btn('def'),
@@ -10208,6 +10242,56 @@ class AppBoundary extends React.Component {
   }
 }
 function OnlinePill(){const[on,setOn]=React.useState(navigator.onLine);const[q,setQ]=React.useState(0);React.useEffect(()=>{const a=()=>setOn(true),b=()=>setOn(false);window.addEventListener('shic-online',a);window.addEventListener('shic-offline',b);const t=setInterval(()=>setQ(_spQueue?_spQueue.length:0),2000);return()=>{window.removeEventListener('shic-online',a);window.removeEventListener('shic-offline',b);clearInterval(t);};},[]);const c=on?OK:'#F59E0B';return React.createElement('span',{title:on?(q?q+' writes pending':'Connected'):'Offline',style:{display:'flex',alignItems:'center',gap:4,fontSize:10,padding:'2px 8px',borderRadius:10,background:c+'22',color:c,border:'1px solid '+c+'44',cursor:'default',userSelect:'none',flexShrink:0}},React.createElement('span',{style:{width:6,height:6,borderRadius:'50%',background:c,display:'inline-block'}}),on?(q?q+' pending':'Online'):'Offline');}
+function SyncStatusBar() {
+  const [sync, setSync] = React.useState(() => getSyncStatus());
+  React.useEffect(() => {
+    const h = () => setSync({...getSyncStatus()});
+    window.addEventListener('shic:sync:updated', h);
+    return () => window.removeEventListener('shic:sync:updated', h);
+  }, []);
+  const spColor = sync.sp === 'connected' ? OK : sync.sp === 'error' ? ERR : '#F59E0B';
+  const spLabel = sync.sp === 'connected' ? '✓ SP Connected' : sync.sp === 'error' ? '✗ SP Error' : '● SP Unknown';
+  const lastSync = sync.lastSyncAt ? (() => {
+    const mins = Math.round((Date.now() - new Date(sync.lastSyncAt)) / 60000);
+    return mins < 1 ? 'just now' : mins < 60 ? mins + 'm ago' : Math.round(mins/60) + 'h ago';
+  })() : 'never';
+  return React.createElement('div', {
+    style: {
+      display: 'flex', alignItems: 'center', gap: 10, padding: '4px 14px',
+      background: CARD, borderBottom: `1px solid ${BDR}`,
+      fontSize: 10, color: MT, flexWrap: 'wrap'
+    }
+  },
+    React.createElement('span', {style:{fontWeight:700,color:MT,letterSpacing:'.05em',textTransform:'uppercase'}}, 'Sync'),
+    React.createElement('span', {
+      style:{display:'flex',alignItems:'center',gap:4,padding:'2px 8px',borderRadius:10,
+             background:spColor+'22',color:spColor,border:'1px solid '+spColor+'44'}
+    }, spLabel),
+    sync.dirty && React.createElement('span', {
+      style:{color:'#F59E0B',display:'flex',alignItems:'center',gap:3}
+    }, '● Unsaved changes'),
+    React.createElement('span', {style:{color:MT}}, 'Last sync: ' + lastSync),
+    sync.stale && React.createElement('span', {
+      style:{color:ERR,fontWeight:700}
+    }, '⚠ Stale — SP has newer data'),
+    React.createElement('button', {
+      onClick: async () => {
+        setSyncStatus({sp:'unknown'});
+        try {
+          const [mon] = await Promise.all([dbGetMon()]);
+          setSyncStatus({sp:'connected', lastSyncAt: new Date().toISOString(), dirty:false});
+          showToast('Sync refreshed from SharePoint.');
+        } catch(e) {
+          setSyncStatus({sp:'error'});
+          showToast('SharePoint sync failed.', true);
+        }
+      },
+      title: 'Refresh from SharePoint',
+      style:{marginLeft:'auto',background:'none',border:`1px solid ${BDR}`,color:MT,
+             borderRadius:6,padding:'2px 8px',cursor:'pointer',fontSize:10}
+    }, '↻ Refresh')
+  );
+}
 function AuthGate() {
   const [page, setPage] = useState('loading');
   const [currentUser, setCurrentUser] = useState(null);

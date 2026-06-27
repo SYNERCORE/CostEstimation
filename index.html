@@ -4644,11 +4644,16 @@ function App({
         const rawStatus = String(r[iStatus]||'').trim().toLowerCase();
         const appStatus = Object.entries(statusMap).find(([k]) => rawStatus.startsWith(k))?.[1] || 'Pending';
 
-        // Parse deadline date robustly
+        // Parse deadline date robustly — guard against out-of-range dates
         const parseDate = v => {
           if (!v) return '';
-          const d = new Date(v);
-          return isNaN(d) ? '' : d.toISOString().slice(0,10);
+          try {
+            const d = new Date(v);
+            if (isNaN(d.getTime())) return '';
+            const y = d.getFullYear();
+            if (y < 2000 || y > 2100) return '';
+            return d.toISOString().slice(0,10);
+          } catch { return ''; }
         };
 
         toInsert.push({
@@ -6783,7 +6788,7 @@ function App({
     XLSX.writeFile(wb, (info.ceNum||'CE') + '_' + (info.client||'export').replace(/[^a-z0-9]/gi,'_') + '.xlsx');
     showToast('Exported to Excel.');
   };
-  const [showDraftBanner] = React.useState(() => hasDraft());
+  const [showDraftBanner, setShowDraftBanner] = React.useState(() => hasDraft());
   return /*#__PURE__*/React.createElement("div", {
     style: {
       background: BG,

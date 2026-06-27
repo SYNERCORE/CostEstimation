@@ -1,0 +1,19 @@
+{
+  "name": "SHIC Cost Estimator",
+  "short_name": "SHIC CE",
+  "description": "Cost Estimation App — Synercore Heavy Industries",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0D1117",
+  "theme_color": "#F0A429",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

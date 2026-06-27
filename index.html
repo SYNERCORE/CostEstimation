@@ -4669,7 +4669,7 @@ function App({
           approvers:[], mobVehicles:[], demobVehicles:[],
           grand:0, unitP:0,
           savedBy: String(r[iCeName]||'').trim(),
-          savedAt: r[iDate] ? new Date(r[iDate]).toISOString() : new Date().toISOString(),
+          savedAt: parseDate(r[iDate]) ? new Date(parseDate(r[iDate])).toISOString() : new Date().toISOString(),
           _imported: true,
         });
 

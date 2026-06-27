@@ -1,4 +1,4 @@
-const CACHE='shic-ce-v4';
+const CACHE='shic-ce-v5';
 const CDN=[
   'https://unpkg.com/react@18/umd/react.production.min.js',
   'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
@@ -27,9 +27,18 @@ self.addEventListener('fetch',e=>{
     return;
   }
   /* Network-first for app shell so updates propagate, fall back to cache offline */
-  if(SHELL.some(u=>e.request.url.endsWith(u.replace('./',''))||e.request.url===self.location.origin+'/')){
+  /* Only intercept same-origin GET requests matching explicit shell paths */
+  const url=e.request.url;
+  const isShell=e.request.method==='GET'&&(
+    url===self.location.origin+'/'||
+    url.endsWith('/index.html')||
+    url.endsWith('/manifest.json')||
+    url.endsWith('/icon.svg')
+  )&&!url.includes('/_api/')&&!url.includes('/_layouts/');
+  if(isShell){
     e.respondWith(fetch(e.request).then(res=>{
-      caches.open(CACHE).then(c=>c.put(e.request,res.clone()));return res;
+      if(res.ok){const clone=res.clone();caches.open(CACHE).then(c=>c.put(e.request,clone));}
+      return res;
     }).catch(()=>caches.match(e.request)));
   }
 });

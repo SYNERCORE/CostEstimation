@@ -961,7 +961,7 @@ async function dbGetMon(){
 }
 
 /* ── Sync status helpers ── */
-let _syncStatus={sp:'unknown',lastSyncAt:null,dirty:false,stale:false};
+let _syncStatus={sp:'unknown',lastSyncAt:null,dirty:false,stale:false,masterlist:'unknown',monitoring:'unknown',drafts:'unknown'};
 function getSyncStatus(){return _syncStatus;}
 function setSyncStatus(patch){_syncStatus={..._syncStatus,...patch};window.dispatchEvent(new Event('shic:sync:updated'));}
 
@@ -2887,9 +2887,11 @@ function App({
       if (r && r.data) {
         setMonData(r.data);
         localStorage.setItem(MON_KEY, JSON.stringify(r.data));
-        setSyncStatus({lastSyncAt: new Date().toISOString(), sp: 'connected'});
+        setSyncStatus({monitoring:'synced', lastSyncAt: new Date().toISOString(), sp: 'connected'});
+      } else {
+        setSyncStatus({monitoring:'local'});
       }
-    } catch {}
+    } catch { setSyncStatus({monitoring:'error'}); }
   };
   const updateMon = (ceId, field, val) => setMonData(prev => {
     const extra = {};
@@ -2983,8 +2985,9 @@ function App({
     (async () => {
       try {
         const ml = await dbGetML();
-        if (ml) setMasterlist(ml);
-      } catch(ex) { console.warn('Masterlist load failed:', ex.message); }
+        if (ml) { setMasterlist(ml); setSyncStatus({masterlist:'synced', lastSyncAt: new Date().toISOString(), sp:'connected'}); }
+        else setSyncStatus({masterlist:'local'});
+      } catch(ex) { console.warn('Masterlist load failed:', ex.message); setSyncStatus({masterlist:'error', sp:'error'}); }
       loadHist();
       loadMonData();
       /* Feature 7: load shared draft from URL ?draft= param */
@@ -3022,12 +3025,14 @@ function App({
   const saveML = async ml => {
     setMasterlist(ml);
     try{window.shicMasterlist=ml;}catch(_e){}
+    setSyncStatus({masterlist:'saving', dirty:true});
     try {
       await dbSaveML(ml);
+      setSyncStatus({masterlist:'synced', lastSyncAt: new Date().toISOString(), sp:'connected', dirty:false});
     } catch (e) {
+      setSyncStatus({masterlist:'error'});
       showToast('Masterlist save failed: ' + e.message, true);
     }
-    ;
   };
   const showToast = (msg, err = false) => {
     setToast(msg);
@@ -3377,12 +3382,15 @@ function App({
 
   /* \u2500\u2500 Load shared drafts list from SharePoint \u2500\u2500 */
   const loadSharedDrafts = async () => {
+    setSyncStatus({drafts:'saving'});
     try {
       const list = await dbGetDrafts();
       setSharedDrafts(list);
+      setSyncStatus({drafts:'synced', lastSyncAt: new Date().toISOString(), sp:'connected'});
       if (list.length === 0) showToast('No shared drafts found.');
     } catch (e) {
       setSharedDrafts([]);
+      setSyncStatus({drafts:'error'});
     }
   };
 
@@ -10251,46 +10259,87 @@ function SyncStatusBar() {
     window.addEventListener('shic:sync:updated', h);
     return () => window.removeEventListener('shic:sync:updated', h);
   }, []);
+
   const spColor = sync.sp === 'connected' ? OK : sync.sp === 'error' ? ERR : '#F59E0B';
-  const spLabel = sync.sp === 'connected' ? '✓ SP Connected' : sync.sp === 'error' ? '✗ SP Error' : '● SP Unknown';
+  const spLabel = sync.sp === 'connected' ? '✓ SP' : sync.sp === 'error' ? '✗ SP Error' : '○ SP';
+
   const lastSync = sync.lastSyncAt ? (() => {
     const mins = Math.round((Date.now() - new Date(sync.lastSyncAt)) / 60000);
     return mins < 1 ? 'just now' : mins < 60 ? mins + 'm ago' : Math.round(mins/60) + 'h ago';
   })() : 'never';
+
+  const entityColor = s => s === 'synced' ? OK : s === 'error' ? ERR : s === 'saving' ? '#F59E0B' : BDR;
+  const entityIcon  = s => s === 'synced' ? '✓' : s === 'error' ? '✗' : s === 'saving' ? '↻' : '○';
+
+  const entities = [
+    {key:'masterlist', label:'Masterlist'},
+    {key:'monitoring', label:'Monitoring'},
+    {key:'drafts',     label:'Drafts'},
+  ];
+
   return React.createElement('div', {
     style: {
-      display: 'flex', alignItems: 'center', gap: 10, padding: '4px 14px',
+      display: 'flex', alignItems: 'center', gap: 8, padding: '3px 14px',
       background: CARD, borderBottom: `1px solid ${BDR}`,
       fontSize: 10, color: MT, flexWrap: 'wrap'
     }
   },
-    React.createElement('span', {style:{fontWeight:700,color:MT,letterSpacing:'.05em',textTransform:'uppercase'}}, 'Sync'),
+    /* SP pill */
     React.createElement('span', {
+      title: 'SharePoint connection',
       style:{display:'flex',alignItems:'center',gap:4,padding:'2px 8px',borderRadius:10,
-             background:spColor+'22',color:spColor,border:'1px solid '+spColor+'44'}
+             background:spColor+'22',color:spColor,border:'1px solid '+spColor+'44',fontWeight:700}
     }, spLabel),
-    sync.dirty && React.createElement('span', {
-      style:{color:'#F59E0B',display:'flex',alignItems:'center',gap:3}
-    }, '● Unsaved changes'),
-    React.createElement('span', {style:{color:MT}}, 'Last sync: ' + lastSync),
-    sync.stale && React.createElement('span', {
-      style:{color:ERR,fontWeight:700}
-    }, '⚠ Stale — SP has newer data'),
+
+    /* divider */
+    React.createElement('span', {style:{color:BDR}}, '|'),
+
+    /* per-entity pills */
+    ...entities.map(({key, label}) => {
+      const s = sync[key] || 'unknown';
+      const c = entityColor(s);
+      return React.createElement('span', {
+        key,
+        title: label + ': ' + s,
+        style:{display:'flex',alignItems:'center',gap:3,color:c,opacity: s==='unknown'?0.4:1}
+      }, entityIcon(s), ' ', label);
+    }),
+
+    /* divider */
+    React.createElement('span', {style:{color:BDR}}, '|'),
+
+    /* last sync */
+    React.createElement('span', {title:'Last successful sync'}, '🕐 ' + lastSync),
+
+    /* dirty */
+    sync.dirty && React.createElement('span', {style:{color:'#F59E0B',fontWeight:700}}, '● Unsaved'),
+
+    /* stale */
+    sync.stale && React.createElement('span', {style:{color:ERR,fontWeight:700}}, '⚠ Stale'),
+
+    /* refresh */
     React.createElement('button', {
       onClick: async () => {
-        setSyncStatus({sp:'unknown'});
+        setSyncStatus({sp:'unknown', masterlist:'saving', monitoring:'saving', drafts:'saving'});
         try {
-          const [mon] = await Promise.all([dbGetMon()]);
-          setSyncStatus({sp:'connected', lastSyncAt: new Date().toISOString(), dirty:false});
-          (window._shicToast||console.log)('Sync refreshed from SharePoint.');
+          const [ml, mon, drafts] = await Promise.all([dbGetML(), dbGetMon(), dbGetDrafts()]);
+          setSyncStatus({
+            sp: 'connected',
+            lastSyncAt: new Date().toISOString(),
+            dirty: false,
+            masterlist: ml ? 'synced' : 'local',
+            monitoring: mon ? 'synced' : 'local',
+            drafts: drafts && drafts.length >= 0 ? 'synced' : 'local',
+          });
+          (window._shicToast||console.log)('All data refreshed from SharePoint.');
         } catch(e) {
-          setSyncStatus({sp:'error'});
+          setSyncStatus({sp:'error', masterlist:'error', monitoring:'error', drafts:'error'});
           (window._shicToast||console.log)('SharePoint sync failed.', true);
         }
       },
-      title: 'Refresh from SharePoint',
+      title: 'Refresh all from SharePoint',
       style:{marginLeft:'auto',background:'none',border:`1px solid ${BDR}`,color:MT,
-             borderRadius:6,padding:'2px 8px',cursor:'pointer',fontSize:10}
+             borderRadius:6,padding:'2px 8px',cursor:'pointer',fontSize:10,whiteSpace:'nowrap'}
     }, '↻ Refresh')
   );
 }

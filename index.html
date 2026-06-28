@@ -5303,7 +5303,7 @@ function App({
     /* Feature 3: Compare button for revisions */
     (()=>{const cn=(e.info?.ceNum||e.ceNum||'');const isRev=/-R\d+$/i.test(cn);if(!isRev)return null;return/*#__PURE__*/React.createElement("button",{style:{...btn('def',true),fontSize:10,padding:'2px 8px'},title:"Compare with base CE",onClick:()=>{const base=cn.replace(/-R\d+$/i,'').toUpperCase();const baseEntry=history.find(h=>(h.info?.ceNum||h.ceNum||'').toUpperCase()===base);setDiffModal({base:baseEntry||null,rev:e.data||e});}},"⚖ Diff");})()
     )));
-  })))))),
+  }))))),
   /* Pagination bar */
   (() => {
     const totalPages = Math.ceil(sortedHistory.length / MON_PAGE_SIZE);

@@ -4747,9 +4747,20 @@ function App({
       // CE Date optional — fall back to Date Received
       const iDate = col('CEDate') >= 0 ? col('CEDate') : iRecvDate;
 
-      const statusMap = {'done':'Submitted','cancelled':'Cancelled','no quote':'On Hold',
-        'ongoing':'Ongoing','pending':'Pending','for site insp':'For site insp.',
-        'for approval':'For Approval','submitted':'Submitted','no access':'No Access'};
+      const statusMap = {
+        'done':'Submitted', 'submitted':'Submitted',
+        'ongoing':'Ongoing',
+        'pending':'Pending',
+        'for site insp':'For site insp.',
+        'for approval':'For Approval',
+        'waiting':'Waiting in...', 'waiting in':'Waiting in...',
+        'on hold':'On Hold', 'onhold':'On Hold',
+        'cancelled':'Cancelled',
+        'sourcing':'Sourcing',
+        'no quote':'No Quote',
+        'no access':'No Access',
+        'approved':'Approved',
+      };
 
       const dataRows = rows.slice(headerIdx + 1).filter(r =>
         r && r[iCeNum] && String(r[iCeNum]).trim().match(/CE-\d{4}-\d+/i));
@@ -4782,8 +4793,10 @@ function App({
         const ceNum = String(r[iCeNum]||'').trim().toUpperCase();
         if (!ceNum) continue;
 
-        const rawStatus = String(r[iStatus]||'').trim().toLowerCase();
-        const appStatus = Object.entries(statusMap).find(([k]) => rawStatus.startsWith(k))?.[1] || 'Pending';
+        const rawStatus = String(r[iStatus]||'').trim();
+        const rawLower = rawStatus.toLowerCase();
+        // Try map first; if no match use the raw value as-is so nothing is lost
+        const appStatus = Object.entries(statusMap).find(([k]) => rawLower.startsWith(k))?.[1] || rawStatus || 'Pending';
         const estimatorName = String(r[iCeName]||'').trim();
 
         monByCeNum[ceNum] = {

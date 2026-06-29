@@ -2756,7 +2756,7 @@ function AdminPanel({
       gap: 4,
       marginLeft: 8
     }
-  }, [['pending', 'Pending', pending.length], ['users', 'All Users', active.length + others.length]].map(([secId, secLabel, secCount]) => /*#__PURE__*/React.createElement("button", {
+  }, [['pending', 'Pending', pending.length], ['users', 'All Users', active.length + others.length], ['audit', 'Audit Log', 0]].map(([secId, secLabel, secCount]) => /*#__PURE__*/React.createElement("button", {
     key: secId,
     onClick: () => setSection(secId),
     style: btn(section === secId ? 'acc' : 'def', true)
@@ -2970,7 +2970,41 @@ function AdminPanel({
   }, h)))), /*#__PURE__*/React.createElement("tbody", null, [...active, ...others].map(u => /*#__PURE__*/React.createElement(URow, {
     key: u.id,
     u: u
-  })))))), /*#__PURE__*/React.createElement("div", {
+  })))))), !busy && section === 'audit' && /*#__PURE__*/React.createElement("div", {style: CS}, (()=>{
+    const log = LS.get('auditlog') || [];
+    const actionColor = {role_change: INFO, delete_ce: ERR, save_ce: OK, xlsx_import: ACC};
+    return /*#__PURE__*/React.createElement(React.Fragment, null,
+      /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',gap:8,marginBottom:10}},
+        /*#__PURE__*/React.createElement("span", {style:{fontWeight:700,fontSize:13}}, "Audit Log"),
+        /*#__PURE__*/React.createElement("span", {style:{color:MT,fontSize:11}}, log.length + " entries"),
+        log.length > 0 && /*#__PURE__*/React.createElement("button", {
+          style:{...btn('danger',true),fontSize:11,marginLeft:'auto'},
+          onClick:()=>{ if(confirm('Clear audit log?')){LS.set('auditlog',[]);toast2('Audit log cleared.');} }
+        }, "Clear Log")
+      ),
+      log.length === 0
+        ? /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:12}}, "No audit events yet.")
+        : /*#__PURE__*/React.createElement("div", {style:{overflowX:'auto'}},
+            /*#__PURE__*/React.createElement("table", {style:{width:'100%',borderCollapse:'collapse',fontSize:11}},
+              /*#__PURE__*/React.createElement("thead", null,
+                /*#__PURE__*/React.createElement("tr", null,
+                  ['Time','Action','Detail','User'].map(h=>/*#__PURE__*/React.createElement("th",{key:h,style:{textAlign:'left',padding:'4px 8px',color:MT,borderBottom:'1px solid '+BDR}},h))
+                )
+              ),
+              /*#__PURE__*/React.createElement("tbody", null, log.map((e,i)=>
+                /*#__PURE__*/React.createElement("tr",{key:i,style:{borderBottom:'1px solid '+BDR+'44'}},
+                  /*#__PURE__*/React.createElement("td",{style:{padding:'4px 8px',color:MT,whiteSpace:'nowrap'}},new Date(e.ts).toLocaleString()),
+                  /*#__PURE__*/React.createElement("td",{style:{padding:'4px 8px'}},
+                    /*#__PURE__*/React.createElement("span",{style:{padding:'1px 6px',borderRadius:4,fontSize:10,background:(actionColor[e.action]||MT)+'22',color:actionColor[e.action]||MT,fontWeight:600}},e.action)
+                  ),
+                  /*#__PURE__*/React.createElement("td",{style:{padding:'4px 8px'}},e.detail||'—'),
+                  /*#__PURE__*/React.createElement("td",{style:{padding:'4px 8px',color:MT}},e.user||'—')
+                )
+              ))
+            )
+          )
+    );
+  })()), /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
       marginTop: 8,
@@ -3723,7 +3757,20 @@ function App({
     const ceNum = (info.ceNum || '').trim().toUpperCase();
     if (ceNum !== (info.ceNum || '').trim()) setInfo(p => ({...p, ceNum}));
     if (!ceNum) {
-      showToast('Please enter a CE Number before saving.', true);
+      showToast('CE Number is required.', true);
+      return;
+    }
+    if (!/^[A-Z0-9\-_\/\.]{2,30}$/.test(ceNum)) {
+      showToast('CE Number must be 2–30 characters, letters/numbers/dashes only.', true);
+      return;
+    }
+    if (!(info.client || '').trim()) {
+      showToast('Client name is required.', true);
+      return;
+    }
+    const badCost = [...(mp||[]), ...(tools||[]), ...(mats||[]), ...(ppe||[])].find(r => Number(r.cost||r.rate||0) < 0);
+    if (badCost) {
+      showToast('All cost/rate values must be zero or positive.', true);
       return;
     }
     const allHist = await dbGetHistory(null, true).catch(() => []);

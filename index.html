@@ -4952,13 +4952,14 @@ function App({
     ref: monTopScrollRef,
     style: {overflowX: 'auto', overflowY: 'hidden', height: 13, background: SURF, border: `1px solid ${BDR}`, borderTop: 'none', borderBottom: 'none'},
     onScroll: e => { if(monTableWrapRef.current && monTableWrapRef.current.scrollLeft !== e.target.scrollLeft) monTableWrapRef.current.scrollLeft = e.target.scrollLeft; }
-  }, /*#__PURE__*/React.createElement("div", {style: {minWidth: 1300, height: 1}})),
+  }, /*#__PURE__*/React.createElement("div", {style: {minWidth: 1470, height: 1}})),
   /*#__PURE__*/React.createElement("div", {
     ref: monTableWrapRef,
     onScroll: e => { if(monTopScrollRef.current && monTopScrollRef.current.scrollLeft !== e.target.scrollLeft) monTopScrollRef.current.scrollLeft = e.target.scrollLeft; },
     style: {
       overflowX: 'auto',
-      overflowY: 'clip',
+      overflowY: 'auto',
+      maxHeight: 'calc(100vh - 200px)',
       background: CARD,
       borderRadius: 8,
       borderTopLeftRadius: 0,
@@ -4971,13 +4972,13 @@ function App({
       width: '100%',
       borderCollapse: 'collapse',
       fontSize: 11,
-      minWidth: 1200
+      minWidth: 1470
     }
   }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", {
     style: {
       background: SURF,
       position: 'sticky',
-      top: 152,
+      top: 0,
       zIndex: 2
     }
   }, [['ceeName', 'Estimator', 80], ['companyDesig', 'Co.', 60], ['ceNum', 'CE No.', 120], ['designation', 'Discipline', 90], ['customer', 'Customer', 100], ['jobTitle', 'Job Title', 200], ['dateRecv', 'Date Recv.', 95], ['deadline', 'Deadline', 95], ['deadlineDays', 'Days Left', 65], ['dateSubmitted', 'Date Submitted', 105], ['status', 'Status', 120], ['receivedBy', 'Received By', 100], ['remarks', 'Remarks', 160]].map(([col, label, w]) => /*#__PURE__*/React.createElement("th", {

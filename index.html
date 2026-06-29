@@ -162,7 +162,7 @@ const BLANK_INFO = {
   location: "",
   attention: "SALES DEPARTMENT",
   endUser: "C/O SALES",
-  projType: "electrical",
+  projType: "Electrical",
   description: "",
   dept: "",
   status: "FOR REVIEW",
@@ -4887,6 +4887,7 @@ function App({
           remarks: String(r[iRemarks]||'').trim(),
           preparedBy: estimatorName,
           ceeName: estimatorName,
+          designation: String(r[iDisc]||'').trim(),
         };
 
         if (existingMap[ceNum]) {
@@ -5297,11 +5298,12 @@ function App({
         width: '100%'
       },
       key: e.id + 'designation',
-      defaultValue: m.designation || 'MECHANICAL',
+      defaultValue: m.designation || m.discipline || e.info?.discipline || e.info?.projType || '',
       onBlur: ev => {
-        if (ev.target.value !== String(m.designation || 'MECHANICAL')) updateMon(e.id, 'designation', ev.target.value);
+        const cur = m.designation || m.discipline || e.info?.discipline || e.info?.projType || '';
+        if (ev.target.value !== String(cur)) updateMon(e.id, 'designation', ev.target.value);
       }
-    }) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11}}, m.designation||'MECHANICAL')), /*#__PURE__*/React.createElement("td", {
+    }) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11}}, m.designation || m.discipline || e.info?.discipline || e.info?.projType || '')), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
         padding: '4px 6px'
@@ -6893,7 +6895,7 @@ function App({
         <tr><td style="border:none">Revision Date:</td><td style="border:none">${co.revDate}</td></tr></table>
       </td></tr>
       <tr><td colspan="3" style="text-align:center;background:#000;color:#fff;font-weight:bold;font-size:9pt;padding:3px;border:1px solid #000">${title}</td></tr>
-      <tr><td colspan="3" style="border:none;text-align:right;font-size:7.5pt;padding:1px 4px"><b>CE No.:</b>&nbsp;${info.ceNum || ''}&nbsp;&nbsp;<b>PROJECT TYPE:</b>&nbsp;${ceType.toUpperCase()}&nbsp;&nbsp;<b>DATE:</b>&nbsp;${info.date||''}</td></tr>
+      <tr><td colspan="3" style="border:none;text-align:right;font-size:7.5pt;padding:1px 4px"><b>CE No.:</b>&nbsp;${info.ceNum || ''}&nbsp;&nbsp;<b>CE TYPE:</b>&nbsp;${ceType.toUpperCase()}&nbsp;&nbsp;<b>DATE:</b>&nbsp;${info.date||''}</td></tr>
     </table>`;
 
     const infoTable = `<table class="bdr" style="margin-bottom:5px;font-size:7.5pt">
@@ -8185,7 +8187,7 @@ tab === 'dashboard' && (() => {
     }
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     style: LBL
-  }, "Project Type"), /*#__PURE__*/React.createElement("select", {
+  }, "Discipline"), /*#__PURE__*/React.createElement("select", {
     style: INP,
     value: info.projType,
     onChange: e => setInfo(p => ({
@@ -8193,10 +8195,14 @@ tab === 'dashboard' && (() => {
       projType: e.target.value
     }))
   }, /*#__PURE__*/React.createElement("option", {
-    value: "electrical"
+    value: "Electrical"
   }, "Electrical"), /*#__PURE__*/React.createElement("option", {
-    value: "mechanical"
-  }, "Mechanical"))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    value: "Mechanical"
+  }, "Mechanical"), /*#__PURE__*/React.createElement("option", {
+    value: "Civil"
+  }, "Civil"), /*#__PURE__*/React.createElement("option", {
+    value: "General"
+  }, "General"))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     style: LBL
   }, "Department"), /*#__PURE__*/React.createElement("input", {
     style: INP,

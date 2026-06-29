@@ -6519,6 +6519,20 @@ function App({
       }])
     })
   }, "From Masterlist"), /*#__PURE__*/React.createElement("button", {
+    style: btn('ok', true),
+    title: "Update all costs to current masterlist rates",
+    onClick: () => {
+      const mlItems = masterlist[mlType] || [];
+      let updated = 0;
+      set(p => p.map(r => {
+        const f = mlItems.find(m => m.desc && r.desc && m.desc.toUpperCase() === r.desc.toUpperCase());
+        if (!f) return r;
+        updated++;
+        return {...r, cost: f.cost !== undefined ? f.cost : (f.rate !== undefined ? f.rate : r.cost)};
+      }));
+      showToast(updated ? `Updated ${updated} rate(s) from masterlist.` : 'No matching items found in masterlist.', !updated);
+    }
+  }, "↺ Sync Rates"), /*#__PURE__*/React.createElement("button", {
     style: btn('def', true),
     onClick: () => set(p => [...p, mkRes()])
   }, "+ Add"), /*#__PURE__*/React.createElement("label", {

@@ -3215,7 +3215,7 @@ function App({
   const toolsT = useMemo(() => tools.reduce((s, r) => s + N(r.qty) * N(r.cost), 0), [tools]);
   const matsT = useMemo(() => mats.reduce((s, r) => s + N(r.qty) * N(r.cost), 0), [mats]);
   const ppeT = useMemo(() => ppe.reduce((s, r) => s + N(r.qty) * N(r.cost), 0), [ppe]);
-  const miscT = useMemo(() => MISC_DEF[ceType].reduce((s, [k]) => {
+  const miscT = useMemo(() => (MISC_DEF[ceType] || MISC_DEF['onsite']).reduce((s, [k]) => {
     const arr = Array.isArray(misc[k]) ? misc[k] : [];
     return s + arr.reduce((t, r) => t + N(r.qty) * N(r.cost), 0);
   }, 0), [misc, ceType]);
@@ -4893,7 +4893,7 @@ function App({
           updated++;
         } else {
           toInsert.push({
-            ceType: String(r[iDisc]||'').toLowerCase().includes('elec') ? 'electrical' : 'mechanical',
+            ceType: 'onsite',
             info: {
               ceNum,
               client: String(r[iClient]||'').trim(),

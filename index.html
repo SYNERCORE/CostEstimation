@@ -3979,7 +3979,7 @@ function App({
       return [r.role, N(r.pax), N(r.days), sh?.label, sh?.mult, N(r.rate), N(r.pax) * N(r.days) * N(r.rate) * (sh?.mult || 1)];
     }), ['', '', '', '', '', 'Subtotal:', mpSub], ['Benefits 20%:', '', '', '', '', '', ben], ['', '', '', '', '', 'TOTAL:', mpTot]];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s3), 'Manpower Cost');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['MISCELLANEOUS'], [], ...MISC_DEF[ceType].map(([k, l]) => [l, N(misc[k])]), [], ['TOTAL:', miscT]]), 'MISC.');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['MISCELLANEOUS'], [], ...(MISC_DEF[ceType] || MISC_DEF.onsite).map(([k, l]) => [l, N(misc[k])]), [], ['TOTAL:', miscT]]), 'MISC.');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['SUMMARY'], ['Grand Total:', grand], ['Unit Price (qty=' + info.qty + '):', unitP]]), 'Summary');
     XLSX.writeFile(wb, info.ceNum + '_' + ceType + '.xlsx');
     showToast('Excel exported - 5 sheets!');
@@ -9884,7 +9884,7 @@ tab === 'dashboard' && (() => {
     total: ppeT,
     label: "Personal Protective Equipment (PPE)",
     mlType: "ppe"
-  }), tab === 'misc' && /*#__PURE__*/React.createElement("div", null, MISC_DEF[ceType].map(([miscKey, label]) => {
+  }), tab === 'misc' && /*#__PURE__*/React.createElement("div", null, (MISC_DEF[ceType] || MISC_DEF.onsite).map(([miscKey, label]) => {
     const rows = Array.isArray(misc[miscKey]) ? misc[miscKey] : [];
     const catTotal = rows.reduce((s, r) => s + N(r.qty) * N(r.cost), 0);
     const addItem = () => setMisc(p => ({

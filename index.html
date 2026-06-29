@@ -5959,14 +5959,14 @@ function App({
       const del = id => setRows(safeRows.filter(r => r.id !== id));
       const autoFill = (id, name) => {
         const m = mlItems.find(x => (x.role || x.desc || '').toUpperCase() === name.toUpperCase());
-        if (m) setRows(p => p.map(r => r.id === id ? {
+        if (m) setRows(safeRows.map(r => r.id === id ? {
           ...r,
           name,
           code: m.code || r.code,
           cat: m.category || r.cat,
           cost: m.rate || m.cost || r.cost,
           uom: m.uom || r.uom
-        } : r));else setRows(p => p.map(r => r.id === id ? {
+        } : r));else setRows(safeRows.map(r => r.id === id ? {
           ...r,
           name
         } : r));

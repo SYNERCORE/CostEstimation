@@ -2171,6 +2171,10 @@ function FbSetupPanel(){
     }
     setBusy(false);
   };
+  React.useEffect(()=>{
+    const saved=getSPConfig();
+    if(saved.siteUrl&&saved.clientId)handleConnect();
+  },[]);
   const pfx=cfg.listPrefix||'SHICCE';const stC=status==='connected'?OK:status.startsWith('error')?ERR:MT;
   return React.createElement('div',null,
     React.createElement('div',{style:{fontWeight:700,marginBottom:12,fontSize:13,display:'flex',alignItems:'center',gap:8}},'SP SharePoint Sync',React.createElement('span',{style:{fontSize:10,padding:'2px 8px',borderRadius:10,background:stC+'22',color:stC,fontWeight:700,marginLeft:4}},status)),

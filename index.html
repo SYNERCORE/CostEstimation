@@ -3208,6 +3208,7 @@ function App({
   const [mlQ, setMlQ] = useState('');
   const [mlPage, setMlPage] = useState(0);
   const [mlQuickAdd, setMlQuickAdd] = useState('');
+  const mlSaveTimer = React.useRef(null);
   const [picker, setPicker] = useState(null);
   const [confirmDel, setConfirmDel] = useState(null);
   const [docFile, setDocFile] = useState(null);
@@ -4560,13 +4561,23 @@ function App({
       vehicles: ['Transport', 'Fuel', 'Allowance', 'Meals', 'Travel', 'Accommodation', 'Personnel', 'Equipment Rental', 'Permit / Fee', 'Miscellaneous']
     };
     const filtered = (masterlist[mlTab] || []).filter(r => !mlQ || (r.role || r.desc || '').toLowerCase().includes(mlQ.toLowerCase()) || r.category.toLowerCase().includes(mlQ.toLowerCase()));
-    const updML = (id, k, v) => saveML({
-      ...masterlist,
-      [mlTab]: masterlist[mlTab].map(r => r.id === id ? {
-        ...r,
-        [k]: v
-      } : r)
-    });
+    const updML = (id, k, v) => {
+      const next = { ...masterlist, [mlTab]: masterlist[mlTab].map(r => r.id === id ? { ...r, [k]: v } : r) };
+      setMasterlist(next);
+      try { window.shicMasterlist = next; } catch (_e) {}
+      setSyncStatus(s => ({ ...s, dirty: true }));
+      if (mlSaveTimer.current) clearTimeout(mlSaveTimer.current);
+      mlSaveTimer.current = setTimeout(async () => {
+        setSyncStatus({ masterlist: 'saving', dirty: true });
+        try {
+          await dbSaveML(next);
+          setSyncStatus({ masterlist: 'synced', lastSyncAt: new Date().toISOString(), sp: 'connected', dirty: false });
+        } catch (e) {
+          setSyncStatus({ masterlist: 'error' });
+          showToast('Masterlist save failed: ' + e.message, true);
+        }
+      }, 800);
+    };
     const pfxMap = {
       manpower: 'MP',
       tools: 'TL',

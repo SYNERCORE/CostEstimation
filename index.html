@@ -8735,7 +8735,21 @@ tab === 'dashboard' && (() => {
     }, "ML"), /*#__PURE__*/React.createElement("button", {
       style: btn('def', true),
       onClick: addRow
-    }, "+ Add"), /*#__PURE__*/React.createElement("label", {
+    }, "+ Add"), /*#__PURE__*/React.createElement("button", {
+      style: btn('ok', true),
+      title: "Update all rates in this shift to current masterlist rates",
+      onClick: () => {
+        let updated = 0;
+        setMp(p => p.map(r => {
+          if (r.shift !== shiftKey) return r;
+          const f = masterlist.manpower.find(m => m.role && r.role && m.role.toUpperCase() === r.role.toUpperCase());
+          if (!f) return r;
+          updated++;
+          return {...r, rate: f.rate, perDiem: f.perDiem !== undefined ? f.perDiem : r.perDiem};
+        }));
+        showToast(updated ? `Updated ${updated} rate(s) from masterlist.` : 'No matching roles found in masterlist.', !updated);
+      }
+    }, "↺ Sync Rates"), /*#__PURE__*/React.createElement("label", {
       style: {...btn('def', true), cursor: 'pointer'},
       title: "Import from Excel — columns: Role, PAX, Days, Rate"
     }, "📥 XLS", /*#__PURE__*/React.createElement("input", {

@@ -5134,7 +5134,7 @@ function App({
         if (ev.target.value !== String(m.jobTitle || jobTitle)) updateMon(e.id, 'jobTitle', ev.target.value);
       },
       placeholder: jobTitle
-    }) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',display:'block',maxWidth:200}}, m.jobTitle||jobTitle||'—')), /*#__PURE__*/React.createElement("td", {
+    }) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11,whiteSpace:'normal',wordBreak:'break-word',display:'block',maxWidth:200}}, m.jobTitle||jobTitle||'—')), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
         padding: '4px 6px',

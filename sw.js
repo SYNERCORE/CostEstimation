@@ -1,4 +1,4 @@
-const CACHE='shic-ce-v5';
+const CACHE='shic-ce-v6';
 const CDN=[
   'https://unpkg.com/react@18/umd/react.production.min.js',
   'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
@@ -22,7 +22,7 @@ self.addEventListener('fetch',e=>{
   /* Cache-first for CDN scripts */
   if(CDN.some(u=>e.request.url.startsWith(u))){
     e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>{
-      caches.open(CACHE).then(c=>c.put(e.request,res.clone()));return res;
+      const clone=res.clone();caches.open(CACHE).then(c=>c.put(e.request,clone));return res;
     })));
     return;
   }

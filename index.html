@@ -2960,10 +2960,12 @@ function App({
       if (r && r.empty) {
         /* SP reachable but list is empty — purge local cache */
         setMonData({});
+        setMonSpIds(new Set());
         try { localStorage.removeItem(MON_KEY); } catch {}
         setSyncStatus({monitoring:'synced', lastSyncAt: new Date().toISOString(), sp:'connected'});
       } else if (r && r.data && Object.keys(r.data).length > 0) {
         setMonData(r.data);
+        setMonSpIds(new Set(Object.keys(_monSpIdCache)));
         try { localStorage.setItem(MON_KEY, JSON.stringify(r.data)); } catch {}
         setSyncStatus({monitoring:'synced', lastSyncAt: new Date().toISOString(), sp: 'connected'});
         if (r.legacy) {
@@ -4656,6 +4658,7 @@ function App({
   const [monSearch, setMonSearch] = useState('');
   const [monStatusFilter, setMonStatusFilter] = useState(new Set());
   const [showStatusFilter, setShowStatusFilter] = useState(false);
+  const [monSpIds, setMonSpIds] = useState(new Set());
   const [monSortCol, setMonSortCol] = useState('savedAt');
   const [monSortDir, setMonSortDir] = useState('desc');
   const [showStatusMgr, setShowStatusMgr] = useState(false);
@@ -5156,7 +5159,10 @@ function App({
         if (ev.target.value !== String(m.ceeName || m.preparedBy || e.savedBy || '')) updateMon(e.id, 'ceeName', ev.target.value);
       },
       placeholder: "Estimator"
-    }) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11,fontWeight:700,color:CE_CFG[e.ceType]?.color||ACC}}, m.ceeName||m.preparedBy||e.savedBy||'—')), /*#__PURE__*/React.createElement("td", {
+    }) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11,fontWeight:700,color:CE_CFG[e.ceType]?.color||ACC}}, m.ceeName||m.preparedBy||e.savedBy||'—'), /*#__PURE__*/React.createElement("span", {
+      title: monSpIds.has(String(e.id)) ? 'Synced with SharePoint' : 'Local only — no SP record yet',
+      style: {fontSize:9, marginLeft:3, color: monSpIds.has(String(e.id)) ? OK : BDR, cursor:'default'}
+    }, monSpIds.has(String(e.id)) ? '☁' : '○')), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
         padding: '4px 6px'

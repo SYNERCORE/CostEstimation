@@ -3264,7 +3264,7 @@ function App({
   const [copyMenu, setCopyMenu] = useState(null); /* {fromShift, anchorEl} */
   const fileRef = useRef(null);
   const isAdmin = currentUser.role === 'admin';
-  const cfg = CE_CFG[ceType];
+  const cfg = CE_CFG[ceType] || CE_CFG.onsite || {};
   const TABS = [...CE_TABS, ...(isAdmin ? [{
     id: 'admin',
     label: 'Users'
@@ -5041,7 +5041,7 @@ function App({
 
       // Column indices — robust to files with or without CE Date
       const iCeNum=col('CENo'), iCeName=col('CEName'), iComp=col('CompanyDesignation'),
-            iDisc=col('Designation'), iClient=col('Customer'),
+            iDisc=headers.findIndex(h => { const c=h.toLowerCase().replace(/\s+/g,''); return c==='designation'||c==='discipline'; }), iClient=col('Customer'),
             iTitle=col('JobTitle'), iRecvDate=col('DateRecieved'), iDeadline=col('Deadline'),
             iSubmDate=col('DateSubmitted');
       // Status column header is blank in Google Sheets export — fallback to position after Date Submitted

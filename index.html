@@ -4654,6 +4654,8 @@ function App({
   const getStatusColor = s => STATUS_COLOR_MAP[s] || ACC;
   const [newStatusInput, setNewStatusInput] = useState('');
   const [monSearch, setMonSearch] = useState('');
+  const [monStatusFilter, setMonStatusFilter] = useState(new Set());
+  const [showStatusFilter, setShowStatusFilter] = useState(false);
   const [monSortCol, setMonSortCol] = useState('savedAt');
   const [monSortDir, setMonSortDir] = useState('desc');
   const [showStatusMgr, setShowStatusMgr] = useState(false);
@@ -4664,9 +4666,13 @@ function App({
   const monTableWrapRef = React.useRef(null);
   const sortedHistory = useMemo(() => {
     const filtered = history.filter(e => {
+      const m = monData[e.id] || {};
+      if (monStatusFilter.size > 0) {
+        const s = m.status || '';
+        if (!monStatusFilter.has(s)) return false;
+      }
       if (!monSearch) return true;
       const q = monSearch.toLowerCase();
-      const m = monData[e.id] || {};
       return (e.info?.ceNum || '').toLowerCase().includes(q) || (e.info?.client || '').toLowerCase().includes(q) || (e.info?.description || '').toLowerCase().includes(q) || (m.customer || '').toLowerCase().includes(q) || (m.receivedBy || '').toLowerCase().includes(q) || (m.remarks || '').toLowerCase().includes(q);
     });
     return [...filtered].sort((a, b) => {
@@ -4693,7 +4699,7 @@ function App({
       if (va > vb) return monSortDir === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [history, monData, monSearch, monSortCol, monSortDir]);
+  }, [history, monData, monSearch, monStatusFilter, monSortCol, monSortDir]);
   const toggleSort = col => {
     if (monSortCol === col) setMonSortDir(d => d === 'asc' ? 'desc' : 'asc');else {
       setMonSortCol(col);
@@ -4884,6 +4890,45 @@ function App({
     value: monSearch,
     onChange: e => { setMonSearch(e.target.value); setMonPage(0); }
   }), /*#__PURE__*/React.createElement("div", {
+    style: {position: 'relative', display: 'inline-block'}
+  }, /*#__PURE__*/React.createElement("button", {
+    style: {...btn(monStatusFilter.size > 0 ? 'acc' : 'def', true), minWidth: 90},
+    onClick: () => { setShowStatusFilter(p => !p); setShowStatusMgr(false); }
+  }, "▼ Status", monStatusFilter.size > 0 ? ` (${monStatusFilter.size})` : ''),
+  showStatusFilter && /*#__PURE__*/React.createElement("div", {
+    style: {position:'absolute', top:'110%', left:0, zIndex:200, background:SURF, border:`1px solid ${BDR}`, borderRadius:8, padding:8, minWidth:160, boxShadow:'0 4px 16px #0006'}
+  }, /*#__PURE__*/React.createElement("div", {style:{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6}},
+    /*#__PURE__*/React.createElement("span", {style:{fontSize:11, fontWeight:700, color:MT}}, "Filter by Status"),
+    monStatusFilter.size > 0 && /*#__PURE__*/React.createElement("button", {
+      style:{...btn('danger',true), fontSize:10, padding:'1px 6px'},
+      onClick: () => { setMonStatusFilter(new Set()); setMonPage(0); }
+    }, "Clear")
+  ),
+  allStatuses.map(s =>
+    /*#__PURE__*/React.createElement("label", {
+      key: s,
+      style: {display:'flex', alignItems:'center', gap:8, padding:'4px 2px', cursor:'pointer', fontSize:12}
+    },
+    /*#__PURE__*/React.createElement("input", {
+      type: "checkbox",
+      checked: monStatusFilter.has(s),
+      onChange: () => {
+        setMonStatusFilter(prev => {
+          const next = new Set(prev);
+          next.has(s) ? next.delete(s) : next.add(s);
+          return next;
+        });
+        setMonPage(0);
+      }
+    }),
+    /*#__PURE__*/React.createElement("span", {
+      style: {
+        display:'inline-block', width:8, height:8, borderRadius:'50%',
+        background: STATUS_COLOR_MAP[s] || ACC, flexShrink:0
+      }
+    }),
+    s)
+  ))), /*#__PURE__*/React.createElement("div", {
     style: {
       marginLeft: 'auto',
       display: 'flex',

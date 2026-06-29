@@ -1080,6 +1080,31 @@ async function spPost(l,data){const su=getSiteURL();if(!su)throw new Error('SP n
 async function spPatch(l,id,data){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*','X-HTTP-Method':'MERGE',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'PATCH',credentials:'omit',headers:h,body:JSON.stringify(data)});if(!r.ok)throw new Error('SP patch '+l+':'+r.status);}
 async function spDelete(l,id){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'DELETE',credentials:'omit',headers:h});if(!r.ok)throw new Error('SP delete '+l+':'+r.status);}
 
+async function spGetAttachments(listName, itemId){
+  const su=getSiteURL(); if(!su) return [];
+  const tok=await getSPToken(); if(!tok) return [];
+  const h={'Accept':'application/json;odata=nometadata','Authorization':'Bearer '+tok};
+  const r=await fetch(`${su}/_api/web/lists/getbytitle('${listName}')/items(${itemId})/AttachmentFiles`,{credentials:'omit',headers:h});
+  if(!r.ok) return [];
+  const json=await r.json();
+  return json.value||[];
+}
+async function spAddAttachment(listName, itemId, fileName, fileBuffer){
+  const su=getSiteURL(); if(!su) throw new Error('No SP site');
+  const {digest,token}=await spDigest();
+  const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/octet-stream','X-RequestDigest':digest,...(token?{'Authorization':'Bearer '+token}:{})};
+  const r=await fetch(`${su}/_api/web/lists/getbytitle('${listName}')/items(${itemId})/AttachmentFiles/add(FileName='${encodeURIComponent(fileName)}')`,{method:'POST',credentials:'omit',headers:h,body:fileBuffer});
+  if(!r.ok) throw new Error('SP attach '+r.status);
+  return await r.json();
+}
+async function spDeleteAttachment(listName, itemId, fileName){
+  const su=getSiteURL(); if(!su) throw new Error('No SP site');
+  const {digest,token}=await spDigest();
+  const h={'Accept':'application/json;odata=nometadata','X-RequestDigest':digest,'X-HTTP-Method':'DELETE','IF-MATCH':'*',...(token?{'Authorization':'Bearer '+token}:{})};
+  const r=await fetch(`${su}/_api/web/lists/getbytitle('${listName}')/items(${itemId})/AttachmentFiles/getByFileName('${encodeURIComponent(fileName)}')`,{method:'POST',credentials:'omit',headers:h});
+  if(!r.ok) throw new Error('SP del attach '+r.status);
+}
+
 async function dbGetUsers(){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Users'),'','Id,Title,shicName,shicHash,shicRole,shicStatus,shicEmail,Created');return r.filter(u=>u&&u.Title).map(u=>({id:u.Id,username:u.Title,name:u.shicName||'',hash:u.shicHash||'',role:u.shicRole||'user',status:u.shicStatus||'pending',email:u.shicEmail||'',createdAt:u.Created}));}catch(e){console.warn('dbGetUsers:',e.message);}}return(LS.get('users')||[]).filter(u=>u&&u.username);}
 async function dbCreateUser(u){if(USE_SP||getSiteURL()){try{const r=await spPost(spList('Users'),{Title:u.username,shicName:u.name,shicHash:u.hash,shicRole:u.role,shicStatus:u.status,shicEmail:u.email||''});return{...u,id:r.Id};}catch(e){console.warn('dbCreateUser:',e.message);}}const all=LS.get('users')||[];const nu={...u,id:Date.now()};LS.set('users',[...all,nu]);return nu;}
 async function dbUpdateUser(id,data){if(USE_SP||getSiteURL()){try{const sp={};if(data.status!==undefined)sp.shicStatus=data.status;if(data.role!==undefined)sp.shicRole=data.role;if(data.hash!==undefined)sp.shicHash=data.hash;if(data.name!==undefined)sp.shicName=data.name;await spPatch(spList('Users'),id,sp);return;}catch(e){console.warn('dbUpdateUser:',e.message);}}LS.set('users',(LS.get('users')||[]).map(u=>u.id===id?{...u,...data}:u));}
@@ -4665,8 +4690,56 @@ function App({
   const [monPage, setMonPage] = useState(0);
   const MON_PAGE_SIZE = 20;
   const [editingRow, setEditingRow] = React.useState(null);
+  const [attachPanel, setAttachPanel] = React.useState(null); // ceId or null
+  const [attachList, setAttachList] = React.useState([]);
+  const [attachBusy, setAttachBusy] = React.useState(false);
   const monTopScrollRef = React.useRef(null);
   const monTableWrapRef = React.useRef(null);
+
+  const openAttachPanel = async (ceId) => {
+    setAttachPanel(ceId); setAttachList([]); setAttachBusy(true);
+    try {
+      const spId = _monSpIdCache[ceId];
+      if (!spId) { setAttachBusy(false); return; }
+      const files = await spGetAttachments(spList('Monitoring'), spId);
+      setAttachList(files);
+    } catch(e) { showToast('Could not load attachments: ' + e.message, true); }
+    setAttachBusy(false);
+  };
+
+  const handleAttachUpload = async (ceId, ceNum, files) => {
+    if (!files.length) return;
+    setAttachBusy(true);
+    try {
+      let spId = _monSpIdCache[ceId];
+      if (!spId) {
+        // Ensure monitoring record exists first
+        await dbSaveMonEntry(ceId, ceNum, monData[ceId] || {});
+        spId = _monSpIdCache[ceId];
+      }
+      if (!spId) throw new Error('Could not create monitoring record');
+      for (const file of Array.from(files)) {
+        const buf = await file.arrayBuffer();
+        await spAddAttachment(spList('Monitoring'), spId, file.name, buf);
+      }
+      const updated = await spGetAttachments(spList('Monitoring'), spId);
+      setAttachList(updated);
+      showToast(`${files.length} file(s) uploaded.`);
+    } catch(e) { showToast('Upload failed: ' + e.message, true); }
+    setAttachBusy(false);
+  };
+
+  const handleAttachDelete = async (ceId, fileName) => {
+    setAttachBusy(true);
+    try {
+      const spId = _monSpIdCache[ceId];
+      if (!spId) throw new Error('No SP record');
+      await spDeleteAttachment(spList('Monitoring'), spId, fileName);
+      setAttachList(p => p.filter(f => f.FileName !== fileName));
+      showToast('Attachment deleted.');
+    } catch(e) { showToast('Delete failed: ' + e.message, true); }
+    setAttachBusy(false);
+  };
   const sortedHistory = useMemo(() => {
     const filtered = history.filter(e => {
       const m = monData[e.id] || {};
@@ -5411,7 +5484,11 @@ function App({
     }, /*#__PURE__*/React.createElement("button", {
       style: {...btn(editingRow === e.id ? 'ok' : 'def', true), fontSize: 10, padding: '2px 8px'},
       onClick: () => setEditingRow(editingRow === e.id ? null : e.id)
-    }, editingRow === e.id ? '✓ Done' : '✎ Edit'), (e.data || e.info) && /*#__PURE__*/React.createElement("button", {
+    }, editingRow === e.id ? '✓ Done' : '✎ Edit'), /*#__PURE__*/React.createElement("button", {
+      style: {...btn(attachPanel === e.id ? 'acc' : 'def', true), fontSize: 10, padding: '2px 8px'},
+      title: "Attachments (Drawings, TOR, etc.)",
+      onClick: () => { if (attachPanel === e.id) { setAttachPanel(null); } else { openAttachPanel(e.id); } }
+    }, '📎', monSpIds.has(String(e.id)) && attachList.length > 0 && attachPanel === e.id ? ` ${attachList.length}` : ''), (e.data || e.info) && /*#__PURE__*/React.createElement("button", {
       style: {
         ...btn('acc', true),
         fontSize: 10,
@@ -7806,6 +7883,72 @@ function App({
       }, "x")));
     });
   })()))), tab === 'scopelib' && /*#__PURE__*/React.createElement(ScopeLibraryEditor, null), tab === 'masterlist' && /*#__PURE__*/React.createElement(MlEditor, null), tab === 'history' && /*#__PURE__*/React.createElement(HistPanel, null),
+
+/* ── Attachment Panel Modal ── */
+attachPanel && /*#__PURE__*/React.createElement("div", {
+  style:{position:'fixed',inset:0,background:'#000b',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center'},
+  onClick:()=>setAttachPanel(null)
+}, /*#__PURE__*/React.createElement("div", {
+  style:{background:CARD,border:`1px solid ${BDR}`,borderRadius:10,padding:24,minWidth:420,maxWidth:560,maxHeight:'80vh',overflowY:'auto'},
+  onClick:e=>e.stopPropagation()
+},
+  /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}},
+    /*#__PURE__*/React.createElement("div", null,
+      /*#__PURE__*/React.createElement("b", {style:{fontSize:14}}, "📎 Attachments"),
+      /*#__PURE__*/React.createElement("span", {style:{fontSize:11,color:MT,marginLeft:8}},
+        (()=>{ const e=sortedHistory.find(x=>x.id===attachPanel); return e?.info?.ceNum||''; })()
+      )
+    ),
+    /*#__PURE__*/React.createElement("button", {style:btn('def',true), onClick:()=>setAttachPanel(null)}, "✕ Close")
+  ),
+  !monSpIds.has(String(attachPanel)) && /*#__PURE__*/React.createElement("div", {
+    style:{background:ERR+'22',border:`1px solid ${ERR}44`,borderRadius:6,padding:'10px 14px',fontSize:12,color:ERR,marginBottom:12}
+  }, "⚠ This CE has no SharePoint monitoring record yet. Fill in any monitoring field (e.g. Status) and save first to enable attachments."),
+  monSpIds.has(String(attachPanel)) && /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("label", {
+      style:{...btn('info',true),cursor:'pointer',marginBottom:12,display:'inline-flex',alignItems:'center',gap:6}
+    }, attachBusy ? '⏳ Uploading…' : '⬆ Upload Files',
+      /*#__PURE__*/React.createElement("input", {
+        type:'file', multiple:true, style:{display:'none'},
+        disabled:attachBusy,
+        onChange: e => {
+          const ceId = attachPanel;
+          const ceNum = (sortedHistory.find(x=>x.id===ceId)?.info?.ceNum)||'';
+          handleAttachUpload(ceId, ceNum, e.target.files);
+          e.target.value='';
+        }
+      })
+    ),
+    attachBusy && /*#__PURE__*/React.createElement("span", {style:{fontSize:11,color:MT,marginLeft:8}}, "Please wait…"),
+    attachList.length === 0 && !attachBusy && /*#__PURE__*/React.createElement("div", {
+      style:{textAlign:'center',padding:'20px 0',color:MT,fontSize:12,border:`1px dashed ${BDR}`,borderRadius:6}
+    }, "No attachments yet. Upload drawings, TOR, or other documents."),
+    attachList.length > 0 && /*#__PURE__*/React.createElement("div", {style:{marginTop:8,display:'flex',flexDirection:'column',gap:6}},
+      attachList.map(f => /*#__PURE__*/React.createElement("div", {
+        key:f.FileName,
+        style:{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:SURF,borderRadius:6,border:`1px solid ${BDR}`}
+      },
+        /*#__PURE__*/React.createElement("span", {style:{fontSize:18,flexShrink:0}},
+          f.FileName.match(/\.(pdf)$/i) ? '📄' :
+          f.FileName.match(/\.(dwg|dxf|dwf)$/i) ? '📐' :
+          f.FileName.match(/\.(xlsx?|csv)$/i) ? '📊' :
+          f.FileName.match(/\.(docx?|txt)$/i) ? '📝' :
+          f.FileName.match(/\.(jpe?g|png|gif|webp)$/i) ? '🖼' : '📎'
+        ),
+        /*#__PURE__*/React.createElement("a", {
+          href: f.ServerRelativeUrl,
+          target:'_blank', rel:'noopener noreferrer',
+          style:{flex:1,fontSize:12,color:INFO,wordBreak:'break-all',textDecoration:'none'}
+        }, f.FileName),
+        /*#__PURE__*/React.createElement("button", {
+          style:{...btn('danger',true),fontSize:10,padding:'2px 6px',flexShrink:0},
+          disabled:attachBusy,
+          onClick:()=>handleAttachDelete(attachPanel, f.FileName)
+        }, "✕")
+      ))
+    )
+  )
+)),
 
 /* ── Feature 3: Revision Diff Modal ── */
 diffModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset:0,background:'#000a',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center'},onClick:()=>setDiffModal(null)},

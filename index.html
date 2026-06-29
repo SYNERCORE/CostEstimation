@@ -5782,7 +5782,7 @@ function App({
       };
       const mlItems = mlMap[type] || [];
       const catOpts = type === 'mp' ? ['Electrical', 'Mechanical', 'Civil', 'General'] : type === 'ppe' ? ['General', 'Welding', 'Electrical', 'Mechanical'] : ['Electrical', 'Mechanical', 'Civil', 'General'];
-      const addRow = () => setRows(p => [...p, {
+      const addRow = () => setRows([...safeRows, {
         id: uid(),
         code: '',
         cat: 'General',
@@ -5791,11 +5791,11 @@ function App({
         cost: 0,
         uom: type === 'mp' ? 'Day' : 'Lot'
       }]);
-      const upd = (id, k, v) => setRows(p => p.map(r => r.id === id ? {
+      const upd = (id, k, v) => setRows(safeRows.map(r => r.id === id ? {
         ...r,
         [k]: v
       } : r));
-      const del = id => setRows(p => p.filter(r => r.id !== id));
+      const del = id => setRows(safeRows.filter(r => r.id !== id));
       const autoFill = (id, name) => {
         const m = mlItems.find(x => (x.role || x.desc || '').toUpperCase() === name.toUpperCase());
         if (m) setRows(p => p.map(r => r.id === id ? {

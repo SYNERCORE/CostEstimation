@@ -191,10 +191,26 @@ async function sha256(s) {
   const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s + 'sy3_salt_2026'));
   return Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2, '0')).join('');
 }
-const getRememberKey = () => localStorage.getItem('sy3:rememberkey') === '1';
-const setRememberKey = v => v ? localStorage.setItem('sy3:rememberkey','1') : localStorage.removeItem('sy3:rememberkey');
-const getApiKey = () => sessionStorage.getItem('sy3:apikey') || (getRememberKey() ? localStorage.getItem('sy3:apikey') || '' : '');
-const setApiKey = (k, remember) => { sessionStorage.setItem('sy3:apikey', k); if(remember){ localStorage.setItem('sy3:apikey', k); setRememberKey(true); } else { localStorage.removeItem('sy3:apikey'); setRememberKey(false); } };
+const _hex = buf => Array.from(new Uint8Array(buf)).map(x => x.toString(16).padStart(2,'0')).join('');
+async function hashPassword(pw) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({name:'PBKDF2', hash:'SHA-256', salt, iterations:200000}, key, 256);
+  return 'pbkdf2:' + _hex(salt.buffer) + ':' + _hex(bits);
+}
+async function verifyPassword(pw, stored) {
+  if (stored && stored.startsWith('pbkdf2:')) {
+    const parts = stored.split(':');
+    const salt = new Uint8Array(parts[1].match(/.{2}/g).map(h => parseInt(h,16)));
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({name:'PBKDF2', hash:'SHA-256', salt, iterations:200000}, key, 256);
+    return _hex(bits) === parts[2];
+  }
+  // Legacy SHA-256 fallback
+  return await sha256(pw) === stored;
+}
+const getApiKey = () => sessionStorage.getItem('sy3:apikey') || '';
+const setApiKey = (k) => { sessionStorage.setItem('sy3:apikey', k); localStorage.removeItem('sy3:apikey'); localStorage.removeItem('sy3:rememberkey'); };
 
 /* === COMPANY DATABASE ======================================================= */
 function getCompanies(){
@@ -1047,7 +1063,29 @@ const LS = {
       try { return JSON.parse(_d(v)); } catch { try { return JSON.parse(v); } catch { return null; } }
     } catch { return null; }
   },
-  set: (k, v) => { try { localStorage.setItem('shic:' + k, _e(JSON.stringify(v))); } catch {} }
+  set: (k, v) => {
+    try {
+      localStorage.setItem('shic:' + k, _e(JSON.stringify(v)));
+      // Quota guard: warn when total localStorage usage exceeds 4 MB
+      try {
+        let total = 0;
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          total += (localStorage.getItem(key)||'').length * 2; // UTF-16
+        }
+        if (total > 4 * 1024 * 1024 && !window._lsWarnShown) {
+          window._lsWarnShown = true;
+          setTimeout(() => {
+            (window._shicToast || console.warn)('Storage almost full (' + Math.round(total/1024) + ' KB). Consider syncing to SharePoint or exporting a backup.', true);
+          }, 500);
+        }
+      } catch {}
+    } catch (e) {
+      if (e && e.name === 'QuotaExceededError') {
+        (window._shicToast || console.error)('Storage full! Export a backup or connect SharePoint to free space.', true);
+      }
+    }
+  }
 };
 
 async function spDigest(){const su=getSiteURL();const tok=await getSPToken();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json',...(tok?{'Authorization':'Bearer '+tok}:{})};const r=await fetch(`${su}/_api/contextinfo`,{method:'POST',credentials:'omit',headers:h});const d=await r.json();return{digest:d.FormDigestValue,token:tok};}
@@ -1233,7 +1271,7 @@ async function ensureAdmin() {
     const u = await dbGetUsers();
     const admin = u.find(x => x && x.role === 'admin');
     if (!admin) {
-      const h = await sha256('ShicAdmin2026!');
+      const h = await hashPassword('ShicAdmin2026!');
       await dbCreateUser({
         username: 'admin',
         name: 'Administrator',
@@ -1245,9 +1283,9 @@ async function ensureAdmin() {
       });
     } else {
       /* Migrate old password hash */
-      const oldHash = await sha256('Sy3Admin2026!');
-      if (admin.hash === oldHash) {
-        const newHash = await sha256('ShicAdmin2026!');
+      const isLegacyDefault = await verifyPassword('Sy3Admin2026!', admin.hash);
+      if (isLegacyDefault) {
+        const newHash = await hashPassword('ShicAdmin2026!');
         await dbUpdateUser(admin.id, {
           hash: newHash
         });
@@ -1300,7 +1338,6 @@ function LoginPage({
     setBusy(true);
     setErr('');
     try {
-      const h = await sha256(pw);
       const users = await dbGetUsers();
       const u = users.find(x => x && x.username && x.username.toLowerCase() === un.toLowerCase().trim());
       if (!u) {
@@ -1308,10 +1345,16 @@ function LoginPage({
         setBusy(false);
         return;
       }
-      if (u.hash !== h) {
+      const ok = await verifyPassword(pw, u.hash);
+      if (!ok) {
         setErr('Incorrect password.');
         setBusy(false);
         return;
+      }
+      // Migrate legacy SHA-256 hash to PBKDF2 on successful login
+      if (u.hash && !u.hash.startsWith('pbkdf2:')) {
+        const newHash = await hashPassword(pw);
+        await dbUpdateUser(u.id, { hash: newHash }).catch(() => {});
       }
       if (u.status === 'pending') {
         setErr('Account pending admin approval.');
@@ -1580,7 +1623,7 @@ function RegisterPage({
         setBusy(false);
         return;
       }
-      const h = await sha256(f.pw);
+      const h = await hashPassword(f.pw);
       await dbCreateUser({
         username: f.username.trim(),
         name: f.name.trim(),
@@ -2349,9 +2392,8 @@ function AdminPanel({
   };
   const toggleRole = async u => {
     const r = u.role === 'admin' ? 'user' : 'admin';
-    await dbUpdateUser(u.id, {
-      role: r
-    });
+    if (!confirm(`Change "${u.username}" role to ${r}?`)) return;
+    await dbUpdateUser(u.id, { role: r });
     toast2(u.username + ' is now ' + r);
     load();
   };
@@ -2360,7 +2402,7 @@ function AdminPanel({
       alert('Min 6 chars.');
       return;
     }
-    const h = await sha256(newPw);
+    const h = await hashPassword(newPw);
     await dbUpdateUser(changePwUser.id, {
       hash: h
     });
@@ -2509,7 +2551,7 @@ function AdminPanel({
         setCreateBusy(false);
         return;
       }
-      const h = await sha256(password);
+      const h = await hashPassword(password);
       await dbCreateUser({
         username: username.trim(),
         name: name.trim(),
@@ -2994,7 +3036,6 @@ function App({
         try { localStorage.setItem(MON_KEY, JSON.stringify(r.data)); } catch {}
         setSyncStatus({monitoring:'synced', lastSyncAt: new Date().toISOString(), sp: 'connected'});
         if (r.legacy) {
-          console.log('Migrating monitoring data to itemized SP storage…');
           dbSaveMonAll(r.data, []).catch(() => {});
         }
       } else {
@@ -3150,7 +3191,6 @@ function App({
       spLoadMLImports().then(function(imports){
         if(imports&&imports.length){
           window.shicHistory=(window.shicHistory||[]).concat(imports);
-          console.log('ML engine: '+imports.length+' shared training records loaded from SP');
         }
       }).catch(function(){});
     } catch (e) {
@@ -4914,6 +4954,20 @@ function App({
 
       const total = toInsert.length + updated;
       if (!total) { showToast('No valid CE rows found in the file.', true); return; }
+
+      // Preview confirmation before applying
+      const preview = [
+        `Found ${total} CE row(s) in the file:`,
+        `  • ${toInsert.length} new CE(s) to create`,
+        `  • ${updated} existing CE(s) to update`,
+        '',
+        toInsert.length > 0
+          ? 'New: ' + toInsert.slice(0,5).map(e => e.info.ceNum).join(', ') + (toInsert.length > 5 ? ` +${toInsert.length-5} more` : '')
+          : '',
+        '',
+        'Proceed with import?'
+      ].filter(Boolean).join('\n');
+      if (!confirm(preview)) return;
 
       // Batch insert new CEs — 5 at a time to avoid SP throttling
       const BATCH = 5;
@@ -7509,13 +7563,8 @@ function App({
       }
     }, "console.anthropic.com"), " - pay-per-use, no monthly fee")), /*#__PURE__*/React.createElement("label", {
       style: {display:'flex', alignItems:'center', gap:7, marginBottom:14, cursor:'pointer', userSelect:'none'}
-    }, /*#__PURE__*/React.createElement("input", {
-      id: "rememberApiKey",
-      type: "checkbox",
-      defaultChecked: getRememberKey(),
-      style: {accentColor: ACC, width:14, height:14, cursor:'pointer'}
-    }), /*#__PURE__*/React.createElement("span", {style:{fontSize:11, color:MT}},
-      "Remember key across sessions ", /*#__PURE__*/React.createElement("span", {style:{color:ERR+'cc', fontSize:10}}, "(uncheck on shared computers)")
+    }, /*#__PURE__*/React.createElement("span", {style:{fontSize:11, color:MT}},
+      "🔒 Key is session-only — cleared automatically when the tab closes"
     )), /*#__PURE__*/React.createElement("div", {
       style: {
         display: 'flex',
@@ -7545,10 +7594,9 @@ function App({
           }
           setAzureEndpoint(ep);
         }
-        const remember = document.getElementById('rememberApiKey')?.checked || false;
         setProvider(selP);
-        setApiKey(newKey, remember);
-        showToast((PROVIDERS[selP]?.label || selP) + ' key saved!' + (remember ? ' (remembered)' : ' (session only)'));
+        setApiKey(newKey);
+        showToast((PROVIDERS[selP]?.label || selP) + ' key saved! (session only — clears on tab close)');
         setShowApiKey(false);
         setApiKeyInput('');
       }
@@ -11004,6 +11052,7 @@ window.SHIC_ML=(function(){
 
 function shicMLToggle(){var p=document.getElementById('shic-ml-panel');if(p)p.style.display=p.style.display==='none'||!p.style.display?'block':'none';}
 function ph2(n){return 'P'+Number(n).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function _esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function shicMLRate(){
   var role=document.getElementById('ml-role-input').value.trim();
   if(!role)return;
@@ -11016,7 +11065,7 @@ function shicMLRate(){
     +'<div style="text-align:center"><div style="color:#7D8590;font-size:10px">LATEST</div><div style="color:#10B981;font-weight:700;font-size:13px">'+ph2(res.latest)+'</div></div>'
     +'<div style="text-align:center"><div style="color:#7D8590;font-size:10px">RANGE</div><div style="font-size:10px">'+ph2(res.min)+' - '+ph2(res.max)+'</div></div>'
     +'</div><div style="color:#7D8590;font-size:10px">From '+res.count+' record(s):<br>'
-    +res.samples.map(function(s){return (s.ceNum||'?')+': '+ph2(s.rate);}).join(' &bull; ')+'</div></div>';
+    +res.samples.map(function(s){return _esc(s.ceNum||'?')+': '+ph2(s.rate);}).join(' &bull; ')+'</div></div>';
 }
 function shicMLPredict(){
   var scope=document.getElementById('ml-scope-input').value.trim();
@@ -11029,7 +11078,7 @@ function shicMLPredict(){
     +'<div style="font-size:18px;font-weight:800;color:#F0A429">'+ph2(res.predicted)+'</div>'
     +'<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><div style="background:#1C2128;border-radius:8px;height:5px;flex:1"><div style="background:'+cc+';height:5px;border-radius:8px;width:'+res.confidence+'%"></div></div>'
     +'<span style="color:'+cc+';font-weight:700;font-size:10px">'+res.confidence+'% confidence</span></div>'
-    +res.topMatches.map(function(m){return '<div style="color:#7D8590;font-size:10px;margin-top:2px">- '+(m.ceNum||m.source||'?')+': '+ph2(m.grand)+'</div>';}).join('')+'</div>';
+    +res.topMatches.map(function(m){return '<div style="color:#7D8590;font-size:10px;margin-top:2px">- '+_esc(m.ceNum||m.source||'?')+': '+ph2(m.grand)+'</div>';}).join('')+'</div>';
 }
 function shicMLMatch(){
   var scope=document.getElementById('ml-match-input').value.trim();
@@ -11039,10 +11088,10 @@ function shicMLMatch(){
   if(!results||!results.length){el.innerHTML='<span style="color:#F59E0B">No matching projects found yet.</span>';return;}
   el.innerHTML=results.map(function(m){
     return '<div style="background:#0D1117;border-radius:6px;padding:8px;margin-top:6px;border-left:3px solid #8B5CF6">'
-      +'<div style="display:flex;justify-content:space-between"><span style="font-weight:700;color:#8B5CF6">'+(m.ceNum||m.source||'Unknown')+'</span><span style="font-size:10px;color:#7D8590">'+Math.round(m.sim*100)+'% match</span></div>'
-      +(m.description?'<div style="font-size:11px;margin:3px 0">'+m.description+'</div>':'')
+      +'<div style="display:flex;justify-content:space-between"><span style="font-weight:700;color:#8B5CF6">'+_esc(m.ceNum||m.source||'Unknown')+'</span><span style="font-size:10px;color:#7D8590">'+Math.round(m.sim*100)+'% match</span></div>'
+      +(m.description?'<div style="font-size:11px;margin:3px 0">'+_esc(m.description)+'</div>':'')
       +'<div style="color:#F0A429;font-size:11px;font-weight:700">'+ph2(m.grand)+'</div>'
-      +(m.mp&&m.mp.length?'<div style="color:#7D8590;font-size:10px">Workers: '+m.mp.slice(0,3).map(function(r){return typeof r==='string'?r:r.role||'';}).join(', ')+'</div>':'')
+      +(m.mp&&m.mp.length?'<div style="color:#7D8590;font-size:10px">Workers: '+m.mp.slice(0,3).map(function(r){return _esc(typeof r==='string'?r:r.role||'');}).join(', ')+'</div>':'')
       +'</div>';
   }).join('');
 }
@@ -11054,7 +11103,7 @@ function shicMLAnomalies(){
   el.innerHTML=anomalies.map(function(a){
     return '<div style="background:#EF444411;border:1px solid #EF444433;border-radius:6px;padding:8px;margin-top:6px">'
       +'<div style="color:#EF4444;font-weight:700;font-size:11px">'+(a.type==='rate_high'?'High Rate':'Low Rate')+'</div>'
-      +'<div style="font-size:11px;margin:2px 0">'+a.item+'</div>'
+      +'<div style="font-size:11px;margin:2px 0">'+_esc(a.item)+'</div>'
       +'<div style="color:#7D8590;font-size:10px">Yours: '+ph2(a.value)+' | Expected: '+ph2(a.expected)+'</div></div>';
   }).join('');
 }
@@ -11202,9 +11251,7 @@ async function analyzeLocalFiles(){
   try{localStorage.setItem('shic:local_history',JSON.stringify(projects.slice(0,100)));}catch(e){}
   /* Save to SharePoint so all users benefit &#8212; admin-only operation */
   if(projects.length>0&&typeof spSaveMLImports!=='undefined'){
-    spSaveMLImports(projects).then(function(){
-      console.log('ML: saved '+projects.length+' projects to SharePoint for team sharing');
-    }).catch(function(e){console.warn('SP ML save:',e.message);});
+    spSaveMLImports(projects).catch(function(e){console.warn('SP ML save:',e.message);});
   }
   var wG=projects.filter(function(p){return p.grand>0;}).length;
   res.style.display='block';

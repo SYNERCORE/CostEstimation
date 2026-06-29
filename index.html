@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en">
+﻿<!DOCTYPE html><html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <meta name="theme-color" content="#F0A429"><meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="SHIC CE">
@@ -1050,8 +1050,8 @@ function resetLockTimer(fn){clearTimeout(_lockTimer);if(fn)_lockTimer=setTimeout
 ['click','keydown','touchstart'].forEach(ev=>window.addEventListener(ev,()=>resetLockTimer(window._shicLock),{passive:true}));
 
 /* &#9472;&#9472; Storage obfuscation &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472; */
-const _lsK=()=>{try{let k=localStorage.getItem('shic:_sk');if(!k){k=Math.random().toString(36).slice(2)+Date.now().toString(36);localStorage.setItem('shic:_sk',k);}return k;}catch{return'shic2026';}};
-const _e=(s)=>{try{const k=_lsK();return btoa(Array.from(s,(c,i)=>String.fromCharCode(c.charCodeAt(0)^k.charCodeAt(i%k.length))).join(''));}catch{return s;}};
+/* Legacy decoder only — reads old XOR+btoa encoded values for migration */
+const _lsK=()=>{try{const k=localStorage.getItem('shic:_sk');return k||'shic2026';}catch{return'shic2026';}};
 const _d=(s)=>{try{const k=_lsK(),b=atob(s);return Array.from(b,(c,i)=>String.fromCharCode(c.charCodeAt(0)^k.charCodeAt(i%k.length))).join('');}catch{return s;}};
 
 /* &#9472;&#9472; localStorage helper &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472; */
@@ -1060,33 +1060,46 @@ const LS = {
     try {
       const v = localStorage.getItem('shic:' + k);
       if (!v) return null;
-      try { return JSON.parse(_d(v)); } catch { try { return JSON.parse(v); } catch { return null; } }
+      // Plain JSON first (new format), then legacy XOR+btoa fallback
+      try { return JSON.parse(v); } catch { try { return JSON.parse(_d(v)); } catch { return null; } }
     } catch { return null; }
   },
   set: (k, v) => {
     try {
-      localStorage.setItem('shic:' + k, _e(JSON.stringify(v)));
-      // Quota guard: warn when total localStorage usage exceeds 4 MB
-      try {
-        let total = 0;
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          total += (localStorage.getItem(key)||'').length * 2; // UTF-16
-        }
-        if (total > 4 * 1024 * 1024 && !window._lsWarnShown) {
-          window._lsWarnShown = true;
-          setTimeout(() => {
-            (window._shicToast || console.warn)('Storage almost full (' + Math.round(total/1024) + ' KB). Consider syncing to SharePoint or exporting a backup.', true);
-          }, 500);
-        }
-      } catch {}
+      localStorage.setItem('shic:' + k, JSON.stringify(v));
+      // Quota guard — one toast per session
+      if (!window._lsWarnShown) {
+        try {
+          let total = 0;
+          for (let i = 0; i < localStorage.length; i++) total += (localStorage.getItem(localStorage.key(i))||'').length * 2;
+          if (total > 4 * 1024 * 1024) {
+            window._lsWarnShown = true;
+            setTimeout(() => (window._shicToast||console.warn)('Storage almost full (' + Math.round(total/1024) + ' KB). Sync to SharePoint or export a backup.', true), 500);
+          }
+        } catch {}
+      }
     } catch (e) {
       if (e && e.name === 'QuotaExceededError') {
-        (window._shicToast || console.error)('Storage full! Export a backup or connect SharePoint to free space.', true);
+        if (!window._lsFullShown) { window._lsFullShown = true; setTimeout(() => (window._shicToast||console.error)('Storage full! Export a backup or connect SharePoint to free space.', true), 100); }
       }
     }
   }
 };
+
+/* One-time migration: rewrite legacy XOR+btoa keys as plain JSON to reclaim ~33% space */
+(function migrateLSEncoding() {
+  try {
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith('shic:')) keys.push(k); }
+    for (const fullKey of keys) {
+      const raw = localStorage.getItem(fullKey);
+      if (!raw) continue;
+      try { JSON.parse(raw); } catch {
+        try { const dec = _d(raw); JSON.parse(dec); localStorage.setItem(fullKey, dec); } catch {}
+      }
+    }
+  } catch {}
+})();
 
 async function spDigest(){const su=getSiteURL();const tok=await getSPToken();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json',...(tok?{'Authorization':'Bearer '+tok}:{})};const r=await fetch(`${su}/_api/contextinfo`,{method:'POST',credentials:'omit',headers:h});const d=await r.json();return{digest:d.FormDigestValue,token:tok};}
 const spH = (d, x = {}) => ({

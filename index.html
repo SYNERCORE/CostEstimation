@@ -953,7 +953,16 @@ async function dbSaveMonEntry(ceId, ceNum, monFields){
     }
     const payload={shicMonData:JSON.stringify(monFields)};
     if(spId){
-      await spPatch(spList('Monitoring'),spId,payload);
+      try{
+        await spPatch(spList('Monitoring'),spId,payload);
+      }catch(patchErr){
+        /* 404 = item was deleted in SP; clear cache and create fresh */
+        if(patchErr.message&&patchErr.message.includes('404')){
+          delete _monSpIdCache[ceId];
+          const created=await spPost(spList('Monitoring'),{Title:ceNum||String(ceId),shicCEId:numId,...payload});
+          if(created&&created.Id)_monSpIdCache[ceId]=created.Id;
+        }else throw patchErr;
+      }
     }else{
       const created=await spPost(spList('Monitoring'),{Title:ceNum||String(ceId),shicCEId:numId,...payload});
       if(created&&created.Id)_monSpIdCache[ceId]=created.Id;
@@ -1050,7 +1059,23 @@ const spH = (d, x = {}) => ({
   } : {}),
   ...x
 });
-async function spGet(l,f='',sel=''){const su=getSiteURL();if(!su)return[];const tok=await getSPToken();if(!tok){console.warn('SP: No auth token &#8212; skipping '+l);return[];}const h={'Accept':'application/json;odata=nometadata','Authorization':'Bearer '+tok};const qs=[];if(f)qs.push('$filter='+encodeURIComponent(f));if(sel)qs.push('$select='+sel);qs.push('$top=2000');const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items${qs.length?'?'+qs.join('&'):''}`,{credentials:'omit',headers:h});if(!r.ok)throw new Error('SP get '+l+':'+r.status);return(await r.json()).value;}
+async function spGet(l,f='',sel=''){
+  const su=getSiteURL();if(!su)return[];
+  const tok=await getSPToken();if(!tok){console.warn('SP: No auth token — skipping '+l);return[];}
+  const h={'Accept':'application/json;odata=nometadata','Authorization':'Bearer '+tok};
+  let results=[];
+  const qs=[];if(f)qs.push('$filter='+encodeURIComponent(f));if(sel)qs.push('$select='+sel);qs.push('$top=5000');
+  let url=`${su}/_api/web/lists/getbytitle('${l}')/items?${qs.join('&')}`;
+  /* Follow odata.nextLink to page through lists larger than 5000 items */
+  while(url){
+    const r=await fetch(url,{credentials:'omit',headers:h});
+    if(!r.ok)throw new Error('SP get '+l+':'+r.status);
+    const json=await r.json();
+    results=results.concat(json.value||[]);
+    url=json['odata.nextLink']||null;
+  }
+  return results;
+}
 async function spPost(l,data){const su=getSiteURL();if(!su)throw new Error('SP not configured');const{digest,token}=await spDigest();if(!token)throw new Error('SP: No auth token. Please sign in via Connect & Test first.');const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'Authorization':'Bearer '+token};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items`,{method:'POST',credentials:'omit',headers:h,body:JSON.stringify(data)});if(!r.ok){const t=await r.text();throw new Error('SP post '+l+':'+r.status+' '+t.slice(0,100));}return r.json();}
 async function spPatch(l,id,data){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*','X-HTTP-Method':'MERGE',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'PATCH',credentials:'omit',headers:h,body:JSON.stringify(data)});if(!r.ok)throw new Error('SP patch '+l+':'+r.status);}
 async function spDelete(l,id){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'DELETE',credentials:'omit',headers:h});if(!r.ok)throw new Error('SP delete '+l+':'+r.status);}
@@ -2926,32 +2951,41 @@ function App({
   };
   const MON_KEY = 'shic:monitoring';
   const loadMonData = async () => {
+    /* Always fetch from SP first; only fall back to localStorage if SP is unreachable */
+    setSyncStatus({monitoring:'saving'});
     try {
-      const v = localStorage.getItem(MON_KEY);
-      if (v) setMonData(JSON.parse(v));
-    } catch {}
-    try {
+      /* Clear stale cache before every fetch so deleted SP items are not reused */
+      Object.keys(_monSpIdCache).forEach(k => delete _monSpIdCache[k]);
       const r = await dbGetMon();
       if (r && r.empty) {
-        /* SP reachable but list is empty — clear stale local cache */
+        /* SP reachable but list is empty — purge local cache */
         setMonData({});
         try { localStorage.removeItem(MON_KEY); } catch {}
-        Object.keys(_monSpIdCache).forEach(k => delete _monSpIdCache[k]);
         setSyncStatus({monitoring:'synced', lastSyncAt: new Date().toISOString(), sp:'connected'});
       } else if (r && r.data && Object.keys(r.data).length > 0) {
         setMonData(r.data);
-        localStorage.setItem(MON_KEY, JSON.stringify(r.data));
+        try { localStorage.setItem(MON_KEY, JSON.stringify(r.data)); } catch {}
         setSyncStatus({monitoring:'synced', lastSyncAt: new Date().toISOString(), sp: 'connected'});
-        /* Migrate legacy single-blob to per-CE items in the background */
         if (r.legacy) {
           console.log('Migrating monitoring data to itemized SP storage…');
           dbSaveMonAll(r.data, []).catch(() => {});
         }
       } else {
-        /* null = fetch failed, keep local cache */
+        /* SP unreachable — fall back to localStorage so user isn't left with nothing */
+        try {
+          const v = localStorage.getItem(MON_KEY);
+          if (v) setMonData(JSON.parse(v));
+        } catch {}
         setSyncStatus({monitoring:'local'});
       }
-    } catch { setSyncStatus({monitoring:'error'}); }
+    } catch {
+      /* SP error — fall back to localStorage */
+      try {
+        const v = localStorage.getItem(MON_KEY);
+        if (v) setMonData(JSON.parse(v));
+      } catch {}
+      setSyncStatus({monitoring:'error'});
+    }
   };
   const updateMon = (ceId, field, val) => setMonData(prev => {
     const extra = {};
@@ -3053,6 +3087,11 @@ function App({
       } catch(ex) { console.warn('Masterlist load failed:', ex.message); setSyncStatus({masterlist:'error', sp:'error'}); }
       loadHist();
       loadMonData();
+      /* Expose a global full-refresh so SyncStatusBar can trigger it */
+      window._shicFullRefresh = async () => {
+        Object.keys(_monSpIdCache).forEach(k => delete _monSpIdCache[k]);
+        await Promise.all([loadHist(), loadMonData()]);
+      };
       /* Feature 7: load shared draft from URL ?draft= param */
       try {
         const urlDraft = new URLSearchParams(window.location.search).get('draft');
@@ -3070,10 +3109,17 @@ function App({
   const loadHist = async () => {
     setHistBusy(true);
     try {
+      const spAvail = !!(USE_SP || getSiteURL());
       const h = await dbGetHistory(currentUser.username, isAdmin);
       setHistory(h);
+      /* Keep LS in sync with SP so fallback is never stale */
+      if (spAvail && h && h.length > 0) {
+        try { LS.set('history', h); } catch (_e) {}
+      } else if (spAvail && h && h.length === 0) {
+        /* SP returned nothing — purge stale LS */
+        try { LS.set('history', []); } catch (_e) {}
+      }
       try{window.shicHistory=h.map(function(e){return Object.assign({},e.data||{},e);});}catch(_e){}
-      /* Load shared ML training data from SharePoint */
       spLoadMLImports().then(function(imports){
         if(imports&&imports.length){
           window.shicHistory=(window.shicHistory||[]).concat(imports);
@@ -3081,7 +3127,13 @@ function App({
         }
       }).catch(function(){});
     } catch (e) {
-      console.error(e);
+      /* SP completely unreachable — show whatever is in LS */
+      console.warn('loadHist error, using local cache:', e.message);
+      try {
+        const cached = LS.get('history') || [];
+        const u = currentUser.username;
+        setHistory(isAdmin ? cached : cached.filter(h => h.savedBy === u));
+      } catch (_e) {}
     }
     setHistBusy(false);
   };
@@ -10582,15 +10634,18 @@ function SyncStatusBar() {
       onClick: async () => {
         setSyncStatus({sp:'unknown', masterlist:'saving', monitoring:'saving', drafts:'saving'});
         try {
-          const [ml, mon, drafts] = await Promise.all([dbGetML(), dbGetMon(), dbGetDrafts()]);
-          setSyncStatus({
-            sp: 'connected',
-            lastSyncAt: new Date().toISOString(),
-            dirty: false,
-            masterlist: ml ? 'synced' : 'local',
-            monitoring: mon ? 'synced' : 'local',
-            drafts: drafts && drafts.length >= 0 ? 'synced' : 'local',
-          });
+          if (window._shicFullRefresh) {
+            await window._shicFullRefresh();
+          } else {
+            /* Fallback if called before app fully initialised */
+            const [ml, mon, drafts] = await Promise.all([dbGetML(), dbGetMon(), dbGetDrafts()]);
+            setSyncStatus({
+              sp: 'connected', lastSyncAt: new Date().toISOString(), dirty: false,
+              masterlist: ml ? 'synced' : 'local',
+              monitoring: (mon && !mon.empty) ? 'synced' : 'local',
+              drafts: drafts && drafts.length >= 0 ? 'synced' : 'local',
+            });
+          }
           (window._shicToast||console.log)('All data refreshed from SharePoint.');
         } catch(e) {
           setSyncStatus({sp:'error', masterlist:'error', monitoring:'error', drafts:'error'});

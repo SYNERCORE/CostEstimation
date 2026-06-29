@@ -4742,13 +4742,15 @@ function App({
       const iCeNum=col('CENo'), iCeName=col('CEName'), iComp=col('CompanyDesignation'),
             iDisc=col('Designation'), iClient=col('Customer'),
             iTitle=col('JobTitle'), iRecvDate=col('DateRecieved'), iDeadline=col('Deadline'),
-            iSubmDate=col('DateSubmitted'), iStatus=col('Column12'),
-            iRecvBy=col('RecievedBy'), iRemarks=col('Remarks'), iStanding=col('Standing');
+            iSubmDate=col('DateSubmitted');
+      // Status column header is blank in Google Sheets export — fallback to position after Date Submitted
+      const iStatus = col('Column12') >= 0 ? col('Column12') : col('Status') >= 0 ? col('Status') : (iSubmDate >= 0 ? iSubmDate + 1 : -1);
+      // Received By and Remarks may also shift if status header was blank
+      const iRecvBy   = col('RecievedBy') > iStatus ? col('RecievedBy') : (iStatus >= 0 ? iStatus + 1 : -1);
+      const iRemarks  = col('Remarks')    > iStatus ? col('Remarks')    : (iStatus >= 0 ? iStatus + 2 : -1);
+      const iStanding = col('Standing');
       // CE Date optional — fall back to Date Received
       const iDate = col('CEDate') >= 0 ? col('CEDate') : iRecvDate;
-      console.log('[Import] Headers JSON:', JSON.stringify(headers));
-      console.log('[Import] Column indices — ceNum:',iCeNum,'status(Col12):',iStatus,'deadline:',iDeadline,'submDate:',iSubmDate);
-      if (rows[headerIdx+1]) console.log('[Import] First data row [10-14]:', rows[headerIdx+1].slice(10,15));
 
       const statusMap = {
         'done':'Submitted', 'submitted':'Submitted',

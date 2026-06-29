@@ -4756,51 +4756,36 @@ function App({
       if (!dataRows.length) { showToast('No CE rows found in the file.', true); return; }
 
       const existing = await dbGetHistory(null, true).catch(() => []);
-      const existingNums = new Set(existing.map(h => (h.info?.ceNum||h.ceNum||'').toUpperCase().trim()));
+      // Map ceNum → history entry for existing CEs
+      const existingMap = {};
+      existing.forEach(h => {
+        const k = (h.info?.ceNum||h.ceNum||'').toUpperCase().trim();
+        if (k) existingMap[k] = h;
+      });
 
-      // Build entries to insert
-      const toInsert = [];
-      const monByCeNum = {};
-      let skipped = 0;
+      const parseDate = v => {
+        if (!v) return '';
+        try {
+          const d = new Date(v);
+          if (isNaN(d.getTime())) return '';
+          const y = d.getFullYear();
+          if (y < 2000 || y > 2100) return '';
+          return d.toISOString().slice(0,10);
+        } catch { return ''; }
+      };
+
+      const toInsert = [];   // new CEs to create
+      const monByCeNum = {}; // monitoring data keyed by ceNum (both new + existing)
+      let updated = 0;
 
       for (const r of dataRows) {
         const ceNum = String(r[iCeNum]||'').trim().toUpperCase();
         if (!ceNum) continue;
-        if (existingNums.has(ceNum)) { skipped++; continue; }
 
         const rawStatus = String(r[iStatus]||'').trim().toLowerCase();
         const appStatus = Object.entries(statusMap).find(([k]) => rawStatus.startsWith(k))?.[1] || 'Pending';
-
-        // Parse deadline date robustly — guard against out-of-range dates
-        const parseDate = v => {
-          if (!v) return '';
-          try {
-            const d = new Date(v);
-            if (isNaN(d.getTime())) return '';
-            const y = d.getFullYear();
-            if (y < 2000 || y > 2100) return '';
-            return d.toISOString().slice(0,10);
-          } catch { return ''; }
-        };
-
-        toInsert.push({
-          ceType: String(r[iDisc]||'').toLowerCase().includes('elec') ? 'electrical' : 'mechanical',
-          info: {
-            ceNum,
-            client: String(r[iClient]||'').trim(),
-            description: String(r[iTitle]||'').trim(),
-            company: String(r[iComp]||'').trim(),
-            discipline: String(r[iDisc]||'').trim(),
-          },
-          mp:[], tools:[], mats:[], ppe:[], misc:{}, notes:[], sowItems:[],
-          approvers:[], mobVehicles:[], demobVehicles:[],
-          grand:0, unitP:0,
-          savedBy: String(r[iCeName]||'').trim(),
-          savedAt: parseDate(r[iDate]) ? new Date(parseDate(r[iDate])).toISOString() : new Date().toISOString(),
-          _imported: true,
-        });
-
         const estimatorName = String(r[iCeName]||'').trim();
+
         monByCeNum[ceNum] = {
           status: appStatus,
           standing: String(r[iStanding]||'').trim(),
@@ -4812,28 +4797,45 @@ function App({
           preparedBy: estimatorName,
           ceeName: estimatorName,
         };
-        existingNums.add(ceNum);
+
+        if (existingMap[ceNum]) {
+          updated++;
+        } else {
+          toInsert.push({
+            ceType: String(r[iDisc]||'').toLowerCase().includes('elec') ? 'electrical' : 'mechanical',
+            info: {
+              ceNum,
+              client: String(r[iClient]||'').trim(),
+              description: String(r[iTitle]||'').trim(),
+              company: String(r[iComp]||'').trim(),
+              discipline: String(r[iDisc]||'').trim(),
+            },
+            mp:[], tools:[], mats:[], ppe:[], misc:{}, notes:[], sowItems:[],
+            approvers:[], mobVehicles:[], demobVehicles:[],
+            grand:0, unitP:0,
+            savedBy: estimatorName,
+            savedAt: parseDate(r[iDate]) ? new Date(parseDate(r[iDate])).toISOString() : new Date().toISOString(),
+            _imported: true,
+          });
+        }
       }
 
-      if (!toInsert.length) {
-        showToast(`Nothing new to import. ${skipped} CEs already existed.`);
-        return;
-      }
+      const total = toInsert.length + updated;
+      if (!total) { showToast('No valid CE rows found in the file.', true); return; }
 
-      // Batch insert — 5 at a time to avoid SP throttling
+      // Batch insert new CEs — 5 at a time to avoid SP throttling
       const BATCH = 5;
-      setImportProgress({done:0, total:toInsert.length});
+      setImportProgress({done:0, total});
       let imported = 0;
       for (let i = 0; i < toInsert.length; i += BATCH) {
         const chunk = toInsert.slice(i, i + BATCH);
         await Promise.all(chunk.map(e => dbSaveHistory(e).catch(()=>{})));
         imported += chunk.length;
-        setImportProgress({done: imported, total: toInsert.length});
-        // Small delay to avoid SP throttle
+        setImportProgress({done: imported, total});
         if (i + BATCH < toInsert.length) await new Promise(res => setTimeout(res, 300));
       }
 
-      // Reload history to get real IDs, remap monData
+      // Reload history to get real IDs, apply monitoring data to all matched CEs
       const fresh = await dbGetHistory(null, true).catch(() => []);
       const merged = {...monData};
       for (const h of fresh) {
@@ -4845,7 +4847,7 @@ function App({
       await dbSaveMonAll(merged, fresh).catch(()=>{});
       setHistory(fresh);
       setImportProgress(null);
-      showToast(`Import complete: ${imported} CEs added, ${skipped} skipped.`);
+      showToast(`Import complete: ${imported} CEs added, ${updated} monitoring records updated.`);
     } catch(e) {
       setImportProgress(null);
       showToast('Import failed: ' + e.message, true);

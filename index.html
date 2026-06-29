@@ -994,14 +994,18 @@ async function dbGetMon(){
         if(!latest||item.Modified>latest)latest=item.Modified;
       }
       if(Object.keys(data).length)return{data,modifiedAt:latest};
+      /* SP reachable, items exist but none had valid data */
+      return{data:{},modifiedAt:latest,empty:true};
     }
-    /* Fall back to legacy blob */
+    /* No per-CE items at all — check legacy blob */
     const legacy=await spGet(spList('Monitoring'),"Title eq 'config'",'Id,shicMonData,Modified');
     if(legacy.length&&legacy[0].shicMonData){
       try{return{data:JSON.parse(legacy[0].shicMonData),modifiedAt:legacy[0].Modified,legacy:true};}catch{}
     }
+    /* SP reachable, list is completely empty */
+    return{data:{},modifiedAt:null,empty:true};
   }catch(e){console.warn('dbGetMon:',e.message);}
-  return null;
+  return null; /* null = fetch failed, keep local cache */
 }
 
 /* ── Sync status helpers ── */
@@ -2928,7 +2932,13 @@ function App({
     } catch {}
     try {
       const r = await dbGetMon();
-      if (r && r.data) {
+      if (r && r.empty) {
+        /* SP reachable but list is empty — clear stale local cache */
+        setMonData({});
+        try { localStorage.removeItem(MON_KEY); } catch {}
+        Object.keys(_monSpIdCache).forEach(k => delete _monSpIdCache[k]);
+        setSyncStatus({monitoring:'synced', lastSyncAt: new Date().toISOString(), sp:'connected'});
+      } else if (r && r.data && Object.keys(r.data).length > 0) {
         setMonData(r.data);
         localStorage.setItem(MON_KEY, JSON.stringify(r.data));
         setSyncStatus({monitoring:'synced', lastSyncAt: new Date().toISOString(), sp: 'connected'});
@@ -2938,6 +2948,7 @@ function App({
           dbSaveMonAll(r.data, []).catch(() => {});
         }
       } else {
+        /* null = fetch failed, keep local cache */
         setSyncStatus({monitoring:'local'});
       }
     } catch { setSyncStatus({monitoring:'error'}); }

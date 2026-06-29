@@ -4746,9 +4746,9 @@ function App({
             iRecvBy=col('RecievedBy'), iRemarks=col('Remarks'), iStanding=col('Standing');
       // CE Date optional — fall back to Date Received
       const iDate = col('CEDate') >= 0 ? col('CEDate') : iRecvDate;
-      console.log('[Import] Headers:', headers);
+      console.log('[Import] Headers JSON:', JSON.stringify(headers));
       console.log('[Import] Column indices — ceNum:',iCeNum,'status(Col12):',iStatus,'deadline:',iDeadline,'submDate:',iSubmDate);
-      if (rows[headerIdx+1]) console.log('[Import] First data row sample — status value:', rows[headerIdx+1][iStatus], '| ceNum:', rows[headerIdx+1][iCeNum]);
+      if (rows[headerIdx+1]) console.log('[Import] First data row [10-14]:', rows[headerIdx+1].slice(10,15));
 
       const statusMap = {
         'done':'Submitted', 'submitted':'Submitted',

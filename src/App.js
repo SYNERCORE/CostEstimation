@@ -3478,7 +3478,7 @@
         borderBottom: `1px solid ${BDR}`,
         paddingBottom: 8
       }
-    }, [['mp', 'Manpower', editDraft.mp.length], ['tools', 'Tools & Equip', editDraft.tools.length], ['mats', 'Materials', editDraft.mats.length], ['ppe', 'PPE', editDraft.ppe.length]].map(([tabId, tabLabel, tabCount]) => /*#__PURE__*/React.createElement("button", {
+    }, [['mp', 'Manpower', editDraft.mp.length], ['tools', 'Tools & Equipment', editDraft.tools.length], ['mats', 'Materials', editDraft.mats.length], ['ppe', 'PPE', editDraft.ppe.length]].map(([tabId, tabLabel, tabCount]) => /*#__PURE__*/React.createElement("button", {
       key: tabId,
       onClick: () => setResTab(tabId),
       style: {

@@ -4,6 +4,7 @@
   useEffect,
   useRef
 } = React;
+const AppContext = React.createContext({});
 const BG = "#0D1117",
   CARD = "#161B22",
   SURF = "#1C2128",

@@ -3872,7 +3872,13 @@
     total,
     label,
     mlType
-  }) => /*#__PURE__*/React.createElement("div", {
+  }) => {
+    const [_rtNewId, _rtSetNewId] = useState(null);
+    const _rtDescRef = useRef(null);
+    useEffect(() => {
+      if (_rtNewId && _rtDescRef.current) { _rtDescRef.current.focus(); _rtSetNewId(null); }
+    }, [_rtNewId]);
+    return /*#__PURE__*/React.createElement("div", {
     style: CS
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -3920,7 +3926,7 @@
     }
   }, "↺ Sync Rates"), /*#__PURE__*/React.createElement("button", {
     style: btn('def', true),
-    onClick: () => set(p => [...p, mkRes()])
+    onClick: () => { const nid = uid(); _rtSetNewId(nid); set(p => [...p, {...mkRes(), id: nid}]); }
   }, "+ Add"), /*#__PURE__*/React.createElement("label", {
     style: {...btn('def', true), cursor: 'pointer'},
     title: "Import from Excel — columns: Description, Qty, UOM, Unit Cost"
@@ -3973,6 +3979,7 @@
         ...INP,
         minWidth: 190
       },
+      ref: r.id === _rtNewId ? _rtDescRef : undefined,
       list: 'dl_' + mlType + '_' + r.id,
       value: r.desc,
       onChange: e => {
@@ -4080,6 +4087,7 @@
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   })))));
+  };
   const summaryRows = [...(cfg.mobDemob ? [['Mobilization Expenses', mobSubT], ['Demobilization Expenses', demobSubT]] : []), ['A.  Manpower Cost', mpTot], [(ceType === 'supply' ? 'B.' : 'D.') + '  Tools & Equipment', toolsT], [(ceType === 'supply' ? 'B.' : 'E.') + '  Materials & Consumables', matsT], [(ceType === 'supply' ? 'C.' : 'F.') + '  PPE', ppeT], [(ceType === 'supply' ? 'D.' : ceType === 'onsite' ? 'G.' : 'E.') + '  Miscellaneous', miscT]];
   const handleGenerateCE = () => {
     const fmt = (n, d = 2) => 'P' + N(n).toLocaleString('en-PH', {

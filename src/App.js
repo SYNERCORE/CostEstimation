@@ -153,6 +153,7 @@
   const [mlQ, setMlQ] = useState('');
   const [mlPage, setMlPage] = useState(0);
   const [mlQuickAdd, setMlQuickAdd] = useState('');
+  const mlQuickAddRef = React.useRef(null);
   const mlSaveTimer = React.useRef(null);
   const [picker, setPicker] = useState(null);
   const [confirmDel, setConfirmDel] = useState(null);
@@ -1567,6 +1568,7 @@
       const name = mlQuickAdd.trim();
       addML(name);
       setMlQuickAdd('');
+      setTimeout(() => mlQuickAddRef.current?.focus(), 0);
     };
     const delML = id => saveML({
       ...masterlist,
@@ -1697,6 +1699,7 @@
       style: btn('acc', true),
       onClick: () => addML('')
     }, "+ Add Item"), /*#__PURE__*/React.createElement("input", {
+      ref: mlQuickAddRef,
       style: {...INP, width:180, fontSize:12},
       type: "text",
       placeholder: "Quick add name, press Enter",

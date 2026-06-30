@@ -2938,15 +2938,27 @@
       };
       const mlItems = mlMap[type] || [];
       const catOpts = type === 'mp' ? ['Electrical', 'Mechanical', 'Civil', 'General'] : type === 'ppe' ? ['General', 'Welding', 'Electrical', 'Mechanical'] : ['Electrical', 'Mechanical', 'Civil', 'General'];
-      const addRow = () => setRows([...safeRows, {
-        id: uid(),
-        code: '',
-        cat: 'General',
-        name: '',
-        qty: 1,
-        cost: 0,
-        uom: type === 'mp' ? 'Day' : 'Lot'
-      }]);
+      const [newRowId, setNewRowId] = useState(null);
+      const newRowNameRef = useRef(null);
+      useEffect(() => {
+        if (newRowId && newRowNameRef.current) {
+          newRowNameRef.current.focus();
+          setNewRowId(null);
+        }
+      }, [newRowId]);
+      const addRow = () => {
+        const newId = uid();
+        setNewRowId(newId);
+        setRows([...safeRows, {
+          id: newId,
+          code: '',
+          cat: 'General',
+          name: '',
+          qty: 1,
+          cost: 0,
+          uom: type === 'mp' ? 'Day' : 'Lot'
+        }]);
+      };
       const upd = (id, k, v) => setRows(safeRows.map(r => r.id === id ? {
         ...r,
         [k]: v
@@ -3032,6 +3044,7 @@
           ...INP,
           minWidth: 170
         },
+        ref: r.id === newRowId ? newRowNameRef : undefined,
         list: 'slr' + r.id,
         value: r.name || '',
         onChange: e => autoFill(r.id, e.target.value),

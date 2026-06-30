@@ -4147,8 +4147,9 @@
     </table>`;
 
     const notesList = notes.length ? `<div style="margin-top:4px"><b>NOTE:</b><ol style="margin:1px 0 0 14px;padding:0;font-size:7.5pt">${notes.map(n=>`<li>${n.text}</li>`).join('')}</ol></div>` : '';
-    const sigBlock = `<table style="width:100%;border-collapse:collapse;margin-top:20px" class="sig">
-      <tr>${approvers.map((a,i)=>{const sigImg=signatures[a.id||i]?`<img src="${signatures[a.id||i]}" style="height:30px;max-width:100%;display:block;margin-bottom:2px"/>`:'<div style="height:30px"></div>';return`<td><div style="text-align:center">${sigImg}<div style="border-top:1px solid #000;padding-top:2px"><b style="font-size:7.5pt">${a.name||''}</b><br><span style="font-size:7pt;color:#555">${a.role||''}</span></div></div></td>`;}).join('')}</tr>
+    const sigBlock = `<table style="width:100%;border-collapse:collapse;margin-top:20px;table-layout:fixed" class="sig">
+      <tr>${approvers.map(a=>`<td style="border:1px solid #000;padding:4px 8px;font-size:8pt;font-weight:bold;vertical-align:top"><b>${a.role}:</b></td>`).join('')}</tr>
+      <tr>${approvers.map((a,i)=>{const sigImg=signatures[a.id||i]?`<img src="${signatures[a.id||i]}" style="height:36px;max-width:100%;display:block;margin:0 auto 2px"/>`:'';return`<td style="border:1px solid #000;padding:4px 8px;vertical-align:bottom"><div style="min-height:46px;text-align:center">${sigImg}</div><div style="border-top:1px solid #000;padding-top:3px;text-align:center"><b style="font-size:8pt">${a.name||''}</b><br><span style="font-size:7.5pt">${a.title||a.role||''}</span></div></td>`;}).join('')}</tr>
     </table>`;
 
     /* Manpower &#8212; skip zero-rate rows */

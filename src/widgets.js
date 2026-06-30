@@ -164,8 +164,6 @@ function AuthGate() {
   return null;
 }
 ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.createElement(AppBoundary, null, /*#__PURE__*/React.createElement(AuthGate, null)));
-</script>
-<script>
 
 
 

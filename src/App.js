@@ -724,7 +724,7 @@
     }
     const allHist = await dbGetHistory(null, true).catch(() => []);
     const dup = allHist.find(h => (h.info?.ceNum || '').trim().toUpperCase() === ceNum.toUpperCase());
-    if (dup) {
+    if (dup && !dup._imported) {
       showToast('CE Number "' + ceNum + '" already exists in history (saved ' + new Date(dup.savedAt).toLocaleDateString() + '). Use a unique CE Number.', true);
       return;
     }
@@ -2232,7 +2232,20 @@
       loadHist();
       loadMonData();
     }
-  }, "\u21BB Refresh"), /*#__PURE__*/React.createElement("label", {
+  }, "\u21BB Refresh"), /*#__PURE__*/React.createElement("button", {
+    title: "Download a blank Excel template with the correct column headers for bulk import",
+    style: btn('def', true),
+    onClick: () => {
+      const ws = XLSX.utils.aoa_to_sheet([
+        ['CE No.','CE Name','Company Designation','Discipline','Customer','Job Title','Date Recieved','Deadline','Date Submitted','Status','Recieved By','Remarks'],
+        ['CE-2826-0001','Juan Dela Cruz','SHIC','Mechanical','Sample Client Inc.','PUMP OVERHAUL AND REPAIR','2026-01-15','2026-01-22','2026-01-21','Submitted','Kenneth Mendoza',''],
+      ]);
+      ws['!cols'] = [120,120,120,100,140,200,110,110,110,90,120,140].map(w=>({wch:Math.round(w/7)}));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'CE Monitoring');
+      XLSX.writeFile(wb, 'SHIC_CE_Import_Template.xlsx');
+    }
+  }, "\u2193 Template"), /*#__PURE__*/React.createElement("label", {
     title: "Import CE Tracking spreadsheet (.xlsx)",
     style: {...btn('def', true), cursor:'pointer', display:'inline-flex', alignItems:'center', gap:4}
   }, importProgress ? `Importing\u2026 ${importProgress.done}/${importProgress.total}` : "\u2B06 Import xlsx", /*#__PURE__*/React.createElement("input", {

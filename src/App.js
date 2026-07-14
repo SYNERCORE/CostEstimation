@@ -2024,12 +2024,14 @@
         // ── Resource sheet parser — auto-detects header row and column positions ──
         const parseRes = (sheetName) => {
           const rows = getSheet(sheetName);
+          console.log('[CE Import DBG]', sheetName, 'total rows:', rows.length);
+          rows.slice(0,15).forEach((r,i)=>console.log('[CE Import DBG] row'+i+':', JSON.stringify(r&&r.slice(0,12))));
           const items=[]; let hdr=false, qI=-1, uI=-1, cI=-1;
           for (const row of rows) {
             if (!row) continue;
             if (!hdr) {
               const s = row.map(v=>String(v||'').toUpperCase()).join('|');
-              if (s.includes('ITEM NO') && s.includes('DESCRIPTION')) {
+              if ((s.includes('ITEM NO') || s.includes('ITEM\nNO') || s.includes('NO.')) && s.includes('DESCRIPTION')) {
                 row.forEach((v,i)=>{
                   const t=String(v||'').toUpperCase().trim();
                   if (t==='QTY') qI=i;
@@ -2041,7 +2043,8 @@
             }
             if (!hdr) continue;
             // Data row: col 2 (C) is a number item index, col 3 (D) is description
-            if (typeof row[2]==='number' && row[2]>0 && row[3]) {
+            const _itemNo = row[2]; const _itemNoN = Number(_itemNo);
+            if (_itemNo != null && _itemNo !== '' && !isNaN(_itemNoN) && _itemNoN > 0 && row[3]) {
               const desc=String(row[3]).trim();
               if (!desc || desc.toUpperCase()==='N/A') continue;
               const qVal = qI>=0 ? Number(row[qI]) : 1;

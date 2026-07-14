@@ -2083,10 +2083,72 @@
           }
           return m;
         };
-        const sheetNames = Object.keys(wb.Sheets).map(s=>s.toUpperCase());
-        const missingSheets = ['BOTE','BOCM','PPE','MISC.'].filter(s=>!sheetNames.some(n=>n===s||n.startsWith(s.replace('.',''))));
-        if (missingSheets.length) showToast(`Warning: sheets not found in ${file.name}: ${missingSheets.join(', ')}`, true);
-        const tools=parseRes('BOTE'), mats=parseRes('BOCM'), ppe=parseRes('PPE'), misc=parseMisc();
+        // Detect sheet role from header content (first 3 non-empty rows) as fallback to sheet name
+        const detectSheetRole = (sheetKey) => {
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetKey], {header:1, defval:null});
+          for (let i=0; i<Math.min(3,rows.length); i++) {
+            const txt = (rows[i]||[]).map(v=>String(v||'').toUpperCase()).join(' ');
+            if (txt.includes('PERSONAL PROTECTIVE') || txt.includes('PPE')) return 'ppe';
+            if (txt.includes('BILL OF TOOLS') || txt.includes('TOOLS & EQUIP') || txt.includes('TOOLS AND EQUIP') || txt.match(/\bBOTE\b/)) return 'tools';
+            if (txt.includes('BILL OF CONSUMABLE') || txt.includes('MATERIALS') || txt.match(/\bBOCM\b/)) return 'mats';
+            if (txt.includes('MISCELLANEOUS')) return 'misc';
+          }
+          return null;
+        };
+        // Build role→sheetKey map: prefer exact name match, fallback to header detection
+        const roleMap = {tools:null, mats:null, ppe:null, misc:null};
+        const nameRoles = {'BOTE':'tools','BOCM':'mats','PPE':'ppe','MISC':'misc','MISC.':'misc'};
+        for (const key of Object.keys(wb.Sheets)) {
+          const up = key.toUpperCase().replace('.','');
+          for (const [n,r] of Object.entries(nameRoles)) { if (up===n.replace('.','') && !roleMap[r]) { roleMap[r]=key; break; } }
+        }
+        // Fill remaining roles via header detection
+        for (const key of Object.keys(wb.Sheets)) {
+          const role = detectSheetRole(key);
+          if (role && !roleMap[role]) roleMap[role]=key;
+        }
+        const missingRoles = Object.entries(roleMap).filter(([,v])=>!v).map(([k])=>k);
+        if (missingRoles.length) showToast(`Warning: could not find sheets for: ${missingRoles.join(', ')} in ${file.name}`, true);
+        // Override getSheet to use detected keys
+        const getSheetByRole = role => roleMap[role] ? XLSX.utils.sheet_to_json(wb.Sheets[roleMap[role]], {header:1, defval:null}) : [];
+        const parseResByRole = role => {
+          const rows = getSheetByRole(role);
+          const items=[]; let hdr=false, qI=-1, uI=-1, cI=-1;
+          for (const row of rows) {
+            if (!row) continue;
+            if (!hdr) {
+              const s = row.map(v=>String(v||'').toUpperCase()).join('|');
+              if ((s.includes('ITEM NO') || s.includes('ITEM\nNO') || s.includes('NO.')) && s.includes('DESCRIPTION')) {
+                row.forEach((v,i)=>{ const t=String(v||'').toUpperCase().trim(); if(t==='QTY')qI=i; if(t==='UOM')uI=i; if(t==='UNIT PRICE'||t.includes('UNIT PRICE'))cI=i; });
+                hdr=true; continue;
+              }
+            }
+            if (!hdr) continue;
+            const _itemNo=row[1]; const _itemNoN=Number(_itemNo);
+            if (_itemNo!=null && _itemNo!=='' && !isNaN(_itemNoN) && _itemNoN>0 && row[2]) {
+              const desc=String(row[2]).trim();
+              if (!desc || desc.toUpperCase()==='N/A') continue;
+              items.push({id:uid(), desc, qty:qI>=0?Number(row[qI])||1:1, uom:uI>=0?String(row[uI]||'Lot').replace(/\/S$/i,'').trim():'Lot', cost:cI>=0?Number(row[cI])||0:0});
+            }
+          }
+          console.log('[CE Import]', role, '→', items.length, 'items (sheet:', roleMap[role]||'not found', ')');
+          return items;
+        };
+        const parseMiscByRole = () => {
+          const m={accommodation:[],transportation:[],requirements:[],adminCost:[],thirdParty:[],insurance:[],allowance:[]};
+          const SM={ACCOMODATION:'accommodation',ACCOMMODATION:'accommodation',TRANSPORTATION:'transportation',REQUIREMENTS:'requirements','ADMIN COST':'adminCost','THIRD PARTY SERVICES':'thirdParty','THIRD PARTY':'thirdParty',INSURANCES:'insurance',INSURANCE:'insurance',ALLOWANCE:'allowance'};
+          let sec=null;
+          for (const row of getSheetByRole('misc')) {
+            if (!row) continue;
+            if (row[2] && typeof row[2]==='string' && /^[A-Z]\.$/.test(row[2].trim())) { sec=SM[String(row[3]||'').toUpperCase().trim()]||null; continue; }
+            if (sec && typeof row[2]==='number' && row[2]>0 && row[3]) {
+              const cost=Number(row[10])||Number(row[11])||0;
+              if (cost>0) m[sec].push({id:uid(), desc:String(row[3]).trim(), qty:Number(row[7])||1, uom:String(row[8]||'Lot').replace(/\/S$/i,'').trim(), cost});
+            }
+          }
+          return m;
+        };
+        const tools=parseResByRole('tools'), mats=parseResByRole('mats'), ppe=parseResByRole('ppe'), misc=parseMiscByRole();
         const dateStr = dateVal ? dateVal.toISOString().slice(0,10) : new Date().toISOString().slice(0,10);
         const fallbackCeNum = file.name.replace(/\.xlsx?$/i,'').slice(0,30);
         // Derive CE type from project type field (Electrical=onsite, Mechanical=shopworks default)

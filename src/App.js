@@ -1995,6 +1995,8 @@
         // row[10]: {1:'ATTENTION:', 3:attention, 11:qty}
         // row[11]: {1:'END USER:', 3:endUser, 11:days}
         const sum = getSheet('CE SUMMARY');
+        console.log('[CE Import DBG] CE SUMMARY rows:');
+        sum.slice(0,18).forEach((r,i)=>console.log('  sum['+i+']:', JSON.stringify(r&&r.slice(0,14))));
         let ceNum='', description='', client='', location='', dateVal=null,
             projType='Mechanical', attention='', endUser='', material='', qty='', days='';
         for (let i=0; i<Math.min(16, sum.length); i++) {

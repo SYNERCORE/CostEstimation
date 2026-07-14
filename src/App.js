@@ -2161,36 +2161,53 @@
         const parseBOL = () => {
           const rows = getSheetByRole('manpower');
           const mp = []; let shift = 'regular_day'; let skipSection = false;
-          const shiftMap = (txt) => {
-            const t = txt.toUpperCase();
-            if (t.includes('BENEFITS')) return '__skip__';
+          // Fixed col positions from SHIC BOL template (0-indexed):
+          // col2=item#, col3=role, col4=pax, col6=days, col7=rate/day, col9=OT hrs/day
+          let nI=2, rI=3, pI=4, dI=6, wtI=7, otI=9;
+          const shiftKey = (txt) => {
+            const t = String(txt||'').toUpperCase();
             const night = t.includes('NIGHT');
-            if (t.includes('LEGAL HOLIDAY') || t.includes('LEGAL HOLIDAYS')) return night ? 'holiday_night' : 'holiday_day';
-            if (t.includes('SUNDAY') || t.includes('NON-WORKING') || t.includes('SPECIAL')) return night ? 'sunday_night' : 'sunday_day';
-            if (t.includes('REGULAR') || t.includes('DAY SHIFT') || t.includes('NIGHT SHIFT')) return night ? 'regular_night' : 'regular_day';
+            if (t.includes('LEGAL HOLIDAY')) return night ? 'holiday_night' : 'holiday_day';
+            if (t.includes('SUNDAY') || t.includes('NON-WORKING')) return night ? 'sunday_night' : 'sunday_day';
+            if (t.includes('DAY SHIFT') || t.includes('NIGHT SHIFT')) return night ? 'regular_night' : 'regular_day';
+            if (t.includes('REGULAR DAY')) return 'regular_day';
+            if (t.includes('REGULAR NIGHT')) return 'regular_night';
             return null;
           };
           for (const row of rows) {
             if (!row) continue;
-            // Section header row: col2 looks like 'C.1', 'C.2', etc.
-            const c2 = String(row[2]||'').trim();
-            const c3 = String(row[3]||'').trim();
-            if (/^C\.\d+$/i.test(c2) && c3) {
-              const detected = shiftMap(c3);
-              if (detected === '__skip__') { skipSection = true; continue; }
-              if (detected) { shift = detected; skipSection = false; }
+            // Auto-detect column positions from header row
+            if (nI === 2 && row.some(v => String(v||'').toUpperCase().includes('MANPOWER LOADING'))) {
+              row.forEach((v,i) => {
+                const t = String(v||'').toUpperCase().trim();
+                if (t === 'ITEM' || t.startsWith('ITEM NO')) nI = i;
+                else if (t === 'MANPOWER LOADING') rI = i;
+                else if (t === 'QTY') pI = i;
+                else if (t === 'NO. OF DAYS' || t === 'NO OF DAYS') dI = i;
+                else if (t === 'RATE PER DAY') wtI = i;
+                else if (t.startsWith('OT HRS')) otI = i;
+              });
+              continue;
+            }
+            // Section header: look for C.x label anywhere in row (handles merged cells)
+            const cxCell = row.find(v => /^C\.\d+$/i.test(String(v||'').trim()));
+            if (cxCell !== undefined) {
+              const label = row.map(v=>String(v||'')).join(' ');
+              if (label.toUpperCase().includes('BENEFITS')) { skipSection = true; continue; }
+              const k = shiftKey(label);
+              if (k) { shift = k; skipSection = false; }
               continue;
             }
             if (skipSection) continue;
-            // Data row: col2 is a positive integer item#, col3 is role, col4 is pax > 0
-            const itemNo = Number(row[2]);
-            const pax = Number(row[4]);
+            // Data row
+            const itemNo = Number(row[nI]);
+            const pax = Number(row[pI]);
             if (!isFinite(itemNo) || itemNo <= 0 || !isFinite(pax) || pax <= 0) continue;
-            const role = c3; if (!role) continue;
-            const daysCnt = Number(row[6]) || 0;
-            const rate = Number(row[7]) || 0;
-            const otPerDay = Number(row[9]) || 0;
-            mp.push({id:uid(), role, pax, days:daysCnt||1, otHours:otPerDay*daysCnt, shift, rate, perDiem:0});
+            const role = String(row[rI]||'').trim(); if (!role) continue;
+            const daysCnt = Number(row[dI]) || 1;
+            const rate = Number(row[wtI]) || 0;
+            const otPerDay = Number(row[otI]) || 0;
+            mp.push({id:uid(), role, pax, days:daysCnt, otHours:otPerDay*daysCnt, shift, rate, perDiem:0});
           }
           console.log('[CE Import] BOL →', mp.length, 'manpower rows');
           return mp;

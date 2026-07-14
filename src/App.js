@@ -866,6 +866,7 @@
     showToast('Revision ' + newCeNum + ' loaded — review & save when ready.');
   };
   const handleNew = () => {
+    setCeType('onsite');
     setInfo({
       ...BLANK_INFO,
       ceNum: nextCeNum(history),
@@ -2020,7 +2021,7 @@
             if (row[8]===true || row[8]==='TRUE') projType='Mechanical';
             else if (row[5]===true || row[5]==='TRUE') projType='Electrical';
           }
-          if (r1.includes('PROJECT DECRIPTION')) {
+          if (r1.includes('PROJECT DESC') || r1.includes('PROJECT DECRIPTION')) {
             // Date is at col 12 on this row; description is on the NEXT row col 1
             const dv = row[12];
             if (dv instanceof Date) dateVal = dv;
@@ -2082,16 +2083,23 @@
           }
           return m;
         };
+        const sheetNames = Object.keys(wb.Sheets).map(s=>s.toUpperCase());
+        const missingSheets = ['BOTE','BOCM','PPE','MISC.'].filter(s=>!sheetNames.some(n=>n===s||n.startsWith(s.replace('.',''))));
+        if (missingSheets.length) showToast(`Warning: sheets not found in ${file.name}: ${missingSheets.join(', ')}`, true);
         const tools=parseRes('BOTE'), mats=parseRes('BOCM'), ppe=parseRes('PPE'), misc=parseMisc();
         const dateStr = dateVal ? dateVal.toISOString().slice(0,10) : new Date().toISOString().slice(0,10);
         const fallbackCeNum = file.name.replace(/\.xlsx?$/i,'').slice(0,30);
-        console.log('[CE Import] Parsed:', {ceNum, description, client, tools:tools.length, mats:mats.length, ppe:ppe.length});
+        // Derive CE type from project type field (Electrical=onsite, Mechanical=shopworks default)
+        const importedCeType = projType==='Electrical' ? 'onsite' : 'shopworks';
+        // Compute provisional grand total from parsed rows
+        const provisionalGrand = [...tools,...mats,...ppe].reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
+        console.log('[CE Import] Parsed:', {ceNum, description, client, ceType:importedCeType, tools:tools.length, mats:mats.length, ppe:ppe.length, grand:provisionalGrand});
         const entry = {
-          ceType:'shopworks',
+          ceType:importedCeType,
           info:{ceNum:ceNum||fallbackCeNum, date:dateStr, client, location, attention:attention||'SALES DEPARTMENT', endUser:endUser||'C/O SALES', projType, description, dept:'', status:'Submitted', material, qty, days, companyId:null},
           mp:[], tools, mats, ppe, misc,
           notes:[], sowItems:[], approvers:[], mobVehicles:[], demobVehicles:[],
-          grand:0, unitP:0, savedBy:currentUser?.username||'import',
+          grand:Math.round(provisionalGrand), unitP:0, savedBy:currentUser?.username||'import',
           savedAt:new Date(dateStr).toISOString(), _imported:true
         };
         await dbSaveHistory(entry);

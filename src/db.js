@@ -25,7 +25,7 @@ async function dbGetDrafts(){
 async function dbDeleteDraft(draftId){
   if(USE_SP||getSiteURL()){
     try{
-      const r=await spGet(spList('Drafts'),`Title eq '${draftId}'`,'Id');
+      const r=await spGet(spList('Drafts'),`Title eq '${(draftId||'').replace(/'/g,"''")}'`,'Id');
       if(r.length)await spDelete(spList('Drafts'),r[0].Id);
     }catch(e){console.warn('dbDeleteDraft:',e.message);}
   }
@@ -79,8 +79,6 @@ async function dbSaveMonAll(monData, histItems){
   }
 }
 
-/* Legacy: old single-blob save — kept for migration only */
-async function dbSaveMon(data){return dbSaveMonAll(data,[]);}
 
 async function dbGetMon(){
   if(!(USE_SP||getSiteURL()))return null;
@@ -167,6 +165,7 @@ const LS = {
 /* One-time migration: rewrite legacy XOR+btoa keys as plain JSON to reclaim ~33% space */
 (function migrateLSEncoding() {
   try {
+    if (localStorage.getItem('shic:_migv2')) return;
     const keys = [];
     for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith('shic:')) keys.push(k); }
     for (const fullKey of keys) {
@@ -176,6 +175,7 @@ const LS = {
         try { const dec = _d(raw); JSON.parse(dec); localStorage.setItem(fullKey, dec); } catch {}
       }
     }
+    localStorage.setItem('shic:_migv2', '1');
   } catch {}
 })();
 async function dbGetUsers(){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Users'),'','Id,Title,shicName,shicHash,shicRole,shicStatus,shicEmail,Created');return r.filter(u=>u&&u.Title).map(u=>({id:u.Id,username:u.Title,name:u.shicName||'',hash:u.shicHash||'',role:u.shicRole||'user',status:u.shicStatus||'pending',email:u.shicEmail||'',createdAt:u.Created}));}catch(e){console.warn('dbGetUsers:',e.message);}}return(LS.get('users')||[]).filter(u=>u&&u.username);}
@@ -183,7 +183,7 @@ async function dbCreateUser(u){if(USE_SP||getSiteURL()){try{const r=await spPost
 async function dbUpdateUser(id,data){if(USE_SP||getSiteURL()){try{const sp={};if(data.status!==undefined)sp.shicStatus=data.status;if(data.role!==undefined)sp.shicRole=data.role;if(data.hash!==undefined)sp.shicHash=data.hash;if(data.name!==undefined)sp.shicName=data.name;await spPatch(spList('Users'),id,sp);return;}catch(e){console.warn('dbUpdateUser:',e.message);}}LS.set('users',(LS.get('users')||[]).map(u=>u.id===id?{...u,...data}:u));}
 async function dbGetHistory(username,isAdmin){if(USE_SP||getSiteURL()){try{const f=isAdmin?"":`shicSavedBy eq '${username}'`;const r=await spGet(spList('CEs'),f,'Id,Title,shicType,shicClient,shicDesc,shicTotal,shicSavedBy,shicSavedAt');return r.map(h=>({id:h.Id,ceNum:h.Title,ceType:h.shicType,client:h.shicClient||'',grand:h.shicTotal||0,savedBy:h.shicSavedBy||'',savedAt:h.shicSavedAt||h.Created,info:{ceNum:h.Title,client:h.shicClient||'',description:h.shicDesc||''}}));}catch(e){console.warn('dbGetHistory:',e.message);}}const all=LS.get('history')||[];return isAdmin?all:all.filter(h=>h.savedBy===username);}
 async function dbLoadCE(id){if(!(USE_SP||getSiteURL()))return null;try{const[hR,mR,rR]=await Promise.all([spGet(spList('CEs'),`Id eq ${id}`,'Id,Title,shicType,shicClient,shicDesc,shicTotal,shicSavedBy,shicSavedAt,shicScope,shicNotes,shicApprovers,shicMob,shicDemob,shicMisc'),spGet(spList('CE_MP'),`shicCEId eq ${id}`,'Id,shicRole,shicRate,shicShift,shicDays,shicQty'),spGet(spList('CE_Resources'),`shicCEId eq ${id}`,'Id,shicTab,shicDesc,shicQty,shicUOM,shicCost,shicDays')]);if(!hR.length)return null;const h=hR[0];return{id:h.Id,ceType:h.shicType||'onsite',grand:h.shicTotal||0,savedBy:h.shicSavedBy||'',savedAt:h.shicSavedAt||'',info:{ceNum:h.Title,client:h.shicClient||'',description:h.shicDesc||''},scope:h.shicScope||'',mp:mR.map(r=>({id:'sp'+r.Id,role:r.shicRole||'',rate:r.shicRate||0,shift:r.shicShift||'straight',days:r.shicDays||1,qty:r.shicQty||1})),tools:rR.filter(r=>r.shicTab==='tools').map(r=>({id:'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,days:r.shicDays||1})),mats:rR.filter(r=>r.shicTab==='mats').map(r=>({id:'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0})),ppe:rR.filter(r=>r.shicTab==='ppe').map(r=>({id:'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0})),misc:h.shicMisc?JSON.parse(h.shicMisc):{},notes:h.shicNotes?JSON.parse(h.shicNotes):[],approvers:h.shicApprovers?JSON.parse(h.shicApprovers):[],mobVehicles:h.shicMob?JSON.parse(h.shicMob):[],demobVehicles:h.shicDemob?JSON.parse(h.shicDemob):[]};}catch(e){console.warn('dbLoadCE:',e.message);return null;}}
-async function dbSaveHistory(e){if(USE_SP||getSiteURL()){try{const existing=await spGet(spList('CEs'),`Title eq '${e.info.ceNum}'`,'Id');const hdr={Title:e.info.ceNum,shicType:e.ceType,shicClient:e.info.client||'',shicDesc:e.info.description||'',shicTotal:Math.round(e.grand||0),shicSavedBy:e.savedBy||'',shicSavedAt:new Date().toISOString(),shicScope:e.scope||'',shicNotes:JSON.stringify(e.notes||[]),shicApprovers:JSON.stringify(e.approvers||[]),shicMob:JSON.stringify(e.mobVehicles||[]),shicDemob:JSON.stringify(e.demobVehicles||[]),shicMisc:JSON.stringify(e.misc||{})};let ceId;if(existing.length){ceId=existing[0].Id;await spPatch(spList('CEs'),ceId,hdr);}else{const r=await spPost(spList('CEs'),hdr);ceId=r.Id;}const[om,or]=await Promise.all([spGet(spList('CE_MP'),`shicCEId eq ${ceId}`,'Id'),spGet(spList('CE_Resources'),`shicCEId eq ${ceId}`,'Id')]);const dels=[...om.map(x=>spDelete(spList('CE_MP'),x.Id)),...or.map(x=>spDelete(spList('CE_Resources'),x.Id))];for(let i=0;i<dels.length;i+=5)await Promise.all(dels.slice(i,i+5));const ins=[(e.mp||[]).filter(r=>r.role).map(r=>spPost(spList('CE_MP'),{shicCEId:ceId,shicRole:r.role,shicRate:r.rate||0,shicShift:r.shift||'straight',shicDays:r.days||1,shicQty:r.qty||1})),(e.tools||[]).filter(r=>r.desc).map(r=>spPost(spList('CE_Resources'),{shicCEId:ceId,shicTab:'tools',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicDays:r.days||1})),(e.mats||[]).filter(r=>r.desc).map(r=>spPost(spList('CE_Resources'),{shicCEId:ceId,shicTab:'mats',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0})),(e.ppe||[]).filter(r=>r.desc).map(r=>spPost(spList('CE_Resources'),{shicCEId:ceId,shicTab:'ppe',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0}))].flat();for(let i=0;i<ins.length;i+=5)await Promise.all(ins.slice(i,i+5));try{LS.set('ce_cache:'+e.info.ceNum,{...e,id:ceId});}catch(_){}return;}catch(e2){console.warn('dbSaveHistory:',e2.message);}}const h=LS.get('history')||[];const _eid=Date.now();LS.set('history',[{...e,id:_eid},...h.filter(x=>(x.info?.ceNum||x.ceNum)!==e.info.ceNum)]);try{LS.set('ce_cache:'+e.info.ceNum,{...e,id:_eid});}catch(_){}}
+async function dbSaveHistory(e){if(USE_SP||getSiteURL()){try{const existing=await spGet(spList('CEs'),`Title eq '${e.info.ceNum}'`,'Id');const hdr={Title:e.info.ceNum,shicType:e.ceType,shicClient:e.info.client||'',shicDesc:e.info.description||'',shicTotal:Math.round(e.grand||0),shicSavedBy:e.savedBy||'',shicSavedAt:new Date().toISOString(),shicScope:e.scope||'',shicNotes:JSON.stringify(e.notes||[]),shicApprovers:JSON.stringify(e.approvers||[]),shicMob:JSON.stringify(e.mobVehicles||[]),shicDemob:JSON.stringify(e.demobVehicles||[]),shicMisc:JSON.stringify(e.misc||{})};let ceId;if(existing.length){ceId=existing[0].Id;await spPatch(spList('CEs'),ceId,hdr);}else{const r=await spPost(spList('CEs'),hdr);ceId=r.Id;}const[om,or]=await Promise.all([spGet(spList('CE_MP'),`shicCEId eq ${ceId}`,'Id'),spGet(spList('CE_Resources'),`shicCEId eq ${ceId}`,'Id')]);/* Insert new rows FIRST — if any insert fails the old rows are still intact (no data loss) */const ins=[(e.mp||[]).filter(r=>r.role).map(r=>spPost(spList('CE_MP'),{shicCEId:ceId,shicRole:r.role,shicRate:r.rate||0,shicShift:r.shift||'straight',shicDays:r.days||1,shicQty:r.qty||1})),(e.tools||[]).filter(r=>r.desc).map(r=>spPost(spList('CE_Resources'),{shicCEId:ceId,shicTab:'tools',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicDays:r.days||1})),(e.mats||[]).filter(r=>r.desc).map(r=>spPost(spList('CE_Resources'),{shicCEId:ceId,shicTab:'mats',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0})),(e.ppe||[]).filter(r=>r.desc).map(r=>spPost(spList('CE_Resources'),{shicCEId:ceId,shicTab:'ppe',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0}))].flat();for(let i=0;i<ins.length;i+=5)await Promise.all(ins.slice(i,i+5));/* Only delete OLD rows after new ones are safely written */const dels=[...om.map(x=>spDelete(spList('CE_MP'),x.Id)),...or.map(x=>spDelete(spList('CE_Resources'),x.Id))];for(let i=0;i<dels.length;i+=5)await Promise.all(dels.slice(i,i+5)).catch(()=>{});try{LS.set('ce_cache:'+e.info.ceNum,{...e,id:ceId});}catch(_){}return;}catch(e2){console.warn('dbSaveHistory:',e2.message);setTimeout(()=>(window._shicToast||console.warn)('SharePoint save failed — CE stored locally only. Reconnect SP to sync.',true),100);}}const h=LS.get('history')||[];const _eid=Date.now();LS.set('history',[{...e,id:_eid},...h.filter(x=>(x.info?.ceNum||x.ceNum)!==e.info.ceNum)]);try{LS.set('ce_cache:'+e.info.ceNum,{...e,id:_eid});}catch(_){}}
 async function dbDeleteHistory(id){if(USE_SP||getSiteURL()){try{const[m,r]=await Promise.all([spGet(spList('CE_MP'),`shicCEId eq ${id}`,'Id'),spGet(spList('CE_Resources'),`shicCEId eq ${id}`,'Id')]);const d=[...m.map(x=>spDelete(spList('CE_MP'),x.Id)),...r.map(x=>spDelete(spList('CE_Resources'),x.Id))];for(let i=0;i<d.length;i+=5)await Promise.all(d.slice(i,i+5));await spDelete(spList('CEs'),id);return;}catch(e){console.warn('dbDeleteHistory:',e.message);}}LS.set('history',(LS.get('history')||[]).filter(h=>h.id!==id));}
 async function dbGetML(){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Masterlist'),"Title eq 'config'",'Id,shicData');if(r.length&&r[0].shicData)return JSON.parse(r[0].shicData);}catch(e){console.warn('dbGetML:',e.message);}}return LS.get('masterlist');}
 
@@ -306,25 +306,11 @@ async function ensureAdmin() {
     const u = await dbGetUsers();
     const admin = u.find(x => x && x.role === 'admin');
     if (!admin) {
-      const h = await hashPassword('ShicAdmin2026!');
-      await dbCreateUser({
-        username: 'admin',
-        name: 'Administrator',
-        hash: h,
-        role: 'admin',
-        status: 'approved',
-        email: '',
-        createdAt: new Date().toISOString()
-      });
-    } else {
-      /* Migrate old password hash */
-      const isLegacyDefault = await verifyPassword('Sy3Admin2026!', admin.hash);
-      if (isLegacyDefault) {
-        const newHash = await hashPassword('ShicAdmin2026!');
-        await dbUpdateUser(admin.id, {
-          hash: newHash
-        });
-      }
+      /* Generate a random first-run password — never hardcoded in source */
+      const tmpPw = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(36)).join('').slice(0,10) + 'A1!';
+      const h = await hashPassword(tmpPw);
+      await dbCreateUser({username:'admin',name:'Administrator',hash:h,role:'admin',status:'approved',email:'',createdAt:new Date().toISOString()});
+      setTimeout(()=>(window._shicToast||console.warn)('First-run admin created. Temporary password: '+tmpPw+' — Change this in Admin Panel immediately.',true),2000);
     }
   } catch (e) {
     console.warn('seed admin:', e);

@@ -45,7 +45,7 @@ async function getSPToken(){
           authority:'https://login.microsoftonline.com/'+(cfg.tenantId||'common'),
           redirectUri:window.location.origin+window.location.pathname.replace(/\/[^\/]*$/,'/')
         },
-        cache:{cacheLocation:'localStorage',storeAuthStateInCookie:false}
+        cache:{cacheLocation:'sessionStorage',storeAuthStateInCookie:false}
       });
       try{await _spMsalApp.initialize();}catch(e){}
       /* Handle redirect response (from acquireTokenRedirect) */

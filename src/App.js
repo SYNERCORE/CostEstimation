@@ -776,11 +776,15 @@
   const handleLoad = async e => {
     let d = e.data || e;
     // SP history items have numeric id but no tools — fetch full CE before applying
-    if (typeof d.id === 'number' && d.tools === undefined && (USE_SP || getSiteURL())) {
-      try {
-        const full = await dbLoadCE(d.id);
-        if (full) d = full;
-      } catch(ex) { console.warn('handleLoad dbLoadCE:', ex.message); }
+    if (d.tools === undefined) {
+      // Try SP first, fall back to local full-data cache
+      if (typeof d.id === 'number' && (USE_SP || getSiteURL())) {
+        try { const full = await dbLoadCE(d.id); if (full) d = full; } catch(ex) { console.warn('handleLoad dbLoadCE:', ex.message); }
+      }
+      // Still no tools — try the local cache written by dbSaveHistory
+      if (d.tools === undefined) {
+        try { const cached = LS.get('ce_cache:' + (d.info?.ceNum || d.ceNum)); if (cached) d = cached; } catch(_) {}
+      }
     }
     setCeType(d.ceType);
     setInfo({
@@ -2002,8 +2006,6 @@
         // row[10]: {1:'ATTENTION:', 3:attention, 11:qty}
         // row[11]: {1:'END USER:', 3:endUser, 11:days}
         const sum = getSheet('CE SUMMARY');
-        console.log('[CE Import DBG] CE SUMMARY rows:');
-        sum.slice(0,18).forEach((r,i)=>console.log('  sum['+i+']:', JSON.stringify(r&&r.slice(0,14))));
         let ceNum='', description='', client='', location='', dateVal=null,
             projType='Mechanical', attention='', endUser='', material='', qty='', days='';
         for (let i=0; i<Math.min(16, sum.length); i++) {
@@ -2033,8 +2035,6 @@
         // ── Resource sheet parser — auto-detects header row and column positions ──
         const parseRes = (sheetName) => {
           const rows = getSheet(sheetName);
-          console.log('[CE Import DBG]', sheetName, 'total rows:', rows.length);
-          rows.slice(0,15).forEach((r,i)=>console.log('[CE Import DBG] row'+i+':', JSON.stringify(r&&r.slice(0,12))));
           const items=[]; let hdr=false, qI=-1, uI=-1, cI=-1;
           for (const row of rows) {
             if (!row) continue;

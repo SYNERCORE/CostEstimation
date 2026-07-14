@@ -1967,6 +1967,94 @@
       marginLeft: 3
     }
   }, monSortCol === col ? monSortDir === 'asc' ? '\u25b2' : '\u25bc' : '\u21c5');
+  /* ── Import full SHIC CE Excel files (BOTE/BOCM/PPE/MISC sheets) ── */
+  const [ceImportProgress, setCeImportProgress] = React.useState(null);
+  const importShicCeFiles = async (files) => {
+    const list = Array.from(files);
+    if (!list.length) return;
+    setCeImportProgress({done: 0, total: list.length, errors: []});
+    let done = 0, errors = [];
+    for (const file of list) {
+      try {
+        const ab = await file.arrayBuffer();
+        const wb = XLSX.read(new Uint8Array(ab), {type:'array', cellDates:true});
+        const getSheet = name => wb.Sheets[name] ? XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1, defval:null}) : [];
+        // ── CE SUMMARY ──
+        const sum = getSheet('CE SUMMARY');
+        let ceNum='', description='', client='', location='', dateVal=null,
+            projType='Mechanical', attention='', endUser='', material='', qty='', days='';
+        for (let i=0; i<Math.min(15,sum.length); i++) {
+          const row = sum[i]||[];
+          if (row[11] && String(row[11]).match(/CE-\d{4}-\d+/i)) ceNum = String(row[11]).trim();
+          if (row[1] && String(row[1]).toUpperCase().includes('PROJECT DECRIPTION')) {
+            const nr = sum[i+1]||[]; description = String(nr[1]||'').trim();
+          }
+          if (row[1] && String(row[1]).toUpperCase().includes('CLIENT NAME')) client = String(row[3]||'').trim();
+          if (row[1] && String(row[1]).toUpperCase().includes('CLIENT LOCATION')) { location=String(row[3]||'').trim(); material=String(row[11]||'').trim(); }
+          if (row[1] && String(row[1]).toUpperCase().includes('PROJECT DECRIPTION') && row[11]) {
+            if (row[11] instanceof Date) dateVal = row[11];
+            else if (typeof row[11]==='number') dateVal = new Date((row[11]-25569)*86400000);
+          }
+          if (row[1] && String(row[1]).toUpperCase().includes('ATTENTION')) { attention=String(row[3]||'').trim(); qty=String(row[11]||'').trim(); }
+          if (row[1] && String(row[1]).toUpperCase().includes('END USER')) { endUser=String(row[3]||'').trim(); days=String(row[11]||'').trim(); }
+          if (row[1] && String(row[1]).toUpperCase().includes('PROJECT TYPE')) {
+            if (row[8]===true) projType='Mechanical'; else if (row[6]===true) projType='Electrical';
+          }
+        }
+        // ── Resource sheet parser ──
+        const parseRes = (sheetName) => {
+          const rows = getSheet(sheetName);
+          const items=[]; let hdr=false, qI=7, uI=8, cI=9;
+          for (const row of rows) {
+            if (!hdr) {
+              const s = row.map(v=>String(v||'').toUpperCase()).join('|');
+              if (s.includes('ITEM NO') && s.includes('DESCRIPTION')) {
+                row.forEach((v,i)=>{ const t=String(v||'').toUpperCase(); if(t==='QTY')qI=i; if(t==='UOM')uI=i; if(t.includes('UNIT PRICE'))cI=i; });
+                hdr=true; continue;
+              }
+            }
+            if (hdr && typeof row[2]==='number' && row[3]) {
+              const desc=String(row[3]).trim();
+              if (!desc||desc.toUpperCase()==='N/A') continue;
+              items.push({id:uid(), desc, qty:Number(row[qI])||1, uom:String(row[uI]||'Lot').replace(/\/S$/i,'').trim(), cost:Number(row[cI])||0});
+            }
+          }
+          return items;
+        };
+        // ── MISC parser ──
+        const parseMisc = () => {
+          const m={accommodation:[],transportation:[],requirements:[],adminCost:[],thirdParty:[],insurance:[],allowance:[]};
+          const SM={'ACCOMODATION':'accommodation','ACCOMMODATION':'accommodation','TRANSPORTATION':'transportation','REQUIREMENTS':'requirements','ADMIN COST':'adminCost','THIRD PARTY SERVICES':'thirdParty','THIRD PARTY':'thirdParty','INSURANCES':'insurance','INSURANCE':'insurance','ALLOWANCE':'allowance'};
+          let sec=null;
+          for (const row of getSheet('MISC.')) {
+            if (row[2] && typeof row[2]==='string' && /^[A-Z]\.$/.test(row[2].trim())) { sec=SM[String(row[3]||'').toUpperCase().trim()]||null; continue; }
+            if (sec && typeof row[2]==='number' && row[3]) {
+              const cost=Number(row[10]||row[11]||0);
+              if (cost>0) m[sec].push({id:uid(), desc:String(row[3]).trim(), qty:Number(row[7]||1)||1, uom:String(row[8]||'Lot').replace(/\/S$/i,'').trim(), cost});
+            }
+          }
+          return m;
+        };
+        const dateStr = dateVal ? dateVal.toISOString().slice(0,10) : new Date().toISOString().slice(0,10);
+        const entry = {
+          ceType:'shopworks', info:{ceNum:ceNum||file.name.replace(/\.xlsx?$/i,'').slice(0,30), date:dateStr, client, location, attention:attention||'SALES DEPARTMENT', endUser:endUser||'C/O SALES', projType, description, dept:'', status:'Submitted', material, qty, days, companyId:null},
+          mp:[], tools:parseRes('BOTE'), mats:parseRes('BOCM'), ppe:parseRes('PPE'), misc:parseMisc(),
+          notes:[], sowItems:[], approvers:[], mobVehicles:[], demobVehicles:[],
+          grand:0, unitP:0, savedBy:currentUser?.username||'import',
+          savedAt:new Date(dateStr).toISOString(), _imported:true
+        };
+        // Overwrite existing stub if any, otherwise save fresh
+        await spWithRetry(() => dbSaveHistory(entry)).catch(()=>dbSaveHistory(entry));
+        done++;
+      } catch(ex) { errors.push(file.name + ': ' + ex.message); }
+      setCeImportProgress({done, total:list.length, errors});
+    }
+    await loadHist();
+    if (errors.length) showToast(`Imported ${done}/${list.length} CE files. ${errors.length} failed.`, true);
+    else showToast(`Imported ${done} CE file${done!==1?'s':''} successfully.`);
+    setTimeout(()=>setCeImportProgress(null), 2000);
+  };
+
   /* ── Import monitoring from Excel (CE Tracking spreadsheet) ── */
   const [importProgress, setImportProgress] = React.useState(null); // null | {done,total}
   const importMonitoringXLSX = async (file) => {
@@ -2254,6 +2342,16 @@
     style: {display:'none'},
     disabled: !!importProgress,
     onChange: e => { if(e.target.files[0]) { importMonitoringXLSX(e.target.files[0]); e.target.value=''; } }
+  })), /*#__PURE__*/React.createElement("label", {
+    title: "Import one or multiple SHIC CE Excel files (reads BOTE, BOCM, PPE, MISC sheets)",
+    style: {...btn('info', true), cursor:'pointer', display:'inline-flex', alignItems:'center', gap:4}
+  }, ceImportProgress ? `\u21BB Importing ${ceImportProgress.done}/${ceImportProgress.total}\u2026` : "\u2B06 Import CE File(s)", /*#__PURE__*/React.createElement("input", {
+    type: "file",
+    accept: ".xlsx,.xls",
+    multiple: true,
+    style: {display:'none'},
+    disabled: !!ceImportProgress,
+    onChange: e => { if(e.target.files.length) { importShicCeFiles(e.target.files); e.target.value=''; } }
   })), importProgress && /*#__PURE__*/React.createElement("div", {
     style: {display:'flex', alignItems:'center', gap:6, fontSize:10, color:ACC}
   }, /*#__PURE__*/React.createElement("div", {

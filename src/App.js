@@ -2114,20 +2114,28 @@
         const getSheetByRole = role => roleMap[role] ? XLSX.utils.sheet_to_json(wb.Sheets[roleMap[role]], {header:1, defval:null}) : [];
         const parseResByRole = role => {
           const rows = getSheetByRole(role);
-          const items=[]; let hdr=false, qI=-1, uI=-1, cI=-1;
+          const items=[]; let hdr=false, nI=-1, dI=-1, qI=-1, uI=-1, cI=-1;
           for (const row of rows) {
             if (!row) continue;
             if (!hdr) {
               const s = row.map(v=>String(v||'').toUpperCase()).join('|');
-              if ((s.includes('ITEM NO') || s.includes('ITEM\nNO') || s.includes('NO.')) && s.includes('DESCRIPTION')) {
-                row.forEach((v,i)=>{ const t=String(v||'').toUpperCase().trim(); if(t==='QTY')qI=i; if(t==='UOM')uI=i; if(t==='UNIT PRICE'||t.includes('UNIT PRICE'))cI=i; });
+              if ((s.includes('ITEM NO') || s.includes('ITEM\nNO')) && s.includes('DESCRIPTION')) {
+                row.forEach((v,i)=>{
+                  const t=String(v||'').toUpperCase().trim();
+                  if(t.includes('ITEM NO') || t==='ITEM\nNO.') nI=i;
+                  if(t==='DESCRIPTION') dI=i;
+                  if(t==='QTY') qI=i;
+                  if(t==='UOM') uI=i;
+                  if(t==='UNIT PRICE'||t.includes('UNIT PRICE')) cI=i;
+                });
                 hdr=true; continue;
               }
             }
             if (!hdr) continue;
-            const _itemNo=row[1]; const _itemNoN=Number(_itemNo);
-            if (_itemNo!=null && _itemNo!=='' && !isNaN(_itemNoN) && _itemNoN>0 && row[2]) {
-              const desc=String(row[2]).trim();
+            const _itemNo = nI>=0 ? row[nI] : (row[1]??row[2]);
+            const _itemNoN = Number(_itemNo);
+            if (_itemNo!=null && _itemNo!=='' && !isNaN(_itemNoN) && _itemNoN>0) {
+              const desc = String(dI>=0 ? (row[dI]||'') : (row[2]||row[3]||'')).trim();
               if (!desc || desc.toUpperCase()==='N/A') continue;
               items.push({id:uid(), desc, qty:qI>=0?Number(row[qI])||1:1, uom:uI>=0?String(row[uI]||'Lot').replace(/\/S$/i,'').trim():'Lot', cost:cI>=0?Number(row[cI])||0:0});
             }

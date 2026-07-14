@@ -773,8 +773,15 @@
       showToast('Save failed: ' + e.message, true);
     }
   };
-  const handleLoad = e => {
-    const d = e.data || e;
+  const handleLoad = async e => {
+    let d = e.data || e;
+    // SP history items have numeric id but no tools — fetch full CE before applying
+    if (typeof d.id === 'number' && d.tools === undefined && (USE_SP || getSiteURL())) {
+      try {
+        const full = await dbLoadCE(d.id);
+        if (full) d = full;
+      } catch(ex) { console.warn('handleLoad dbLoadCE:', ex.message); }
+    }
     setCeType(d.ceType);
     setInfo({
       ...BLANK_INFO,

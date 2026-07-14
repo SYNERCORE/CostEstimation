@@ -2042,10 +2042,10 @@
               }
             }
             if (!hdr) continue;
-            // Data row: col 2 (C) is a number item index, col 3 (D) is description
-            const _itemNo = row[2]; const _itemNoN = Number(_itemNo);
-            if (_itemNo != null && _itemNo !== '' && !isNaN(_itemNoN) && _itemNoN > 0 && row[3]) {
-              const desc=String(row[3]).trim();
+            // Data row: col 1 = item number, col 2 = description
+            const _itemNo = row[1]; const _itemNoN = Number(_itemNo);
+            if (_itemNo != null && _itemNo !== '' && !isNaN(_itemNoN) && _itemNoN > 0 && row[2]) {
+              const desc=String(row[2]).trim();
               if (!desc || desc.toUpperCase()==='N/A') continue;
               const qVal = qI>=0 ? Number(row[qI]) : 1;
               const uVal = uI>=0 ? String(row[uI]||'Lot') : 'Lot';

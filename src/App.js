@@ -1977,82 +1977,121 @@
     for (const file of list) {
       try {
         const ab = await file.arrayBuffer();
-        const wb = XLSX.read(new Uint8Array(ab), {type:'array', cellDates:true});
-        const getSheet = name => wb.Sheets[name] ? XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1, defval:null}) : [];
+        const wb = XLSX.read(ab, {type:'array', cellDates:true});
+        const getSheet = name => {
+          // Try exact name first, then case-insensitive match
+          if (wb.Sheets[name]) return XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1, defval:null});
+          const key = Object.keys(wb.Sheets).find(k => k.toUpperCase() === name.toUpperCase());
+          return key ? XLSX.utils.sheet_to_json(wb.Sheets[key], {header:1, defval:null}) : [];
+        };
         // ── CE SUMMARY ──
+        // Column map (0-indexed) based on SHIC CE template:
+        // row[5]: {1:'PROJECT DECRIPTION:', 11:'DATE:', 12:date}
+        // row[6]: {1:description}
+        // row[7]: {11:CE_number}
+        // row[4]: {1:'PROJECT TYPE:', 5:electrical_checkbox, 8:mechanical_checkbox}
+        // row[8]: {1:'CLIENT NAME:', 3:client}
+        // row[9]: {1:'CLIENT LOCATION:', 3:location, 11:material}
+        // row[10]: {1:'ATTENTION:', 3:attention, 11:qty}
+        // row[11]: {1:'END USER:', 3:endUser, 11:days}
         const sum = getSheet('CE SUMMARY');
         let ceNum='', description='', client='', location='', dateVal=null,
             projType='Mechanical', attention='', endUser='', material='', qty='', days='';
-        for (let i=0; i<Math.min(15,sum.length); i++) {
+        for (let i=0; i<Math.min(16, sum.length); i++) {
           const row = sum[i]||[];
-          if (row[11] && String(row[11]).match(/CE-\d{4}-\d+/i)) ceNum = String(row[11]).trim();
-          if (row[1] && String(row[1]).toUpperCase().includes('PROJECT DECRIPTION')) {
+          // CE Number — look for pattern like SY3-CE-2026-0479 in any column
+          for (let c=0; c<row.length; c++) {
+            if (row[c] && String(row[c]).match(/\w+-CE-\d{4}-\d+/i)) { ceNum = String(row[c]).trim(); break; }
+          }
+          const r1 = String(row[1]||'').toUpperCase();
+          if (r1.includes('PROJECT TYPE')) {
+            // Electrical checkbox at col 5, Mechanical at col 8
+            if (row[8]===true || row[8]==='TRUE') projType='Mechanical';
+            else if (row[5]===true || row[5]==='TRUE') projType='Electrical';
+          }
+          if (r1.includes('PROJECT DECRIPTION')) {
+            // Date is at col 12 on this row; description is on the NEXT row col 1
+            const dv = row[12];
+            if (dv instanceof Date) dateVal = dv;
+            else if (typeof dv==='number' && dv>40000) dateVal = new Date((dv-25569)*86400000);
             const nr = sum[i+1]||[]; description = String(nr[1]||'').trim();
           }
-          if (row[1] && String(row[1]).toUpperCase().includes('CLIENT NAME')) client = String(row[3]||'').trim();
-          if (row[1] && String(row[1]).toUpperCase().includes('CLIENT LOCATION')) { location=String(row[3]||'').trim(); material=String(row[11]||'').trim(); }
-          if (row[1] && String(row[1]).toUpperCase().includes('PROJECT DECRIPTION') && row[11]) {
-            if (row[11] instanceof Date) dateVal = row[11];
-            else if (typeof row[11]==='number') dateVal = new Date((row[11]-25569)*86400000);
-          }
-          if (row[1] && String(row[1]).toUpperCase().includes('ATTENTION')) { attention=String(row[3]||'').trim(); qty=String(row[11]||'').trim(); }
-          if (row[1] && String(row[1]).toUpperCase().includes('END USER')) { endUser=String(row[3]||'').trim(); days=String(row[11]||'').trim(); }
-          if (row[1] && String(row[1]).toUpperCase().includes('PROJECT TYPE')) {
-            if (row[8]===true) projType='Mechanical'; else if (row[6]===true) projType='Electrical';
-          }
+          if (r1.includes('CLIENT NAME')) client = String(row[3]||'').trim();
+          if (r1.includes('CLIENT LOCATION')) { location=String(row[3]||'').trim(); material=String(row[11]||'').trim(); }
+          if (r1.includes('ATTENTION')) { attention=String(row[3]||'').trim(); qty=String(row[11]||'').trim(); }
+          if (r1.includes('END USER')) { endUser=String(row[3]||'').trim(); days=String(row[11]||'').trim(); }
         }
-        // ── Resource sheet parser ──
+        // ── Resource sheet parser — auto-detects header row and column positions ──
         const parseRes = (sheetName) => {
           const rows = getSheet(sheetName);
-          const items=[]; let hdr=false, qI=7, uI=8, cI=9;
+          const items=[]; let hdr=false, qI=-1, uI=-1, cI=-1;
           for (const row of rows) {
+            if (!row) continue;
             if (!hdr) {
               const s = row.map(v=>String(v||'').toUpperCase()).join('|');
               if (s.includes('ITEM NO') && s.includes('DESCRIPTION')) {
-                row.forEach((v,i)=>{ const t=String(v||'').toUpperCase(); if(t==='QTY')qI=i; if(t==='UOM')uI=i; if(t.includes('UNIT PRICE'))cI=i; });
+                row.forEach((v,i)=>{
+                  const t=String(v||'').toUpperCase().trim();
+                  if (t==='QTY') qI=i;
+                  if (t==='UOM') uI=i;
+                  if (t==='UNIT PRICE' || t.includes('UNIT PRICE')) cI=i;
+                });
                 hdr=true; continue;
               }
             }
-            if (hdr && typeof row[2]==='number' && row[3]) {
+            if (!hdr) continue;
+            // Data row: col 2 (C) is a number item index, col 3 (D) is description
+            if (typeof row[2]==='number' && row[2]>0 && row[3]) {
               const desc=String(row[3]).trim();
-              if (!desc||desc.toUpperCase()==='N/A') continue;
-              items.push({id:uid(), desc, qty:Number(row[qI])||1, uom:String(row[uI]||'Lot').replace(/\/S$/i,'').trim(), cost:Number(row[cI])||0});
+              if (!desc || desc.toUpperCase()==='N/A') continue;
+              const qVal = qI>=0 ? Number(row[qI]) : 1;
+              const uVal = uI>=0 ? String(row[uI]||'Lot') : 'Lot';
+              const cVal = cI>=0 ? Number(row[cI]) : 0;
+              items.push({id:uid(), desc, qty:qVal||1, uom:uVal.replace(/\/S$/i,'').trim(), cost:cVal||0});
             }
           }
+          console.log('[CE Import]', sheetName, '→', items.length, 'items');
           return items;
         };
         // ── MISC parser ──
         const parseMisc = () => {
           const m={accommodation:[],transportation:[],requirements:[],adminCost:[],thirdParty:[],insurance:[],allowance:[]};
-          const SM={'ACCOMODATION':'accommodation','ACCOMMODATION':'accommodation','TRANSPORTATION':'transportation','REQUIREMENTS':'requirements','ADMIN COST':'adminCost','THIRD PARTY SERVICES':'thirdParty','THIRD PARTY':'thirdParty','INSURANCES':'insurance','INSURANCE':'insurance','ALLOWANCE':'allowance'};
+          const SM={ACCOMODATION:'accommodation',ACCOMMODATION:'accommodation',TRANSPORTATION:'transportation',REQUIREMENTS:'requirements','ADMIN COST':'adminCost','THIRD PARTY SERVICES':'thirdParty','THIRD PARTY':'thirdParty',INSURANCES:'insurance',INSURANCE:'insurance',ALLOWANCE:'allowance'};
           let sec=null;
           for (const row of getSheet('MISC.')) {
-            if (row[2] && typeof row[2]==='string' && /^[A-Z]\.$/.test(row[2].trim())) { sec=SM[String(row[3]||'').toUpperCase().trim()]||null; continue; }
-            if (sec && typeof row[2]==='number' && row[3]) {
-              const cost=Number(row[10]||row[11]||0);
-              if (cost>0) m[sec].push({id:uid(), desc:String(row[3]).trim(), qty:Number(row[7]||1)||1, uom:String(row[8]||'Lot').replace(/\/S$/i,'').trim(), cost});
+            if (!row) continue;
+            if (row[2] && typeof row[2]==='string' && /^[A-Z]\.$/.test(row[2].trim())) {
+              sec=SM[String(row[3]||'').toUpperCase().trim()]||null; continue;
+            }
+            if (sec && typeof row[2]==='number' && row[2]>0 && row[3]) {
+              const cost=Number(row[10])||Number(row[11])||0;
+              if (cost>0) m[sec].push({id:uid(), desc:String(row[3]).trim(), qty:Number(row[7])||1, uom:String(row[8]||'Lot').replace(/\/S$/i,'').trim(), cost});
             }
           }
           return m;
         };
+        const tools=parseRes('BOTE'), mats=parseRes('BOCM'), ppe=parseRes('PPE'), misc=parseMisc();
         const dateStr = dateVal ? dateVal.toISOString().slice(0,10) : new Date().toISOString().slice(0,10);
+        const fallbackCeNum = file.name.replace(/\.xlsx?$/i,'').slice(0,30);
+        console.log('[CE Import] Parsed:', {ceNum, description, client, tools:tools.length, mats:mats.length, ppe:ppe.length});
         const entry = {
-          ceType:'shopworks', info:{ceNum:ceNum||file.name.replace(/\.xlsx?$/i,'').slice(0,30), date:dateStr, client, location, attention:attention||'SALES DEPARTMENT', endUser:endUser||'C/O SALES', projType, description, dept:'', status:'Submitted', material, qty, days, companyId:null},
-          mp:[], tools:parseRes('BOTE'), mats:parseRes('BOCM'), ppe:parseRes('PPE'), misc:parseMisc(),
+          ceType:'shopworks',
+          info:{ceNum:ceNum||fallbackCeNum, date:dateStr, client, location, attention:attention||'SALES DEPARTMENT', endUser:endUser||'C/O SALES', projType, description, dept:'', status:'Submitted', material, qty, days, companyId:null},
+          mp:[], tools, mats, ppe, misc,
           notes:[], sowItems:[], approvers:[], mobVehicles:[], demobVehicles:[],
           grand:0, unitP:0, savedBy:currentUser?.username||'import',
           savedAt:new Date(dateStr).toISOString(), _imported:true
         };
-        // Overwrite existing stub if any, otherwise save fresh
-        await spWithRetry(() => dbSaveHistory(entry)).catch(()=>dbSaveHistory(entry));
+        await dbSaveHistory(entry);
         done++;
-      } catch(ex) { errors.push(file.name + ': ' + ex.message); }
+        showToast(`Imported ${ceNum||fallbackCeNum} — ${tools.length} tools, ${mats.length} materials, ${ppe.length} PPE items.`);
+      } catch(ex) { console.error('[CE Import] Error:', ex); errors.push(file.name + ': ' + ex.message); }
       setCeImportProgress({done, total:list.length, errors});
     }
     await loadHist();
-    if (errors.length) showToast(`Imported ${done}/${list.length} CE files. ${errors.length} failed.`, true);
-    else showToast(`Imported ${done} CE file${done!==1?'s':''} successfully.`);
-    setTimeout(()=>setCeImportProgress(null), 2000);
+    if (errors.length) showToast(`Imported ${done}/${list.length} CE files. ${errors.length} failed: ${errors[0]}`, true);
+    else if (list.length > 1) showToast(`Imported ${done} CE files successfully.`);
+    setTimeout(()=>setCeImportProgress(null), 3000);
   };
 
   /* ── Import monitoring from Excel (CE Tracking spreadsheet) ── */

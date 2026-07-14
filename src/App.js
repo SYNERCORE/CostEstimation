@@ -2092,12 +2092,13 @@
             if (txt.includes('BILL OF TOOLS') || txt.includes('TOOLS & EQUIP') || txt.includes('TOOLS AND EQUIP') || txt.match(/\bBOTE\b/)) return 'tools';
             if (txt.includes('BILL OF CONSUMABLE') || txt.includes('MATERIALS') || txt.match(/\bBOCM\b/)) return 'mats';
             if (txt.includes('MISCELLANEOUS')) return 'misc';
+            if (txt.includes('BILL OF LABOR') || txt.match(/\bBOL\b/)) return 'manpower';
           }
           return null;
         };
         // Build role→sheetKey map: prefer exact name match, fallback to header detection
-        const roleMap = {tools:null, mats:null, ppe:null, misc:null};
-        const nameRoles = {'BOTE':'tools','BOCM':'mats','PPE':'ppe','MISC':'misc','MISC.':'misc'};
+        const roleMap = {manpower:null, tools:null, mats:null, ppe:null, misc:null};
+        const nameRoles = {'BOL':'manpower','BOTE':'tools','BOCM':'mats','PPE':'ppe','MISC':'misc','MISC.':'misc'};
         for (const key of Object.keys(wb.Sheets)) {
           const up = key.toUpperCase().replace('.','');
           for (const [n,r] of Object.entries(nameRoles)) { if (up===n.replace('.','') && !roleMap[r]) { roleMap[r]=key; break; } }
@@ -2148,25 +2149,64 @@
           }
           return m;
         };
-        const tools=parseResByRole('tools'), mats=parseResByRole('mats'), ppe=parseResByRole('ppe'), misc=parseMiscByRole();
+        // ── BOL (Bill of Labor) parser ──
+        const parseBOL = () => {
+          const rows = getSheetByRole('manpower');
+          const mp = []; let shift = 'regular_day'; let skipSection = false;
+          const shiftMap = (txt) => {
+            const t = txt.toUpperCase();
+            if (t.includes('BENEFITS')) return '__skip__';
+            const night = t.includes('NIGHT');
+            if (t.includes('LEGAL HOLIDAY') || t.includes('LEGAL HOLIDAYS')) return night ? 'holiday_night' : 'holiday_day';
+            if (t.includes('SUNDAY') || t.includes('NON-WORKING') || t.includes('SPECIAL')) return night ? 'sunday_night' : 'sunday_day';
+            if (t.includes('REGULAR') || t.includes('DAY SHIFT') || t.includes('NIGHT SHIFT')) return night ? 'regular_night' : 'regular_day';
+            return null;
+          };
+          for (const row of rows) {
+            if (!row) continue;
+            // Section header row: col2 looks like 'C.1', 'C.2', etc.
+            const c2 = String(row[2]||'').trim();
+            const c3 = String(row[3]||'').trim();
+            if (/^C\.\d+$/i.test(c2) && c3) {
+              const detected = shiftMap(c3);
+              if (detected === '__skip__') { skipSection = true; continue; }
+              if (detected) { shift = detected; skipSection = false; }
+              continue;
+            }
+            if (skipSection) continue;
+            // Data row: col2 is a positive integer item#, col3 is role, col4 is pax > 0
+            const itemNo = Number(row[2]);
+            const pax = Number(row[4]);
+            if (!isFinite(itemNo) || itemNo <= 0 || !isFinite(pax) || pax <= 0) continue;
+            const role = c3; if (!role) continue;
+            const daysCnt = Number(row[6]) || 0;
+            const rate = Number(row[7]) || 0;
+            const otPerDay = Number(row[9]) || 0;
+            mp.push({id:uid(), role, pax, days:daysCnt||1, otHours:otPerDay*daysCnt, shift, rate, perDiem:0});
+          }
+          console.log('[CE Import] BOL →', mp.length, 'manpower rows');
+          return mp;
+        };
+        const tools=parseResByRole('tools'), mats=parseResByRole('mats'), ppe=parseResByRole('ppe'), misc=parseMiscByRole(), mpRows=parseBOL();
         const dateStr = dateVal ? dateVal.toISOString().slice(0,10) : new Date().toISOString().slice(0,10);
         const fallbackCeNum = file.name.replace(/\.xlsx?$/i,'').slice(0,30);
         // Derive CE type from project type field (Electrical=onsite, Mechanical=shopworks default)
         const importedCeType = projType==='Electrical' ? 'onsite' : 'shopworks';
         // Compute provisional grand total from parsed rows
-        const provisionalGrand = [...tools,...mats,...ppe].reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
-        console.log('[CE Import] Parsed:', {ceNum, description, client, ceType:importedCeType, tools:tools.length, mats:mats.length, ppe:ppe.length, grand:provisionalGrand});
+        const mpGrand = mpRows.reduce((s,r)=>s+N(r.pax)*N(r.days)*N(r.rate)*(SHIFTS[r.shift]?.mult||1),0);
+        const provisionalGrand = mpGrand + [...tools,...mats,...ppe].reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
+        console.log('[CE Import] Parsed:', {ceNum, description, client, ceType:importedCeType, mp:mpRows.length, tools:tools.length, mats:mats.length, ppe:ppe.length, grand:provisionalGrand});
         const entry = {
           ceType:importedCeType,
           info:{ceNum:ceNum||fallbackCeNum, date:dateStr, client, location, attention:attention||'SALES DEPARTMENT', endUser:endUser||'C/O SALES', projType, description, dept:'', status:'Submitted', material, qty, days, companyId:null},
-          mp:[], tools, mats, ppe, misc,
+          mp:mpRows, tools, mats, ppe, misc,
           notes:[], sowItems:[], approvers:[], mobVehicles:[], demobVehicles:[],
           grand:Math.round(provisionalGrand), unitP:0, savedBy:currentUser?.username||'import',
           savedAt:new Date(dateStr).toISOString(), _imported:true
         };
         await dbSaveHistory(entry);
         done++;
-        showToast(`Imported ${ceNum||fallbackCeNum} — ${tools.length} tools, ${mats.length} materials, ${ppe.length} PPE items.`);
+        showToast(`Imported ${ceNum||fallbackCeNum} — ${mpRows.length} manpower, ${tools.length} tools, ${mats.length} materials, ${ppe.length} PPE.`);
       } catch(ex) { console.error('[CE Import] Error:', ex); errors.push(file.name + ': ' + ex.message); }
       setCeImportProgress({done, total:list.length, errors});
     }

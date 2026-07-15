@@ -785,6 +785,12 @@
       if (d.tools === undefined) {
         try { const cached = LS.get('ce_cache:' + (d.info?.ceNum || d.ceNum)); if (cached) d = cached; } catch(_) {}
       }
+    } else {
+      // We have full data from SP — compare with local cache and use whichever is newer
+      try {
+        const cached = LS.get('ce_cache:' + (d.info?.ceNum || d.ceNum));
+        if (cached && cached.savedAt && d.savedAt && cached.savedAt > d.savedAt) d = cached;
+      } catch(_) {}
     }
     setCeType(d.ceType);
     setInfo({
@@ -1870,6 +1876,7 @@
   const [newStatusInput, setNewStatusInput] = useState('');
   const [monSearch, setMonSearch] = useState('');
   const [monStatusFilter, setMonStatusFilter] = useState(new Set());
+  const [monTypeFilter, setMonTypeFilter] = useState('all'); // 'all' | 'onsite' | 'shopworks' | 'supply'
   const [showStatusFilter, setShowStatusFilter] = useState(false);
   const [monSpIds, setMonSpIds] = useState(new Set());
   const [monSortCol, setMonSortCol] = useState('savedAt');
@@ -1935,6 +1942,7 @@
         const s = m.status || '';
         if (!monStatusFilter.has(s)) return false;
       }
+      if (monTypeFilter !== 'all' && (e.ceType || 'onsite') !== monTypeFilter) return false;
       if (!monSearch) return true;
       const q = monSearch.toLowerCase();
       return (e.info?.ceNum || '').toLowerCase().includes(q) || (e.info?.client || '').toLowerCase().includes(q) || (e.info?.description || '').toLowerCase().includes(q) || (m.customer || '').toLowerCase().includes(q) || (m.receivedBy || '').toLowerCase().includes(q) || (m.remarks || '').toLowerCase().includes(q);
@@ -1963,7 +1971,7 @@
       if (va > vb) return monSortDir === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [history, monData, monSearch, monStatusFilter, monSortCol, monSortDir]);
+  }, [history, monData, monSearch, monStatusFilter, monTypeFilter, monSortCol, monSortDir]);
   const toggleSort = col => {
     if (monSortCol === col) setMonSortDir(d => d === 'asc' ? 'desc' : 'asc');else {
       setMonSortCol(col);
@@ -2149,7 +2157,8 @@
           let sec=null;
           for (const row of getSheetByRole('misc')) {
             if (!row) continue;
-            if (row[2] && typeof row[2]==='string' && /^[A-Z]\.$/.test(row[2].trim())) { sec=SM[String(row[3]||'').toUpperCase().trim()]||null; continue; }
+            const sxIdx = row.findIndex(v => v && typeof v==='string' && /^[A-Z]\.$/.test(String(v).trim()));
+            if (sxIdx >= 0) { sec=SM[String(row[sxIdx+1]||'').toUpperCase().trim()]||null; continue; }
             if (sec && typeof row[2]==='number' && row[2]>0 && row[3]) {
               const cost=Number(row[10])||Number(row[11])||0;
               if (cost>0) m[sec].push({id:uid(), desc:String(row[3]).trim(), qty:Number(row[7])||1, uom:String(row[8]||'Lot').replace(/\/S$/i,'').trim(), cost});
@@ -2229,9 +2238,15 @@
           grand:Math.round(provisionalGrand), unitP:0, savedBy:currentUser?.username||'import',
           savedAt:new Date(dateStr).toISOString(), _imported:true
         };
+        const effCeNum = ceNum || fallbackCeNum;
+        const dupIdx = history.findIndex(h => (h.info?.ceNum || h.ceNum) === effCeNum);
+        if (dupIdx >= 0) {
+          const confirmed = window.confirm(`CE ${effCeNum} already exists in history. Overwrite it?`);
+          if (!confirmed) { errors.push(file.name + ': skipped (duplicate)'); setCeImportProgress({done, total:list.length, errors}); continue; }
+        }
         await dbSaveHistory(entry);
         done++;
-        showToast(`Imported ${ceNum||fallbackCeNum} — ${mpRows.length} manpower, ${tools.length} tools, ${mats.length} materials, ${ppe.length} PPE.`);
+        showToast(`Imported ${effCeNum} — ${mpRows.length} manpower, ${tools.length} tools, ${mats.length} materials, ${ppe.length} PPE.`);
       } catch(ex) { console.error('[CE Import] Error:', ex); errors.push(file.name + ': ' + ex.message); }
       setCeImportProgress({done, total:list.length, errors});
     }
@@ -2490,7 +2505,19 @@
       }
     }),
     s)
-  ))), /*#__PURE__*/React.createElement("div", {
+  ))),
+  /*#__PURE__*/React.createElement("select", {
+    style: {...INP, fontSize:11, width:120},
+    value: monTypeFilter,
+    onChange: e => { setMonTypeFilter(e.target.value); setMonPage(0); },
+    title: "Filter by CE type"
+  },
+    /*#__PURE__*/React.createElement("option", {value:'all'}, "All Types"),
+    /*#__PURE__*/React.createElement("option", {value:'onsite'}, "Onsite"),
+    /*#__PURE__*/React.createElement("option", {value:'shopworks'}, "Shopworks"),
+    /*#__PURE__*/React.createElement("option", {value:'supply'}, "Supply")
+  ),
+  /*#__PURE__*/React.createElement("div", {
     style: {
       marginLeft: 'auto',
       display: 'flex',

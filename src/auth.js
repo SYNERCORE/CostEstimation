@@ -50,12 +50,20 @@ function _checkAutoBackup(getCEData) {
   if (_saveCount % 50 === 0) {
     try {
       const data = getCEData ? getCEData() : (LS.get('history') || []);
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'shic-autobackup-' + new Date().toISOString().slice(0,10) + '.json';
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+      const filename = 'shic-autobackup-' + new Date().toISOString().slice(0,10) + '.json';
+      setTimeout(() => (window._shicToast||console.warn)(
+        'Auto-backup ready (' + (data.length||0) + ' CEs). Downloading ' + filename + '…'
+      ), 100);
+      setTimeout(() => {
+        try {
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = filename;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+        } catch {}
+      }, 600);
     } catch {}
   }
 }

@@ -3,8 +3,7 @@ const ph = n => (n || 0).toLocaleString("en-PH", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2
 });
-let _uid = 1000;
-const uid = () => String(++_uid);
+const uid = () => { try { return crypto.randomUUID(); } catch { return Date.now().toString(36) + Math.random().toString(36).slice(2); } };
 function nextCeNum(history, cePrefix) {
   const yr = new Date().getFullYear();
   const pfx = ((cePrefix || 'SHIC') + '-CE-' + yr + '-').toUpperCase();

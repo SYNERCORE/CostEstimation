@@ -1876,7 +1876,9 @@
   const [newStatusInput, setNewStatusInput] = useState('');
   const [monSearch, setMonSearch] = useState('');
   const [monStatusFilter, setMonStatusFilter] = useState(new Set());
-  const [monTypeFilter, setMonTypeFilter] = useState('all'); // 'all' | 'onsite' | 'shopworks' | 'supply'
+  const [monTypeFilter, setMonTypeFilter] = useState('all');
+  const [compareSet, setCompareSet] = useState(new Set()); // CE comparison: max 2 ids
+  const [compareModal, setCompareModal] = useState(null); // {a, b} loaded CE data // 'all' | 'onsite' | 'shopworks' | 'supply'
   const [showStatusFilter, setShowStatusFilter] = useState(false);
   const [monSpIds, setMonSpIds] = useState(new Set());
   const [monSortCol, setMonSortCol] = useState('savedAt');
@@ -2702,7 +2704,7 @@
       top: 0,
       zIndex: 2
     }
-  }, [['ceeName', 'Estimator', 80], ['companyDesig', 'Co.', 60], ['ceNum', 'CE No.', 120], ['designation', 'Discipline', 90], ['customer', 'Customer', 100], ['jobTitle', 'Job Title', 200], ['dateRecv', 'Date Recv.', 95], ['deadline', 'Deadline', 95], ['deadlineDays', 'Days Left', 65], ['dateSubmitted', 'Date Submitted', 105], ['status', 'Status', 120], ['receivedBy', 'Received By', 100], ['remarks', 'Remarks', 160]].map(([col, label, w]) => /*#__PURE__*/React.createElement("th", {
+  }, /*#__PURE__*/React.createElement("th", {style:{...THS,width:28,padding:'6px 4px',fontSize:10,textAlign:'center'}, title:"Select to compare (max 2)"}, "⚖"), [['ceeName', 'Estimator', 80], ['companyDesig', 'Co.', 60], ['ceNum', 'CE No.', 120], ['designation', 'Discipline', 90], ['customer', 'Customer', 100], ['jobTitle', 'Job Title', 200], ['dateRecv', 'Date Recv.', 95], ['deadline', 'Deadline', 95], ['deadlineDays', 'Days Left', 65], ['dateSubmitted', 'Date Submitted', 105], ['status', 'Status', 120], ['receivedBy', 'Received By', 100], ['remarks', 'Remarks', 160]].map(([col, label, w]) => /*#__PURE__*/React.createElement("th", {
     key: col,
     onClick: () => ['ceNum', 'deadline', 'status'].includes(col) && toggleSort(col),
     style: {
@@ -2746,7 +2748,19 @@
         background: trBg,
         borderBottom: `1px solid ${BDR}22`
       }
-    }, /*#__PURE__*/React.createElement("td", {
+    }, /*#__PURE__*/React.createElement("td", {style:{...TDS,padding:'4px',textAlign:'center'}},
+      /*#__PURE__*/React.createElement("input", {
+        type:"checkbox",
+        title: compareSet.has(e.id) ? "Remove from comparison" : compareSet.size >= 2 ? "Deselect another first" : "Add to comparison",
+        checked: compareSet.has(e.id),
+        disabled: !compareSet.has(e.id) && compareSet.size >= 2,
+        onChange: () => setCompareSet(prev => {
+          const next = new Set(prev);
+          next.has(e.id) ? next.delete(e.id) : next.add(e.id);
+          return next;
+        })
+      })
+    ), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
         padding: '4px 6px'
@@ -3099,6 +3113,98 @@
         }, '»')
       )
     );
+  })(),
+  /* ── Compare bar (floats when 2 CEs selected) ── */
+  compareSet.size === 2 && /*#__PURE__*/React.createElement("div", {
+    style:{position:'fixed',bottom:24,left:'50%',transform:'translateX(-50%)',zIndex:500,background:ACC,color:'#000',borderRadius:12,padding:'10px 20px',display:'flex',gap:12,alignItems:'center',boxShadow:'0 4px 20px #0008',fontWeight:700,fontSize:13}
+  }, "⚖ 2 CEs selected",
+    /*#__PURE__*/React.createElement("button", {
+      style:{background:'#000',color:ACC,border:'none',borderRadius:6,padding:'4px 14px',fontWeight:700,cursor:'pointer',fontSize:12},
+      onClick: async () => {
+        const [idA, idB] = [...compareSet];
+        const loadFull = async id => {
+          const e = history.find(h => h.id === id);
+          if (!e) return null;
+          const ceNum = e.info?.ceNum || e.ceNum || '';
+          const cached = LS.get('ce_cache:' + ceNum);
+          if (cached && cached.tools !== undefined) return cached;
+          if (typeof id === 'number' && (USE_SP || getSiteURL())) {
+            try { const full = await dbLoadCE(id); if (full) return full; } catch {}
+          }
+          return e;
+        };
+        const [a, b] = await Promise.all([loadFull(idA), loadFull(idB)]);
+        setCompareModal({a, b});
+      }
+    }, "Compare →"),
+    /*#__PURE__*/React.createElement("button", {
+      style:{background:'transparent',color:'#000',border:'1px solid #0004',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:12},
+      onClick: () => setCompareSet(new Set())
+    }, "✕")
+  ),
+  /* ── Compare Modal ── */
+  compareModal && (() => {
+    const {a, b} = compareModal;
+    const ceA = a?.info?.ceNum || 'CE A';
+    const ceB = b?.info?.ceNum || 'CE B';
+    const calcSections = ce => {
+      if (!ce) return {};
+      const mpT = (ce.mp||[]).reduce((s,r)=>s+N(r.pax)*N(r.days)*N(r.rate)*(SHIFTS[r.shift]?.mult||1)+N(r.pax)*N(r.otHours)*(N(r.rate)/8)*1.25+N(r.pax)*N(r.days)*N(r.perDiem),0);
+      const toolT = (ce.tools||[]).reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
+      const matT = (ce.mats||[]).reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
+      const ppeT = (ce.ppe||[]).reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
+      const miscT = Object.values(ce.misc||{}).flat().reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
+      const grand = mpT+toolT+matT+ppeT+miscT;
+      return {mpT,toolT,matT,ppeT,miscT,grand};
+    };
+    const sA = calcSections(a), sB = calcSections(b);
+    const rows = [['Manpower','mpT'],['Tools & Equipment','toolT'],['Materials','matT'],['PPE','ppeT'],['Miscellaneous','miscT'],['Grand Total','grand']];
+    const diffColor = (va,vb) => va===vb ? MT : va>vb ? OK : ERR;
+    return /*#__PURE__*/React.createElement("div", {
+      style:{position:'fixed',inset:0,zIndex:600,background:'#0009',display:'flex',alignItems:'center',justifyContent:'center'},
+      onClick: e => { if(e.target===e.currentTarget) setCompareModal(null); }
+    }, /*#__PURE__*/React.createElement("div", {
+      style:{background:CARD,border:`1px solid ${BDR}`,borderRadius:12,padding:24,minWidth:560,maxWidth:'90vw',maxHeight:'85vh',overflowY:'auto',boxShadow:'0 8px 40px #0008'}
+    },
+      /*#__PURE__*/React.createElement("div", {style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}},
+        /*#__PURE__*/React.createElement("span", {style:{fontWeight:800,fontSize:15}}, "⚖ CE Comparison"),
+        /*#__PURE__*/React.createElement("button", {style:{...btn('def',true),fontSize:11}, onClick:()=>setCompareModal(null)}, "✕ Close")
+      ),
+      /*#__PURE__*/React.createElement("div", {style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}},
+        /*#__PURE__*/React.createElement("div", {style:{...CS,padding:'8px 12px'}},
+          /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,color:ACC,fontSize:12}}, ceA),
+          /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT}}, a?.info?.client||'—'),
+          /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT}}, a?.info?.description||'—')
+        ),
+        /*#__PURE__*/React.createElement("div", {style:{...CS,padding:'8px 12px'}},
+          /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,color:INFO,fontSize:12}}, ceB),
+          /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT}}, b?.info?.client||'—'),
+          /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT}}, b?.info?.description||'—')
+        )
+      ),
+      /*#__PURE__*/React.createElement("table", {style:{width:'100%',borderCollapse:'collapse',fontSize:12}},
+        /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", {style:{background:SURF}},
+          /*#__PURE__*/React.createElement("th", {style:{...THS,textAlign:'left'}}, "Section"),
+          /*#__PURE__*/React.createElement("th", {style:{...THS,textAlign:'right',color:ACC}}, ceA),
+          /*#__PURE__*/React.createElement("th", {style:{...THS,textAlign:'right',color:INFO}}, ceB),
+          /*#__PURE__*/React.createElement("th", {style:{...THS,textAlign:'right'}}, "Δ Diff")
+        )),
+        /*#__PURE__*/React.createElement("tbody", null, rows.map(([label,key]) => {
+          const va = sA[key]||0, vb = sB[key]||0, diff = vb-va;
+          const isGrand = key==='grand';
+          return /*#__PURE__*/React.createElement("tr", {key, style:{borderBottom:`1px solid ${BDR}22`,background:isGrand?SURF+'88':'transparent'}},
+            /*#__PURE__*/React.createElement("td", {style:{...TDS,fontWeight:isGrand?700:400}}, label),
+            /*#__PURE__*/React.createElement("td", {style:{...TDS,...MONO,textAlign:'right',color:isGrand?ACC:TX}}, '₱'+ph(va)),
+            /*#__PURE__*/React.createElement("td", {style:{...TDS,...MONO,textAlign:'right',color:isGrand?INFO:TX}}, '₱'+ph(vb)),
+            /*#__PURE__*/React.createElement("td", {style:{...TDS,...MONO,textAlign:'right',color:diffColor(va,vb)}}, diff===0?'—':(diff>0?'+':'')+'₱'+ph(diff))
+          );
+        }))
+      ),
+      /*#__PURE__*/React.createElement("div", {style:{marginTop:14,display:'flex',gap:8,justifyContent:'flex-end'}},
+        /*#__PURE__*/React.createElement("button", {style:{...btn('acc',true),fontSize:11}, onClick:()=>{handleLoad(a);setCompareModal(null);}}, "Load "+ceA),
+        /*#__PURE__*/React.createElement("button", {style:{...btn('info',true)||btn('def',true),fontSize:11,borderColor:INFO+'55',color:INFO}, onClick:()=>{handleLoad(b);setCompareModal(null);}}, "Load "+ceB)
+      )
+    ));
   })()
   );
   /* ---- Scope Library Editor (Scope Library tab) ---- */
@@ -7577,6 +7683,26 @@ tab === 'dashboard' && (() => {
     },
     title: "Copy shareable link to this draft"
   }, "🔗 Share"), /*#__PURE__*/React.createElement("button", {
+    style: {...btn('def'), borderColor: '#A371F755', color: '#A371F7'},
+    title: "Open email client to notify approvers",
+    onClick: () => {
+      const subject = encodeURIComponent(`[CE FOR APPROVAL] ${info.ceNum} — ${info.client || info.description || ''}`);
+      const approverNames = approvers.map(a => `${a.role}: ${a.name}${a.title ? ' (' + a.title + ')' : ''}`).join('\n');
+      const sectionLines = summaryRows.map(([l,v]) => `  ${l.padEnd(30)} ₱${ph(v)}`).join('\n');
+      const body = encodeURIComponent(
+        `Good day,\n\nKindly review and approve the attached Cost Estimate:\n\n` +
+        `CE No.:      ${info.ceNum}\n` +
+        `Client:      ${info.client || '—'}\n` +
+        `Description: ${info.description || '—'}\n` +
+        `Date:        ${info.date || '—'}\n\n` +
+        `COST SUMMARY\n${'─'.repeat(46)}\n${sectionLines}\n${'─'.repeat(46)}\n` +
+        `  ${'GRAND TOTAL'.padEnd(30)} ₱${ph(grand)}\n\n` +
+        `Approvers:\n${approverNames}\n\n` +
+        `Thank you.`
+      );
+      window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
+    }
+  }, "📧 Notify"), /*#__PURE__*/React.createElement("button", {
     style: btn('ok'),
     onClick: handleExportXLSX
   }, "Export XLSX"), /*#__PURE__*/React.createElement("button", {

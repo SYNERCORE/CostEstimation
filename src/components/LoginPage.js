@@ -251,7 +251,7 @@
       fontSize: 11
     },
     onClick: () => {
-      if (confirm('Reset all local user data? This removes all locally stored accounts and recreates the default admin account. Click OK to confirm.')) {
+      if (confirm('Reset all local user data?\n\nThis removes all locally stored accounts and recreates the default admin account.\n\n⚠ SharePoint connection settings will also be cleared — you will need to re-enter them after reload.\n\nClick OK to confirm.')) {
         /* Remove all sy3: and shic: prefixed keys */
         Object.keys(localStorage).filter(k => k.startsWith('sy3:') || k.startsWith('shic') || k.includes('user') || k.includes('session')).forEach(k => localStorage.removeItem(k));
         sessionStorage.clear();

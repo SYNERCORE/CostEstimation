@@ -96,7 +96,7 @@ function LocalToSPSync() {
   return React.createElement('div', null,
     React.createElement('div', {style:{fontWeight:700,fontSize:13,marginBottom:4,color:OK}}, '☁ Push Local Data to SharePoint'),
     React.createElement('div', {style:{fontSize:11,color:MT,marginBottom:10,lineHeight:1.6}},
-      'After connecting SharePoint for the first time, use this to upload all your existing local CEs, users, and masterlist to SP so other computers can access them.'
+      'After connecting SharePoint for the first time, use this to upload the local CEs, users, and masterlist stored in THIS browser to SP so other computers can access them. Each user must run this from their own browser to sync their own data.'
     ),
     !connected && React.createElement('div', {style:{fontSize:11,color:ERR,marginBottom:8}},
       '⚠ SharePoint not connected. Complete the SP setup above first.'

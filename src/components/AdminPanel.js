@@ -8,6 +8,7 @@
   const [changePwUser, setChangePwUser] = useState(null);
   const [auditEntries, setAuditEntries] = useState(null); /* null=not loaded yet */
   const [auditBusy, setAuditBusy] = useState(false);
+  const [auditListMissing, setAuditListMissing] = useState(false);
   const [newPw, setNewPw] = useState('');
   const [setupMsg, setSetupMsg] = useState('');
   const [setupBusy, setSetupBusy] = useState(false);
@@ -574,15 +575,18 @@
         spConnected && /*#__PURE__*/React.createElement("button", {
           style:{...btn('def',true),fontSize:11},
           disabled:auditBusy,
-          onClick:async()=>{setAuditBusy(true);try{setAuditEntries(await dbGetAuditLog(500));}catch(e){toast2('Load error: '+e.message);}setAuditBusy(false);}
+          onClick:async()=>{setAuditBusy(true);setAuditListMissing(false);try{const r=await dbGetAuditLog(500);setAuditEntries(r);}catch(e){const msg=e.message||'';const missing=msg.includes('does not exist')||msg.includes('404')||msg.includes('list')||msg.includes('AuditLog');if(missing){setAuditListMissing(true);}else{toast2('Load error: '+msg);}}setAuditBusy(false);}
         }, auditBusy ? 'Loading…' : (auditEntries===null ? '☁ Load from SharePoint' : '↻ Refresh')),
         !spConnected && log.length > 0 && /*#__PURE__*/React.createElement("button", {
           style:{...btn('danger',true),fontSize:11,marginLeft:'auto'},
           onClick:()=>{ if(confirm('Clear local audit log?')){LS.set('auditlog',[]);setAuditEntries([]);toast2('Local audit log cleared.');} }
         }, "Clear Local Log")
       ),
+      auditListMissing && /*#__PURE__*/React.createElement("div", {style:{color:'#F59E0B',fontSize:12,padding:'8px 10px',background:'#F59E0B11',border:'1px solid #F59E0B44',borderRadius:6,marginBottom:8}},
+        '⚠ The AuditLog SharePoint list doesn\'t exist yet. Go to the SharePoint Setup section below and click "Setup SharePoint" to create it, then reload this tab.'
+      ),
       log.length === 0
-        ? /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:12}}, auditEntries===null && spConnected ? 'Click "Load from SharePoint" to see the full team audit log.' : 'No audit events yet.')
+        ? /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:12}}, auditListMissing ? '' : auditEntries===null && spConnected ? 'Click "Load from SharePoint" to see the full team audit log.' : 'No audit events yet.')
         : /*#__PURE__*/React.createElement("div", {style:{overflowX:'auto'}},
             /*#__PURE__*/React.createElement("table", {style:{width:'100%',borderCollapse:'collapse',fontSize:11}},
               /*#__PURE__*/React.createElement("thead", null,

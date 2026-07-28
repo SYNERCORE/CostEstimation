@@ -5216,7 +5216,7 @@
         lineHeight: 1.4
       }
     }, cnt));
-  }))), /*#__PURE__*/React.createElement("div", {
+  })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex'
     }
@@ -8355,7 +8355,7 @@ tab === 'dashboard' && (() => {
       fontSize: 10
     },
     onClick: () => setTab('history')
-  }, "View All")))));
+  }, "View All"))))));
 }
 class AppBoundary extends React.Component {
   constructor(props) {

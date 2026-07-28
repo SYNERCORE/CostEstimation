@@ -7921,7 +7921,7 @@ tab === 'dashboard' && (() => {
       style: {...INP, width:62, fontSize:11, textAlign:'right', padding:'2px 6px'}
     }),
     /*#__PURE__*/React.createElement("span", {style:{color:MT,fontSize:11}}, "% margin")
-  ))))), /*#__PURE__*/React.createElement("div", {
+  )))))), /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
       borderColor: INFO + '44'
@@ -8355,7 +8355,7 @@ tab === 'dashboard' && (() => {
       fontSize: 10
     },
     onClick: () => setTab('history')
-  }, "View All"))))));
+  }, "View All")))));
 }
 class AppBoundary extends React.Component {
   constructor(props) {

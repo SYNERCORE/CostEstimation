@@ -32,7 +32,7 @@ function LocalToSPSync() {
               }));
               uOk++;
             }
-          } catch {}
+          } catch (e2) { addLog(`  ✗ ${u.username}: ${e2.message.slice(0,60)}`); }
         }
       }
       addLog(`✅ Users: ${uOk}/${localUsers.length} synced`);

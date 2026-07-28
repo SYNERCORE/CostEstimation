@@ -602,7 +602,10 @@
       borderColor: '#F05032' + '44',
       background: '#F05032' + '06'
     }
-  }, /*#__PURE__*/React.createElement(CompanyDBPanel, null), /*#__PURE__*/React.createElement('hr',{style:{border:'none',borderTop:'1px solid '+BDR,margin:'16px 0'}}), React.createElement(FbSetupPanel, null)), USE_SP && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(CompanyDBPanel, null), /*#__PURE__*/React.createElement('hr',{style:{border:'none',borderTop:'1px solid '+BDR,margin:'16px 0'}}), React.createElement(FbSetupPanel, null),
+  /*#__PURE__*/React.createElement('hr',{style:{border:'none',borderTop:'1px solid '+BDR,margin:'16px 0'}}),
+  React.createElement(LocalToSPSync, null)
+  ), USE_SP && /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
       marginTop: 8,

@@ -55,7 +55,7 @@ const BLANK_INFO = {
   projType: "Electrical",
   description: "",
   dept: "",
-  status: "FOR REVIEW",
+  status: "DRAFT",
   material: "",
   qty: "1",
   days: "",

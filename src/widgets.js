@@ -58,6 +58,12 @@ function SyncStatusBar() {
     /* last sync */
     React.createElement('span', {title:'Last successful sync'}, '🕐 ' + lastSync),
 
+    /* draft auto-save time */
+    sync.lastDraftSaveAt && React.createElement('span', {
+      title: 'Last draft auto-save: ' + new Date(sync.lastDraftSaveAt).toLocaleTimeString(),
+      style:{color:MT}
+    }, '📝 Draft: ' + (() => { const mins=Math.round((Date.now()-new Date(sync.lastDraftSaveAt))/60000); return mins<1?'just now':mins+'m ago'; })()),
+
     /* dirty */
     sync.dirty && React.createElement('span', {style:{color:'#F59E0B',fontWeight:700}}, '● Unsaved'),
 

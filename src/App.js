@@ -216,7 +216,7 @@
     window.addEventListener('keydown',onKey);
     const onUnload=e=>{e.preventDefault();e.returnValue='';};
     window.addEventListener('beforeunload',onUnload);
-    const autoTimer=setInterval(()=>{try{saveDraft&&saveDraft();showToast('Draft auto-saved.');}catch(ex){}},180000);
+    const autoTimer=setInterval(()=>{try{saveDraft&&saveDraft();const t=new Date().toISOString();setSyncStatus({lastDraftSaveAt:t});showToast('Draft auto-saved.');}catch(ex){}},180000);
     const histTimer=setInterval(()=>{if(USE_SP||getSiteURL())loadHist();},5*60*1000);
     (async () => {
       try {
@@ -776,7 +776,13 @@
       showToast('Save failed: ' + e.message, true);
     }
   };
+  const hasUnsavedWork = () => {
+    const hasInfo = !!(info.ceNum && info.ceNum !== BLANK_INFO.ceNum) || !!(info.client) || !!(info.description);
+    const hasRows = mp.some(r=>r.role||r.pax) || tools.some(r=>r.desc) || mats.some(r=>r.desc) || ppe.some(r=>r.desc);
+    return hasInfo || hasRows;
+  };
   const handleLoad = async e => {
+    if (hasUnsavedWork() && !confirm('Load this CE? Your current unsaved work will be replaced.\n\nTip: save a draft first (Ctrl+S or the Save Draft button) if you need to keep it.')) return;
     let d = e.data || e;
     // SP history items have numeric id but no tools — fetch full CE before applying
     if (d.tools === undefined) {
@@ -2522,6 +2528,11 @@
     /*#__PURE__*/React.createElement("option", {value:'shopworks'}, "Shopworks"),
     /*#__PURE__*/React.createElement("option", {value:'supply'}, "Supply")
   ),
+  (monSearch || monStatusFilter.size > 0 || monTypeFilter !== 'all') && /*#__PURE__*/React.createElement("button", {
+    style: {...btn('danger', true), fontSize:10},
+    title: "Clear all filters",
+    onClick: () => { setMonSearch(''); setMonStatusFilter(new Set()); setMonTypeFilter('all'); setMonPage(0); }
+  }, "\u2715 Clear Filters"),
   /*#__PURE__*/React.createElement("div", {
     style: {
       marginLeft: 'auto',
@@ -2707,9 +2718,9 @@
       top: 0,
       zIndex: 2
     }
-  }, /*#__PURE__*/React.createElement("th", {style:{...THS,width:28,padding:'6px 4px',fontSize:10,textAlign:'center'}, title:"Select to compare (max 2)"}, "⚖"), [['ceeName', 'Estimator', 80], ['companyDesig', 'Co.', 60], ['ceNum', 'CE No.', 120], ['designation', 'Discipline', 90], ['customer', 'Customer', 100], ['jobTitle', 'Job Title', 200], ['dateRecv', 'Date Recv.', 95], ['deadline', 'Deadline', 95], ['deadlineDays', 'Days Left', 65], ['dateSubmitted', 'Date Submitted', 105], ['status', 'Status', 120], ['receivedBy', 'Received By', 100], ['remarks', 'Remarks', 160]].map(([col, label, w]) => /*#__PURE__*/React.createElement("th", {
+  }, /*#__PURE__*/React.createElement("th", {style:{...THS,width:28,padding:'6px 4px',fontSize:10,textAlign:'center'}, title:"Select to compare (max 2)"}, "⚖"), [['ceeName', 'Estimator', 80], ['companyDesig', 'Co.', 60], ['ceNum', 'CE No.', 120], ['designation', 'Discipline', 90], ['customer', 'Customer', 100], ['jobTitle', 'Job Title', 180], ['grand', 'Total (₱)', 110], ['dateRecv', 'Date Recv.', 95], ['deadline', 'Deadline', 95], ['deadlineDays', 'Days Left', 65], ['dateSubmitted', 'Date Submitted', 105], ['status', 'Status', 120], ['receivedBy', 'Received By', 100], ['remarks', 'Remarks', 140]].map(([col, label, w]) => /*#__PURE__*/React.createElement("th", {
     key: col,
-    onClick: () => ['ceNum', 'deadline', 'status'].includes(col) && toggleSort(col),
+    onClick: () => ['ceNum', 'deadline', 'status', 'grand'].includes(col) && toggleSort(col),
     style: {
       ...THS,
       width: w,
@@ -2717,10 +2728,10 @@
       padding: '6px 8px',
       fontSize: 10,
       whiteSpace: 'nowrap',
-      cursor: ['ceNum', 'deadline', 'status'].includes(col) ? 'pointer' : 'default',
+      cursor: ['ceNum', 'deadline', 'status', 'grand'].includes(col) ? 'pointer' : 'default',
       userSelect: 'none'
     }
-  }, label, ['ceNum', 'deadline', 'status'].includes(col) && /*#__PURE__*/React.createElement(SortIcon, {
+  }, label, ['ceNum', 'deadline', 'status', 'grand'].includes(col) && /*#__PURE__*/React.createElement(SortIcon, {
     col: col
   }))), /*#__PURE__*/React.createElement("th", {
     style: {
@@ -2876,7 +2887,17 @@
         if (ev.target.value !== String(m.jobTitle || jobTitle)) updateMon(e.id, 'jobTitle', ev.target.value);
       },
       placeholder: jobTitle
-    }) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11,whiteSpace:'normal',wordBreak:'break-word',display:'block',maxWidth:200}}, m.jobTitle||jobTitle||'—')), /*#__PURE__*/React.createElement("td", {
+    }) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11,whiteSpace:'normal',wordBreak:'break-word',display:'block',maxWidth:180}}, m.jobTitle||jobTitle||'—')), /*#__PURE__*/React.createElement("td", {
+      style: {
+        ...TDS,
+        padding: '4px 6px',
+        whiteSpace: 'nowrap',
+        textAlign: 'right',
+        fontWeight: 600,
+        fontSize: 11,
+        color: e.grand ? OK : MT
+      }
+    }, e.grand ? '₱' + Number(e.grand).toLocaleString('en-PH', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—'), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
         padding: '4px 6px',
@@ -5087,11 +5108,16 @@
     }
   }, /*#__PURE__*/React.createElement("button", {
     style: btn('def', true),
-    onClick: handleNew
+    onClick: handleNew,
+    title: "New CE (Ctrl+N)"
   }, "+ New"), /*#__PURE__*/React.createElement("button", {
     style: btn('def', true),
-    onClick: handleSave
-  }, "Save"), /*#__PURE__*/React.createElement("button", {
+    onClick: handleSave,
+    title: "Save CE (Ctrl+S)"
+  }, "Save"), /*#__PURE__*/React.createElement("span", {
+    title: "Keyboard shortcuts: Ctrl+S = Save  •  Ctrl+N = New CE",
+    style: {fontSize:9, color:BDR, cursor:'default', userSelect:'none', letterSpacing:.3}
+  }, "Ctrl+S / Ctrl+N"), /*#__PURE__*/React.createElement("button", {
     style: btn('acc', true),
     onClick: handleExport
   }, "Export XLS"), /*#__PURE__*/React.createElement("button", {
@@ -5145,23 +5171,40 @@
       top: 48,
       zIndex: 49
     }
-  }, TABS.map(t => /*#__PURE__*/React.createElement("button", {
-    key: t.id,
-    onClick: () => setTab(t.id),
-    style: {
-      background: 'none',
-      border: 'none',
-      borderBottom: tab === t.id ? `2px solid ${ACC}` : '2px solid transparent',
-      color: tab === t.id ? ACC : MT,
-      padding: '9px 13px',
-      cursor: 'pointer',
-      fontFamily: 'inherit',
-      fontWeight: tab === t.id ? 700 : 400,
-      fontSize: 12,
-      whiteSpace: 'nowrap',
-      transition: 'all .12s'
-    }
-  }, t.label))), /*#__PURE__*/React.createElement("div", {
+  }, TABS.map(t => {
+    const tabCounts = {manpower: mp.filter(r=>r.role||r.pax).length, tools: tools.filter(r=>r.desc).length, materials: mats.filter(r=>r.desc).length, ppe: ppe.filter(r=>r.desc).length};
+    const cnt = tabCounts[t.id];
+    return /*#__PURE__*/React.createElement("button", {
+      key: t.id,
+      onClick: () => setTab(t.id),
+      style: {
+        background: 'none',
+        border: 'none',
+        borderBottom: tab === t.id ? `2px solid ${ACC}` : '2px solid transparent',
+        color: tab === t.id ? ACC : MT,
+        padding: '9px 13px',
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        fontWeight: tab === t.id ? 700 : 400,
+        fontSize: 12,
+        whiteSpace: 'nowrap',
+        transition: 'all .12s',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5
+      }
+    }, t.label, cnt > 0 && /*#__PURE__*/React.createElement("span", {
+      style: {
+        background: tab === t.id ? ACC : ACC+'44',
+        color: tab === t.id ? '#000' : ACC,
+        fontSize: 9,
+        fontWeight: 700,
+        borderRadius: 8,
+        padding: '1px 5px',
+        lineHeight: 1.4
+      }
+    }, cnt));
+  }))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex'
     }

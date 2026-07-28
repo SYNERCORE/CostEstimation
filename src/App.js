@@ -338,9 +338,42 @@
   const mobSubT = mobVehiclesT;
   const demobSubT = demobVehiclesT;
   const mobT = cfg.mobDemob ? mobSubT + demobSubT : 0;
-  const addlT = useMemo(() => (addlCosts||[]).reduce((s,r) => s + N(r.amount), 0), [addlCosts]);
-  const grand = mobT + mpTot + toolsT + matsT + ppeT + miscT + addlT;
+  const grand = mobT + mpTot + toolsT + matsT + ppeT + miscT;
   const unitP = grand / (N(info.qty) || 1);
+  /* ── Highlighted costs ──────────────────────────────────────────────────
+     Callouts of money that is ALREADY counted in the sections above (e.g. a
+     client wants "DELIVERY TO PAGBILAO" or "THIRD PARTY COST" shown on its
+     own line). They are never added to `grand` -- doing so would double-count.
+     A row either links to a CE figure via `src` (amount stays in sync when the
+     underlying cost is edited) or carries a manually typed amount. */
+  const hlSources = useMemo(() => {
+    const o = [];
+    o.push({ k: 'calc:unit', g: 'Computed', l: 'Unit Price (Total / Qty)', v: unitP });
+    o.push({ k: 'calc:grand', g: 'Computed', l: 'Grand Total', v: grand });
+    if (cfg.mobDemob) {
+      o.push({ k: 'sec:mob', g: 'Sections', l: 'Mobilization', v: mobSubT });
+      o.push({ k: 'sec:demob', g: 'Sections', l: 'Demobilization', v: demobSubT });
+    }
+    o.push({ k: 'sec:mp', g: 'Sections', l: 'Manpower Cost', v: mpTot });
+    o.push({ k: 'sec:tools', g: 'Sections', l: 'Tools & Equipment', v: toolsT });
+    o.push({ k: 'sec:mats', g: 'Sections', l: 'Materials & Consumables', v: matsT });
+    o.push({ k: 'sec:ppe', g: 'Sections', l: 'PPE', v: ppeT });
+    o.push({ k: 'sec:misc', g: 'Sections', l: 'Miscellaneous', v: miscT });
+    (MISC_DEF[ceType] || MISC_DEF['onsite']).forEach(([key, lbl]) => {
+      const nm = lbl.replace(/^[A-Z]\.\d+\s*/, '');
+      const arr = Array.isArray(misc[key]) ? misc[key] : [];
+      o.push({ k: 'miscCat:' + key, g: 'Misc Categories', l: nm, v: arr.reduce((s, r) => s + N(r.qty) * N(r.cost), 0) });
+      arr.forEach((r, i) => {
+        if (!r.desc) return;
+        o.push({ k: 'miscRow:' + key + ':' + (r.id || i), g: 'Misc Line Items', l: nm + ' → ' + r.desc, v: N(r.qty) * N(r.cost) });
+      });
+    });
+    return o;
+  }, [unitP, grand, mobSubT, demobSubT, mpTot, toolsT, matsT, ppeT, miscT, misc, ceType, cfg.mobDemob]);
+  /* Resolve a highlighted row to its current amount / label. */
+  const hlAmt = r => (r.src && r.src !== 'manual') ? N((hlSources.find(o => o.k === r.src) || {}).v) : N(r.amount);
+  const hlLabel = r => r.label || r.desc || '';
+  const hlRows = (addlCosts || []).filter(r => hlLabel(r));
   const addRow = (set, t) => set(p => [...p, t === 'mp' ? mkMP() : mkRes()]);
   const updRow = (set, id, k, v) => set(p => p.map(r => r.id === id ? {
     ...r,
@@ -938,7 +971,7 @@
   const handleExport = () => {
     const wb = XLSX.utils.book_new();
     const cl = ceType === 'onsite' ? 'Onsite' : ceType === 'shopworks' ? 'Shopwork' : 'Supply';
-    const s1 = [['COST ESTIMATE SUMMARY', '', '', '', '', '', '', '', '', '', '', 'Document No.:', cfg.docNo], ['', '', '', '', '', '', '', '', '', '', '', 'Revision No.:', '0'], ['PROJECT TYPE:', '', '', '', info.projType === 'electrical' ? 'TRUE' : 'FALSE', 'Electrical ' + cl, '', info.projType === 'mechanical' ? 'TRUE' : 'FALSE', 'Mechanical ' + cl], ['PROJECT DESCRIPTION:', info.description, '', '', '', '', '', '', '', '', 'DATE:', info.date], ['CE NUMBER:', info.ceNum], ['CLIENT:', info.client, '', '', '', '', '', '', '', '', '', '', '', 'CE:', info.ceNum], ['LOCATION:', info.location, '', '', '', '', '', 'MATERIAL:', info.material], ['ATTENTION:', info.attention, '', '', '', '', '', 'QTY:', info.qty, '', '', 'STATUS:', info.status], ['END USER:', info.endUser, '', '', '', '', '', 'DAYS:', info.days], [], ['ITEM', 'DESCRIPTION', '', '', '', '', '', '', '', '', 'TOTAL COST'], ...(cfg.mobDemob ? [['', 'MOBILIZATION', '', '', '', '', '', '', '', '', N(mobSubT)], ['', 'DEMOBILIZATION', '', '', '', '', '', '', '', '', N(demobSubT)]] : []), ['A.', 'MANPOWER COST', '', '', '', '', '', '', '', '', mpTot], [ceType === 'supply' ? 'B.' : 'D.', 'TOOLS AND EQUIPMENT', '', '', '', '', '', '', '', '', toolsT], [ceType === 'supply' ? 'B.' : 'E.', 'MATERIALS AND CONSUMABLES', '', '', '', '', '', '', '', '', matsT], [ceType === 'supply' ? 'C.' : 'F.', 'PERSONAL PROTECTIVE EQUIPMENT', '', '', '', '', '', '', '', '', ppeT], [ceType === 'supply' ? 'D.' : ceType === 'onsite' ? 'G.' : 'E.', 'MISCELLANEOUS', '', '', '', '', '', '', '', '', miscT], ...(addlCosts.filter(r=>r.desc).map(r=>['', r.desc.toUpperCase(), '', '', '', '', '', '', '', '', N(r.amount)])), [], ['TOTAL AMOUNT:', '', '', '', '', '', '', '', '', '', grand], [], ['UNIT PRICE:', '', '', '', '', '', '', '', '', '', unitP], [], ['NOTE:'], ['1. CE covers ' + ceType + ' work for ' + info.description], ['2. Additional scope not in original SOW is excluded.'], ['3. Lead time assumes no interruptions or hold points.'], [], ['Prepared By:', '', '', '', 'Checked By:', '', '', 'Noted By:', '', '', '', 'Approved By:'], ['', '', '', '', 'Mr. Jhuniel Ubana', '', '', 'Mr. Fernando Bautista', '', '', '', 'Mr. Warren Maralit'], ['Cost Estimator', '', '', '', 'TSG - Head', '', '', 'Operations Director', '', '', '', 'Dir. Sales & Technical'], [], ['Reviewed By:', '', '', '', '', '', '', cfg.hasConc ? 'Concurred By:' : ''], ['Kenneth Mendoza', '', '', '', '', '', '', cfg.hasConc ? 'RADIM ASAULA' : ''], ['Cost Supervisor', '', '', '', '', '', '', cfg.hasConc ? 'FS MANAGER' : '']];
+    const s1 = [['COST ESTIMATE SUMMARY', '', '', '', '', '', '', '', '', '', '', 'Document No.:', cfg.docNo], ['', '', '', '', '', '', '', '', '', '', '', 'Revision No.:', '0'], ['PROJECT TYPE:', '', '', '', info.projType === 'electrical' ? 'TRUE' : 'FALSE', 'Electrical ' + cl, '', info.projType === 'mechanical' ? 'TRUE' : 'FALSE', 'Mechanical ' + cl], ['PROJECT DESCRIPTION:', info.description, '', '', '', '', '', '', '', '', 'DATE:', info.date], ['CE NUMBER:', info.ceNum], ['CLIENT:', info.client, '', '', '', '', '', '', '', '', '', '', '', 'CE:', info.ceNum], ['LOCATION:', info.location, '', '', '', '', '', 'MATERIAL:', info.material], ['ATTENTION:', info.attention, '', '', '', '', '', 'QTY:', info.qty, '', '', 'STATUS:', info.status], ['END USER:', info.endUser, '', '', '', '', '', 'DAYS:', info.days], [], ['ITEM', 'DESCRIPTION', '', '', '', '', '', '', '', '', 'TOTAL COST'], ...(cfg.mobDemob ? [['', 'MOBILIZATION', '', '', '', '', '', '', '', '', N(mobSubT)], ['', 'DEMOBILIZATION', '', '', '', '', '', '', '', '', N(demobSubT)]] : []), ['A.', 'MANPOWER COST', '', '', '', '', '', '', '', '', mpTot], [ceType === 'supply' ? 'B.' : 'D.', 'TOOLS AND EQUIPMENT', '', '', '', '', '', '', '', '', toolsT], [ceType === 'supply' ? 'B.' : 'E.', 'MATERIALS AND CONSUMABLES', '', '', '', '', '', '', '', '', matsT], [ceType === 'supply' ? 'C.' : 'F.', 'PERSONAL PROTECTIVE EQUIPMENT', '', '', '', '', '', '', '', '', ppeT], [ceType === 'supply' ? 'D.' : ceType === 'onsite' ? 'G.' : 'E.', 'MISCELLANEOUS', '', '', '', '', '', '', '', '', miscT], [], ['TOTAL AMOUNT:', '', '', '', '', '', '', '', '', '', grand], [], ['UNIT PRICE:', '', '', '', '', '', '', '', '', '', unitP], ...(hlRows.length ? [[], ['HIGHLIGHTED COSTS (already included above):'], ...hlRows.map(r => ['', hlLabel(r).toUpperCase(), '', '', '', '', '', '', '', '', hlAmt(r)])] : []), [], ['NOTE:'], ['1. CE covers ' + ceType + ' work for ' + info.description], ['2. Additional scope not in original SOW is excluded.'], ['3. Lead time assumes no interruptions or hold points.'], [], ['Prepared By:', '', '', '', 'Checked By:', '', '', 'Noted By:', '', '', '', 'Approved By:'], ['', '', '', '', 'Mr. Jhuniel Ubana', '', '', 'Mr. Fernando Bautista', '', '', '', 'Mr. Warren Maralit'], ['Cost Estimator', '', '', '', 'TSG - Head', '', '', 'Operations Director', '', '', '', 'Dir. Sales & Technical'], [], ['Reviewed By:', '', '', '', '', '', '', cfg.hasConc ? 'Concurred By:' : ''], ['Kenneth Mendoza', '', '', '', '', '', '', cfg.hasConc ? 'RADIM ASAULA' : ''], ['Cost Supervisor', '', '', '', '', '', '', cfg.hasConc ? 'FS MANAGER' : '']];
     const ws1 = XLSX.utils.aoa_to_sheet(s1);
     ws1['!cols'] = [{
       wch: 8
@@ -4317,7 +4350,7 @@
   };
 
   /* ResTab — defined in src/components/ResTab.js */
-  const summaryRows = [...(cfg.mobDemob ? [['Mobilization Expenses', mobSubT], ['Demobilization Expenses', demobSubT]] : []), ['A.  Manpower Cost', mpTot], [(ceType === 'supply' ? 'B.' : 'D.') + '  Tools & Equipment', toolsT], [(ceType === 'supply' ? 'B.' : 'E.') + '  Materials & Consumables', matsT], [(ceType === 'supply' ? 'C.' : 'F.') + '  PPE', ppeT], [(ceType === 'supply' ? 'D.' : ceType === 'onsite' ? 'G.' : 'E.') + '  Miscellaneous', miscT], ...(addlCosts.filter(r=>r.desc).map(r=>[r.desc, N(r.amount)]))];
+  const summaryRows = [...(cfg.mobDemob ? [['Mobilization Expenses', mobSubT], ['Demobilization Expenses', demobSubT]] : []), ['A.  Manpower Cost', mpTot], [(ceType === 'supply' ? 'B.' : 'D.') + '  Tools & Equipment', toolsT], [(ceType === 'supply' ? 'B.' : 'E.') + '  Materials & Consumables', matsT], [(ceType === 'supply' ? 'C.' : 'F.') + '  PPE', ppeT], [(ceType === 'supply' ? 'D.' : ceType === 'onsite' ? 'G.' : 'E.') + '  Miscellaneous', miscT]];
   const handleGenerateCE = () => {
     const fmt = (n, d = 2) => 'P' + N(n).toLocaleString('en-PH', {
       minimumFractionDigits: d,
@@ -4408,10 +4441,10 @@
         <td class="r">${fmt(r.v)}</td>
       </tr>${r.sub?r.sub.map(s=>`<tr><td class="c" style="font-size:7pt">${s.l.split(' ')[0]}</td><td style="padding-left:16px;font-size:7pt">${s.l.split(' ').slice(1).join(' ')}</td><td class="r" style="font-size:7pt">${fmt(s.v)}</td></tr>`).join(''):''}
       `).join('')}
-      ${addlCosts.filter(r=>r.desc).map(r=>`<tr><td class="c b"></td><td class="b" style="text-align:right;padding-right:8px">${r.desc.toUpperCase()}:</td><td class="r b">${fmt(N(r.amount))}</td></tr>`).join('')}
       <tr class="tot"><td colspan="2" class="b r" style="font-size:9pt">TOTAL AMOUNT:</td><td class="r b" style="font-size:9pt">${fmt(grand)}</td></tr>
       <tr class="tot"><td colspan="2" class="b r">UNIT PRICE (qty ${N(info.qty)||1}):</td><td class="r b">${fmt(unitP)}</td></tr>
       ${margin !== 0 ? `<tr class="tot" style="background:#e8f5e9"><td colspan="2" class="b r">SELLING PRICE (${margin > 0 ? '+' : ''}${margin}% margin):</td><td class="r b">${fmt(grand*(1+margin/100))}</td></tr>` : ''}
+      ${hlRows.length ? hlRows.map(r=>`<tr class="tot"><td colspan="2" class="b r">${hlLabel(r).toUpperCase()}:</td><td class="r b">${fmt(hlAmt(r))}</td></tr>`).join('') : ''}
     </table>`;
 
     const notesList = notes.length ? `<div style="margin-top:4px"><b>NOTE:</b><ol style="margin:1px 0 0 14px;padding:0;font-size:7.5pt">${notes.map(n=>`<li>${n.text}</li>`).join('')}</ol></div>` : '';
@@ -7346,43 +7379,79 @@ tab === 'dashboard' && (() => {
         grand>0&&(grand<aiSuggest.grand*0.8||grand>aiSuggest.grand*1.2)?" — outside typical range ⚠":" — within typical range ✓"),
       /*#__PURE__*/React.createElement("button", {style:{...btn('def',true),fontSize:9,marginTop:6},onClick:()=>setAiSuggest(null)}, "✕ Dismiss")
     )),
-  /* Additional Costs card */
+  /* Highlighted Costs card — callouts of costs already counted in the CE */
   /*#__PURE__*/React.createElement("div", {style:{...CS, borderColor:'#F59E0B44', marginBottom:10}},
-    /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',gap:8,marginBottom:8,flexWrap:'wrap'}},
-      /*#__PURE__*/React.createElement("span", {style:{fontWeight:700,fontSize:12}}, "Additional Costs"),
-      /*#__PURE__*/React.createElement("span", {style:{color:MT,fontSize:11}}, "— Delivery, per-item charges, freight, permits, etc. Added to grand total."),
+    /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',gap:8,marginBottom:4,flexWrap:'wrap'}},
+      /*#__PURE__*/React.createElement("span", {style:{fontWeight:700,fontSize:12}}, "Highlighted Costs"),
+      /*#__PURE__*/React.createElement("span", {style:{color:MT,fontSize:11}}, "— Break out a cost the client wants called out (delivery, pickup, third party, cost per unit...)"),
       /*#__PURE__*/React.createElement("button", {
         style:{...btn('ok',true),marginLeft:'auto'},
-        onClick:()=>setAddlCosts(p=>[...p,{id:uid(),desc:'',amount:0}])
+        onClick:()=>setAddlCosts(p=>[...p,{id:uid(),label:'',src:'',amount:0}])
       }, "+ Add Row")
     ),
-    addlCosts.length === 0 && /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:11,fontStyle:'italic',padding:'6px 0'}}, "No additional costs. Click \"+ Add Row\" to add delivery fees, per-item charges, etc."),
+    /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:10,marginBottom:8,fontStyle:'italic'}},
+      "These are already included in the Grand Total — they are shown separately on the CE, never added on top."),
+    addlCosts.length === 0 && /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:11,fontStyle:'italic',padding:'6px 0'}}, "No highlighted costs. Click \"+ Add Row\" to call out a delivery charge, third party cost, unit price, etc."),
     addlCosts.length > 0 && /*#__PURE__*/React.createElement("table", {style:{width:'100%',borderCollapse:'collapse',fontSize:12}},
       /*#__PURE__*/React.createElement("thead", null,
         /*#__PURE__*/React.createElement("tr", null,
-          /*#__PURE__*/React.createElement("th", {style:{...THS,textAlign:'left'}}, "Description"),
-          /*#__PURE__*/React.createElement("th", {style:{...THS,textAlign:'right',width:160}}, "Amount (₱)"),
+          /*#__PURE__*/React.createElement("th", {style:{...THS,textAlign:'left'}}, "Label shown on CE"),
+          /*#__PURE__*/React.createElement("th", {style:{...THS,textAlign:'left',width:230}}, "Take amount from"),
+          /*#__PURE__*/React.createElement("th", {style:{...THS,textAlign:'right',width:150}}, "Amount (₱)"),
           /*#__PURE__*/React.createElement("th", {style:{...THS,width:40}})
         )
       ),
-      /*#__PURE__*/React.createElement("tbody", null, addlCosts.map(r=>
-        /*#__PURE__*/React.createElement("tr", {key:r.id},
+      /*#__PURE__*/React.createElement("tbody", null, addlCosts.map(r=>{
+        const linked = r.src && r.src !== 'manual';
+        const missing = linked && !hlSources.some(o=>o.k===r.src);
+        return /*#__PURE__*/React.createElement("tr", {key:r.id},
           /*#__PURE__*/React.createElement("td", {style:TDS},
             /*#__PURE__*/React.createElement("input", {
               style:{...INP,width:'100%'},
-              value:r.desc,
+              value:hlLabel(r),
               placeholder:"e.g. Delivery to Pagbilao, Unit Price per Set...",
-              onChange:e=>setAddlCosts(p=>p.map(x=>x.id===r.id?{...x,desc:e.target.value}:x))
+              onChange:e=>setAddlCosts(p=>p.map(x=>x.id===r.id?{...x,label:e.target.value,desc:undefined}:x))
             })
           ),
+          /*#__PURE__*/React.createElement("td", {style:TDS},
+            /*#__PURE__*/React.createElement("select", {
+              style:{...INP,width:'100%',fontSize:11},
+              value:r.src||'manual',
+              onChange:e=>{
+                const src = e.target.value;
+                setAddlCosts(p=>p.map(x=>{
+                  if (x.id!==r.id) return x;
+                  const hit = hlSources.find(o=>o.k===src);
+                  /* Prefill an empty label with the source name for convenience. */
+                  return {...x, src, label: (hlLabel(x) || (hit ? hit.l : '')), desc: undefined};
+                }));
+              }
+            },
+              /*#__PURE__*/React.createElement("option", {value:'manual'}, "— type amount manually —"),
+              ['Computed','Sections','Misc Categories','Misc Line Items'].map(g=>{
+                const inGroup = hlSources.filter(o=>o.g===g);
+                if (!inGroup.length) return null;
+                return /*#__PURE__*/React.createElement("optgroup", {key:g,label:g},
+                  inGroup.map(o=>/*#__PURE__*/React.createElement("option", {key:o.k,value:o.k}, o.l + '  (₱' + ph(o.v) + ')'))
+                );
+              }),
+              /* Keep a stale link selectable so the row is not silently rewritten. */
+              missing && /*#__PURE__*/React.createElement("option", {value:r.src}, "⚠ linked cost no longer exists")
+            )
+          ),
           /*#__PURE__*/React.createElement("td", {style:{...TDS,textAlign:'right'}},
-            /*#__PURE__*/React.createElement("input", {
-              style:{...INP,...MONO,width:150,textAlign:'right'},
-              type:'number',min:0,step:0.01,
-              value:r.amount||'',
-              placeholder:"0.00",
-              onChange:e=>setAddlCosts(p=>p.map(x=>x.id===r.id?{...x,amount:N(e.target.value)}:x))
-            })
+            linked
+              ? /*#__PURE__*/React.createElement("span", {
+                  style:{...MONO,fontSize:12,color:missing?ERR:OK},
+                  title: missing ? 'The linked cost was removed from the CE — pick another source or switch to manual.' : 'Linked — updates automatically when this cost changes'
+                }, missing ? '⚠ —' : '₱' + ph(hlAmt(r)))
+              : /*#__PURE__*/React.createElement("input", {
+                  style:{...INP,...MONO,width:140,textAlign:'right'},
+                  type:'number',min:0,step:0.01,
+                  value:r.amount||'',
+                  placeholder:"0.00",
+                  onChange:e=>setAddlCosts(p=>p.map(x=>x.id===r.id?{...x,amount:N(e.target.value)}:x))
+                })
           ),
           /*#__PURE__*/React.createElement("td", {style:{...TDS,textAlign:'center'}},
             /*#__PURE__*/React.createElement("button", {
@@ -7390,15 +7459,8 @@ tab === 'dashboard' && (() => {
               onClick:()=>setAddlCosts(p=>p.filter(x=>x.id!==r.id))
             }, "✕")
           )
-        )
-      )),
-      addlCosts.filter(r=>r.desc).length > 0 && /*#__PURE__*/React.createElement("tfoot", null,
-        /*#__PURE__*/React.createElement("tr", null,
-          /*#__PURE__*/React.createElement("td", {style:{...TDS,fontWeight:700,textAlign:'right',color:MT,fontSize:11}}, "Additional Costs Total:"),
-          /*#__PURE__*/React.createElement("td", {style:{...TDS,...MONO,textAlign:'right',fontWeight:700,color:'#F59E0B'}}, "₱", ph(addlT)),
-          /*#__PURE__*/React.createElement("td", {style:TDS})
-        )
-      )
+        );
+      }))
     )
   ),
   /*#__PURE__*/React.createElement("div", {

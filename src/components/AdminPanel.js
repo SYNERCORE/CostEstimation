@@ -6,6 +6,8 @@
   const [toast, setToast] = useState('');
   const [section, setSection] = useState('pending');
   const [changePwUser, setChangePwUser] = useState(null);
+  const [auditEntries, setAuditEntries] = useState(null); /* null=not loaded yet */
+  const [auditBusy, setAuditBusy] = useState(false);
   const [newPw, setNewPw] = useState('');
   const [setupMsg, setSetupMsg] = useState('');
   const [setupBusy, setSetupBusy] = useState(false);
@@ -562,19 +564,25 @@
     key: u.id,
     u: u
   })))))), !busy && section === 'audit' && /*#__PURE__*/React.createElement("div", {style: CS}, (()=>{
-    const log = LS.get('auditlog') || [];
-    const actionColor = {role_change: INFO, delete_ce: ERR, save_ce: OK, xlsx_import: ACC};
+    const log = auditEntries !== null ? auditEntries : (LS.get('auditlog') || []);
+    const spConnected = !!getSiteURL();
+    const actionColor = {role_change: INFO, delete_ce: ERR, save_ce: OK, xlsx_import: ACC, change_password: INFO};
     return /*#__PURE__*/React.createElement(React.Fragment, null,
-      /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',gap:8,marginBottom:10}},
+      /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',gap:8,marginBottom:10,flexWrap:'wrap'}},
         /*#__PURE__*/React.createElement("span", {style:{fontWeight:700,fontSize:13}}, "Audit Log"),
-        /*#__PURE__*/React.createElement("span", {style:{color:MT,fontSize:11}}, log.length + " entries"),
-        log.length > 0 && /*#__PURE__*/React.createElement("button", {
+        /*#__PURE__*/React.createElement("span", {style:{color:MT,fontSize:11}}, log.length + " entries" + (spConnected && auditEntries !== null ? ' (SharePoint)' : ' (this browser)')),
+        spConnected && /*#__PURE__*/React.createElement("button", {
+          style:{...btn('def',true),fontSize:11},
+          disabled:auditBusy,
+          onClick:async()=>{setAuditBusy(true);try{setAuditEntries(await dbGetAuditLog(500));}catch(e){toast2('Load error: '+e.message);}setAuditBusy(false);}
+        }, auditBusy ? 'Loading…' : (auditEntries===null ? '☁ Load from SharePoint' : '↻ Refresh')),
+        !spConnected && log.length > 0 && /*#__PURE__*/React.createElement("button", {
           style:{...btn('danger',true),fontSize:11,marginLeft:'auto'},
-          onClick:()=>{ if(confirm('Clear audit log?')){LS.set('auditlog',[]);toast2('Audit log cleared.');} }
-        }, "Clear Log")
+          onClick:()=>{ if(confirm('Clear local audit log?')){LS.set('auditlog',[]);setAuditEntries([]);toast2('Local audit log cleared.');} }
+        }, "Clear Local Log")
       ),
       log.length === 0
-        ? /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:12}}, "No audit events yet.")
+        ? /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:12}}, auditEntries===null && spConnected ? 'Click "Load from SharePoint" to see the full team audit log.' : 'No audit events yet.')
         : /*#__PURE__*/React.createElement("div", {style:{overflowX:'auto'}},
             /*#__PURE__*/React.createElement("table", {style:{width:'100%',borderCollapse:'collapse',fontSize:11}},
               /*#__PURE__*/React.createElement("thead", null,

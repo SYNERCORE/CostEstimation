@@ -217,6 +217,7 @@
     const onUnload=e=>{e.preventDefault();e.returnValue='';};
     window.addEventListener('beforeunload',onUnload);
     const autoTimer=setInterval(()=>{try{saveDraft&&saveDraft();showToast('Draft auto-saved.');}catch(ex){}},180000);
+    const histTimer=setInterval(()=>{if(USE_SP||getSiteURL())loadHist();},5*60*1000);
     (async () => {
       try {
         const ml = await dbGetML();
@@ -225,6 +226,8 @@
       } catch(ex) { console.warn('Masterlist load failed:', ex.message); setSyncStatus({masterlist:'error', sp:'error'}); }
       loadHist();
       loadMonData();
+      /* Notify admin of pending registrations */
+      if(isAdmin){try{const all=await dbGetUsers();const pCount=all.filter(u=>u.status==='pending').length;if(pCount>0)setTimeout(()=>showToast(`👤 ${pCount} user${pCount>1?'s':''} awaiting approval — check Admin Panel → Users`),1500);}catch(_){}};
       /* Expose a global full-refresh so SyncStatusBar can trigger it */
       window._shicFullRefresh = async () => {
         Object.keys(_monSpIdCache).forEach(k => delete _monSpIdCache[k]);
@@ -242,7 +245,7 @@
         }
       } catch(e) { console.warn('Draft URL parse failed:', e.message); }
     })();
-    return()=>{window.removeEventListener('keydown',onKey);window.removeEventListener('beforeunload',onUnload);clearInterval(autoTimer);};
+    return()=>{window.removeEventListener('keydown',onKey);window.removeEventListener('beforeunload',onUnload);clearInterval(autoTimer);clearInterval(histTimer);};
   }, []);
   const loadHist = async () => {
     setHistBusy(true);
@@ -5128,7 +5131,7 @@
       textTransform: 'uppercase',
       letterSpacing: '0.07em'
     }
-  }, currentUser.role)), /*#__PURE__*/React.createElement(OnlinePill,null), /*#__PURE__*/React.createElement("button", {
+  }, currentUser.role)), /*#__PURE__*/React.createElement(OnlinePill,null), /*#__PURE__*/React.createElement(ChangePasswordModal,{currentUser}), /*#__PURE__*/React.createElement("button", {
     onClick: onLogout,
     style: btn('danger', true)
   }, "Sign Out"))), /*#__PURE__*/React.createElement("div", {

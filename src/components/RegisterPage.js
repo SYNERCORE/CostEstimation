@@ -309,7 +309,8 @@ async function autoSetupSP(progressCb){
     [spList('Masterlist')]:  [[3,'shicData']],
     [spList('SowLib')]:      [[3,'shicData']],
     [spList('Companies')]:   [[3,'shicData']],
-    [spList('Drafts')]:      [[2,'shicSavedBy'],[3,'shicData']]
+    [spList('Drafts')]:      [[2,'shicSavedBy'],[3,'shicData']],
+    [spList('AuditLog')]:   [[2,'shicAction'],[3,'shicDetail'],[2,'shicUser'],[2,'shicTs']]
   };
 
   const names=Object.keys(lists);

@@ -35,12 +35,19 @@ async function spWithRetry(fn, attempts = 3) {
 
 /* ── Audit log ───────────────────────────────────────────────────── */
 function auditLog(action, detail, user) {
+  const entry = { ts: new Date().toISOString(), action, detail, user: user || '' };
   try {
     const log = LS.get('auditlog') || [];
-    log.unshift({ ts: new Date().toISOString(), action, detail, user: user || '' });
+    log.unshift(entry);
     if (log.length > 500) log.length = 500;
     LS.set('auditlog', log);
   } catch {}
+  /* Fire-and-forget write to SP AuditLog list when connected */
+  if (getSiteURL()) {
+    Promise.resolve().then(() =>
+      spPost(spList('AuditLog'), { Title: action, shicAction: action, shicDetail: (detail||'').slice(0,255), shicUser: user||'', shicTs: entry.ts })
+    ).catch(() => {});
+  }
 }
 
 /* ── Auto-backup counter ─────────────────────────────────────────── */

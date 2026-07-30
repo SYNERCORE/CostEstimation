@@ -304,6 +304,7 @@
   const prov = getProvider();
   const provInfo = PROVIDERS[prov];
   const mpSub = useMemo(() => mp.reduce((s, r) => {
+    if (!r.role) return s; /* blank starter row is not a cost */
     const mult = SHIFTS[r.shift]?.mult || 1;
     const reg = N(r.pax) * N(r.days) * N(r.rate) * mult;
     const ot = N(r.pax) * (N(r.otHours || 0) / 8) * N(r.rate) * 1.25 * mult;
@@ -328,7 +329,7 @@
       total: thirteenth + sss + hdmf + sil + perdiem
     };
   };
-  const ben = mp.reduce((s, r) => s + calcBen(r).total, 0),
+  const ben = mp.reduce((s, r) => s + (r.role ? calcBen(r).total : 0), 0),
     mpTot = mpSub + ben;
   const toolsT = useMemo(() => tools.reduce((s, r) => s + N(r.qty) * N(r.cost), 0), [tools]);
   const matsT = useMemo(() => mats.reduce((s, r) => s + N(r.qty) * N(r.cost), 0), [mats]);
@@ -425,6 +426,7 @@
      so a per-task subtotal can never disagree with the Grand Total. */
   const rowCost = (kind, r) => {
     if (kind !== 'mp') return N(r.qty) * N(r.cost);
+    if (!r.role) return 0; /* blank row: no role, no cost (calcBen SIL adds pax*30) */
     const mult = SHIFTS[r.shift]?.mult || 1;
     const reg = N(r.pax) * N(r.days) * N(r.rate) * mult;
     const ot = N(r.pax) * (N(r.otHours || 0) / 8) * N(r.rate) * 1.25 * mult;
@@ -907,7 +909,10 @@
   };
   const hasUnsavedWork = () => {
     const hasInfo = !!(info.ceNum && info.ceNum !== BLANK_INFO.ceNum) || !!(info.client) || !!(info.description);
-    const hasRows = mp.some(r=>r.role||r.pax) || tools.some(r=>r.desc) || mats.some(r=>r.desc) || ppe.some(r=>r.desc);
+    /* `r.pax` defaults to 1 on the blank starter row, so testing it made a
+       brand-new CE look dirty and prompted "unsaved work will be replaced"
+       before anything had been typed. */
+    const hasRows = mp.some(r=>r.role) || tools.some(r=>r.desc) || mats.some(r=>r.desc) || ppe.some(r=>r.desc);
     return hasInfo || hasRows;
   };
   const handleLoad = async e => {
@@ -5304,7 +5309,10 @@
       zIndex: 49
     }
   }, TABS.map(t => {
-    const tabCounts = {manpower: mp.filter(r=>r.role||r.pax).length, tools: tools.filter(r=>r.desc).length, materials: mats.filter(r=>r.desc).length, ppe: ppe.filter(r=>r.desc).length, sowbreak: sowUnassignedCount};
+    /* Count only rows the user actually filled in. mkMP() defaults pax to 1, so
+       `r.role||r.pax` counted the blank starter row and every new CE showed a
+       phantom "1" on the Manpower tab. */
+    const tabCounts = {manpower: mp.filter(r=>r.role).length, tools: tools.filter(r=>r.desc).length, materials: mats.filter(r=>r.desc).length, ppe: ppe.filter(r=>r.desc).length, sowbreak: sowUnassignedCount};
     const cnt = tabCounts[t.id];
     return /*#__PURE__*/React.createElement("button", {
       key: t.id,
@@ -6873,6 +6881,10 @@ tab === 'dashboard' && (() => {
   }, "Rows are grouped by shift type. Add under the shift you need."))), Object.entries(SHIFTS).map(([shiftKey, shiftInfo]) => {
     const rows = mp.filter(r => r.shift === shiftKey);
     const shiftSub = rows.reduce((s, r) => s + N(r.pax) * N(r.days) * N(r.rate) * (shiftInfo.mult || 1), 0);
+    /* Head count = total PAX across rows that actually name a role. A blank
+       starter row defaults to pax 1, so counting rows reported "1 worker" on an
+       empty CE, and a row of 3 electricians only counted as one. */
+    const shiftWorkers = rows.reduce((s, r) => s + (r.role ? N(r.pax) : 0), 0);
     const collapsed = !!collapsedShifts[shiftKey];
     const addFromML = () => setPicker({
       type: 'manpower',
@@ -6946,12 +6958,12 @@ tab === 'dashboard' && (() => {
         padding: '1px 7px',
         borderRadius: 3
       }
-    }, shiftInfo.mult, "x"), rows.length > 0 && /*#__PURE__*/React.createElement("span", {
+    }, shiftInfo.mult, "x"), shiftWorkers > 0 && /*#__PURE__*/React.createElement("span", {
       style: {
         color: MT,
         fontSize: 11
       }
-    }, rows.length, " worker", rows.length !== 1 ? 's' : ''))), shiftSub > 0 && /*#__PURE__*/React.createElement("span", {
+    }, shiftWorkers, " worker", shiftWorkers !== 1 ? 's' : ''))), shiftSub > 0 && /*#__PURE__*/React.createElement("span", {
       style: {
         ...MONO,
         color: shiftColor,

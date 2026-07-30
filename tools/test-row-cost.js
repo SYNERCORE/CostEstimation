@@ -40,7 +40,8 @@ check('blank row costs 0', api.rowCost('tools', { qty: 0, cost: 0 }) === 0);
 check('missing fields do not produce NaN', Number.isFinite(api.rowCost('tools', {})), api.rowCost('tools', {}));
 
 console.log('\nrowCost (manpower):');
-const base = { pax: 2, days: 3, rate: 1000, shift: 'regular_day', otHours: 0, perDiem: 0 };
+/* A role is required: a row with no role is an unfilled blank and costs 0. */
+const base = { role: 'BALANCING SUPERVISOR', pax: 2, days: 3, rate: 1000, shift: 'regular_day', otHours: 0, perDiem: 0 };
 const c1 = api.rowCost('mp', base);
 const cMoreDays = api.rowCost('mp', { ...base, days: 6 });
 const cMoreRate = api.rowCost('mp', { ...base, rate: 2000 });
@@ -56,6 +57,21 @@ check('overtime hours add cost', cOt > c1, c1 + ' -> ' + cOt);
 check('night shift multiplier applies', cNight > c1, c1 + ' -> ' + cNight);
 check('zero pax costs nothing', api.rowCost('mp', { ...base, pax: 0 }) === 0, api.rowCost('mp', { ...base, pax: 0 }));
 check('no NaN on empty manpower row', Number.isFinite(api.rowCost('mp', {})), api.rowCost('mp', {}));
+
+console.log('\nblank starter row must be free (calcBen SIL adds pax*30):');
+/* mkMP() defaults pax:1, days:1, rate:0 -- with no role this is an empty row the
+   user has not filled in. It previously cost P30, so every new CE opened showing
+   "Manpower P30.00" and a P30 Grand Total. */
+const blank = { role: '', pax: 1, days: 1, rate: 0, shift: 'regular_day', otHours: 0, perDiem: 0 };
+check('blank manpower row costs 0, not 30', api.rowCost('mp', blank) === 0, api.rowCost('mp', blank));
+check('raw calcBen on that row really does charge 30 (so the guard is required)',
+  api.calcBen(blank).total === 30, api.calcBen(blank).total);
+check('a named row still gets its benefits on top of pay',
+  api.rowCost('mp', { ...blank, role: 'ELECTRICIAN', rate: 850 }) > 850,
+  api.rowCost('mp', { ...blank, role: 'ELECTRICIAN', rate: 850 }));
+check('named row with no rate still carries the 30 SIL floor',
+  api.rowCost('mp', { ...blank, role: 'ELECTRICIAN' }) === 30,
+  api.rowCost('mp', { ...blank, role: 'ELECTRICIAN' }));
 
 console.log('\nsowTaskGroup (deleting a main task takes its sub-tasks):');
 const list = [

@@ -130,3 +130,23 @@ async function spDeleteAttachment(listName, itemId, fileName){
   const r=await fetch(`${su}/_api/web/lists/getbytitle('${listName}')/items(${itemId})/AttachmentFiles/getByFileName('${encodeURIComponent(fileName)}')`,{method:'POST',credentials:'omit',headers:h});
   if(!r.ok) throw new Error('SP del attach '+r.status);
 }
+/* Upload a client document and return its server-relative URL, or null.
+   Called by handleDocUpload but never defined, so attaching a document threw a
+   ReferenceError for every SharePoint user. Built on the existing spPost /
+   spAddAttachment helpers rather than a new file-library code path.
+   Never throws: the caller keeps the locally extracted text either way, so a
+   failed upload must degrade to local-only instead of losing the document. */
+async function spUploadDoc(fileName, fileBuffer){
+  try{
+    if(!getSiteURL()) return null;
+    const list = spList('CE_Documents');
+    const ext = (String(fileName).split('.').pop() || '').toLowerCase();
+    const item = await spPost(list, {Title:fileName, shicFileName:fileName, shicFileType:ext});
+    if(!item || item.Id === undefined) return null;
+    const att = await spAddAttachment(list, item.Id, fileName, fileBuffer);
+    return (att && att.ServerRelativeUrl) || null;
+  }catch(e){
+    console.warn('spUploadDoc:', e.message);
+    return null;
+  }
+}

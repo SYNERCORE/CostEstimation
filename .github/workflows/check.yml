@@ -16,6 +16,8 @@ jobs:
           node-version: '20'
       - name: Syntax + render tree structure
         run: node tools/check-render-tree.js
+      - name: No calls to undefined project functions
+        run: node tools/check-undefined-calls.js
       - name: SOW Breakdown - taskId survives a load round-trip
         run: node tools/test-taskid-remap.js src/App.js
       - name: SOW Breakdown - row cost formulas

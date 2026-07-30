@@ -101,8 +101,17 @@
   const runSetup = async () => {
     setSetupBusy(true);
     setSetupMsg('Running...');
-    const r = await dbSetup();
-    setSetupMsg(r.ok ? 'OK: ' + r.msg : 'Error: ' + r.msg);
+    try {
+      /* Was calling dbSetup(), which does not exist anywhere -- this button threw
+         a ReferenceError instead of doing anything. autoSetupSP is the real
+         implementation, shared with the Connect & Auto-Setup panel. */
+      const r = await autoSetupSP(p => setSetupMsg(p.msg));
+      let msg = r.created + ' list(s) created, ' + r.skipped + ' already existed, ' + (r.added || 0) + ' column(s) added.';
+      if (r.errors && r.errors.length) msg += ' ⚠ ' + r.errors.length + ' problem(s): ' + r.errors.slice(0, 2).join(' | ');
+      setSetupMsg(msg);
+    } catch (e) {
+      setSetupMsg('Error: ' + (e.message || e));
+    }
     setSetupBusy(false);
   };
   /* ── Recompute saved CE totals ───────────────────────────────────────────

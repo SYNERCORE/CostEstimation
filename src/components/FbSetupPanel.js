@@ -27,7 +27,11 @@
         if(p.step!=='done')addLog(p.msg);
       });
       setStatus('connected');
-      addLog('Lists ready: '+result.created+' created, '+result.skipped+' already existed.');
+      addLog('Lists ready: '+result.created+' created, '+result.skipped+' already existed, '+(result.added||0)+' column(s) added.');
+      if(result.errors&&result.errors.length){
+        addLog('⚠ '+result.errors.length+' problem(s) — see below:');
+        result.errors.slice(0,6).forEach(e=>addLog('   '+e));
+      }
       setProgress(null);
     }catch(e){
       setStatus('error: '+e.message.slice(0,100));

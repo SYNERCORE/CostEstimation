@@ -259,6 +259,45 @@
    ====================================================== */
 
 /* &#9472;&#9472; Auto-create SP lists on first connect &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472; */
+/* POST to the SharePoint REST API.
+   The old code sent an "__metadata" property while declaring
+   odata=nometadata, which SharePoint rejects with InvalidClientQueryException --
+   that is why list and column creation was failing. nometadata does not want
+   __metadata at all. Some older on-prem farms only accept the verbose form, so
+   fall back to that on a 400 rather than guessing which one a tenant needs. */
+async function spRestPost(url, payload, spType, token, digest){
+  const attempt = async verbose => {
+    const body = verbose ? {...payload, __metadata:{type:spType}} : payload;
+    const ct = verbose ? 'application/json;odata=verbose' : 'application/json;odata=nometadata';
+    const r = await fetch(url,{
+      method:'POST',credentials:'omit',
+      headers:{'Accept':ct,'Content-Type':ct,'X-RequestDigest':digest,'Authorization':'Bearer '+token},
+      body:JSON.stringify(body)
+    });
+    return {ok:r.ok, status:r.status, text:r.ok ? '' : await r.text()};
+  };
+  let res = await attempt(false);
+  if(!res.ok && res.status === 400) res = await attempt(true);
+  return res;
+}
+/* Existing field names for a list (lower-cased internal names AND titles), or
+   null if the list is missing/unreadable. Lets setup add only what is absent
+   instead of POSTing every column and collecting a 400 for each one. */
+async function spGetFieldNames(listName, token){
+  const su=getSiteURL();
+  try{
+    const r=await fetch(`${su}/_api/web/lists/getbytitle('${listName}')/fields?$select=InternalName,Title&$top=500`,
+      {credentials:'omit',headers:{'Accept':'application/json;odata=nometadata','Authorization':'Bearer '+token}});
+    if(!r.ok)return null;
+    const j=await r.json();
+    const set=new Set();
+    (j.value||[]).forEach(f=>{
+      if(f.InternalName)set.add(String(f.InternalName).toLowerCase());
+      if(f.Title)set.add(String(f.Title).toLowerCase());
+    });
+    return set;
+  }catch(e){return null;}
+}
 async function spCreateList(name, token, digest){
   const su=getSiteURL();
   /* Check if list exists */
@@ -268,29 +307,25 @@ async function spCreateList(name, token, digest){
     if(r.ok)return false; /* already exists */
   }catch(e){}
   /* Create list */
-  const r=await fetch(`${su}/_api/web/lists`,{
-    method:'POST',credentials:'omit',
-    headers:{'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata',
-             'X-RequestDigest':digest,'Authorization':'Bearer '+token},
-    body:JSON.stringify({'__metadata':{'type':'SP.List'},'BaseTemplate':100,'Title':name,'Description':'SHIC Cost Estimator - auto-created'})
-  });
-  if(!r.ok){const t=await r.text();throw new Error('Create list '+name+': '+r.status+' '+t.slice(0,100));}
+  const res=await spRestPost(`${su}/_api/web/lists`,
+    {BaseTemplate:100,Title:name,Description:'SHIC Cost Estimator - auto-created'},
+    'SP.List',token,digest);
+  if(!res.ok)throw new Error('Create list '+name+': '+res.status+' '+res.text.slice(0,140));
   return true; /* created */
 }
 
+/* Returns {ok} or {ok:false, err} so setup can report a real total instead of
+   scattering console warnings. A duplicate field is treated as success. */
 async function spAddField(listName, fieldName, fieldType, token, digest){
   const su=getSiteURL();
   /* fieldType: 2=text, 3=note, 9=number */
-  const body={'__metadata':{'type':'SP.Field'},'FieldTypeKind':fieldType,'Title':fieldName};
-  if(fieldType===3)body.NumberOfLines=100; /* multi-line */
-  const r=await fetch(`${su}/_api/web/lists/getbytitle('${listName}')/fields`,{
-    method:'POST',credentials:'omit',
-    headers:{'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata',
-             'X-RequestDigest':digest,'Authorization':'Bearer '+token},
-    body:JSON.stringify(body)
-  });
-  /* Ignore 'field already exists' errors */
-  if(!r.ok){const t=await r.text();if(!t.includes('already exists')&&!t.includes('duplicate'))console.warn('addField',fieldName,r.status);}
+  const payload={FieldTypeKind:fieldType,Title:fieldName};
+  if(fieldType===3)payload.NumberOfLines=100; /* multi-line */
+  const res=await spRestPost(`${su}/_api/web/lists/getbytitle('${listName}')/fields`,payload,'SP.Field',token,digest);
+  if(res.ok)return{ok:true};
+  const t=res.text||'';
+  if(/already exist|duplicate/i.test(t))return{ok:true,existed:true};
+  return{ok:false,err:fieldName+': '+res.status+' '+t.slice(0,120)};
 }
 
 async function autoSetupSP(progressCb){
@@ -314,26 +349,35 @@ async function autoSetupSP(progressCb){
   };
 
   const names=Object.keys(lists);
-  let created=0,skipped=0;
+  let created=0,skipped=0,added=0;
+  const errors=[];
   for(let i=0;i<names.length;i++){
     const name=names[i];
     const fields=lists[name];
     progressCb&&progressCb({step:'list',msg:'Setting up '+name+'...',progress:(i/names.length)});
     try{
       const wasCreated=await spCreateList(name,tok,digest);
-      /* Always ensure columns, not just on creation. spAddField ignores
-         "already exists", so this is idempotent -- and it is the only way an
-         install created by an older version ever receives newly added columns.
-         Previously columns were added on create only, so existing sites
-         silently lacked them and writes failed. */
-      for(const[type,fname]of fields){
-        await spAddField(name,fname,type,tok,digest);
+      if(wasCreated){created++;}else{skipped++;}
+      /* Columns are ensured on every run, not just on creation -- that is the
+         only way a site set up by an older version ever receives a newly added
+         column. Read the existing fields first and add only what is missing, so
+         a routine re-run costs one request per list instead of one failing
+         request per column. */
+      const existing=wasCreated?null:await spGetFieldNames(name,tok);
+      const missing=fields.filter(([,fname])=>!existing||!existing.has(fname.toLowerCase()));
+      for(const[type,fname]of missing){
+        const r=await spAddField(name,fname,type,tok,digest);
+        if(r.ok){ if(!r.existed)added++; } else errors.push(name+' / '+r.err);
         /* Small delay to avoid SP throttling */
         await new Promise(r=>setTimeout(r,200));
       }
-      if(wasCreated){created++;}else{skipped++;}
-    }catch(e){console.warn('Setup list',name,e.message);}
+    }catch(e){errors.push(name+': '+e.message);}
   }
-  progressCb&&progressCb({step:'done',msg:'Done! '+created+' lists created, '+skipped+' already existed.',progress:1});
-  return{created,skipped};
+  let msg='Done! '+created+' list(s) created, '+skipped+' already existed, '+added+' column(s) added.';
+  if(errors.length){
+    msg+=' '+errors.length+' problem(s): '+errors.slice(0,3).join(' | ')+(errors.length>3?' ...':'');
+    console.warn('SharePoint setup problems:',errors);
+  }
+  progressCb&&progressCb({step:'done',msg,progress:1});
+  return{created,skipped,added,errors};
 }

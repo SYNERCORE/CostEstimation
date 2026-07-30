@@ -24,6 +24,10 @@
     text: ''
   });
   const [sowItems, setSowItems] = useState([]); /* [{id,type:'main'|'sub',text}] */
+  /* SOW Breakdown view state */
+  const [sbCollapsed, setSbCollapsed] = useState({}); /* {taskId:true} */
+  const [sbSel, setSbSel] = useState({});             /* bulk-assign selection, {selKey:descriptor} */
+  const [sbSearch, setSbSearch] = useState('');
   const [addMode, setAddMode] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null); /* true=add to existing CE, false=replace */
   const DRAFT_KEY = 'shic_draft';
@@ -417,18 +421,49 @@
   const miscClearTask = taskId => setMisc(p => { const n = { ...p }; Object.keys(n).forEach(k => { if (Array.isArray(n[k])) n[k] = n[k].filter(r => r.taskId !== taskId); }); return n; });
   const taskResCount = id => RES_TABS.reduce((s, t) => s + t.rows.filter(r => r.taskId === id).length, 0)
     + miscFlat().filter(r => r.taskId === id).length;
+  /* Cost of a single row, using the same formulas that drive the section totals
+     so a per-task subtotal can never disagree with the Grand Total. */
+  const rowCost = (kind, r) => {
+    if (kind !== 'mp') return N(r.qty) * N(r.cost);
+    const mult = SHIFTS[r.shift]?.mult || 1;
+    const reg = N(r.pax) * N(r.days) * N(r.rate) * mult;
+    const ot = N(r.pax) * (N(r.otHours || 0) / 8) * N(r.rate) * 1.25 * mult;
+    return reg + ot + calcBen(r).total;
+  };
+  const taskCost = id => RES_TABS.reduce((s, t) => s + t.rows.filter(r => r.taskId === id).reduce((a, r) => a + rowCost(t.key, r), 0), 0)
+    + miscFlat().filter(r => r.taskId === id).reduce((a, r) => a + rowCost('misc', r), 0);
+  /* A main task owns the consecutive sub-tasks that follow it in the flat list. */
+  const sowTaskGroup = item => {
+    const list = sowItems || [];
+    const i = list.findIndex(s => s.id === item.id);
+    if (i < 0 || item.type !== 'main') return [item.id];
+    const ids = [item.id];
+    for (let j = i + 1; j < list.length && list[j].type === 'sub'; j++) ids.push(list[j].id);
+    return ids;
+  };
+  const sowUnassignedCount = (() => {
+    const valid = new Set((sowItems || []).map(s => s.id));
+    const bad = r => !r.taskId || !valid.has(r.taskId);
+    return RES_TABS.reduce((s, t) => s + t.rows.filter(r => r[t.nameKey] && bad(r)).length, 0)
+      + miscFlat().filter(r => r.desc && bad(r)).length;
+  })();
   /* Delete a scope task and, with confirmation, the resources assigned to it. */
   const deleteSowTask = item => {
-    const n = taskResCount(item.id);
-    if (n > 0 && !confirm('Delete this scope task and the ' + n + ' resource row' + (n === 1 ? '' : 's') +
-      ' assigned to it?\n\nThe resources will be removed from the Manpower / Tools / Consumables / PPE tabs too, so the totals will change.\n\nYou can undo this for 10 seconds.')) return;
+    const ids = sowTaskGroup(item);
+    const subs = ids.length - 1;
+    const n = ids.reduce((s, id) => s + taskResCount(id), 0);
+    if ((n > 0 || subs > 0) && !confirm('Delete this scope task' +
+      (subs > 0 ? ' and its ' + subs + ' sub-task' + (subs === 1 ? '' : 's') : '') +
+      (n > 0 ? ', plus the ' + n + ' resource row' + (n === 1 ? '' : 's') + ' assigned to ' + (subs > 0 ? 'them' : 'it') : '') +
+      '?' + (n > 0 ? '\n\nThe resources will be removed from the Manpower / Tools / Consumables / PPE / Miscellaneous tabs too, so the totals will change.' : '') +
+      '\n\nYou can undo this for 10 seconds.')) return;
     const snap = { sow: [...sowItems], mp: [...mp], tools: [...tools], mats: [...mats], ppe: [...ppe], misc: JSON.parse(JSON.stringify(misc)) };
-    setSowItems(p => p.filter(s => s.id !== item.id));
-    if (n > 0) { RES_TABS.forEach(t => t.set(p => p.filter(r => r.taskId !== item.id))); miscClearTask(item.id); }
-    if (n > 0) {
+    setSowItems(p => p.filter(s => !ids.includes(s.id)));
+    if (n > 0) { RES_TABS.forEach(t => t.set(p => p.filter(r => !ids.includes(r.taskId)))); ids.forEach(id => miscClearTask(id)); }
+    if (n > 0 || subs > 0) {
       const tid = setTimeout(() => setUndoToast(null), 10000);
       setUndoToast({
-        msg: 'Scope task and ' + n + ' resource row' + (n === 1 ? '' : 's') + ' deleted.',
+        msg: (ids.length > 1 ? ids.length + ' scope tasks' : 'Scope task') + (n > 0 ? ' and ' + n + ' resource row' + (n === 1 ? '' : 's') : '') + ' deleted.',
         onUndo: () => {
           clearTimeout(tid);
           setSowItems(snap.sow); setMp(snap.mp); setTools(snap.tools); setMats(snap.mats); setPpe(snap.ppe); setMisc(snap.misc);
@@ -5269,7 +5304,7 @@
       zIndex: 49
     }
   }, TABS.map(t => {
-    const tabCounts = {manpower: mp.filter(r=>r.role||r.pax).length, tools: tools.filter(r=>r.desc).length, materials: mats.filter(r=>r.desc).length, ppe: ppe.filter(r=>r.desc).length};
+    const tabCounts = {manpower: mp.filter(r=>r.role||r.pax).length, tools: tools.filter(r=>r.desc).length, materials: mats.filter(r=>r.desc).length, ppe: ppe.filter(r=>r.desc).length, sowbreak: sowUnassignedCount};
     const cnt = tabCounts[t.id];
     return /*#__PURE__*/React.createElement("button", {
       key: t.id,
@@ -5291,6 +5326,9 @@
         gap: 5
       }
     }, t.label, cnt > 0 && /*#__PURE__*/React.createElement("span", {
+      title: t.id === 'sowbreak'
+        ? cnt + ' resource row' + (cnt === 1 ? '' : 's') + ' not yet assigned to a scope task'
+        : cnt + ' item' + (cnt === 1 ? '' : 's'),
       style: {
         background: tab === t.id ? ACC : ACC+'44',
         color: tab === t.id ? '#000' : ACC,
@@ -5481,6 +5519,7 @@
 
 /* ── SOW Breakdown: assign resources per scope task ── */
 tab === 'sowbreak' && (() => {
+  const UOMS = ['Lot', 'Pcs', 'Set', 'Unit', 'M', 'Kg', 'L', 'Box', 'Pack', 'Roll', 'Pair', 'Day'];
   const named = t => t.rows.filter(r => r[t.nameKey]);
   const _miscNamed = miscFlat().filter(r => r.desc);
   /* A row counts as unassigned if it has no task OR points at a task that no
@@ -5497,202 +5536,359 @@ tab === 'sowbreak' && (() => {
     else t.set(p => [...p, t.mk(null, taskId)]);
   };
 
+  /* Copy every resource of another task onto this one. */
+  const copyFrom = (srcId, dstId) => {
+    RES_TABS.forEach(t => t.set(p => {
+      const clones = p.filter(r => r.taskId === srcId).map(r => ({ ...r, id: uid(), taskId: dstId }));
+      return clones.length ? [...p, ...clones] : p;
+    }));
+    setMisc(p => {
+      const n = { ...p };
+      Object.keys(n).forEach(k => {
+        if (!Array.isArray(n[k])) return;
+        const clones = n[k].filter(r => r.taskId === srcId).map(r => ({ ...r, id: uid(), taskId: dstId }));
+        if (clones.length) n[k] = [...n[k], ...clones];
+      });
+      return n;
+    });
+    showToast('Resources copied.');
+  };
+
+  /* Shared cell renderers so every group lines up in the same columns. */
+  const numCell = (val, onChange, title, w) => /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: w || 58 } },
+    /*#__PURE__*/React.createElement("input", {
+      style: { ...INP, ...MONO, width: (w || 58) - 8, fontSize: 11, padding: '2px 4px', textAlign: 'right' },
+      type: 'number', min: 0, step: 'any', value: val === 0 ? '' : val, title: title, placeholder: '0',
+      onChange: onChange
+    }));
+  const hdr = cols => /*#__PURE__*/React.createElement("thead", null,
+    /*#__PURE__*/React.createElement("tr", null, cols.map((c, i) => /*#__PURE__*/React.createElement("th", {
+      key: i,
+      style: { ...THS, textAlign: i === 0 ? 'left' : 'right', width: c[1] || undefined, fontSize: 9, padding: '2px 4px', paddingLeft: i === 0 ? 128 : 4 }
+    }, c[0]))));
+
   /* One resource group (Manpower / Tools / Consumables / PPE) inside a task card. */
   const group = (t, taskId) => {
     const rows = t.rows.filter(r => r.taskId === taskId);
+    if (!rows.length) return null;
+    const isMp = t.key === 'mp';
     return /*#__PURE__*/React.createElement("div", { key: t.key, style: { marginBottom: 6 } },
-      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 } },
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 } },
         /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, fontWeight: 700, color: MT, textTransform: 'uppercase', letterSpacing: '.06em', minWidth: 128 } }, t.label),
         /*#__PURE__*/React.createElement("button", { style: { ...btn('def', true), fontSize: 10 }, onClick: () => addTo(t, taskId, true) }, "+ Masterlist"),
-        /*#__PURE__*/React.createElement("button", { style: { ...btn('def', true), fontSize: 10 }, onClick: () => addTo(t, taskId, false) }, "+ Blank")
+        /*#__PURE__*/React.createElement("button", { style: { ...btn('def', true), fontSize: 10 }, onClick: () => addTo(t, taskId, false) }, "+ Blank"),
+        /*#__PURE__*/React.createElement("span", { style: { ...MONO, marginLeft: 'auto', fontSize: 10, color: MT }, title: t.label + " subtotal for this task" },
+          "₱" + ph(rows.reduce((a, r) => a + rowCost(t.key, r), 0)))
       ),
-      rows.length === 0
-        ? /*#__PURE__*/React.createElement("div", { style: { color: BDR, fontSize: 10, fontStyle: 'italic', paddingLeft: 128 } }, "none")
-        : /*#__PURE__*/React.createElement("table", { style: { width: '100%', borderCollapse: 'collapse', fontSize: 11, marginBottom: 2 } },
-            /*#__PURE__*/React.createElement("tbody", null, rows.map(r =>
-              /*#__PURE__*/React.createElement("tr", { key: r.id },
-                /*#__PURE__*/React.createElement("td", { style: { ...TDS, paddingLeft: 128 } },
+      /*#__PURE__*/React.createElement("table", { style: { width: '100%', borderCollapse: 'collapse', fontSize: 11, marginBottom: 2 } },
+        hdr([['Item description'], [isMp ? 'Pax' : 'Qty', 58], [isMp ? 'Days' : 'UOM', 66], [isMp ? 'Rate' : 'Unit cost', 92], ['Cost', 92], ['', 56]]),
+        /*#__PURE__*/React.createElement("tbody", null, rows.map(r =>
+          /*#__PURE__*/React.createElement("tr", { key: r.id },
+            /*#__PURE__*/React.createElement("td", { style: { ...TDS, paddingLeft: 128 } },
+              /*#__PURE__*/React.createElement("input", {
+                style: { ...INP, width: '100%', fontSize: 11, padding: '2px 6px' },
+                value: r[t.nameKey] || '', placeholder: "Item description...",
+                onChange: e => updRow(t.set, r.id, t.nameKey, e.target.value)
+              })
+            ),
+            numCell(r[t.qtyKey] || 0, e => updRow(t.set, r.id, t.qtyKey, N(e.target.value)), isMp ? 'PAX' : 'QTY', 58),
+            isMp
+              ? numCell(r.days || 0, e => updRow(t.set, r.id, 'days', N(e.target.value)), 'Number of days', 66)
+              : /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: 66 } },
                   /*#__PURE__*/React.createElement("input", {
-                    style: { ...INP, width: '100%', fontSize: 11, padding: '2px 6px' },
-                    value: r[t.nameKey] || '', placeholder: "Item description...",
-                    onChange: e => updRow(t.set, r.id, t.nameKey, e.target.value)
+                    style: { ...INP, width: 58, fontSize: 10, padding: '2px 4px' },
+                    value: r.uom || '', list: "shic-uom-list", placeholder: "UOM",
+                    onChange: e => updRow(t.set, r.id, 'uom', e.target.value)
                   })
                 ),
-                /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: 62 } },
-                  /*#__PURE__*/React.createElement("input", {
-                    style: { ...INP, ...MONO, width: 54, fontSize: 11, padding: '2px 4px', textAlign: 'right' },
-                    type: 'number', min: 0, step: 1, value: r[t.qtyKey] || '',
-                    title: t.key === 'mp' ? 'PAX' : 'QTY',
-                    onChange: e => updRow(t.set, r.id, t.qtyKey, N(e.target.value))
-                  })
-                ),
-                /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: 68, color: MT, fontSize: 10 } }, t.key === 'mp' ? 'PAX/S' : (r.uom || '')),
-                /*#__PURE__*/React.createElement("td", { style: { ...TDS, ...MONO, width: 96, textAlign: 'right', color: MT, fontSize: 10 } }, "₱" + ph(N(r[t.costKey]))),
-                /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: 54, textAlign: 'right' } },
-                  /*#__PURE__*/React.createElement("button", {
-                    title: "Unassign from this task (keeps the row in the " + t.label + " tab)",
-                    style: { background: 'none', border: 'none', color: MT, cursor: 'pointer', fontSize: 12, padding: '0 3px' },
-                    onClick: () => updRow(t.set, r.id, 'taskId', '')
-                  }, "↩"),
-                  /*#__PURE__*/React.createElement("button", {
-                    title: "Delete this row entirely",
-                    style: { background: 'none', border: 'none', color: ERR, cursor: 'pointer', fontSize: 13, padding: '0 3px' },
-                    onClick: () => delRow(t.set, r.id)
-                  }, "×")
-                )
-              )
-            ))
+            numCell(r[t.costKey] || 0, e => updRow(t.set, r.id, t.costKey, N(e.target.value)), isMp ? 'Daily rate' : 'Cost per unit', 92),
+            /*#__PURE__*/React.createElement("td", { style: { ...TDS, ...MONO, width: 92, textAlign: 'right', color: MT, fontSize: 10 }, title: "Row cost (recomputed)" }, "₱" + ph(rowCost(t.key, r))),
+            /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: 56, textAlign: 'right' } },
+              /*#__PURE__*/React.createElement("button", {
+                title: "Unassign from this task (keeps the row in the " + t.label + " tab)",
+                style: { background: 'none', border: 'none', color: MT, cursor: 'pointer', fontSize: 12, padding: '0 3px' },
+                onClick: () => updRow(t.set, r.id, 'taskId', '')
+              }, "↩"),
+              /*#__PURE__*/React.createElement("button", {
+                title: "Delete this row entirely",
+                style: { background: 'none', border: 'none', color: ERR, cursor: 'pointer', fontSize: 13, padding: '0 3px' },
+                onClick: () => delRow(t.set, r.id)
+              }, "×")
+            )
           )
+        ))
+      )
     );
   };
 
-  /* Miscellaneous group -- same shape as `group()` but spans misc categories. */
+  /* Miscellaneous group -- same columns, but spans the misc categories. */
   const miscGroup = taskId => {
     const rows = miscFlat().filter(r => r.taskId === taskId);
-    const defCat = (miscCats[0] || {}).k;
+    if (!rows.length) return null;
     return /*#__PURE__*/React.createElement("div", { key: 'misc', style: { marginBottom: 6 } },
-      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, flexWrap: 'wrap' } },
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 } },
         /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, fontWeight: 700, color: MT, textTransform: 'uppercase', letterSpacing: '.06em', minWidth: 128 } }, "Miscellaneous"),
-        miscCats.map(c => /*#__PURE__*/React.createElement("button", {
-          key: c.k, style: { ...btn('def', true), fontSize: 10 },
-          title: "Add a blank row under " + c.label,
-          onClick: () => miscAdd(c.k, taskId, null)
-        }, "+ " + c.label))
+        /*#__PURE__*/React.createElement("select", {
+          style: { ...INP, width: 150, fontSize: 10, padding: '2px 4px' }, value: '',
+          onChange: e => { if (e.target.value) miscAdd(e.target.value, taskId, null); }
+        },
+          /*#__PURE__*/React.createElement("option", { value: '' }, "+ add to category..."),
+          miscCats.map(c => /*#__PURE__*/React.createElement("option", { key: c.k, value: c.k }, c.label))
+        ),
+        /*#__PURE__*/React.createElement("span", { style: { ...MONO, marginLeft: 'auto', fontSize: 10, color: MT }, title: "Miscellaneous subtotal for this task" },
+          "₱" + ph(rows.reduce((a, r) => a + rowCost('misc', r), 0)))
       ),
-      rows.length === 0
-        ? /*#__PURE__*/React.createElement("div", { style: { color: BDR, fontSize: 10, fontStyle: 'italic', paddingLeft: 128 } }, "none")
-        : /*#__PURE__*/React.createElement("table", { style: { width: '100%', borderCollapse: 'collapse', fontSize: 11, marginBottom: 2 } },
-            /*#__PURE__*/React.createElement("tbody", null, rows.map(r =>
-              /*#__PURE__*/React.createElement("tr", { key: r.id },
-                /*#__PURE__*/React.createElement("td", { style: { ...TDS, paddingLeft: 128 } },
-                  /*#__PURE__*/React.createElement("input", {
-                    style: { ...INP, width: '100%', fontSize: 11, padding: '2px 6px' },
-                    value: r.desc || '', placeholder: r._catLabel + " item...",
-                    onChange: e => miscUpd(r._cat, r.id, 'desc', e.target.value)
-                  })
-                ),
-                /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: 62 } },
-                  /*#__PURE__*/React.createElement("input", {
-                    style: { ...INP, ...MONO, width: 54, fontSize: 11, padding: '2px 4px', textAlign: 'right' },
-                    type: 'number', min: 0, step: 1, value: r.qty || '',
-                    onChange: e => miscUpd(r._cat, r.id, 'qty', N(e.target.value))
-                  })
-                ),
-                /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: 68, color: MT, fontSize: 10 } }, r.uom || ''),
-                /*#__PURE__*/React.createElement("td", { style: { ...TDS, ...MONO, width: 96, textAlign: 'right', color: MT, fontSize: 10 } }, "₱" + ph(N(r.cost))),
-                /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: 54, textAlign: 'right' } },
-                  /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, color: MT, marginRight: 4 }, title: "Miscellaneous category" }, r._catLabel),
-                  /*#__PURE__*/React.createElement("button", {
-                    title: "Unassign from this task (keeps the row in the Miscellaneous tab)",
-                    style: { background: 'none', border: 'none', color: MT, cursor: 'pointer', fontSize: 12, padding: '0 3px' },
-                    onClick: () => miscUpd(r._cat, r.id, 'taskId', '')
-                  }, "↩"),
-                  /*#__PURE__*/React.createElement("button", {
-                    title: "Delete this row entirely",
-                    style: { background: 'none', border: 'none', color: ERR, cursor: 'pointer', fontSize: 13, padding: '0 3px' },
-                    onClick: () => miscDel(r._cat, r.id)
-                  }, "×")
-                )
-              )
-            ))
+      /*#__PURE__*/React.createElement("table", { style: { width: '100%', borderCollapse: 'collapse', fontSize: 11, marginBottom: 2 } },
+        hdr([['Item description'], ['Qty', 58], ['UOM', 66], ['Unit cost', 92], ['Cost', 92], ['', 56]]),
+        /*#__PURE__*/React.createElement("tbody", null, rows.map(r =>
+          /*#__PURE__*/React.createElement("tr", { key: r.id },
+            /*#__PURE__*/React.createElement("td", { style: { ...TDS, paddingLeft: 128 } },
+              /*#__PURE__*/React.createElement("input", {
+                style: { ...INP, width: '100%', fontSize: 11, padding: '2px 6px' },
+                value: r.desc || '', placeholder: r._catLabel + " item...",
+                onChange: e => miscUpd(r._cat, r.id, 'desc', e.target.value)
+              })
+            ),
+            numCell(r.qty || 0, e => miscUpd(r._cat, r.id, 'qty', N(e.target.value)), 'QTY', 58),
+            /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: 66 } },
+              /*#__PURE__*/React.createElement("input", {
+                style: { ...INP, width: 58, fontSize: 10, padding: '2px 4px' },
+                value: r.uom || '', list: "shic-uom-list", placeholder: "UOM",
+                onChange: e => miscUpd(r._cat, r.id, 'uom', e.target.value)
+              })
+            ),
+            numCell(r.cost || 0, e => miscUpd(r._cat, r.id, 'cost', N(e.target.value)), 'Cost per unit', 92),
+            /*#__PURE__*/React.createElement("td", { style: { ...TDS, ...MONO, width: 92, textAlign: 'right', color: MT, fontSize: 10 } }, "₱" + ph(rowCost('misc', r))),
+            /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: 56, textAlign: 'right' } },
+              /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, color: MT, marginRight: 4 }, title: "Miscellaneous category" }, r._catLabel),
+              /*#__PURE__*/React.createElement("button", {
+                title: "Unassign from this task (keeps the row in the Miscellaneous tab)",
+                style: { background: 'none', border: 'none', color: MT, cursor: 'pointer', fontSize: 12, padding: '0 3px' },
+                onClick: () => miscUpd(r._cat, r.id, 'taskId', '')
+              }, "↩"),
+              /*#__PURE__*/React.createElement("button", {
+                title: "Delete this row entirely",
+                style: { background: 'none', border: 'none', color: ERR, cursor: 'pointer', fontSize: 13, padding: '0 3px' },
+                onClick: () => miscDel(r._cat, r.id)
+              }, "×")
+            )
           )
+        ))
+      )
     );
   };
 
-  const unassigned = RES_TABS.map(t => ({ t, rows: t.rows.filter(r => isUnassigned(r) && r[t.nameKey]) })).filter(x => x.rows.length);
-  const unassignedMisc = miscFlat().filter(r => isUnassigned(r) && r.desc);
+  /* Empty groups collapse into one "Add:" line so a task card stays compact. */
+  const addLine = taskId => {
+    const emptyTabs = RES_TABS.filter(t => !t.rows.some(r => r.taskId === taskId));
+    const miscEmpty = !miscFlat().some(r => r.taskId === taskId);
+    if (!emptyTabs.length && !miscEmpty) return null;
+    return /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 4, paddingTop: 5, borderTop: `1px dashed ${BDR}` } },
+      /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: MT, minWidth: 30 } }, "Add:"),
+      /* Adds a blank row so the group appears immediately -- from there the
+         group header offers "+ Masterlist" too. Going straight to the picker
+         here would strand the user if they cancelled it. */
+      emptyTabs.map(t => /*#__PURE__*/React.createElement("button", {
+        key: t.key, style: { ...btn('def', true), fontSize: 10 },
+        title: "Add a " + t.label + " row to this task",
+        onClick: () => addTo(t, taskId, false)
+      }, "+ " + t.label)),
+      miscEmpty && /*#__PURE__*/React.createElement("select", {
+        style: { ...INP, width: 140, fontSize: 10, padding: '2px 4px' }, value: '',
+        onChange: e => { if (e.target.value) miscAdd(e.target.value, taskId, null); }
+      },
+        /*#__PURE__*/React.createElement("option", { value: '' }, "+ Miscellaneous..."),
+        miscCats.map(c => /*#__PURE__*/React.createElement("option", { key: c.k, value: c.k }, c.label))
+      )
+    );
+  };
+
+  /* ── Bulk assign ── */
+  const selKey = (kind, key, id) => kind + ':' + key + ':' + id;
+  const selCount = Object.keys(sbSel).length;
+  const toggleSel = (kind, key, id, on) => setSbSel(p => {
+    const n = { ...p }, k = selKey(kind, key, id);
+    if (on) n[k] = { kind, key, id }; else delete n[k];
+    return n;
+  });
+  const bulkAssign = taskId => {
+    Object.values(sbSel).forEach(d => {
+      if (d.kind === 'res') { const t = RES_TABS.find(x => x.key === d.key); if (t) updRow(t.set, d.id, 'taskId', taskId); }
+      else miscUpd(d.key, d.id, 'taskId', taskId);
+    });
+    showToast(selCount + ' row' + (selCount === 1 ? '' : 's') + ' assigned.');
+    setSbSel({});
+  };
+
+  const q = sbSearch.trim().toLowerCase();
+  const matches = txt => !q || String(txt || '').toLowerCase().includes(q);
+  const unassigned = RES_TABS.map(t => ({ t, rows: t.rows.filter(r => isUnassigned(r) && r[t.nameKey] && matches(r[t.nameKey])) })).filter(x => x.rows.length);
+  const unassignedMisc = miscFlat().filter(r => isUnassigned(r) && r.desc && matches(r.desc));
+  const shownUnassigned = unassigned.reduce((s, x) => s + x.rows.length, 0) + unassignedMisc.length;
+  const allShown = [].concat(
+    ...unassigned.map(x => x.rows.map(r => ({ kind: 'res', key: x.t.key, id: r.id }))),
+    unassignedMisc.map(r => ({ kind: 'misc', key: r._cat, id: r.id }))
+  );
+  const allSelected = shownUnassigned > 0 && allShown.every(d => sbSel[selKey(d.kind, d.key, d.id)]);
+
+  const taskOptions = (sowItems || []).map(it => /*#__PURE__*/React.createElement("option", { key: it.id, value: it.id }, (sowLabels[it.id] || '') + "  " + (it.text || '(untitled)').slice(0, 60)));
+
+  /* One row in the Unassigned list. */
+  const unRow = (d, name, qty, uom, onAssign) => /*#__PURE__*/React.createElement("tr", { key: d.id },
+    /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: 26, textAlign: 'center' } },
+      /*#__PURE__*/React.createElement("input", {
+        type: 'checkbox', checked: !!sbSel[selKey(d.kind, d.key, d.id)],
+        onChange: e => toggleSel(d.kind, d.key, d.id, e.target.checked)
+      })
+    ),
+    /*#__PURE__*/React.createElement("td", { style: TDS }, name),
+    /*#__PURE__*/React.createElement("td", { style: { ...TDS, ...MONO, width: 58, textAlign: 'right', color: MT } }, qty || ''),
+    /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: 66, color: MT, fontSize: 10 } }, uom || ''),
+    /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: 230 } },
+      /*#__PURE__*/React.createElement("select", {
+        style: { ...INP, width: '100%', fontSize: 11, padding: '2px 6px' }, value: '',
+        onChange: e => { if (e.target.value) onAssign(e.target.value); }
+      }, /*#__PURE__*/React.createElement("option", { value: '' }, "— assign to task —"), taskOptions)
+    )
+  );
 
   return /*#__PURE__*/React.createElement("div", null,
+    /* Shared UOM suggestions for every input in this tab */
+    /*#__PURE__*/React.createElement("datalist", { id: "shic-uom-list" }, UOMS.map(u => /*#__PURE__*/React.createElement("option", { key: u, value: u }))),
+
     /* Intro / status */
     /*#__PURE__*/React.createElement("div", { style: { ...CS, borderColor: INFO + '44', marginBottom: 10 } },
       /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
-        /*#__PURE__*/React.createElement("div", null,
+        /*#__PURE__*/React.createElement("div", { style: { minWidth: 240, flex: 1 } },
           /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 13 } }, "SOW Breakdown"),
           /*#__PURE__*/React.createElement("div", { style: { color: MT, fontSize: 11, marginTop: 2 } },
-            "Assign the manpower, tools, consumables and PPE each scope task needs. Costs still come from the resource tabs — this only records which task each row belongs to.")
+            "Assign the manpower, tools, consumables, PPE and miscellaneous items each scope task needs. Edits here change the resource tabs directly — this is the same data, grouped by task.")
         ),
-        /*#__PURE__*/React.createElement("div", { style: { marginLeft: 'auto', textAlign: 'right' } },
+        (sowItems || []).length > 1 && /*#__PURE__*/React.createElement("button", {
+          style: { ...btn('def', true), fontSize: 10 },
+          onClick: () => {
+            const allOpen = (sowItems || []).every(it => !sbCollapsed[it.id]);
+            const n = {};
+            if (allOpen) (sowItems || []).forEach(it => { n[it.id] = true; });
+            setSbCollapsed(n);
+          }
+        }, (sowItems || []).every(it => !sbCollapsed[it.id]) ? "Collapse all" : "Expand all"),
+        /*#__PURE__*/React.createElement("div", { style: { textAlign: 'right' } },
           /*#__PURE__*/React.createElement("div", { style: { ...MONO, fontSize: 15, fontWeight: 700, color: assignedNamed === totalNamed && totalNamed > 0 ? OK : ACC } }, assignedNamed + " / " + totalNamed),
           /*#__PURE__*/React.createElement("div", { style: { color: MT, fontSize: 10 } }, "resources assigned")
         )
       )
     ),
+
     /* No scope yet */
     (sowItems || []).length === 0 && /*#__PURE__*/React.createElement("div", { style: { ...CS, textAlign: 'center', color: MT, fontSize: 12 } },
       /*#__PURE__*/React.createElement("div", { style: { marginBottom: 8 } }, "No scope tasks yet — add them in the Scope of Work tab first."),
       /*#__PURE__*/React.createElement("button", { style: btn('acc', true), onClick: () => setTab('sow') }, "Go to Scope of Work")
     ),
+
     /* One card per scope task */
     (sowItems || []).map(it => {
       const n = taskResCount(it.id);
+      const cost = taskCost(it.id);
+      const open = !sbCollapsed[it.id];
+      const others = (sowItems || []).filter(o => o.id !== it.id && taskResCount(o.id) > 0);
       return /*#__PURE__*/React.createElement("div", {
         key: it.id,
-        style: { ...CS, marginBottom: 8, borderColor: n ? OK + '33' : BDR, marginLeft: it.type === 'sub' ? 18 : 0 }
+        style: { ...CS, marginBottom: 8, borderColor: n ? OK + '33' : BDR, marginLeft: it.type === 'sub' ? 18 : 0, padding: open ? undefined : '8px 12px' }
       },
-        /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8, flexWrap: 'wrap' } },
+        /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: open ? 8 : 0 } },
+          /*#__PURE__*/React.createElement("button", {
+            title: open ? "Collapse" : "Expand",
+            style: { background: 'none', border: 'none', color: MT, cursor: 'pointer', fontSize: 11, padding: 0, width: 14 },
+            onClick: () => setSbCollapsed(p => ({ ...p, [it.id]: open }))
+          }, open ? "▾" : "▸"),
           /*#__PURE__*/React.createElement("span", { style: { ...MONO, color: ACC, fontWeight: 700, fontSize: 12 } }, sowLabels[it.id] || ''),
-          /*#__PURE__*/React.createElement("span", { style: { fontWeight: it.type === 'main' ? 700 : 400, fontSize: it.type === 'main' ? 12 : 11.5 } }, it.text || /*#__PURE__*/React.createElement("i", { style: { color: MT } }, "(untitled task)")),
           /*#__PURE__*/React.createElement("span", {
-            style: { marginLeft: 'auto', fontSize: 10, color: n ? OK : MT, background: (n ? OK : MT) + '18', borderRadius: 8, padding: '1px 7px', whiteSpace: 'nowrap' }
-          }, n ? n + " resource" + (n === 1 ? '' : 's') : "no resources")
+            style: { fontWeight: it.type === 'main' ? 700 : 400, fontSize: it.type === 'main' ? 12 : 11.5, cursor: 'pointer' },
+            onClick: () => setSbCollapsed(p => ({ ...p, [it.id]: open }))
+          }, it.text || /*#__PURE__*/React.createElement("i", { style: { color: MT } }, "(untitled task)")),
+          /*#__PURE__*/React.createElement("span", { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 } },
+            cost > 0 && /*#__PURE__*/React.createElement("span", { style: { ...MONO, fontSize: 11, fontWeight: 700, color: ACC }, title: "Total cost of the resources assigned to this task" }, "₱" + ph(cost)),
+            /*#__PURE__*/React.createElement("span", {
+              style: { fontSize: 10, color: n ? OK : MT, background: (n ? OK : MT) + '18', borderRadius: 8, padding: '1px 7px', whiteSpace: 'nowrap' }
+            }, n ? n + " resource" + (n === 1 ? '' : 's') : "no resources"),
+            open && others.length > 0 && /*#__PURE__*/React.createElement("select", {
+              style: { ...INP, width: 132, fontSize: 10, padding: '2px 4px' }, value: '',
+              title: "Copy all resources from another task into this one",
+              onChange: e => { if (e.target.value) copyFrom(e.target.value, it.id); }
+            },
+              /*#__PURE__*/React.createElement("option", { value: '' }, "copy from..."),
+              others.map(o => /*#__PURE__*/React.createElement("option", { key: o.id, value: o.id }, (sowLabels[o.id] || '') + "  " + (o.text || '(untitled)').slice(0, 40)))
+            )
+          )
         ),
-        RES_TABS.map(t => group(t, it.id)),
-        miscGroup(it.id)
+        open && RES_TABS.map(t => group(t, it.id)),
+        open && miscGroup(it.id),
+        open && addLine(it.id)
       );
     }),
+
     /* Unassigned rows — existing CEs start here, and this is how you file them */
-    (unassigned.length > 0 || unassignedMisc.length > 0) && /*#__PURE__*/React.createElement("div", { style: { ...CS, borderColor: '#F59E0B44', marginTop: 12 } },
-      /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 12, marginBottom: 2 } }, "Unassigned resources"),
+    (sowUnassignedCount > 0) && /*#__PURE__*/React.createElement("div", { style: { ...CS, borderColor: '#F59E0B44', marginTop: 12 } },
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 } },
+        /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 12 } }, "Unassigned resources"),
+        /*#__PURE__*/React.createElement("input", {
+          style: { ...INP, width: 190, fontSize: 11, padding: '3px 8px', marginLeft: 'auto' },
+          value: sbSearch, placeholder: "Filter by description...",
+          onChange: e => setSbSearch(e.target.value)
+        }),
+        sbSearch && /*#__PURE__*/React.createElement("button", { style: { ...btn('def', true), fontSize: 10 }, onClick: () => setSbSearch('') }, "✕")
+      ),
       /*#__PURE__*/React.createElement("div", { style: { color: MT, fontSize: 11, marginBottom: 8 } },
-        "These are costed in the totals but not linked to a scope task. Pick a task to file them — they will then be removed together with that task."),
+        "These are costed in the totals but not linked to a scope task. Tick several and assign them in one go — they will then be removed together with that task."),
+
+      /* Bulk bar */
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8, padding: '6px 8px', background: SURF, borderRadius: 6 } },
+        /*#__PURE__*/React.createElement("label", { style: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, cursor: 'pointer', userSelect: 'none' } },
+          /*#__PURE__*/React.createElement("input", {
+            type: 'checkbox', checked: allSelected,
+            onChange: e => setSbSel(() => {
+              if (!e.target.checked) return {};
+              const n = {};
+              allShown.forEach(d => { n[selKey(d.kind, d.key, d.id)] = d; });
+              return n;
+            })
+          }),
+          "Select all" + (sbSearch ? " shown (" + shownUnassigned + ")" : "")
+        ),
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: selCount ? ACC : MT, fontWeight: selCount ? 700 : 400 } }, selCount + " selected"),
+        /*#__PURE__*/React.createElement("select", {
+          style: { ...INP, width: 230, fontSize: 11, padding: '2px 6px', marginLeft: 'auto', opacity: selCount ? 1 : .5 },
+          value: '', disabled: !selCount,
+          onChange: e => { if (e.target.value) bulkAssign(e.target.value); }
+        }, /*#__PURE__*/React.createElement("option", { value: '' }, selCount ? "— assign " + selCount + " selected to... —" : "— select rows first —"), taskOptions),
+        selCount > 0 && /*#__PURE__*/React.createElement("button", { style: { ...btn('def', true), fontSize: 10 }, onClick: () => setSbSel({}) }, "Clear")
+      ),
+
+      shownUnassigned === 0 && /*#__PURE__*/React.createElement("div", { style: { color: MT, fontSize: 11, fontStyle: 'italic' } }, "Nothing matches \"" + sbSearch + "\"."),
+
       unassigned.map(({ t, rows }) => /*#__PURE__*/React.createElement("div", { key: t.key, style: { marginBottom: 8 } },
         /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: MT, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 3 } }, t.label + " (" + rows.length + ")"),
         /*#__PURE__*/React.createElement("table", { style: { width: '100%', borderCollapse: 'collapse', fontSize: 11 } },
           /*#__PURE__*/React.createElement("tbody", null, rows.map(r =>
-            /*#__PURE__*/React.createElement("tr", { key: r.id },
-              /*#__PURE__*/React.createElement("td", { style: TDS }, r[t.nameKey]),
-              /*#__PURE__*/React.createElement("td", { style: { ...TDS, ...MONO, width: 62, textAlign: 'right', color: MT } }, N(r[t.qtyKey]) || ''),
-              /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: 68, color: MT, fontSize: 10 } }, t.key === 'mp' ? 'PAX/S' : (r.uom || '')),
-              /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: 240 } },
-                /*#__PURE__*/React.createElement("select", {
-                  style: { ...INP, width: '100%', fontSize: 11, padding: '2px 6px' },
-                  value: '',
-                  onChange: e => { if (e.target.value) updRow(t.set, r.id, 'taskId', e.target.value); }
-                },
-                  /*#__PURE__*/React.createElement("option", { value: '' }, "— assign to task —"),
-                  (sowItems || []).map(it => /*#__PURE__*/React.createElement("option", { key: it.id, value: it.id }, (sowLabels[it.id] || '') + "  " + (it.text || '(untitled)').slice(0, 60)))
-                )
-              )
-            )
+            unRow({ kind: 'res', key: t.key, id: r.id }, r[t.nameKey], N(r[t.qtyKey]), t.key === 'mp' ? 'PAX/S' : r.uom,
+              v => updRow(t.set, r.id, 'taskId', v))
           ))
         )
       )),
-      /* Unassigned miscellaneous rows */
+
       unassignedMisc.length > 0 && /*#__PURE__*/React.createElement("div", { style: { marginBottom: 8 } },
         /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: MT, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 3 } }, "Miscellaneous (" + unassignedMisc.length + ")"),
         /*#__PURE__*/React.createElement("table", { style: { width: '100%', borderCollapse: 'collapse', fontSize: 11 } },
           /*#__PURE__*/React.createElement("tbody", null, unassignedMisc.map(r =>
-            /*#__PURE__*/React.createElement("tr", { key: r.id },
-              /*#__PURE__*/React.createElement("td", { style: TDS }, r.desc),
-              /*#__PURE__*/React.createElement("td", { style: { ...TDS, ...MONO, width: 62, textAlign: 'right', color: MT } }, N(r.qty) || ''),
-              /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: 68, color: MT, fontSize: 10 } }, r.uom || ''),
-              /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: 240 } },
-                /*#__PURE__*/React.createElement("select", {
-                  style: { ...INP, width: '100%', fontSize: 11, padding: '2px 6px' },
-                  value: '',
-                  onChange: e => { if (e.target.value) miscUpd(r._cat, r.id, 'taskId', e.target.value); }
-                },
-                  /*#__PURE__*/React.createElement("option", { value: '' }, "— assign to task —"),
-                  (sowItems || []).map(it => /*#__PURE__*/React.createElement("option", { key: it.id, value: it.id }, (sowLabels[it.id] || '') + "  " + (it.text || '(untitled)').slice(0, 60)))
-                )
-              )
-            )
+            unRow({ kind: 'misc', key: r._cat, id: r.id }, r.desc, N(r.qty), r.uom,
+              v => miscUpd(r._cat, r.id, 'taskId', v))
           ))
         )
       )
     )
   );
-})(), tab === 'scopelib' && /*#__PURE__*/React.createElement(ScopeLibraryEditor, null), tab === 'masterlist' && /*#__PURE__*/React.createElement(MlEditor, null), tab === 'history' && /*#__PURE__*/React.createElement(HistPanel, null),
+})(), tab === 'scopelib' &&
 
 /* ── Attachment Panel Modal ── */
 attachPanel && /*#__PURE__*/React.createElement("div", {

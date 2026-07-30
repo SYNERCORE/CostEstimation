@@ -10,6 +10,9 @@
   const [auditBusy, setAuditBusy] = useState(false);
   const [auditListMissing, setAuditListMissing] = useState(false);
   const [newPw, setNewPw] = useState('');
+  /* Saved-total recompute: null = not scanned, else {checked, diffs:[], skipped} */
+  const [recalc, setRecalc] = useState(null);
+  const [recalcBusy, setRecalcBusy] = useState(false);
   const [setupMsg, setSetupMsg] = useState('');
   const [setupBusy, setSetupBusy] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
@@ -101,6 +104,56 @@
     const r = await dbSetup();
     setSetupMsg(r.ok ? 'OK: ' + r.msg : 'Error: ' + r.msg);
     setSetupBusy(false);
+  };
+  /* ── Recompute saved CE totals ───────────────────────────────────────────
+     Older CEs were saved with a P30-per-blank-manpower-row inflation (calcBen's
+     SIL charges pax*30 even at rate 0, and the blank starter row counted). This
+     recomputes each saved CE from its own stored rows with computeCEGrand and
+     reports the differences. Scanning never writes -- Apply is a separate step. */
+  const scanTotals = async () => {
+    setRecalcBusy(true);
+    setRecalc(null);
+    try {
+      const list = await dbGetHistory(null, true);
+      const diffs = [];
+      let checked = 0, skipped = 0;
+      for (const h of (list || [])) {
+        const ceNum = (h.info && h.info.ceNum) || h.ceNum || '';
+        /* SP history rows carry only summary fields -- fetch the full CE so we
+           recompute from real line items and never from a partial object. */
+        let full = h;
+        if (full.tools === undefined) {
+          if (typeof h.id === 'number') { try { full = (await dbLoadCE(h.id)) || h; } catch (_) { full = h; } }
+          if (full.tools === undefined) { try { full = LS.get('ce_cache:' + ceNum) || full; } catch (_) {} }
+        }
+        if (full.tools === undefined && full.mp === undefined) { skipped++; continue; }
+        checked++;
+        const was = Math.round(N(h.grand) * 100) / 100;
+        const now = Math.round(computeCEGrand(full) * 100) / 100;
+        if (Math.abs(was - now) >= 0.01) diffs.push({ ceNum, id: h.id, was, now, delta: now - was });
+      }
+      diffs.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+      setRecalc({ checked, skipped, diffs });
+    } catch (e) {
+      setToast('Scan failed: ' + (e.message || e));
+    }
+    setRecalcBusy(false);
+  };
+  const applyTotals = async () => {
+    if (!recalc || !recalc.diffs.length) return;
+    const net = recalc.diffs.reduce((s, d) => s + d.delta, 0);
+    if (!window.confirm('Update the stored total of ' + recalc.diffs.length + ' CE' + (recalc.diffs.length === 1 ? '' : 's') +
+      '?\n\nNet change: ' + (net >= 0 ? '+' : '') + net.toFixed(2) +
+      '\n\nOnly the total is rewritten — line items are untouched. This cannot be undone from here.')) return;
+    setRecalcBusy(true);
+    let ok = 0, failed = 0;
+    for (const d of recalc.diffs) {
+      try { await dbUpdateCETotal(d.ceNum, d.id, d.now); ok++; }
+      catch (_) { failed++; }
+    }
+    setToast(ok + ' total' + (ok === 1 ? '' : 's') + ' updated' + (failed ? ', ' + failed + ' failed' : '') + '.');
+    setRecalcBusy(false);
+    scanTotals();
   };
   const SBadge = ({
     s
@@ -624,6 +677,50 @@
       borderColor: INFO + '33'
     }
   }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      marginBottom: 6,
+      fontSize: 11,
+      color: MT,
+      textTransform: 'uppercase',
+      letterSpacing: '0.07em'
+    }
+  }, "Recalculate Saved CE Totals"), /*#__PURE__*/React.createElement("div", {
+    style: { color: MT, fontSize: 11, marginBottom: 8, lineHeight: 1.5 }
+  }, "CEs saved before the blank-row fix carry an extra ₱30 per empty manpower row, because the SIL benefit charges ₱30 per head even at a ₱0 rate. This recomputes each saved CE from its own line items. Scanning changes nothing — you see the differences first, and only the stored total is rewritten."),
+  /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
+    /*#__PURE__*/React.createElement("button", {
+      style: btn('info'), onClick: scanTotals, disabled: recalcBusy
+    }, recalcBusy ? 'Working...' : 'Scan saved CEs'),
+    recalc && recalc.diffs.length > 0 && /*#__PURE__*/React.createElement("button", {
+      style: btn('acc'), onClick: applyTotals, disabled: recalcBusy
+    }, 'Apply ' + recalc.diffs.length + ' correction' + (recalc.diffs.length === 1 ? '' : 's')),
+    recalc && /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: MT } },
+      recalc.checked + ' checked' +
+      (recalc.skipped ? ' · ' + recalc.skipped + ' skipped (no line items stored)' : '') +
+      ' · ' + (recalc.diffs.length ? recalc.diffs.length + ' differ' : 'all totals already correct'))
+  ),
+  recalc && recalc.diffs.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: { marginTop: 10, maxHeight: 260, overflowY: 'auto', border: `1px solid ${BDR}`, borderRadius: 6 }
+  }, /*#__PURE__*/React.createElement("table", {
+    style: { width: '100%', borderCollapse: 'collapse', fontSize: 11 }
+  },
+    /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null,
+      ['CE Number', 'Stored', 'Recomputed', 'Change'].map((h, i) => /*#__PURE__*/React.createElement("th", {
+        key: h,
+        style: { ...THS, textAlign: i ? 'right' : 'left', position: 'sticky', top: 0, background: SURF }
+      }, h)))),
+    /*#__PURE__*/React.createElement("tbody", null, recalc.diffs.map(d => /*#__PURE__*/React.createElement("tr", { key: d.ceNum },
+      /*#__PURE__*/React.createElement("td", { style: TDS }, d.ceNum || '(no CE number)'),
+      /*#__PURE__*/React.createElement("td", { style: { ...TDS, textAlign: 'right', color: MT } }, '₱' + ph(d.was)),
+      /*#__PURE__*/React.createElement("td", { style: { ...TDS, textAlign: 'right', fontWeight: 700 } }, '₱' + ph(d.now)),
+      /*#__PURE__*/React.createElement("td", {
+        style: { ...TDS, textAlign: 'right', color: d.delta < 0 ? OK : ERR, fontWeight: 700 }
+      }, (d.delta >= 0 ? '+' : '') + ph(d.delta))
+    )))
+  )),
+  /*#__PURE__*/React.createElement("div", { style: { borderTop: `1px solid ${BDR}`, margin: '14px 0 10px' } }),
+  /*#__PURE__*/React.createElement("div", {
     style: {
       fontWeight: 700,
       marginBottom: 6,

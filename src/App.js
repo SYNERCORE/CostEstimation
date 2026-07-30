@@ -7859,6 +7859,62 @@ tab === 'dashboard' && (() => {
   }, "Miscellaneous Total: ", /*#__PURE__*/React.createElement("span", {
     style: MONO
   }, "P", ph(miscT)))))), tab === 'summary' && /*#__PURE__*/React.createElement("div", null,
+  /* ── Pre-flight check ── one place listing everything worth fixing before a CE
+     goes out. Read-only: it never changes data, it only points at problems. */
+  (() => {
+    const issues = [];
+    const add = (sev, msg, tabId, hint) => issues.push({ sev, msg, tabId, hint });
+
+    /* Blocking-ish: the numbers are wrong or missing */
+    if (grand <= 0) add('err', 'Grand total is ₱0.00 — nothing is costed yet.', 'manpower');
+    const zero = collectZeroCost();
+    if (zero.length) add('err', zero.length + ' line item' + (zero.length === 1 ? '' : 's') + ' priced at ₱0.00',
+      'manpower', zero.slice(0, 6).join(' · ') + (zero.length > 6 ? ' · …' : ''));
+    if (!(info.description || '').trim()) add('err', 'No project description / scope summary.', 'info');
+    if (!(info.client || '').trim()) add('err', 'No client name.', 'info');
+
+    /* Worth a look, not necessarily wrong */
+    if (!(sowItems || []).length) add('warn', 'No Scope of Work items.', 'sow');
+    else if (sowUnassignedCount > 0) add('warn', sowUnassignedCount + ' resource row' + (sowUnassignedCount === 1 ? '' : 's') + ' not assigned to a scope task.', 'sowbreak');
+    if (N(margin) === 0) add('warn', 'Margin is 0% — the selling price equals cost.', 'summary');
+    if (!N(info.qty)) add('warn', 'Quantity is blank, so the unit price falls back to 1.', 'info');
+    const dangling = (addlCosts || []).filter(r => r.src && r.src !== 'manual' && !hlSources.some(o => o.k === r.src));
+    if (dangling.length) add('err', dangling.length + ' highlighted cost' + (dangling.length === 1 ? '' : 's') + ' point at a cost that no longer exists.', 'summary');
+    if (!(approvers || []).some(a => (a.name || '').trim())) add('warn', 'No approvers named.', 'summary');
+
+    const errs = issues.filter(i => i.sev === 'err').length;
+    const warns = issues.length - errs;
+    const clean = issues.length === 0;
+
+    return /*#__PURE__*/React.createElement("div", {
+      style: { ...CS, marginBottom: 10, borderColor: clean ? OK + '55' : errs ? ERR + '55' : '#F59E0B55' }
+    },
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
+        /*#__PURE__*/React.createElement("span", { style: { fontWeight: 700, fontSize: 12 } }, clean ? "✓ CE looks complete" : "Check CE"),
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: MT } },
+          clean
+            ? "No issues found."
+            : (errs ? errs + " to fix" : "") + (errs && warns ? " · " : "") + (warns ? warns + " to review" : "")),
+        /*#__PURE__*/React.createElement("span", { style: { ...MONO, marginLeft: 'auto', fontSize: 13, fontWeight: 700, color: grand > 0 ? ACC : MT } }, "₱" + ph(grand))
+      ),
+      !clean && /*#__PURE__*/React.createElement("div", { style: { marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 } },
+        issues.map((i, n) => /*#__PURE__*/React.createElement("div", {
+          key: n,
+          style: { display: 'flex', alignItems: 'baseline', gap: 7, fontSize: 11, padding: '3px 0', borderTop: n ? `1px solid ${BDR}` : 'none' }
+        },
+          /*#__PURE__*/React.createElement("span", { style: { color: i.sev === 'err' ? ERR : '#F59E0B', fontWeight: 700, width: 12, flexShrink: 0 } }, i.sev === 'err' ? "!" : "?"),
+          /*#__PURE__*/React.createElement("span", { style: { flex: 1, minWidth: 160 } },
+            i.msg,
+            i.hint && /*#__PURE__*/React.createElement("span", { style: { color: MT, display: 'block', fontSize: 10, marginTop: 1 } }, i.hint)
+          ),
+          i.tabId && i.tabId !== 'summary' && /*#__PURE__*/React.createElement("button", {
+            style: { ...btn('def', true), fontSize: 10, flexShrink: 0 },
+            onClick: () => setTab(i.tabId)
+          }, "Go →")
+        ))
+      )
+    );
+  })(),
   /* Feature 12: AI Cost Suggestion banner */
   /*#__PURE__*/React.createElement("div", {style:{marginBottom:12,display:'flex',gap:8,alignItems:'flex-start',flexWrap:'wrap'}},
     /*#__PURE__*/React.createElement("button", {

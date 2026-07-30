@@ -77,6 +77,49 @@ const mkMiscRow = () => ({
   uom: 'Lot',
   cost: 0
 });
+/* ── Recompute the grand total of a SAVED CE object ──────────────────────────
+   Mirrors the live editor's rules exactly:
+     - a manpower row with no role costs nothing (calcBen's SIL adds pax*30, so
+       the blank starter row used to add P30 to every CE)
+     - Tools & Equipment is qty x days x cost, days optional and defaulting to 1
+     - Materials / PPE / Miscellaneous are qty x cost
+     - Mobilization / Demobilization vehicles are qty x days x rate, and only
+       count for CE types that use them
+   Reads SHIFTS and CE_CFG from config.js at call time (config.js loads after
+   this file, which is fine because nothing here runs at load).
+   tools/test-recompute.js asserts this stays in step with the editor. */
+function ceResDays(r) {
+  return (r.days === undefined || r.days === null || r.days === '') ? 1 : (parseFloat(r.days) || 0);
+}
+function ceMpRowCost(r) {
+  if (!r || !r.role) return 0;
+  const mult = (typeof SHIFTS !== 'undefined' && SHIFTS[r.shift] && SHIFTS[r.shift].mult) || 1;
+  const pax = N(r.pax), days = N(r.days), rate = N(r.rate) * mult;
+  const reg = pax * days * N(r.rate) * mult;
+  const ot = pax * (N(r.otHours || 0) / 8) * N(r.rate) * 1.25 * mult;
+  const thirteenth = rate / 12 * days * pax;
+  const sss = rate * 0.25 * 0.75 * days * pax / 26;
+  const hdmf = rate * 0.16 * days * pax / 26 * 2;
+  const sil = rate * days * pax * 5 / 12 / 26 + pax * 30;
+  const perdiem = N(r.perDiem || 0) * days * pax;
+  return reg + ot + thirteenth + sss + hdmf + sil + perdiem;
+}
+function computeCEGrand(ce) {
+  if (!ce) return 0;
+  const cfg = (typeof CE_CFG !== 'undefined' && CE_CFG[ce.ceType]) || {};
+  const arr = v => Array.isArray(v) ? v : [];
+  const mpT = arr(ce.mp).reduce((s, r) => s + ceMpRowCost(r), 0);
+  const toolsT = arr(ce.tools).reduce((s, r) => s + N(r.qty) * ceResDays(r) * N(r.cost), 0);
+  const matsT = arr(ce.mats).reduce((s, r) => s + N(r.qty) * N(r.cost), 0);
+  const ppeT = arr(ce.ppe).reduce((s, r) => s + N(r.qty) * N(r.cost), 0);
+  const miscT = Object.keys(ce.misc || {}).reduce((s, k) => {
+    if (k.charAt(0) === '_') return s; /* _addlCosts / _margin are not costs */
+    return s + arr((ce.misc || {})[k]).reduce((t, r) => t + N(r.qty) * N(r.cost), 0);
+  }, 0);
+  const veh = rows => arr(rows).reduce((s, r) => s + N(r.qty) * N(r.days) * N(r.rate), 0);
+  const mobT = cfg.mobDemob ? veh(ce.mobVehicles) + veh(ce.demobVehicles) : 0;
+  return mobT + mpT + toolsT + matsT + ppeT + miscT;
+}
 async function sha256(s) {
   const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s + 'sy3_salt_2026'));
   return Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2, '0')).join('');

@@ -8,8 +8,13 @@ const ResTab = ({
   mlType,
   masterlist,
   showToast,
-  setPicker
+  setPicker,
+  showDays /* Tools only: equipment can be charged per day (qty x days x cost) */
 }) => {
+  /* Days is optional per row and defaults to 1, so a row that never sets it
+     costs exactly qty x cost -- existing CEs are unaffected. */
+  const rowDays = r => (r.days === undefined || r.days === '' || r.days === null) ? 1 : (N(r.days) || 0);
+  const rowTot = r => N(r.qty) * (showDays ? rowDays(r) : 1) * N(r.cost);
   const [_rtNewId, _rtSetNewId] = useState(null);
   const _rtDescRef = useRef(null);
   useEffect(() => {
@@ -102,11 +107,11 @@ const ResTab = ({
     borderCollapse: 'collapse',
     fontSize: 12
   }
-}, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Description', 'Qty', 'UOM', 'Unit Cost (P)', 'Row Total', ''].map(h => /*#__PURE__*/React.createElement("th", {
+}, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Description', 'Qty', ...(showDays ? ['Days'] : []), 'UOM', 'Unit Cost (P)', 'Row Total', ''].map(h => /*#__PURE__*/React.createElement("th", {
   key: h,
   style: THS
 }, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map(r => {
-  const tot = N(r.qty) * N(r.cost);
+  const tot = rowTot(r);
   return /*#__PURE__*/React.createElement("tr", {
     key: r.id
   }, /*#__PURE__*/React.createElement("td", {
@@ -148,6 +153,22 @@ const ResTab = ({
     onChange: e => set(p => p.map(x => x.id === r.id ? {
       ...x,
       qty: e.target.value
+    } : x))
+  })), showDays && /*#__PURE__*/React.createElement("td", {
+    style: TDS
+  }, /*#__PURE__*/React.createElement("input", {
+    style: {
+      ...INP,
+      fontFamily: "'JetBrains Mono',monospace",
+      width: 60
+    },
+    type: "number",
+    min: 0,
+    value: r.days === undefined || r.days === null ? 1 : r.days,
+    title: "Number of days this item is charged for. Leave at 1 for a one-off charge.",
+    onChange: e => set(p => p.map(x => x.id === r.id ? {
+      ...x,
+      days: e.target.value
     } : x))
   })), /*#__PURE__*/React.createElement("td", {
     style: TDS

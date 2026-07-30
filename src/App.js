@@ -331,7 +331,11 @@
   };
   const ben = mp.reduce((s, r) => s + (r.role ? calcBen(r).total : 0), 0),
     mpTot = mpSub + ben;
-  const toolsT = useMemo(() => tools.reduce((s, r) => s + N(r.qty) * N(r.cost), 0), [tools]);
+  /* Tools & Equipment can be charged per day (crane, welding machine, ...).
+     `days` is optional and defaults to 1, so any row that never sets it costs
+     exactly qty x cost and existing CEs keep their totals. */
+  const resDays = r => (r.days === undefined || r.days === null || r.days === '') ? 1 : (N(r.days) || 0);
+  const toolsT = useMemo(() => tools.reduce((s, r) => s + N(r.qty) * resDays(r) * N(r.cost), 0), [tools]);
   const matsT = useMemo(() => mats.reduce((s, r) => s + N(r.qty) * N(r.cost), 0), [mats]);
   const ppeT = useMemo(() => ppe.reduce((s, r) => s + N(r.qty) * N(r.cost), 0), [ppe]);
   const miscT = useMemo(() => (MISC_DEF[ceType] || MISC_DEF['onsite']).reduce((s, [k]) => {
@@ -425,6 +429,7 @@
   /* Cost of a single row, using the same formulas that drive the section totals
      so a per-task subtotal can never disagree with the Grand Total. */
   const rowCost = (kind, r) => {
+    if (kind === 'tools') return N(r.qty) * resDays(r) * N(r.cost);
     if (kind !== 'mp') return N(r.qty) * N(r.cost);
     if (!r.role) return 0; /* blank row: no role, no cost (calcBen SIL adds pax*30) */
     const mult = SHIFTS[r.shift]?.mult || 1;
@@ -851,6 +856,7 @@
       showToast('All cost/rate values must be zero or positive.', true);
       return;
     }
+    if (!confirmZeroCost('Save anyway?')) return;
     const allHist = await dbGetHistory(null, true).catch(() => []);
     const dup = allHist.find(h => (h.info?.ceNum || '').trim().toUpperCase() === ceNum.toUpperCase());
     if (dup && !dup._imported) {
@@ -1063,7 +1069,7 @@
   const handleExport = () => {
     const wb = XLSX.utils.book_new();
     const cl = ceType === 'onsite' ? 'Onsite' : ceType === 'shopworks' ? 'Shopwork' : 'Supply';
-    const s1 = [['COST ESTIMATE SUMMARY', '', '', '', '', '', '', '', '', '', '', 'Document No.:', cfg.docNo], ['', '', '', '', '', '', '', '', '', '', '', 'Revision No.:', '0'], ['PROJECT TYPE:', '', '', '', info.projType === 'electrical' ? 'TRUE' : 'FALSE', 'Electrical ' + cl, '', info.projType === 'mechanical' ? 'TRUE' : 'FALSE', 'Mechanical ' + cl], ['PROJECT DESCRIPTION:', info.description, '', '', '', '', '', '', '', '', 'DATE:', info.date], ['CE NUMBER:', info.ceNum], ['CLIENT:', info.client, '', '', '', '', '', '', '', '', '', '', '', 'CE:', info.ceNum], ['LOCATION:', info.location, '', '', '', '', '', 'MATERIAL:', info.material], ['ATTENTION:', info.attention, '', '', '', '', '', 'QTY:', info.qty, '', '', 'STATUS:', info.status], ['END USER:', info.endUser, '', '', '', '', '', 'DAYS:', info.days], [], ['ITEM', 'DESCRIPTION', '', '', '', '', '', '', '', '', 'TOTAL COST'], ...(cfg.mobDemob ? [['', 'MOBILIZATION', '', '', '', '', '', '', '', '', N(mobSubT)], ['', 'DEMOBILIZATION', '', '', '', '', '', '', '', '', N(demobSubT)]] : []), ['A.', 'MANPOWER COST', '', '', '', '', '', '', '', '', mpTot], [ceType === 'supply' ? 'B.' : 'D.', 'TOOLS AND EQUIPMENT', '', '', '', '', '', '', '', '', toolsT], [ceType === 'supply' ? 'B.' : 'E.', 'MATERIALS AND CONSUMABLES', '', '', '', '', '', '', '', '', matsT], [ceType === 'supply' ? 'C.' : 'F.', 'PERSONAL PROTECTIVE EQUIPMENT', '', '', '', '', '', '', '', '', ppeT], [ceType === 'supply' ? 'D.' : ceType === 'onsite' ? 'G.' : 'E.', 'MISCELLANEOUS', '', '', '', '', '', '', '', '', miscT], [], ['TOTAL AMOUNT:', '', '', '', '', '', '', '', '', '', grand], [], ['UNIT PRICE:', '', '', '', '', '', '', '', '', '', unitP], ...(hlRows.length ? [[], ['HIGHLIGHTED COSTS (already included above):'], ...hlRows.map(r => ['', hlLabel(r).toUpperCase(), '', '', '', '', '', '', '', '', hlAmt(r)])] : []), [], ['NOTE:'], ['1. CE covers ' + ceType + ' work for ' + info.description], ['2. Additional scope not in original SOW is excluded.'], ['3. Lead time assumes no interruptions or hold points.'], [], ['Prepared By:', '', '', '', 'Checked By:', '', '', 'Noted By:', '', '', '', 'Approved By:'], ['', '', '', '', 'Mr. Jhuniel Ubana', '', '', 'Mr. Fernando Bautista', '', '', '', 'Mr. Warren Maralit'], ['Cost Estimator', '', '', '', 'TSG - Head', '', '', 'Operations Director', '', '', '', 'Dir. Sales & Technical'], [], ['Reviewed By:', '', '', '', '', '', '', cfg.hasConc ? 'Concurred By:' : ''], ['Kenneth Mendoza', '', '', '', '', '', '', cfg.hasConc ? 'RADIM ASAULA' : ''], ['Cost Supervisor', '', '', '', '', '', '', cfg.hasConc ? 'FS MANAGER' : '']];
+    const s1 = [['COST ESTIMATE SUMMARY', '', '', '', '', '', '', '', '', '', '', 'Document No.:', cfg.docNo], ['', '', '', '', '', '', '', '', '', '', '', 'Revision No.:', '0'], ['PROJECT TYPE:', '', '', '', info.projType === 'electrical' ? 'TRUE' : 'FALSE', 'Electrical ' + cl, '', info.projType === 'mechanical' ? 'TRUE' : 'FALSE', 'Mechanical ' + cl], ['PROJECT DESCRIPTION:', info.description, '', '', '', '', '', '', '', '', 'DATE:', info.date], ['CE NUMBER:', info.ceNum], ['CLIENT:', info.client, '', '', '', '', '', '', '', '', '', '', '', 'CE:', info.ceNum], ['LOCATION:', info.location, '', '', '', '', '', 'MATERIAL:', info.material], ['ATTENTION:', info.attention, '', '', '', '', '', 'QTY:', info.qty, '', '', 'STATUS:', info.status], ['END USER:', info.endUser, '', '', '', '', '', 'DAYS:', info.days], [], ['ITEM', 'DESCRIPTION', '', '', '', '', '', '', '', '', 'TOTAL COST'], ...(cfg.mobDemob ? [['', 'MOBILIZATION', '', '', '', '', '', '', '', '', N(mobSubT)], ['', 'DEMOBILIZATION', '', '', '', '', '', '', '', '', N(demobSubT)]] : []), ['A.', 'MANPOWER COST', '', '', '', '', '', '', '', '', mpTot], [ceType === 'supply' ? 'B.' : 'D.', 'TOOLS AND EQUIPMENT', '', '', '', '', '', '', '', '', toolsT], [ceType === 'supply' ? 'B.' : 'E.', 'MATERIALS AND CONSUMABLES', '', '', '', '', '', '', '', '', matsT], [ceType === 'supply' ? 'C.' : 'F.', 'PERSONAL PROTECTIVE EQUIPMENT', '', '', '', '', '', '', '', '', ppeT], [ceType === 'supply' ? 'D.' : ceType === 'onsite' ? 'G.' : 'E.', 'MISCELLANEOUS', '', '', '', '', '', '', '', '', miscT], [], ['TOTAL AMOUNT:', '', '', '', '', '', '', '', '', '', grand], [], ['UNIT PRICE:', '', '', '', '', '', '', '', '', '', unitP], ...(margin !== 0 ? [['MARGIN:', '', '', '', '', '', '', '', '', '', (margin > 0 ? '+' : '') + margin + '%'], ['SELLING PRICE:', '', '', '', '', '', '', '', '', '', grand * (1 + margin / 100)]] : []), ...(hlRows.length ? [[], ['HIGHLIGHTED COSTS (already included above):'], ...hlRows.map(r => ['', hlLabel(r).toUpperCase(), '', '', '', '', '', '', '', '', hlAmt(r)])] : []), [], ['NOTE:'], ['1. CE covers ' + ceType + ' work for ' + info.description], ['2. Additional scope not in original SOW is excluded.'], ['3. Lead time assumes no interruptions or hold points.'], [], ['Prepared By:', '', '', '', 'Checked By:', '', '', 'Noted By:', '', '', '', 'Approved By:'], ['', '', '', '', 'Mr. Jhuniel Ubana', '', '', 'Mr. Fernando Bautista', '', '', '', 'Mr. Warren Maralit'], ['Cost Estimator', '', '', '', 'TSG - Head', '', '', 'Operations Director', '', '', '', 'Dir. Sales & Technical'], [], ['Reviewed By:', '', '', '', '', '', '', cfg.hasConc ? 'Concurred By:' : ''], ['Kenneth Mendoza', '', '', '', '', '', '', cfg.hasConc ? 'RADIM ASAULA' : ''], ['Cost Supervisor', '', '', '', '', '', '', cfg.hasConc ? 'FS MANAGER' : '']];
     const ws1 = XLSX.utils.aoa_to_sheet(s1);
     ws1['!cols'] = [{
       wch: 8
@@ -1075,7 +1081,7 @@
       wch: 18
     }];
     XLSX.utils.book_append_sheet(wb, ws1, 'CE SUMMARY');
-    const s2 = [['RESOURCES'], [], ['TOOLS (BOTE)'], ['Desc', 'Qty', 'UOM', 'Unit Cost', 'Total'], ...tools.map(r => [r.desc, N(r.qty), r.uom, N(r.cost), N(r.qty) * N(r.cost)]), ['', '', '', 'TOTAL:', toolsT], [], ['MATERIALS (BOCM)'], ['Desc', 'Qty', 'UOM', 'Unit Cost', 'Total'], ...mats.map(r => [r.desc, N(r.qty), r.uom, N(r.cost), N(r.qty) * N(r.cost)]), ['', '', '', 'TOTAL:', matsT], [], ['PPE'], ['Desc', 'Qty', 'UOM', 'Unit Cost', 'Total'], ...ppe.map(r => [r.desc, N(r.qty), r.uom, N(r.cost), N(r.qty) * N(r.cost)]), ['', '', '', 'TOTAL:', ppeT]];
+    const s2 = [['RESOURCES'], [], ['TOOLS (BOTE)'], ['Desc', 'Qty', 'Days', 'UOM', 'Unit Cost', 'Total'], ...tools.map(r => [r.desc, N(r.qty), resDays(r), r.uom, N(r.cost), N(r.qty) * resDays(r) * N(r.cost)]), ['', '', '', '', 'TOTAL:', toolsT], [], ['MATERIALS (BOCM)'], ['Desc', 'Qty', 'UOM', 'Unit Cost', 'Total'], ...mats.map(r => [r.desc, N(r.qty), r.uom, N(r.cost), N(r.qty) * N(r.cost)]), ['', '', '', 'TOTAL:', matsT], [], ['PPE'], ['Desc', 'Qty', 'UOM', 'Unit Cost', 'Total'], ...ppe.map(r => [r.desc, N(r.qty), r.uom, N(r.cost), N(r.qty) * N(r.cost)]), ['', '', '', 'TOTAL:', ppeT]];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s2), 'Resources');
     const s3 = [['MANPOWER COST'], [], ...(cfg.mobDemob ? [['MOBILIZATION'], ...(mobVehicles.length ? [['Vehicles:'], ['Description', 'Qty', 'Days', 'Rate', 'Total'], ...mobVehicles.map(v => [v.desc, N(v.qty), N(v.days), N(v.rate), N(v.qty) * N(v.days) * N(v.rate)]), ['', '', '', 'Mobilization Total:', mobVehiclesT]] : []), ['Mobilization Total:', mobSubT], [], ['DEMOBILIZATION'], ...(demobVehicles.length ? [['Vehicles:'], ['Description', 'Qty', 'Days', 'Rate', 'Total'], ...demobVehicles.map(v => [v.desc, N(v.qty), N(v.days), N(v.rate), N(v.qty) * N(v.days) * N(v.rate)]), ['', '', '', 'Demobilization Total:', demobVehiclesT]] : []), ['Demobilization Total:', demobSubT], []] : []), ['Role', 'PAX', 'Days', 'Shift', 'Mult', 'Day Rate', 'Total'], ...mp.map(r => {
       const sh = SHIFTS[r.shift];
@@ -2374,7 +2380,7 @@
         const importedCeType = projType==='Electrical' ? 'onsite' : 'shopworks';
         // Compute provisional grand total from parsed rows
         const mpGrand = mpRows.reduce((s,r)=>s+N(r.pax)*N(r.days)*N(r.rate)*(SHIFTS[r.shift]?.mult||1),0);
-        const provisionalGrand = mpGrand + [...tools,...mats,...ppe].reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
+        const provisionalGrand = mpGrand + tools.reduce((s,r)=>s+N(r.qty)*resDays(r)*N(r.cost),0) + [...mats,...ppe].reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
         console.log('[CE Import] Parsed:', {ceNum, description, client, ceType:importedCeType, mp:mpRows.length, tools:tools.length, mats:mats.length, ppe:ppe.length, grand:provisionalGrand});
         const entry = {
           ceType:importedCeType,
@@ -3309,7 +3315,7 @@
     const calcSections = ce => {
       if (!ce) return {};
       const mpT = (ce.mp||[]).reduce((s,r)=>s+N(r.pax)*N(r.days)*N(r.rate)*(SHIFTS[r.shift]?.mult||1)+N(r.pax)*N(r.otHours)*(N(r.rate)/8)*1.25+N(r.pax)*N(r.days)*N(r.perDiem),0);
-      const toolT = (ce.tools||[]).reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
+      const toolT = (ce.tools||[]).reduce((s,r)=>s+N(r.qty)*resDays(r)*N(r.cost),0);
       const matT = (ce.mats||[]).reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
       const ppeT = (ce.ppe||[]).reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
       const miscT = Object.values(ce.misc||{}).flat().reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
@@ -4574,7 +4580,7 @@
     const toolsPage=toolsActive.length?`<div class="page page-break">${docHdr('BILL OF TOOLS AND EQUIPMENT')}
       <div class="sec">BILL OF TOOLS AND EQUIPMENT</div>
       <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:28px">QTY</th><th class="c" style="width:35px">UOM</th><th class="c" style="width:35px">DAYS</th><th class="r" style="width:80px">UNIT PRICE</th><th class="r" style="width:80px">TOTAL</th></tr>
-      ${toolsActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${r.desc||''}</td><td class="c">${r.qty||1}</td><td class="c">${r.uom||'Lot'}</td><td class="c">${r.days||1}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(N(r.qty)*N(r.cost)*N(r.days))}</td></tr>`).join('')}
+      ${toolsActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${r.desc||''}</td><td class="c">${r.qty||1}</td><td class="c">${r.uom||'Lot'}</td><td class="c">${resDays(r)}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(N(r.qty)*N(r.cost)*resDays(r))}</td></tr>`).join('')}
       <tr class="tot"><td colspan="6" class="r b">TOTAL:</td><td class="r b">${fmt(toolsT)}</td></tr></table></div>` : '';
 
     /* Materials &#8212; skip zero rows */
@@ -4625,16 +4631,30 @@
       w.document.close();
     }, 900);
   };
+  /* Named line items that carry no cost. They look like real scope on the CE but
+     contribute nothing to the total, so they are almost always an oversight.
+     Shared by Save and Generate CE -- previously only Generate CE checked, so a
+     CE with P0 items could be saved and circulated with no warning. */
+  const collectZeroCost = () => {
+    const out = [];
+    mp.forEach(r => { if (!N(r.rate) && (r.role || r.desc)) out.push('Manpower: ' + (r.role || r.desc)); });
+    tools.forEach(r => { if (!N(r.cost) && r.desc) out.push('Tool: ' + r.desc); });
+    mats.forEach(r => { if (!N(r.cost) && r.desc) out.push('Material: ' + r.desc); });
+    ppe.forEach(r => { if (!N(r.cost) && r.desc) out.push('PPE: ' + r.desc); });
+    miscCats.forEach(c => (Array.isArray(misc[c.k]) ? misc[c.k] : []).forEach(r => {
+      if (!N(r.cost) && r.desc) out.push(c.label + ': ' + r.desc);
+    }));
+    return out;
+  };
+  /* Returns false if the user cancels. */
+  const confirmZeroCost = action => {
+    const z = collectZeroCost();
+    if (!z.length) return true;
+    const preview = z.slice(0, 10).join('\n') + (z.length > 10 ? '\n... and ' + (z.length - 10) + ' more' : '');
+    return window.confirm(z.length + ' item(s) have ₱0 cost and will not contribute to the total:\n\n' + preview + '\n\n' + action);
+  };
   const handleGenerateCEWithCheck = () => {
-    const zeroCost = [];
-    mp.forEach(r => { if (!N(r.rate) && (r.role||r.desc)) zeroCost.push('Manpower: ' + (r.role||r.desc)); });
-    tools.forEach(r => { if (!N(r.cost) && r.desc) zeroCost.push('Tool: ' + r.desc); });
-    mats.forEach(r => { if (!N(r.cost) && r.desc) zeroCost.push('Material: ' + r.desc); });
-    ppe.forEach(r => { if (!N(r.cost) && r.desc) zeroCost.push('PPE: ' + r.desc); });
-    if (zeroCost.length > 0) {
-      const preview = zeroCost.slice(0,10).join('\n') + (zeroCost.length > 10 ? '\n... and ' + (zeroCost.length-10) + ' more' : '');
-      if (!window.confirm(zeroCost.length + ' item(s) have ₱0 cost and will not contribute to the total:\n\n' + preview + '\n\nProceed with generating CE?')) return;
-    }
+    if (!confirmZeroCost('Proceed with generating CE?')) return;
     handleGenerateCE();
   };
   const handleExportXLSX = () => {
@@ -4667,7 +4687,7 @@
     }
     /* Tools */
     if (tools.filter(r=>r.desc).length) {
-      const tRows=[['Description','Qty','UOM','Cost (₱)','Total (₱)'],...tools.filter(r=>r.desc).map(r=>[r.desc,N(r.qty),r.uom,N(r.cost),N(r.qty)*N(r.cost)])];
+      const tRows=[['Description','Qty','Days','UOM','Cost (₱)','Total (₱)'],...tools.filter(r=>r.desc).map(r=>[r.desc,N(r.qty),resDays(r),r.uom,N(r.cost),N(r.qty)*resDays(r)*N(r.cost)])];
       XLSX.utils.book_append_sheet(wb, aoa(tRows), 'Tools');
     }
     /* Materials */
@@ -5256,8 +5276,9 @@
     style: {fontSize:9, color:BDR, cursor:'default', userSelect:'none', letterSpacing:.3}
   }, "Ctrl+S / Ctrl+N"), /*#__PURE__*/React.createElement("button", {
     style: btn('acc', true),
-    onClick: handleExport
-  }, "Export XLS"), /*#__PURE__*/React.createElement("button", {
+    onClick: handleExport,
+    title: "CE template — the standard SY3 Cost Estimate Summary layout"
+  }, "Export CE"), /*#__PURE__*/React.createElement("button", {
     style: {
       ...btn('def', true),
       fontSize: 10,
@@ -5580,6 +5601,7 @@ tab === 'sowbreak' && (() => {
     const rows = t.rows.filter(r => r.taskId === taskId);
     if (!rows.length) return null;
     const isMp = t.key === 'mp';
+    const hasDays = isMp || t.key === 'tools'; /* tools are charged qty x days x cost */
     return /*#__PURE__*/React.createElement("div", { key: t.key, style: { marginBottom: 6 } },
       /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 } },
         /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, fontWeight: 700, color: MT, textTransform: 'uppercase', letterSpacing: '.06em', minWidth: 128 } }, t.label),
@@ -5589,7 +5611,7 @@ tab === 'sowbreak' && (() => {
           "₱" + ph(rows.reduce((a, r) => a + rowCost(t.key, r), 0)))
       ),
       /*#__PURE__*/React.createElement("table", { style: { width: '100%', borderCollapse: 'collapse', fontSize: 11, marginBottom: 2 } },
-        hdr([['Item description'], [isMp ? 'Pax' : 'Qty', 58], [isMp ? 'Days' : 'UOM', 66], [isMp ? 'Rate' : 'Unit cost', 92], ['Cost', 92], ['', 56]]),
+        hdr([['Item description'], [isMp ? 'Pax' : 'Qty', 58], ...(hasDays ? [['Days', 56]] : []), ...(isMp ? [] : [['UOM', 66]]), [isMp ? 'Rate' : 'Unit cost', 92], ['Cost', 92], ['', 56]]),
         /*#__PURE__*/React.createElement("tbody", null, rows.map(r =>
           /*#__PURE__*/React.createElement("tr", { key: r.id },
             /*#__PURE__*/React.createElement("td", { style: { ...TDS, paddingLeft: 128 } },
@@ -5600,15 +5622,18 @@ tab === 'sowbreak' && (() => {
               })
             ),
             numCell(r[t.qtyKey] || 0, e => updRow(t.set, r.id, t.qtyKey, N(e.target.value)), isMp ? 'PAX' : 'QTY', 58),
-            isMp
-              ? numCell(r.days || 0, e => updRow(t.set, r.id, 'days', N(e.target.value)), 'Number of days', 66)
-              : /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: 66 } },
-                  /*#__PURE__*/React.createElement("input", {
-                    style: { ...INP, width: 58, fontSize: 10, padding: '2px 4px' },
-                    value: r.uom || '', list: "shic-uom-list", placeholder: "UOM",
-                    onChange: e => updRow(t.set, r.id, 'uom', e.target.value)
-                  })
-                ),
+            /* Store the raw value like the resource tabs do, so a cleared field
+               is treated as 1 by resDays rather than zeroing the row. */
+            hasDays && numCell(r.days === undefined || r.days === null ? 1 : r.days,
+              e => updRow(t.set, r.id, 'days', e.target.value),
+              isMp ? 'Number of days' : 'Days charged (1 = one-off)', 56),
+            !isMp && /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: 66 } },
+              /*#__PURE__*/React.createElement("input", {
+                style: { ...INP, width: 58, fontSize: 10, padding: '2px 4px' },
+                value: r.uom || '', list: "shic-uom-list", placeholder: "UOM",
+                onChange: e => updRow(t.set, r.id, 'uom', e.target.value)
+              })
+            ),
             numCell(r[t.costKey] || 0, e => updRow(t.set, r.id, t.costKey, N(e.target.value)), isMp ? 'Daily rate' : 'Cost per unit', 92),
             /*#__PURE__*/React.createElement("td", { style: { ...TDS, ...MONO, width: 92, textAlign: 'right', color: MT, fontSize: 10 }, title: "Row cost (recomputed)" }, "₱" + ph(rowCost(t.key, r))),
             /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: 56, textAlign: 'right' } },
@@ -7622,6 +7647,7 @@ tab === 'dashboard' && (() => {
     total: toolsT,
     label: "Tools & Equipment (BOTE)",
     mlType: "tools",
+    showDays: true,
     masterlist, showToast, setPicker
   }), tab === 'materials' && /*#__PURE__*/React.createElement(ResTab, {
     rows: mats,
@@ -8360,11 +8386,13 @@ tab === 'dashboard' && (() => {
     }
   }, "📧 Notify"), /*#__PURE__*/React.createElement("button", {
     style: btn('ok'),
-    onClick: handleExportXLSX
-  }, "Export XLSX"), /*#__PURE__*/React.createElement("button", {
+    onClick: handleExportXLSX,
+    title: "Detailed workbook — one sheet per section with every line item"
+  }, "Export Detailed"), /*#__PURE__*/React.createElement("button", {
     style: btn('acc'),
-    onClick: handleExport
-  }, "Export XLS"))), /*#__PURE__*/React.createElement("table", {
+    onClick: handleExport,
+    title: "CE template — the standard SY3 Cost Estimate Summary layout"
+  }, "Export CE Template"))), /*#__PURE__*/React.createElement("table", {
     style: {
       width: '100%',
       borderCollapse: 'collapse',

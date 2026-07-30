@@ -49,7 +49,7 @@ const MISC_DEF = {
   shopworks: [["accommodation", "E.1 Accommodation"], ["transportation", "E.2 Transportation"], ["requirements", "E.3 Requirements"], ["adminCost", "E.4 Admin Cost"], ["thirdParty", "E.5 Third Party"], ["insurance", "E.6 Insurances"]],
   supply: [["allowance", "D.1 Allowance"], ["transportation", "D.2 Transportation"], ["requirements", "E.3 Requirements"], ["adminCost", "E.4 Admin Cost"], ["thirdParty", "E.5 Third Party"], ["insurance", "E.6 Insurances"]]
 };
-const CE_TABS=[{id:"info",label:"Project Info"},{id:"sow",label:"Scope of Work"},{id:"manpower",label:"Manpower"},{id:"tools",label:"Tools & Equipment"},{id:"materials",label:"Materials"},{id:"ppe",label:"PPE"},{id:"misc",label:"Miscellaneous"},{id:"summary",label:"Summary"},{id:"scopelib",label:"Scope Library"},{id:"masterlist",label:"Masterlist"},{id:"history",label:"CE Monitoring"},{id:"dashboard",label:"📊 Dashboard"}];
+const CE_TABS=[{id:"info",label:"Project Info"},{id:"sow",label:"Scope of Work"},{id:"sowbreak",label:"SOW Breakdown"},{id:"manpower",label:"Manpower"},{id:"tools",label:"Tools & Equipment"},{id:"materials",label:"Materials"},{id:"ppe",label:"PPE"},{id:"misc",label:"Miscellaneous"},{id:"summary",label:"Summary"},{id:"scopelib",label:"Scope Library"},{id:"masterlist",label:"Masterlist"},{id:"history",label:"CE Monitoring"},{id:"dashboard",label:"📊 Dashboard"}];
 const DEFAULT_ML={
   manpower:[
     {id:"m1",code:"SHIC-MP-001",category:"Electrical",role:"Electrical Supervisor",rate:1200,perDiem:0,uom:"Day"},

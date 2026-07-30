@@ -301,9 +301,9 @@ async function autoSetupSP(progressCb){
 
   const lists={
     [spList('Users')]:    [[2,'shicName'],[3,'shicHash'],[2,'shicRole'],[2,'shicStatus'],[2,'shicEmail']],
-    [spList('CEs')]:      [[2,'shicType'],[2,'shicClient'],[3,'shicDesc'],[9,'shicTotal'],[2,'shicSavedBy'],[2,'shicSavedAt'],[3,'shicScope'],[3,'shicNotes'],[3,'shicApprovers'],[3,'shicMob'],[3,'shicDemob'],[3,'shicMisc']],
-    [spList('CE_MP')]:    [[9,'shicCEId'],[2,'shicRole'],[9,'shicRate'],[2,'shicShift'],[9,'shicDays'],[9,'shicQty']],
-    [spList('CE_Resources')]:[[9,'shicCEId'],[2,'shicTab'],[2,'shicDesc'],[9,'shicQty'],[2,'shicUOM'],[9,'shicCost'],[9,'shicDays']],
+    [spList('CEs')]:      [[2,'shicType'],[2,'shicClient'],[3,'shicDesc'],[9,'shicTotal'],[2,'shicSavedBy'],[2,'shicSavedAt'],[3,'shicScope'],[3,'shicNotes'],[3,'shicApprovers'],[3,'shicMob'],[3,'shicDemob'],[3,'shicMisc'],[3,'shicSOW']],
+    [spList('CE_MP')]:    [[9,'shicCEId'],[2,'shicRole'],[9,'shicRate'],[2,'shicShift'],[9,'shicDays'],[9,'shicQty'],[2,'shicTaskId']],
+    [spList('CE_Resources')]:[[9,'shicCEId'],[2,'shicTab'],[2,'shicDesc'],[9,'shicQty'],[2,'shicUOM'],[9,'shicCost'],[9,'shicDays'],[2,'shicTaskId']],
     [spList('CE_Documents')]:[[9,'shicCEId'],[2,'shicFileName'],[2,'shicFileType'],[3,'shicFileData']],
     [spList('Monitoring')]:  [[9,'shicCEId'],[3,'shicMonData']],
     [spList('Masterlist')]:  [[3,'shicData']],
@@ -321,15 +321,17 @@ async function autoSetupSP(progressCb){
     progressCb&&progressCb({step:'list',msg:'Setting up '+name+'...',progress:(i/names.length)});
     try{
       const wasCreated=await spCreateList(name,tok,digest);
-      if(wasCreated){
-        /* Add columns */
-        for(const[type,fname]of fields){
-          await spAddField(name,fname,type,tok,digest);
-          /* Small delay to avoid SP throttling */
-          await new Promise(r=>setTimeout(r,200));
-        }
-        created++;
-      }else{skipped++;}
+      /* Always ensure columns, not just on creation. spAddField ignores
+         "already exists", so this is idempotent -- and it is the only way an
+         install created by an older version ever receives newly added columns.
+         Previously columns were added on create only, so existing sites
+         silently lacked them and writes failed. */
+      for(const[type,fname]of fields){
+        await spAddField(name,fname,type,tok,digest);
+        /* Small delay to avoid SP throttling */
+        await new Promise(r=>setTimeout(r,200));
+      }
+      if(wasCreated){created++;}else{skipped++;}
     }catch(e){console.warn('Setup list',name,e.message);}
   }
   progressCb&&progressCb({step:'done',msg:'Done! '+created+' lists created, '+skipped+' already existed.',progress:1});

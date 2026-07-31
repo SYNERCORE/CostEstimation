@@ -195,7 +195,14 @@
   };
   useEffect(() => {
     if (!(USE_SP || getSiteURL())) return;
-    dbGetSowLib().then(lib => { if (lib && lib.length) setSowLib(lib); }).catch(()=>{});
+    /* Same as the masterlist: cache the SharePoint copy so the Scope Library is
+       populated offline, not just on browsers that happened to edit it. */
+    dbGetSowLib().then(lib => {
+      if (lib && lib.length) {
+        setSowLib(lib);
+        try { localStorage.setItem('sy3:sowlib', JSON.stringify(lib)); } catch (_e) {}
+      }
+    }).catch(()=>{});
   }, []);
   const [sowSearch, setSowSearch] = useState('');
   const [sowCat, setSowCat] = useState('All');
@@ -232,7 +239,10 @@
     (async () => {
       try {
         const ml = await dbGetML();
-        if (ml) { setMasterlist(ml); setSyncStatus({masterlist:'synced', lastSyncAt: new Date().toISOString(), sp:'connected'}); }
+        /* Mirror the SharePoint copy locally. Only dbSaveML wrote this cache, so
+           a browser that had never saved the masterlist itself fell back to
+           DEFAULT_ML when offline — the shared list looked empty. */
+        if (ml) { setMasterlist(ml); try { LS.set('masterlist', ml); } catch (_e) {} setSyncStatus({masterlist:'synced', lastSyncAt: new Date().toISOString(), sp:'connected'}); }
         else setSyncStatus({masterlist:'local'});
       } catch(ex) { console.warn('Masterlist load failed:', ex.message); setSyncStatus({masterlist:'error', sp:'error'}); }
       loadHist();

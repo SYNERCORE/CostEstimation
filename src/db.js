@@ -146,8 +146,11 @@ const LS = {
   set: (k, v) => {
     try {
       localStorage.setItem('shic:' + k, JSON.stringify(v));
-      // Quota guard — one toast per session
-      if (!window._lsWarnShown) {
+      /* Quota guard. This used to re-read and measure EVERY key on every single
+         write until the warning fired — megabytes of string reads per save and
+         per 3-minute autosave. Now it samples at most once a minute. */
+      if (!window._lsWarnShown && Date.now() - (window._lsLastScan || 0) > 60000) {
+        window._lsLastScan = Date.now();
         try {
           let total = 0;
           for (let i = 0; i < localStorage.length; i++) total += (localStorage.getItem(localStorage.key(i))||'').length * 2;
@@ -159,9 +162,36 @@ const LS = {
       }
     } catch (e) {
       if (e && e.name === 'QuotaExceededError') {
+        /* Free the most expendable thing we hold — per-CE caches — and retry
+           once, so a full disk degrades instead of losing the write outright. */
+        const freed = LS.pruneCeCache(20);
+        if (freed) {
+          try { localStorage.setItem('shic:' + k, JSON.stringify(v)); return; } catch (_e2) {}
+        }
         if (!window._lsFullShown) { window._lsFullShown = true; setTimeout(() => (window._shicToast||console.error)('Storage full! Export a backup or connect SharePoint to free space.', true), 100); }
       }
     }
+  },
+  /* ce_cache: holds one full CE per saved estimate and was never pruned, which
+     with 800+ CEs is the bulk of what fills localStorage. Keep the most recent
+     `keep` entries (by savedAt) and drop the rest; they are only a cache and are
+     refetched from SharePoint on demand. Returns how many were removed. */
+  pruneCeCache: (keep = 60) => {
+    try {
+      const entries = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key || key.indexOf('shic:ce_cache:') !== 0) continue;
+        let when = 0;
+        try { when = new Date((JSON.parse(localStorage.getItem(key)) || {}).savedAt || 0).getTime() || 0; } catch (_e) {}
+        entries.push({ key, when });
+      }
+      if (entries.length <= keep) return 0;
+      entries.sort((a, b) => b.when - a.when);
+      const doomed = entries.slice(keep);
+      doomed.forEach(e => { try { localStorage.removeItem(e.key); } catch (_e) {} });
+      return doomed.length;
+    } catch (_e) { return 0; }
   }
 };
 

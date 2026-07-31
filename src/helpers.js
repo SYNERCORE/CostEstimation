@@ -4,6 +4,16 @@ const ph = n => (n || 0).toLocaleString("en-PH", {
   maximumFractionDigits: 2
 });
 const uid = () => { try { return crypto.randomUUID(); } catch { return Date.now().toString(36) + Math.random().toString(36).slice(2); } };
+/* Escape a value for interpolation into generated HTML (the printed CE is built
+   as an HTML string and written into a new window). Without this, a description
+   containing markup executes in whoever opens the CE, and a plain "&" or "<"
+   silently corrupts the printout. Covers text and attribute contexts. */
+const esc = v => String(v == null ? '' : v)
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
 function nextCeNum(history, cePrefix) {
   const yr = new Date().getFullYear();
   const pfx = ((cePrefix || 'SHIC') + '-CE-' + yr + '-').toUpperCase();

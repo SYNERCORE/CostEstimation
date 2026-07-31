@@ -31,10 +31,15 @@ while ((m = re.exec(html))) files.push(m[1]);
 
 if (!files.length) { console.error('no local <script src> tags found in index.html'); process.exit(1); }
 
-/* Blank out strings and comments so we do not match identifiers inside them.
-   Newlines are preserved so reported line numbers stay accurate. */
+/* Blank out strings, comments and regex literals so we do not match identifiers
+   inside them. Newlines are preserved so reported line numbers stay accurate.
+   Regex literals matter: a pattern like /'/g would otherwise open a phantom
+   string and swallow the rest of the file, hiding every later declaration. */
 function stripped(src) {
-  let out = '', i = 0, inS = null, inC = null;
+  let out = '', i = 0, inS = null, inC = null, prev = '';
+  /* A '/' starts a regex (not division) when the previous meaningful token is an
+     operator, opening bracket, comma, etc. — the usual heuristic. */
+  const regexOk = () => prev === '' || '(,=:[!&|?{};+-*%~^<>'.includes(prev);
   while (i < src.length) {
     const c = src[i], n = src[i + 1];
     if (c === '\n' && !(inS && inS !== '`')) { out += '\n'; if (inC === 'line') inC = null; i++; continue; }
@@ -44,7 +49,21 @@ function stripped(src) {
     if (c === '/' && n === '/') { inC = 'line'; i += 2; continue; }
     if (c === '/' && n === '*') { inC = 'block'; i += 2; continue; }
     if (c === '"' || c === "'" || c === '`') { inS = c; i++; continue; }
-    out += c; i++;
+    if (c === '/' && regexOk()) {
+      /* Skip to the unescaped closing '/', staying on this line. */
+      let j = i + 1, cls = false;
+      while (j < src.length && src[j] !== '\n') {
+        if (src[j] === BS) { j += 2; continue; }
+        if (src[j] === '[') cls = true;
+        else if (src[j] === ']') cls = false;
+        else if (src[j] === '/' && !cls) break;
+        j++;
+      }
+      if (j < src.length && src[j] === '/') { i = j + 1; prev = 'x'; continue; }
+    }
+    out += c;
+    if (!/\s/.test(c)) prev = c;
+    i++;
   }
   return out;
 }

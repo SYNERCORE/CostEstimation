@@ -47,6 +47,7 @@
     await dbUpdateUser(u.id, {
       status: 'approved'
     });
+    auditLog('user_approve', u.username, currentUser?.username);
     toast2('Approved ' + u.username);
     load();
   };
@@ -74,6 +75,7 @@
   const del = async u => {
     if (!confirm('Delete "' + u.username + '"?')) return;
     await dbDeleteUser(u.id);
+    auditLog('user_delete', u.username + ' (role: ' + (u.role||'user') + ')', currentUser?.username);
     toast2('Deleted ' + u.username);
     load();
   };
@@ -106,6 +108,7 @@
          a ReferenceError instead of doing anything. autoSetupSP is the real
          implementation, shared with the Connect & Auto-Setup panel. */
       const r = await autoSetupSP(p => setSetupMsg(p.msg));
+      auditLog('sp_setup', r.created + ' list(s), ' + (r.added||0) + ' column(s)' + (r.denied ? ' — permission denied' : ''), currentUser?.username);
       let msg = r.created + ' list(s) created, ' + r.skipped + ' already existed, ' + (r.added || 0) + ' column(s) added.';
       if (r.errors && r.errors.length) msg += ' ⚠ ' + r.errors.length + ' problem(s): ' + r.errors.slice(0, 2).join(' | ');
       setSetupMsg(msg);

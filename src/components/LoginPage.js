@@ -251,9 +251,25 @@
       fontSize: 11
     },
     onClick: () => {
-      if (confirm('Reset all local user data?\n\nThis removes all locally stored accounts and recreates the default admin account.\n\n⚠ SharePoint connection settings will also be cleared — you will need to re-enter them after reload.\n\nClick OK to confirm.')) {
-        /* Remove all sy3: and shic: prefixed keys */
-        Object.keys(localStorage).filter(k => k.startsWith('sy3:') || k.startsWith('shic') || k.includes('user') || k.includes('session')).forEach(k => localStorage.removeItem(k));
+      /* Only account/auth state. The previous filter matched k.startsWith('shic'),
+         which also deleted shic:history, shic:masterlist, shic:ce_cache:* and
+         drafts — i.e. every locally cached CE. On a browser that had never
+         connected to SharePoint that was unrecoverable, and the dialog did not
+         say so. This now names exactly what goes and what stays. */
+      const AUTH_KEYS = ['shic:users', 'shic:session', 'sy3:users', 'sy3:session'];
+      const doomed = Object.keys(localStorage).filter(k =>
+        AUTH_KEYS.includes(k) || /^(shic|sy3):(users|session|auth)/.test(k));
+      let ceCount = 0;
+      try { ceCount = (JSON.parse(localStorage.getItem('shic:history') || '[]') || []).length; } catch (_e) {}
+      const NL = String.fromCharCode(10);
+      if (confirm(
+        'Reset local accounts?' + NL + NL +
+        'Removes ' + doomed.length + ' locally stored account/session entr' + (doomed.length === 1 ? 'y' : 'ies') +
+        ' and recreates the default admin.' + NL + NL +
+        'KEPT: your ' + ceCount + ' cached CE(s), masterlist, scope library and drafts.' + NL +
+        'KEPT: SharePoint connection settings.' + NL + NL +
+        'Click OK to confirm.')) {
+        doomed.forEach(k => localStorage.removeItem(k));
         sessionStorage.clear();
         location.reload();
       }

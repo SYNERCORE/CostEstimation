@@ -115,7 +115,7 @@
       } else if (r && r.data && Object.keys(r.data).length > 0) {
         setMonData(r.data);
         setMonSpIds(new Set(Object.keys(_monSpIdCache)));
-        try { localStorage.setItem(MON_KEY, JSON.stringify(r.data)); } catch {}
+        try { localStorage.setItem(MON_KEY, JSON.stringify(r.data)); } catch (e) { console.warn('monitoring not cached locally:', e && e.message); }
         setSyncStatus({monitoring:'synced', lastSyncAt: new Date().toISOString(), sp: 'connected'});
         if (r.legacy) {
           dbSaveMonAll(r.data, []).catch(() => {});
@@ -190,7 +190,7 @@
   }, []);
   const saveSowLib = lib => {
     setSowLib(lib);
-    try { localStorage.setItem('sy3:sowlib', JSON.stringify(lib)); } catch {}
+    try { localStorage.setItem('sy3:sowlib', JSON.stringify(lib)); } catch (e) { console.warn('scope library not cached locally:', e && e.message); }
     if (USE_SP || getSiteURL()) dbSaveSowLib(lib).catch(()=>{});
   };
   useEffect(() => {
@@ -200,7 +200,7 @@
     dbGetSowLib().then(lib => {
       if (lib && lib.length) {
         setSowLib(lib);
-        try { localStorage.setItem('sy3:sowlib', JSON.stringify(lib)); } catch (_e) {}
+        try { localStorage.setItem('sy3:sowlib', JSON.stringify(lib)); } catch (e) { console.warn('scope library not cached locally:', e && e.message); }
       }
     }).catch(()=>{});
   }, []);
@@ -222,6 +222,8 @@
   }));
   const [copyMenu, setCopyMenu] = useState(null); /* {fromShift, anchorEl} */
   const fileRef = useRef(null);
+  const _lastAutoSig = useRef(null); /* skips no-op auto-saves */
+  const _live = useRef(null);       /* current state for the auto-save timer */
   const isAdmin = currentUser.role === 'admin';
   const cfg = CE_CFG[ceType] || CE_CFG.onsite || {};
   const TABS = [...CE_TABS, ...(isAdmin ? [{
@@ -234,7 +236,25 @@
     window.addEventListener('keydown',onKey);
     const onUnload=e=>{e.preventDefault();e.returnValue='';};
     window.addEventListener('beforeunload',onUnload);
-    const autoTimer=setInterval(()=>{try{saveDraft&&saveDraft();const t=new Date().toISOString();setSyncStatus({lastDraftSaveAt:t});showToast('Draft auto-saved.');}catch(ex){}},180000);
+    /* Auto-save only when the CE actually changed. It used to save and toast
+       every 3 minutes regardless, so an idle tab interrupted the user twice an
+       hour to report writing an identical draft. */
+    /* Read live state through a ref. This effect has [] deps, so anything
+       captured directly here is frozen at the first render -- the timer was
+       calling that first saveDraft, which serialises the INITIAL blank CE and
+       writes it under the initial CE number, overwriting the real draft every
+       3 minutes. */
+    const autoTimer=setInterval(()=>{
+      try{
+        const live=_live.current;
+        if(!live||!live.hasUnsavedWork||!live.hasUnsavedWork())return;
+        if(live.sig===_lastAutoSig.current)return;
+        _lastAutoSig.current=live.sig;
+        live.saveDraft&&live.saveDraft();
+        setSyncStatus({lastDraftSaveAt:new Date().toISOString()});
+        showToast('Draft auto-saved.');
+      }catch(ex){console.warn('auto-save skipped:',ex.message);}
+    },180000);
     const histTimer=setInterval(()=>{if(USE_SP||getSiteURL())loadHist();},5*60*1000);
     (async () => {
       try {
@@ -242,9 +262,12 @@
         /* Mirror the SharePoint copy locally. Only dbSaveML wrote this cache, so
            a browser that had never saved the masterlist itself fell back to
            DEFAULT_ML when offline — the shared list looked empty. */
-        if (ml) { setMasterlist(ml); try { LS.set('masterlist', ml); } catch (_e) {} setSyncStatus({masterlist:'synced', lastSyncAt: new Date().toISOString(), sp:'connected'}); }
+        if (ml) { setMasterlist(ml); try { LS.set('masterlist', ml); } catch (e) { console.warn('masterlist not cached locally:', e && e.message); } setSyncStatus({masterlist:'synced', lastSyncAt: new Date().toISOString(), sp:'connected'}); }
         else setSyncStatus({masterlist:'local'});
       } catch(ex) { console.warn('Masterlist load failed:', ex.message); setSyncStatus({masterlist:'error', sp:'error'}); }
+      /* Trim the per-CE cache on open; it is the bulk of local storage use and
+         nothing pruned it before, so it only ever grew. */
+      try { const n = LS.pruneCeCache(60); if (n) console.info('Pruned ' + n + ' cached CE(s) from local storage.'); } catch (_e) {}
       loadHist();
       loadMonData();
       /* Notify admin of pending registrations */
@@ -283,7 +306,7 @@
       setHistory(h);
       /* Keep LS in sync with SP so fallback is never stale */
       if (spAvail && h && h.length > 0) {
-        try { LS.set('history', h); } catch (_e) {}
+        try { LS.set('history', h); } catch (e) { console.warn('history not cached locally:', e && e.message); }
       } else if (spAvail && h && h.length === 0) {
         /* SP returned nothing — purge stale LS */
         try { LS.set('history', []); } catch (_e) {}
@@ -311,6 +334,7 @@
     setSyncStatus({masterlist:'saving', dirty:true});
     try {
       await dbSaveML(ml);
+      auditLog('masterlist_save', Object.keys(ml||{}).map(k=>k+':'+((ml[k]||[]).length)).join(' '), currentUser?.username);
       setSyncStatus({masterlist:'synced', lastSyncAt: new Date().toISOString(), sp:'connected', dirty:false});
     } catch (e) {
       setSyncStatus({masterlist:'error'});
@@ -4509,26 +4533,26 @@
       color:   coInfo.color   || '#cc0000'
     };
     const logoCell = co.logo
-      ? `<img src="${co.logo}" style="max-width:70px;max-height:36px;object-fit:contain">`
-      : `<div style="font-weight:900;font-size:10pt;color:${co.color};line-height:1.1">${co.name}<br><span style="font-size:6pt">${co.sub}</span></div>`;
+      ? `<img src="${esc(co.logo)}" style="max-width:70px;max-height:36px;object-fit:contain">`
+      : `<div style="font-weight:900;font-size:10pt;color:${esc(co.color)};line-height:1.1">${esc(co.name)}<br><span style="font-size:6pt">${esc(co.sub)}</span></div>`;
 
     const docHdr = title => `<table style="border:1px solid #000;margin-bottom:4px;font-size:7.5pt"><tr>
       <td style="border:none;width:75px;padding:2px">${logoCell}</td>
       <td style="border:none;text-align:center"><h2>COST ESTIMATE SUMMARY</h2></td>
       <td style="border:none;width:150px;font-size:7pt">
-        <table class="nb"><tr><td style="border:none;width:80px">Document No.:</td><td style="border:none">${co.doc}</td></tr>
-        <tr><td style="border:none">Revision No.:</td><td style="border:none">${co.revNo}</td></tr>
-        <tr><td style="border:none">Revision Date:</td><td style="border:none">${co.revDate}</td></tr></table>
+        <table class="nb"><tr><td style="border:none;width:80px">Document No.:</td><td style="border:none">${esc(co.doc)}</td></tr>
+        <tr><td style="border:none">Revision No.:</td><td style="border:none">${esc(co.revNo)}</td></tr>
+        <tr><td style="border:none">Revision Date:</td><td style="border:none">${esc(co.revDate)}</td></tr></table>
       </td></tr>
       <tr><td colspan="3" style="text-align:center;background:#000;color:#fff;font-weight:bold;font-size:9pt;padding:3px;border:1px solid #000">${title}</td></tr>
-      <tr><td colspan="3" style="border:none;text-align:right;font-size:7.5pt;padding:1px 4px"><b>CE No.:</b>&nbsp;${info.ceNum || ''}&nbsp;&nbsp;<b>CE TYPE:</b>&nbsp;${ceType.toUpperCase()}&nbsp;&nbsp;<b>DATE:</b>&nbsp;${info.date||''}</td></tr>
+      <tr><td colspan="3" style="border:none;text-align:right;font-size:7.5pt;padding:1px 4px"><b>CE No.:</b>&nbsp;${esc(info.ceNum || '')}&nbsp;&nbsp;<b>CE TYPE:</b>&nbsp;${ceType.toUpperCase()}&nbsp;&nbsp;<b>DATE:</b>&nbsp;${esc(info.date||'')}</td></tr>
     </table>`;
 
     const infoTable = `<table class="bdr" style="margin-bottom:5px;font-size:7.5pt">
-      <tr><td class="b" style="width:110px">PROJECT DESCRIPTION:</td><td colspan="3" class="b c">${info.description||''}</td></tr>
-      <tr><td class="b">CLIENT NAME:</td><td>${info.client||''}</td><td class="b" style="width:90px">CLIENT LOCATION:</td><td>${info.location||''}</td></tr>
-      <tr><td class="b">ATTENTION:</td><td>${info.attention||'SALES DEPARTMENT'}</td><td class="b">QUANTITY:</td><td>${info.qty||1} LOT</td></tr>
-      <tr><td class="b">END USER:</td><td>${info.endUser||'C/O SALES'}</td><td class="b">NO. OF DAYS:</td><td>${info.days||''} DAYS</td></tr>
+      <tr><td class="b" style="width:110px">PROJECT DESCRIPTION:</td><td colspan="3" class="b c">${esc(info.description||'')}</td></tr>
+      <tr><td class="b">CLIENT NAME:</td><td>${esc(info.client||'')}</td><td class="b" style="width:90px">CLIENT LOCATION:</td><td>${esc(info.location||'')}</td></tr>
+      <tr><td class="b">ATTENTION:</td><td>${esc(info.attention||'SALES DEPARTMENT')}</td><td class="b">QUANTITY:</td><td>${esc(info.qty||1)} LOT</td></tr>
+      <tr><td class="b">END USER:</td><td>${esc(info.endUser||'C/O SALES')}</td><td class="b">NO. OF DAYS:</td><td>${esc(info.days||'')} DAYS</td></tr>
     </table>`;
 
     /* Cost summary &#8212; skip zero rows */
@@ -4564,13 +4588,13 @@
       <tr class="tot"><td colspan="2" class="b r" style="font-size:9pt">TOTAL AMOUNT:</td><td class="r b" style="font-size:9pt">${fmt(grand)}</td></tr>
       <tr class="tot"><td colspan="2" class="b r">UNIT PRICE (qty ${N(info.qty)||1}):</td><td class="r b">${fmt(unitP)}</td></tr>
       ${margin !== 0 ? `<tr class="tot" style="background:#e8f5e9"><td colspan="2" class="b r">SELLING PRICE (${margin > 0 ? '+' : ''}${margin}% margin):</td><td class="r b">${fmt(grand*(1+margin/100))}</td></tr>` : ''}
-      ${hlRows.length ? hlRows.map(r=>`<tr class="tot"><td colspan="2" class="b r">${hlLabel(r).toUpperCase()}:</td><td class="r b">${fmt(hlAmt(r))}</td></tr>`).join('') : ''}
+      ${hlRows.length ? hlRows.map(r=>`<tr class="tot"><td colspan="2" class="b r">${esc(hlLabel(r).toUpperCase())}:</td><td class="r b">${fmt(hlAmt(r))}</td></tr>`).join('') : ''}
     </table>`;
 
-    const notesList = notes.length ? `<div style="margin-top:4px"><b>NOTE:</b><ol style="margin:1px 0 0 14px;padding:0;font-size:7.5pt">${notes.map(n=>`<li>${n.text}</li>`).join('')}</ol></div>` : '';
+    const notesList = notes.length ? `<div style="margin-top:4px"><b>NOTE:</b><ol style="margin:1px 0 0 14px;padding:0;font-size:7.5pt">${notes.map(n=>`<li>${esc(n.text)}</li>`).join('')}</ol></div>` : '';
     const sigBlock = `<table style="width:100%;border-collapse:collapse;margin-top:20px;table-layout:fixed" class="sig">
-      <tr>${approvers.map(a=>`<td style="border:1px solid #000;padding:4px 8px;font-size:8pt;font-weight:bold;vertical-align:top"><b>${a.role}:</b></td>`).join('')}</tr>
-      <tr>${approvers.map((a,i)=>{const sigImg=signatures[a.id||i]?`<img src="${signatures[a.id||i]}" style="height:36px;max-width:100%;display:block;margin:0 auto 2px"/>`:'';return`<td style="border:1px solid #000;padding:4px 8px;vertical-align:bottom"><div style="min-height:46px;text-align:center">${sigImg}</div><div style="border-top:1px solid #000;padding-top:3px;text-align:center"><b style="font-size:8pt">${a.name||''}</b><br><span style="font-size:7.5pt">${a.title||a.role||''}</span></div></td>`;}).join('')}</tr>
+      <tr>${approvers.map(a=>`<td style="border:1px solid #000;padding:4px 8px;font-size:8pt;font-weight:bold;vertical-align:top"><b>${esc(a.role)}:</b></td>`).join('')}</tr>
+      <tr>${approvers.map((a,i)=>{const sigImg=signatures[a.id||i]?`<img src="${signatures[a.id||i]}" style="height:36px;max-width:100%;display:block;margin:0 auto 2px"/>`:'';return`<td style="border:1px solid #000;padding:4px 8px;vertical-align:bottom"><div style="min-height:46px;text-align:center">${sigImg}</div><div style="border-top:1px solid #000;padding-top:3px;text-align:center"><b style="font-size:8pt">${esc(a.name||'')}</b><br><span style="font-size:7.5pt">${esc(a.title||a.role||'')}</span></div></td>`;}).join('')}</tr>
     </table>`;
 
     /* Manpower &#8212; skip zero-rate rows */
@@ -4584,7 +4608,7 @@
       const subB=rows.reduce((s,r)=>s+N(r.pax)*(N(r.otHours)/8)*N(r.rate)*1.25*mult,0);
       return`<div class="sub">${info2?.label||sk.toUpperCase()}</div>
       <table><tr style="background:#eee"><th class="c" style="width:28px">ITEM</th><th>MANPOWER LOADING</th><th class="c" style="width:28px">QTY</th><th class="c" style="width:30px">UOM</th><th class="c" style="width:36px">DAYS</th><th class="r" style="width:60px">RATE/DAY</th><th class="r" style="width:70px">SUBTOTAL</th><th class="c" style="width:30px">AOT</th><th class="r" style="width:55px">RATE OT</th><th class="r" style="width:70px">TOTAL</th></tr>
-      ${rows.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${r.role||''}</td><td class="c">${r.pax||1}</td><td class="c">pax</td><td class="c">${r.days||1}</td><td class="r">${fmt(r.rate)}</td><td class="r">${fmt(N(r.pax)*N(r.days)*N(r.rate)*mult)}</td><td class="c">${r.otHours||0}</td><td class="r">${fmt(N(r.rate)/8*1.25*mult)}</td><td class="r b">${fmt(N(r.pax)*N(r.days)*N(r.rate)*mult+N(r.pax)*(N(r.otHours)/8)*N(r.rate)*1.25*mult)}</td></tr>`).join('')}
+      ${rows.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.role||'')}</td><td class="c">${esc(r.pax||1)}</td><td class="c">pax</td><td class="c">${esc(r.days||1)}</td><td class="r">${fmt(r.rate)}</td><td class="r">${fmt(N(r.pax)*N(r.days)*N(r.rate)*mult)}</td><td class="c">${esc(r.otHours||0)}</td><td class="r">${fmt(N(r.rate)/8*1.25*mult)}</td><td class="r b">${fmt(N(r.pax)*N(r.days)*N(r.rate)*mult+N(r.pax)*(N(r.otHours)/8)*N(r.rate)*1.25*mult)}</td></tr>`).join('')}
       <tr class="tot"><td colspan="9" class="r b">SUB TOTAL:</td><td class="r b">${fmt(subA+subB)}</td></tr></table>`;
     }).join('');
 
@@ -4593,7 +4617,7 @@
     const benPage=benRows.length?`<div class="page page-break">${docHdr('BILL OF LABOR')}
       <div class="sec">C.7 &nbsp;BENEFITS AND OTHERS</div>
       <table><tr style="background:#eee"><th class="c">ITEM</th><th>MANPOWER LOADING</th><th class="c">QTY</th><th class="c">UOM</th><th class="c">TOTAL DAYS</th><th class="r">MONTHLY RATE</th><th class="r">13TH PAY</th><th class="r">SSS</th><th class="r">HDMF&amp;PHIC</th><th class="r">SIL&amp;ECC</th><th class="r">TOTAL</th></tr>
-      ${benRows.map((r,i)=>{const b=r.benefits||{};const tot=N(b.thirteenth)+N(b.sss)+N(b.hdmf)+N(b.sil);return`<tr><td class="c">${i+1}</td><td>${r.role||''}</td><td class="c">${r.pax||1}</td><td class="c">pax</td><td class="c">${r.days||1}</td><td class="r">${fmt(r.monthlyRate||0)}</td><td class="r">${fmt(b.thirteenth||0)}</td><td class="r">${fmt(b.sss||0)}</td><td class="r">${fmt(b.hdmf||0)}</td><td class="r">${fmt(b.sil||0)}</td><td class="r b">${fmt(tot)}</td></tr>`;}).join('')}
+      ${benRows.map((r,i)=>{const b=r.benefits||{};const tot=N(b.thirteenth)+N(b.sss)+N(b.hdmf)+N(b.sil);return`<tr><td class="c">${i+1}</td><td>${esc(r.role||'')}</td><td class="c">${esc(r.pax||1)}</td><td class="c">pax</td><td class="c">${esc(r.days||1)}</td><td class="r">${fmt(r.monthlyRate||0)}</td><td class="r">${fmt(b.thirteenth||0)}</td><td class="r">${fmt(b.sss||0)}</td><td class="r">${fmt(b.hdmf||0)}</td><td class="r">${fmt(b.sil||0)}</td><td class="r b">${fmt(tot)}</td></tr>`;}).join('')}
       <tr class="tot"><td colspan="10" class="r b">BENEFITS &amp; OTHERS SUB TOTAL:</td><td class="r b">${fmt(benRows.reduce((s,r)=>{const b=r.benefits||{};return s+N(b.thirteenth)+N(b.sss)+N(b.hdmf)+N(b.sil);},0))}</td></tr>
       <tr class="tot"><td colspan="10" class="r b">TOTAL MANPOWER COST (C.1-C.7):</td><td class="r b">${fmt(mpTot)}</td></tr></table></div>` : '';
 
@@ -4602,7 +4626,7 @@
     const toolsPage=toolsActive.length?`<div class="page page-break">${docHdr('BILL OF TOOLS AND EQUIPMENT')}
       <div class="sec">BILL OF TOOLS AND EQUIPMENT</div>
       <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:28px">QTY</th><th class="c" style="width:35px">UOM</th><th class="c" style="width:35px">DAYS</th><th class="r" style="width:80px">UNIT PRICE</th><th class="r" style="width:80px">TOTAL</th></tr>
-      ${toolsActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${r.desc||''}</td><td class="c">${r.qty||1}</td><td class="c">${r.uom||'Lot'}</td><td class="c">${resDays(r)}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(N(r.qty)*N(r.cost)*resDays(r))}</td></tr>`).join('')}
+      ${toolsActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.uom||'Lot')}</td><td class="c">${resDays(r)}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(N(r.qty)*N(r.cost)*resDays(r))}</td></tr>`).join('')}
       <tr class="tot"><td colspan="6" class="r b">TOTAL:</td><td class="r b">${fmt(toolsT)}</td></tr></table></div>` : '';
 
     /* Materials &#8212; skip zero rows */
@@ -4610,7 +4634,7 @@
     const matsPage=matsActive.length?`<div class="page page-break">${docHdr('BILL OF MATERIALS AND CONSUMABLES')}
       <div class="sec">BILL OF MATERIALS AND CONSUMABLES</div>
       <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:35px">QTY</th><th class="c" style="width:35px">UOM</th><th class="r" style="width:80px">UNIT PRICE</th><th class="r" style="width:80px">TOTAL</th></tr>
-      ${matsActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${r.desc||''}</td><td class="c">${r.qty||1}</td><td class="c">${r.uom||'Lot'}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(N(r.qty)*N(r.cost))}</td></tr>`).join('')}
+      ${matsActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.uom||'Lot')}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(N(r.qty)*N(r.cost))}</td></tr>`).join('')}
       <tr class="tot"><td colspan="5" class="r b">TOTAL:</td><td class="r b">${fmt(matsT)}</td></tr></table></div>` : '';
 
     /* PPE &#8212; skip zero rows */
@@ -4618,12 +4642,12 @@
     const ppePage=ppeActive.length?`<div class="page page-break">${docHdr('PERSONAL PROTECTIVE EQUIPMENTS')}
       <div class="sec">PERSONAL PROTECTIVE EQUIPMENTS</div>
       <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:35px">QTY</th><th class="c" style="width:35px">UOM</th><th class="r" style="width:80px">UNIT PRICE</th><th class="r" style="width:80px">TOTAL</th></tr>
-      ${ppeActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${r.desc||''}</td><td class="c">${r.qty||1}</td><td class="c">${r.uom||'Lot'}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(N(r.qty)*N(r.cost))}</td></tr>`).join('')}
+      ${ppeActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.uom||'Lot')}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(N(r.qty)*N(r.cost))}</td></tr>`).join('')}
       <tr class="tot"><td colspan="4" class="r b">TOTAL:</td><td class="r b">${fmt(ppeT)}</td></tr></table></div>` : '';
 
-    const sowPage=sowItems.length?`<div class="page page-break">${docHdr('SCOPE OF WORK')}<div style="font-size:8pt;line-height:1.6">${(()=>{let mc=0,sc=0;return sowItems.map(it=>{if(it.type==='main'){mc++;sc=0;return`<div style="margin-top:4px"><b>${mc}. ${it.text}</b></div>`;}else{sc++;return`<div style="margin-left:14px">${mc}.${sc} ${it.text}</div>`;}}).join('');})()}</div></div>`:'';
+    const sowPage=sowItems.length?`<div class="page page-break">${docHdr('SCOPE OF WORK')}<div style="font-size:8pt;line-height:1.6">${(()=>{let mc=0,sc=0;return sowItems.map(it=>{if(it.type==='main'){mc++;sc=0;return`<div style="margin-top:4px"><b>${mc}. ${esc(it.text)}</b></div>`;}else{sc++;return`<div style="margin-left:14px">${mc}.${sc} ${esc(it.text)}</div>`;}}).join('');})()}</div></div>`:'';
 
-    const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>CE ${info.ceNum||''}<\/title><style>${pageStyle}<\/style><\/head><body>
+    const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>CE ${esc(info.ceNum||'')}<\/title><style>${pageStyle}<\/style><\/head><body>
       <div class="page">
         ${docHdr('COST ESTIMATE SUMMARY')}
         ${infoTable}
@@ -4726,6 +4750,12 @@
     showToast('Exported to Excel.');
   };
   const [showDraftBanner, setShowDraftBanner] = React.useState(() => hasDraft());
+  /* Refreshed on every render so the auto-save timer never works from a
+     stale closure. */
+  _live.current = {
+    saveDraft, hasUnsavedWork,
+    sig: JSON.stringify([info, mp, tools, mats, ppe, misc, sowItems, notes, addlCosts, margin, mobVehicles, demobVehicles])
+  };
   return /*#__PURE__*/React.createElement("div", {
     style: {
       background: BG,

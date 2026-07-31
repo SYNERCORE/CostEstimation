@@ -106,7 +106,27 @@ function AuthGate() {
     (async () => {
       const s = session.get();
       if (s) {
-        setCurrentUser(s);
+        /* The session is plain JSON in sessionStorage, so its `role` is only as
+           trustworthy as the browser. Re-read the role (and approval status)
+           from the user store before granting the admin UI, so editing the
+           session blob no longer unlocks it. SharePoint list permissions remain
+           the real boundary for the data itself — this closes the UI gap, it is
+           not a substitute for server-side authorisation. */
+        let u = s;
+        try {
+          const all = await dbGetUsers();
+          const rec = (all || []).find(x => x && x.username === s.username);
+          if (rec) {
+            if (rec.status && rec.status !== 'approved') {
+              session.clear();
+              setPage('login');
+              return;
+            }
+            u = { ...s, role: rec.role, name: rec.name || s.name };
+            if (rec.role !== s.role) session.set(u);
+          }
+        } catch (_e) { /* offline: fall back to the cached session */ }
+        setCurrentUser(u);
         setPage('app');
         return;
       }

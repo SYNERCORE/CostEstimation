@@ -5214,7 +5214,11 @@
       padding: '0 16px',
       position: 'sticky',
       top: 0,
-      zIndex: 50
+      zIndex: 50,
+      /* Height is fixed (the tab strip sticks at top:48), so scroll rather than
+         wrap when the buttons no longer fit. */
+      overflowX: 'auto',
+      overflowY: 'hidden'
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -5235,11 +5239,13 @@
       letterSpacing: '0.05em'
     }
   }, "SHIC"), /*#__PURE__*/React.createElement("span", {
+    className: "shic-hide-tight",
     style: {
       fontWeight: 700,
       fontSize: 14
     }
   }, "Cost Estimator"), /*#__PURE__*/React.createElement("span", {
+    className: "shic-hide-narrow",
     style: {
       color: MT,
       fontSize: 10
@@ -5284,6 +5290,7 @@
     onClick: handleSave,
     title: "Save CE (Ctrl+S)"
   }, "Save"), /*#__PURE__*/React.createElement("span", {
+    className: "shic-hide-narrow",
     title: "Keyboard shortcuts: Ctrl+S = Save  •  Ctrl+N = New CE",
     style: {fontSize:9, color:BDR, cursor:'default', userSelect:'none', letterSpacing:.3}
   }, "Ctrl+S / Ctrl+N"), /*#__PURE__*/React.createElement("button", {
@@ -5312,6 +5319,7 @@
       borderLeft: `1px solid ${BDR}`
     }
   }, /*#__PURE__*/React.createElement("div", {
+    className: "shic-hide-narrow",
     style: {
       textAlign: 'right'
     }
@@ -8331,14 +8339,19 @@ tab === 'dashboard' && (() => {
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 12
+      marginBottom: 12,
+      /* Wrap instead of overflowing once the action buttons no longer fit. */
+      flexWrap: 'wrap',
+      gap: 8
     }
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       fontWeight: 800,
       fontSize: 16,
       letterSpacing: '-0.02em',
-      color: cfg.color
+      color: cfg.color,
+      /* Never break the CE number across lines. */
+      whiteSpace: 'nowrap'
     }
   }, info.ceNum || '(No CE Number)'), docFile && /*#__PURE__*/React.createElement("div", {
     style: {
@@ -8363,7 +8376,9 @@ tab === 'dashboard' && (() => {
   }, "View"))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
-      gap: 6
+      gap: 6,
+      flexWrap: 'wrap',
+      justifyContent: 'flex-end'
     }
   }, /*#__PURE__*/React.createElement("button", {
     style: btn('def'),

@@ -265,6 +265,20 @@
    that is why list and column creation was failing. nometadata does not want
    __metadata at all. Some older on-prem farms only accept the verbose form, so
    fall back to that on a 400 rather than guessing which one a tenant needs. */
+/* The delegated permissions actually carried by the access token, read from its
+   "scp" claim. The app asks for <site>/.default, which grants whatever the Azure
+   AD app registration was configured with -- NOT what the signed-in user can do.
+   So a site owner still gets 403 on schema changes if the registration only has
+   AllSites.Write. Showing the real scopes turns that into a five-second answer.
+   Only the scope claim is read; the token itself is never displayed or sent. */
+function spTokenScopes(tok){
+  try{
+    const seg=String(tok).split('.')[1];
+    if(!seg)return '';
+    const p=JSON.parse(atob(seg.replace(/-/g,'+').replace(/_/g,'/')));
+    return p.scp || (Array.isArray(p.roles) ? p.roles.join(' ') : '') || '';
+  }catch(_){return '';}
+}
 /* SharePoint wraps the useful text in error.message.value (or odata.error...).
    Truncating the raw JSON hid the actual reason behind boilerplate. */
 function spErrText(t){
@@ -390,7 +404,14 @@ async function autoSetupSP(progressCb){
      because no amount of retrying will fix it. */
   const denied=errors.some(e=>/403|access is denied|unauthorized/i.test(e));
   if(denied){
-    msg+=' ⚠ SharePoint denied permission to create lists/columns. Your account can read and write CE data, but changing the site structure needs Full Control (site owner). Ask a SharePoint admin to run this once, or to add the missing columns manually.';
+    const scopes=spTokenScopes(tok);
+    const canManage=/AllSites\.(Manage|FullControl)|Sites\.(Manage|FullControl)\.All/i.test(scopes);
+    msg+=' ⚠ SharePoint denied permission to create lists/columns.';
+    msg+=canManage
+      ? ' The token does carry a manage-level scope ('+scopes+'), so this is a site-level permission or a tenant policy, not the app registration.'
+      : ' This is the Azure AD app registration, not your site ownership: the app requests <site>/.default, so the token only carries the permissions granted to the registration'+
+        (scopes?' — currently: '+scopes:'')+
+        '. Add the SharePoint DELEGATED permission "AllSites.Manage" (or FullControl) to the app registration, grant admin consent, then Sign Out and back in so a new token is issued.';
   }else if(errors.length){
     msg+=' '+errors.length+' problem(s): '+errors.slice(0,3).join(' | ')+(errors.length>3?' ...':'');
   }

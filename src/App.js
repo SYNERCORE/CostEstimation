@@ -96,6 +96,12 @@
   const loadMonData = async () => {
     /* Always fetch from SP first; only fall back to localStorage if SP is unreachable */
     setSyncStatus({monitoring:'saving'});
+    /* Show the cached monitoring table straight away; the SP result below
+       replaces it wholesale once it lands. */
+    try {
+      const v = localStorage.getItem(MON_KEY);
+      if (v) setMonData(JSON.parse(v));
+    } catch (_e) {}
     try {
       /* Clear stale cache before every fetch so deleted SP items are not reused */
       Object.keys(_monSpIdCache).forEach(k => delete _monSpIdCache[k]);
@@ -254,6 +260,13 @@
   }, []);
   const loadHist = async () => {
     setHistBusy(true);
+    /* Paint the cached history immediately, then refresh from SharePoint in the
+       background. Fetching 800+ CEs takes seconds, and blocking the first render
+       on it made opening the app feel like it had hung. */
+    try {
+      const cached = LS.get('history') || [];
+      if (cached.length) setHistory(isAdmin ? cached : cached.filter(h => h.savedBy === currentUser.username));
+    } catch (_e) {}
     try {
       const spAvail = !!(USE_SP || getSiteURL());
       const h = await dbGetHistory(currentUser.username, isAdmin);
@@ -857,8 +870,7 @@
       return;
     }
     if (!confirmZeroCost('Save anyway?')) return;
-    const allHist = await dbGetHistory(null, true).catch(() => []);
-    const dup = allHist.find(h => (h.info?.ceNum || '').trim().toUpperCase() === ceNum.toUpperCase());
+    const dup = await dbFindCEByNum(ceNum).catch(() => null);
     if (dup && !dup._imported) {
       showToast('CE Number "' + ceNum + '" already exists in history (saved ' + new Date(dup.savedAt).toLocaleDateString() + '). Use a unique CE Number.', true);
       return;

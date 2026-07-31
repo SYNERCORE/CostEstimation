@@ -265,6 +265,17 @@
    that is why list and column creation was failing. nometadata does not want
    __metadata at all. Some older on-prem farms only accept the verbose form, so
    fall back to that on a 400 rather than guessing which one a tenant needs. */
+/* SharePoint wraps the useful text in error.message.value (or odata.error...).
+   Truncating the raw JSON hid the actual reason behind boilerplate. */
+function spErrText(t){
+  try{
+    const j=JSON.parse(t);
+    const e=j.error||j['odata.error'];
+    const v=e&&e.message&&(e.message.value||e.message);
+    if(v)return String(v);
+  }catch(_){}
+  return String(t||'').slice(0,200);
+}
 async function spRestPost(url, payload, spType, token, digest){
   const attempt = async verbose => {
     const body = verbose ? {...payload, __metadata:{type:spType}} : payload;
@@ -310,7 +321,7 @@ async function spCreateList(name, token, digest){
   const res=await spRestPost(`${su}/_api/web/lists`,
     {BaseTemplate:100,Title:name,Description:'SHIC Cost Estimator - auto-created'},
     'SP.List',token,digest);
-  if(!res.ok)throw new Error('Create list '+name+': '+res.status+' '+res.text.slice(0,140));
+  if(!res.ok)throw new Error('Create list '+name+': '+res.status+' '+spErrText(res.text));
   return true; /* created */
 }
 
@@ -325,7 +336,7 @@ async function spAddField(listName, fieldName, fieldType, token, digest){
   if(res.ok)return{ok:true};
   const t=res.text||'';
   if(/already exist|duplicate/i.test(t))return{ok:true,existed:true};
-  return{ok:false,err:fieldName+': '+res.status+' '+t.slice(0,120)};
+  return{ok:false,status:res.status,err:fieldName+': '+res.status+' '+spErrText(t)};
 }
 
 async function autoSetupSP(progressCb){
@@ -374,10 +385,16 @@ async function autoSetupSP(progressCb){
     }catch(e){errors.push(name+': '+e.message);}
   }
   let msg='Done! '+created+' list(s) created, '+skipped+' already existed, '+added+' column(s) added.';
-  if(errors.length){
+  /* A 403 here is not a bug in the app -- the signed-in account cannot change
+     the site's schema. Say so plainly instead of showing raw SharePoint JSON,
+     because no amount of retrying will fix it. */
+  const denied=errors.some(e=>/403|access is denied|unauthorized/i.test(e));
+  if(denied){
+    msg+=' ⚠ SharePoint denied permission to create lists/columns. Your account can read and write CE data, but changing the site structure needs Full Control (site owner). Ask a SharePoint admin to run this once, or to add the missing columns manually.';
+  }else if(errors.length){
     msg+=' '+errors.length+' problem(s): '+errors.slice(0,3).join(' | ')+(errors.length>3?' ...':'');
-    console.warn('SharePoint setup problems:',errors);
   }
-  progressCb&&progressCb({step:'done',msg,progress:1});
-  return{created,skipped,added,errors};
+  if(errors.length)console.warn('SharePoint setup problems:',errors);
+  progressCb&&progressCb({step:'done',msg,progress:1,denied});
+  return{created,skipped,added,errors,denied};
 }

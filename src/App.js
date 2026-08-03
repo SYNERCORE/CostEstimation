@@ -5981,7 +5981,10 @@ tab === 'sowbreak' && (() => {
       )
     )
   );
-})(), tab === 'scopelib' &&
+})(),
+tab === 'scopelib' && /*#__PURE__*/React.createElement(ScopeLibraryEditor, null),
+tab === 'masterlist' && /*#__PURE__*/React.createElement(MlEditor, null),
+tab === 'history' && /*#__PURE__*/React.createElement(HistPanel, null),
 
 /* ── Attachment Panel Modal ── */
 attachPanel && /*#__PURE__*/React.createElement("div", {

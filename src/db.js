@@ -393,6 +393,40 @@ async function ensureAdmin() {
     console.warn('seed admin:', e);
   }
 }
+/* ── Bulk upload mode ────────────────────────────────────────────────────────
+   Admin-only, temporary bypass of the duplicate CE-number guard so historical
+   CEs can be loaded in. Deliberately constrained:
+     - sessionStorage, so it dies with the tab and never persists to another
+       machine or another day
+     - carries an expiry, so it cannot be left on and quietly permit duplicates
+       weeks later
+     - the caller still checks isAdmin; this only records the window
+   NOTE: with the guard bypassed, saving a CE number that already exists UPDATES
+   that CE (dbSaveHistory patches the row it finds by Title) rather than adding
+   a second one. */
+const bulkMode = {
+  get() {
+    try {
+      const v = JSON.parse(sessionStorage.getItem('shic:bulk') || 'null');
+      /* `until` must be a real number. A non-numeric value makes the comparison
+         below NaN, which is never true, so a corrupted entry would leave the
+         protection off indefinitely. Anything unexpected fails closed. */
+      if (!v || typeof v.until !== 'number' || !isFinite(v.until)) { sessionStorage.removeItem('shic:bulk'); return null; }
+      if (Date.now() > v.until) { sessionStorage.removeItem('shic:bulk'); return null; }
+      return v;
+    } catch (_e) { return null; }
+  },
+  on() { return !!bulkMode.get(); },
+  minutesLeft() { const v = bulkMode.get(); return v ? Math.max(0, Math.ceil((v.until - Date.now()) / 60000)) : 0; },
+  enable(minutes, by) {
+    try { sessionStorage.setItem('shic:bulk', JSON.stringify({ until: Date.now() + (minutes || 60) * 60000, by: by || '' })); } catch (_e) {}
+    try { window.dispatchEvent(new Event('shic:bulk:changed')); } catch (_e) {}
+  },
+  disable() {
+    try { sessionStorage.removeItem('shic:bulk'); } catch (_e) {}
+    try { window.dispatchEvent(new Event('shic:bulk:changed')); } catch (_e) {}
+  }
+};
 const session = {
   get: () => {
     try {

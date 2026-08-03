@@ -13,6 +13,8 @@
   /* Saved-total recompute: null = not scanned, else {checked, diffs:[], skipped} */
   const [recalc, setRecalc] = useState(null);
   const [recalcBusy, setRecalcBusy] = useState(false);
+  const [bulkOn, setBulkOn] = useState(() => bulkMode.on());
+  const [bulkMins, setBulkMins] = useState(60);
   const [setupMsg, setSetupMsg] = useState('');
   const [setupBusy, setSetupBusy] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
@@ -166,6 +168,26 @@
     setToast(ok + ' total' + (ok === 1 ? '' : 's') + ' updated' + (failed ? ', ' + failed + ' failed' : '') + '.');
     setRecalcBusy(false);
     scanTotals();
+  };
+  /* Bulk upload mode: temporarily lifts the duplicate CE-number guard so
+     historical CEs can be loaded. Time-boxed and session-scoped by design --
+     see bulkMode in db.js. */
+  const toggleBulk = () => {
+    if (bulkOn) {
+      bulkMode.disable();
+      setBulkOn(false);
+      auditLog('bulk_mode_off', '', currentUser?.username);
+      toast2('Bulk upload mode off — duplicate protection restored.');
+      return;
+    }
+    if (!window.confirm(
+      'Turn OFF duplicate CE-number protection for ' + bulkMins + ' minutes?' + String.fromCharCode(10, 10) +
+      'While it is off, saving a CE whose number already exists will OVERWRITE that CE instead of being blocked.' + String.fromCharCode(10, 10) +
+      'It switches back on automatically when the time is up, or when this tab is closed.')) return;
+    bulkMode.enable(bulkMins, currentUser?.username);
+    setBulkOn(true);
+    auditLog('bulk_mode_on', bulkMins + ' min', currentUser?.username);
+    toast2('Bulk upload mode ON for ' + bulkMins + ' minutes.');
   };
   const SBadge = ({
     s
@@ -689,6 +711,37 @@
       borderColor: INFO + '33'
     }
   }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      marginBottom: 6,
+      fontSize: 11,
+      color: MT,
+      textTransform: 'uppercase',
+      letterSpacing: '0.07em'
+    }
+  }, "Bulk CE Upload"), /*#__PURE__*/React.createElement("div", {
+    style: { color: MT, fontSize: 11, marginBottom: 8, lineHeight: 1.5 }
+  }, "Saving is normally blocked when a CE number already exists. Turn that off temporarily to load historical CEs. While it is off, saving a CE number that already exists ", /*#__PURE__*/React.createElement("b", { style: { color: ERR } }, "overwrites"), " that CE. It restores itself when the time runs out or the tab is closed."),
+  /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
+    /*#__PURE__*/React.createElement("button", {
+      style: bulkOn ? btn('danger') : btn('def'), onClick: toggleBulk
+    }, bulkOn ? 'Turn protection back ON' : 'Turn protection OFF'),
+    !bulkOn && /*#__PURE__*/React.createElement("label", { style: { fontSize: 11, color: MT, display: 'flex', alignItems: 'center', gap: 6 } },
+      "for",
+      /*#__PURE__*/React.createElement("select", {
+        style: { ...INP, width: 96, fontSize: 11, padding: '3px 6px' },
+        value: bulkMins,
+        onChange: e => setBulkMins(Number(e.target.value) || 60)
+      }, [15, 30, 60, 120, 240].map(m => /*#__PURE__*/React.createElement("option", { key: m, value: m }, m + ' min')))
+    ),
+    bulkOn && /*#__PURE__*/React.createElement("span", {
+      style: { fontSize: 11, color: ERR, fontWeight: 700 }
+    }, "OFF — " + bulkMode.minutesLeft() + " min remaining"),
+    /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: MT } },
+      bulkOn ? 'Duplicate CE numbers are being accepted.' : 'Duplicate CE numbers are blocked (normal).')
+  ),
+  /*#__PURE__*/React.createElement("div", { style: { borderTop: `1px solid ${BDR}`, margin: '14px 0 10px' } }),
+  /*#__PURE__*/React.createElement("div", {
     style: {
       fontWeight: 700,
       marginBottom: 6,

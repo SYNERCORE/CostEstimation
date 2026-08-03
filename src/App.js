@@ -223,6 +223,15 @@
   const [copyMenu, setCopyMenu] = useState(null); /* {fromShift, anchorEl} */
   const fileRef = useRef(null);
   const _lastAutoSig = useRef(null); /* skips no-op auto-saves */
+  const [bulkOn, setBulkOn] = useState(() => bulkMode.on());
+  useEffect(() => {
+    /* Poll as well as listen: the window expires on a timer, so the banner
+       has to disappear on its own without another user action. */
+    const h = () => setBulkOn(bulkMode.on());
+    window.addEventListener('shic:bulk:changed', h);
+    const t = setInterval(h, 5000); /* short, so the banner clears promptly when the window expires */
+    return () => { window.removeEventListener('shic:bulk:changed', h); clearInterval(t); };
+  }, []);
   const _live = useRef(null);       /* current state for the auto-save timer */
   const isAdmin = currentUser.role === 'admin';
   const cfg = CE_CFG[ceType] || CE_CFG.onsite || {};
@@ -884,6 +893,7 @@
     } catch {}
   };
   const handleSave = async () => {
+    let _overwrote = null; /* set when bulk mode lets a save replace an existing CE */
     const ceNum = (info.ceNum || '').trim().toUpperCase();
     if (ceNum !== (info.ceNum || '').trim()) setInfo(p => ({...p, ceNum}));
     if (!ceNum) {
@@ -906,8 +916,17 @@
     if (!confirmZeroCost('Save anyway?')) return;
     const dup = await dbFindCEByNum(ceNum).catch(() => null);
     if (dup && !dup._imported) {
-      showToast('CE Number "' + ceNum + '" already exists in history (saved ' + new Date(dup.savedAt).toLocaleDateString() + '). Use a unique CE Number.', true);
-      return;
+      /* Bulk upload mode lets an admin load historical CEs whose numbers already
+         exist. Saving then UPDATES that CE rather than adding a second one, so
+         say which one is being replaced instead of failing silently. */
+      if (!(isAdmin && bulkMode.on())) {
+        showToast('CE Number "' + ceNum + '" already exists in history (saved ' + new Date(dup.savedAt).toLocaleDateString() + '). Use a unique CE Number.', true);
+        return;
+      }
+      /* Recorded rather than toasted here: the success toast fires moments later
+         and would replace it, leaving no trace that a CE was replaced. */
+      _overwrote = new Date(dup.savedAt).toLocaleDateString();
+      auditLog('bulk_overwrite', ceNum + ' (was saved ' + _overwrote + ')', currentUser?.username);
     }
     try {
       await spWithRetry(() => dbSaveHistory(mkEntry()));
@@ -915,7 +934,9 @@
       _checkAutoBackup();
       clearDraft();
       await loadHist();
-      showToast('Saved! CE ' + ceNum + ' added to history.');
+      showToast(_overwrote
+        ? 'Saved — REPLACED existing CE ' + ceNum + ' (previously saved ' + _overwrote + ').'
+        : 'Saved! CE ' + ceNum + ' added to history.');
     } catch (e) {
       showToast('Save failed: ' + e.message, true);
     }
@@ -4764,7 +4785,21 @@
       fontSize: 13
     },
     onClick: () => copyMenu && setCopyMenu(null)
-  }, /*#__PURE__*/React.createElement(SyncStatusBar, null), updateInfo?.available && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(SyncStatusBar, null),
+  bulkOn && isAdmin && /*#__PURE__*/React.createElement("div", {
+    style: { background: ERR + '22', borderBottom: `1px solid ${ERR}55`, padding: '6px 16px',
+             display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }
+  },
+    /*#__PURE__*/React.createElement("span", { style: { fontWeight: 700, color: ERR } }, "⚠ BULK UPLOAD MODE"),
+    /*#__PURE__*/React.createElement("span", { style: { color: MT } },
+      "Duplicate CE-number checking is OFF. Saving a CE number that already exists will OVERWRITE it."),
+    /*#__PURE__*/React.createElement("span", { style: { color: MT, marginLeft: 'auto' } },
+      bulkMode.minutesLeft() + " min left"),
+    /*#__PURE__*/React.createElement("button", {
+      style: { ...btn('danger', true), fontSize: 11 },
+      onClick: () => { bulkMode.disable(); setBulkOn(false); showToast('Bulk upload mode off — duplicate protection restored.'); }
+    }, "Turn off now")
+  ), updateInfo?.available && /*#__PURE__*/React.createElement("div", {
     style: {
       background: updateInfo.urgent ? ERR + '22' : '#22C55E22',
       borderBottom: `1px solid ${updateInfo.urgent ? ERR : OK}44`,

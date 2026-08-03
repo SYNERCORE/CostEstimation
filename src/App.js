@@ -106,12 +106,19 @@
       /* Clear stale cache before every fetch so deleted SP items are not reused */
       Object.keys(_monSpIdCache).forEach(k => delete _monSpIdCache[k]);
       const r = await dbGetMon();
-      if (r && r.empty) {
-        /* SP reachable but list is empty — purge local cache */
-        setMonData({});
-        setMonSpIds(new Set());
-        try { localStorage.removeItem(MON_KEY); } catch {}
-        setSyncStatus({monitoring:'synced', lastSyncAt: new Date().toISOString(), sp:'connected'});
+      if (r && r.parseFailed) {
+        /* Items exist in SharePoint but none had readable shicMonData — almost
+           always a missing/unpopulated column, not an empty list. Keep whatever
+           is cached locally and say what is wrong; this used to delete the
+           user's monitoring table and report 'synced'. */
+        setSyncStatus({monitoring:'error', sp:'connected'});
+        showToast('SharePoint returned ' + r.itemCount + ' monitoring row(s) with no readable data — check the shicMonData column. Showing local copy.', true);
+      } else if (r && r.empty && r.definitive) {
+        /* The list really is empty. Still do not delete the local copy silently:
+           show it, flag it as local-only, and leave discarding to the user. */
+        const localCount = Object.keys(monData || {}).length;
+        setSyncStatus({monitoring:'local', lastSyncAt: new Date().toISOString(), sp:'connected'});
+        if (localCount) showToast('SharePoint monitoring list is empty — showing ' + localCount + ' local row(s). Use Push Local Data to upload them.', true);
       } else if (r && r.data && Object.keys(r.data).length > 0) {
         setMonData(r.data);
         setMonSpIds(new Set(Object.keys(_monSpIdCache)));
@@ -312,15 +319,22 @@
     try {
       const spAvail = !!(USE_SP || getSiteURL());
       const h = await dbGetHistory(currentUser.username, isAdmin);
-      setHistory(h);
-      /* Keep LS in sync with SP so fallback is never stale */
+      /* Keep LS in sync with SP so fallback is never stale. Only ever write a
+         NON-empty result. The old code purged the cache whenever SharePoint
+         returned zero rows, which was wrong twice over: a failed/trimmed query
+         looks identical to an empty one, and non-admins query with
+         `shicSavedBy eq '<user>'` — so zero rows means "none of MINE", not
+         "none at all". A brand-new estimator wiped the shared cache. */
+      let effective = h;
       if (spAvail && h && h.length > 0) {
         try { LS.set('history', h); } catch (e) { console.warn('history not cached locally:', e && e.message); }
       } else if (spAvail && h && h.length === 0) {
-        /* SP returned nothing — purge stale LS */
-        try { LS.set('history', []); } catch (_e) {}
+        /* Keep showing the cached list rather than blanking the UI. */
+        try { effective = LS.get('history') || []; } catch (_e) { effective = []; }
+        setSyncStatus({ sp: 'connected' });
       }
-      try{window.shicHistory=h.map(function(e){return Object.assign({},e.data||{},e);});}catch(_e){}
+      setHistory(effective);
+      try{window.shicHistory=effective.map(function(e){return Object.assign({},e.data||{},e);});}catch(_e){}
       spLoadMLImports().then(function(imports){
         if(imports&&imports.length){
           window.shicHistory=(window.shicHistory||[]).concat(imports);

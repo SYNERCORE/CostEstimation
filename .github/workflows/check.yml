@@ -22,6 +22,8 @@ jobs:
         run: node tools/check-sw-precache.js
       - name: Printed CE escapes all user text
         run: node tools/check-print-escaping.js
+      - name: Local caches survive empty SharePoint responses
+        run: node tools/test-cache-preservation.js
       - name: Every tab renders something
         run: node tools/check-tab-coverage.js
       - name: Bulk upload mode expires and fails closed

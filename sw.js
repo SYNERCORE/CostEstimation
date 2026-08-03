@@ -1,4 +1,4 @@
-const CACHE='shic-ce-v26';
+const CACHE='shic-ce-v27';
 const CDN=[
   'https://unpkg.com/react@18/umd/react.production.min.js',
   'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
@@ -13,27 +13,27 @@ const SHELL=['./','./index.html','./manifest.json','./icon.svg'];
    app did. Kept in step with index.html by tools/check-sw-precache.js.
    APP_START */
 const APP=[
-  './src/constants.js?v=26',
-  './src/helpers.js?v=26',
-  './src/ai.js?v=26',
-  './src/config.js?v=26',
-  './src/update.js?v=26',
-  './src/sp.js?v=26',
-  './src/db.js?v=26',
-  './src/auth.js?v=26',
-  './src/components/LoginPage.js?v=26',
-  './src/components/RegisterPage.js?v=26',
-  './src/components/CompanyDBPanel.js?v=26',
-  './src/components/FbSetupPanel.js?v=26',
-  './src/components/LocalToSPSync.js?v=26',
-  './src/components/ChangePasswordModal.js?v=26',
-  './src/components/UpdatePublisher.js?v=26',
-  './src/components/AdminPanel.js?v=26',
-  './src/components/ResTab.js?v=26',
-  './src/App.js?v=26',
-  './src/widgets.js?v=26',
-  './src/tests.js?v=26',
-  './src/ml_utils.js?v=26'
+  './src/constants.js?v=27',
+  './src/helpers.js?v=27',
+  './src/ai.js?v=27',
+  './src/config.js?v=27',
+  './src/update.js?v=27',
+  './src/sp.js?v=27',
+  './src/db.js?v=27',
+  './src/auth.js?v=27',
+  './src/components/LoginPage.js?v=27',
+  './src/components/RegisterPage.js?v=27',
+  './src/components/CompanyDBPanel.js?v=27',
+  './src/components/FbSetupPanel.js?v=27',
+  './src/components/LocalToSPSync.js?v=27',
+  './src/components/ChangePasswordModal.js?v=27',
+  './src/components/UpdatePublisher.js?v=27',
+  './src/components/AdminPanel.js?v=27',
+  './src/components/ResTab.js?v=27',
+  './src/App.js?v=27',
+  './src/widgets.js?v=27',
+  './src/tests.js?v=27',
+  './src/ml_utils.js?v=27'
 ];
 /* APP_END */
 self.addEventListener('install',e=>{

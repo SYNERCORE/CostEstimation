@@ -19,11 +19,20 @@ async function dbGetDrafts(){
          Each draftId embeds the owner username so there are no Title collisions.
          App.js gates resume/delete to owner + admin only. */
       const r=await spGet(spList('Drafts'),'','Id,Title,shicSavedBy,shicData,Modified');
-      return r.map(x=>{try{return JSON.parse(x.shicData||'{}');}catch{return null;}}).filter(Boolean)
-               .sort((a,b)=>new Date(b.savedAt)-new Date(a.savedAt));
+      const out=r.map(x=>{try{return JSON.parse(x.shicData||'{}');}catch{return null;}}).filter(Boolean)
+                 .sort((a,b)=>new Date(b.savedAt)-new Date(a.savedAt));
+      /* `ok` distinguishes "SharePoint confirmed this list" from "we have
+         nothing to show". Both used to be an empty array, so a failed query was
+         indistinguishable from no drafts — and anything pruning local drafts on
+         that basis would delete work that was never uploaded. Still an array,
+         so existing callers are unaffected. */
+      out.ok=true;
+      return out;
     }catch(e){console.warn('dbGetDrafts:',e.message);}
   }
-  return [];
+  const empty=[];
+  empty.ok=false; /* not configured, or the query failed — confirms nothing */
+  return empty;
 }
 async function dbDeleteDraft(draftId){
   if(USE_SP||getSiteURL()){
@@ -98,16 +107,19 @@ async function dbGetMon(){
         if(!latest||item.Modified>latest)latest=item.Modified;
       }
       if(Object.keys(data).length)return{data,modifiedAt:latest};
-      /* SP reachable, items exist but none had valid data */
-      return{data:{},modifiedAt:latest,empty:true};
+      /* Items exist but none carried readable shicMonData. This is NOT an empty
+         list — it usually means the shicMonData column is missing or unpopulated
+         (Note-column creation failed with a 400 until 3fc4b1b), or the results
+         were permission-trimmed. Callers must keep their local copy. */
+      return{data:{},modifiedAt:latest,parseFailed:true,itemCount:r.length};
     }
     /* No per-CE items at all — check legacy blob */
     const legacy=await spGet(spList('Monitoring'),"Title eq 'config'",'Id,shicMonData,Modified');
     if(legacy.length&&legacy[0].shicMonData){
       try{return{data:JSON.parse(legacy[0].shicMonData),modifiedAt:legacy[0].Modified,legacy:true};}catch{}
     }
-    /* SP reachable, list is completely empty */
-    return{data:{},modifiedAt:null,empty:true};
+    /* The list really is empty: the request succeeded and returned no items. */
+    return{data:{},modifiedAt:null,empty:true,definitive:true};
   }catch(e){console.warn('dbGetMon:',e.message);}
   return null; /* null = fetch failed, keep local cache */
 }

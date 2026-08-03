@@ -290,9 +290,11 @@ function spErrText(t){
   }catch(_){}
   return String(t||'').slice(0,200);
 }
-async function spRestPost(url, payload, spType, token, digest){
+async function spRestPost(url, payload, spType, token, digest, verboseExtra, preferVerbose){
   const attempt = async verbose => {
-    const body = verbose ? {...payload, __metadata:{type:spType}} : payload;
+    /* verboseExtra holds properties that only exist on the concrete type, so
+       they can only be sent once __metadata names that type. */
+    const body = verbose ? {...payload, ...(verboseExtra||{}), __metadata:{type:spType}} : payload;
     const ct = verbose ? 'application/json;odata=verbose' : 'application/json;odata=nometadata';
     const r = await fetch(url,{
       method:'POST',credentials:'omit',
@@ -301,8 +303,13 @@ async function spRestPost(url, payload, spType, token, digest){
     });
     return {ok:r.ok, status:r.status, text:r.ok ? '' : await r.text()};
   };
-  let res = await attempt(false);
-  if(!res.ok && res.status === 400) res = await attempt(true);
+  /* Default order is plain-then-verbose. Callers that must land type-specific
+     properties (multi-line columns need RichText:false or SharePoint HTML-wraps
+     the JSON we store in them) ask for verbose first, keeping plain as the
+     fallback for tenants that reject the verbose form. */
+  const first = !!preferVerbose;
+  let res = await attempt(first);
+  if(!res.ok && (res.status === 400 || res.status === 415)) res = await attempt(!first);
   return res;
 }
 /* Existing field names for a list (lower-cased internal names AND titles), or
@@ -341,12 +348,24 @@ async function spCreateList(name, token, digest){
 
 /* Returns {ok} or {ok:false, err} so setup can report a real total instead of
    scattering console warnings. A duplicate field is treated as success. */
+const SP_FIELD_TYPE={2:'SP.FieldText',3:'SP.FieldMultiLineText',9:'SP.FieldNumber'};
 async function spAddField(listName, fieldName, fieldType, token, digest){
   const su=getSiteURL();
   /* fieldType: 2=text, 3=note, 9=number */
   const payload={FieldTypeKind:fieldType,Title:fieldName};
-  if(fieldType===3)payload.NumberOfLines=100; /* multi-line */
-  const res=await spRestPost(`${su}/_api/web/lists/getbytitle('${listName}')/fields`,payload,'SP.Field',token,digest);
+  /* NumberOfLines and RichText exist only on SP.FieldMultiLineText. Sending
+     them on the plain request makes SharePoint validate against the base
+     SP.Field and reject with "The property 'NumberOfLines' does not exist ...
+     use property names that are defined by the type" — which is exactly why
+     every multi-line column (shicSOW, shicDetail, ...) failed while text and
+     number columns succeeded. They now ride only on the verbose attempt, where
+     __metadata names the concrete type.
+     RichText:false matters: these columns hold JSON, and a rich-text column
+     would wrap it in HTML and break the round-trip. */
+  const isNote = fieldType===3;
+  const verboseExtra = isNote ? {NumberOfLines:20, RichText:false} : null;
+  const res=await spRestPost(`${su}/_api/web/lists/getbytitle('${listName}')/fields`,payload,
+    SP_FIELD_TYPE[fieldType]||'SP.Field',token,digest,verboseExtra,isNote);
   if(res.ok)return{ok:true};
   const t=res.text||'';
   if(/already exist|duplicate/i.test(t))return{ok:true,existed:true};

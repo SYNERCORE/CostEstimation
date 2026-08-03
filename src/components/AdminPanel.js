@@ -704,7 +704,14 @@
   }, /*#__PURE__*/React.createElement(CompanyDBPanel, null), /*#__PURE__*/React.createElement('hr',{style:{border:'none',borderTop:'1px solid '+BDR,margin:'16px 0'}}), React.createElement(FbSetupPanel, null),
   /*#__PURE__*/React.createElement('hr',{style:{border:'none',borderTop:'1px solid '+BDR,margin:'16px 0'}}),
   React.createElement(LocalToSPSync, null)
-  ), USE_SP && /*#__PURE__*/React.createElement("div", {
+  ),
+  /* Not gated on USE_SP: these work on local data too, and USE_SP is a const
+     captured at script load, so it is false whenever SharePoint was configured
+     after the page loaded. That single flag was hiding Bulk CE Upload, the
+     total recompute AND SharePoint Setup from admins who did have SharePoint
+     working -- the rest of the codebase tests (USE_SP || getSiteURL()) for
+     exactly this reason. */
+  /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
       marginTop: 8,
@@ -784,8 +791,13 @@
       }, (d.delta >= 0 ? '+' : '') + ph(d.delta))
     )))
   )),
-  /*#__PURE__*/React.createElement("div", { style: { borderTop: `1px solid ${BDR}`, margin: '14px 0 10px' } }),
-  /*#__PURE__*/React.createElement("div", {
+  ), (USE_SP || getSiteURL()) && /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...CS,
+      marginTop: 8,
+      borderColor: INFO + '33'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
     style: {
       fontWeight: 700,
       marginBottom: 6,

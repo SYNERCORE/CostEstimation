@@ -52,11 +52,25 @@ function auditLog(action, detail, user) {
 
 /* ── Auto-backup counter ─────────────────────────────────────────── */
 let _saveCount = 0;
-function _checkAutoBackup(getCEData) {
+/* Both call sites pass nothing, so this fell back to LS.get('history') -- which
+   holds summary records after any SharePoint sync. Every 50th save has been
+   downloading a "backup" with no line items in it, which would not restore
+   anything. Default to the IndexedDB archive, which holds full CEs, and warn
+   rather than download if the records still look like summaries. */
+async function _checkAutoBackup(getCEData) {
   _saveCount++;
   if (_saveCount % 50 === 0) {
     try {
-      const data = getCEData ? getCEData() : (LS.get('history') || []);
+      let data = getCEData ? await getCEData() : null;
+      if (!data) { try { data = await ceAll(); } catch (_e) { data = null; } }
+      if (!data || !data.length) data = LS.get('history') || [];
+      const hasLineItems = data.some(r => ['mp','tools','mats','ppe'].some(f => Array.isArray(r && r[f])));
+      if (data.length && !hasLineItems) {
+        setTimeout(() => (window._shicToast||console.warn)(
+          'Auto-backup skipped: the local archive holds summaries only, so the file would not restore any cost data. Use Export from the Admin panel.', true
+        ), 100);
+        return;
+      }
       const filename = 'shic-autobackup-' + new Date().toISOString().slice(0,10) + '.json';
       setTimeout(() => (window._shicToast||console.warn)(
         'Auto-backup ready (' + (data.length||0) + ' CEs). Downloading ' + filename + '…'

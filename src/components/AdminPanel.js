@@ -13,6 +13,30 @@
   /* Saved-total recompute: null = not scanned, else {checked, diffs:[], skipped} */
   const [recalc, setRecalc] = useState(null);
   const [recalcBusy, setRecalcBusy] = useState(false);
+  /* Offline storage report: how much is held locally and how much of it exists
+     ONLY here (never uploaded), which is the number that actually matters. */
+  const [storage, setStorage] = useState(null);
+  const [storageBusy, setStorageBusy] = useState(false);
+  const loadStorage = async () => {
+    setStorageBusy(true);
+    try { setStorage(await storageReport()); }
+    catch (e) { setToast('Storage report failed: ' + e.message); }
+    setStorageBusy(false);
+  };
+  useEffect(() => { loadStorage(); }, []);
+  const exportArchive = async () => {
+    try {
+      const all = await ceAll();
+      if (!all.length) { setToast('Nothing in the offline archive to export.'); return; }
+      const blob = new Blob([JSON.stringify(all, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'shic-ce-archive-' + new Date().toISOString().slice(0, 10) + '.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+      setToast('Exported ' + all.length + ' full CE(s).');
+    } catch (e) { setToast('Export failed: ' + e.message); }
+  };
   const [bulkOn, setBulkOn] = useState(() => bulkMode.on());
   const [bulkMins, setBulkMins] = useState(60);
   const [setupMsg, setSetupMsg] = useState('');
@@ -746,6 +770,41 @@
     }, "OFF — " + bulkMode.minutesLeft() + " min remaining"),
     /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: MT } },
       bulkOn ? 'Duplicate CE numbers are being accepted.' : 'Duplicate CE numbers are blocked (normal).')
+  ),
+  /*#__PURE__*/React.createElement("div", { style: { borderTop: `1px solid ${BDR}`, margin: '14px 0 10px' } }),
+  /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      marginBottom: 6,
+      fontSize: 11,
+      color: MT,
+      textTransform: 'uppercase',
+      letterSpacing: '0.07em'
+    }
+  }, "Offline Storage"), /*#__PURE__*/React.createElement("div", {
+    style: { color: MT, fontSize: 11, marginBottom: 8, lineHeight: 1.5 }
+  }, "Cost estimates are kept in this browser so the app works without a connection. \"Local only\" are CEs that exist nowhere else — they have not reached SharePoint, so they are never deleted by cleanup and are the ones worth exporting."),
+  /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 18, flexWrap: 'wrap', marginBottom: 8 } },
+    storage && [
+      ['CEs offline', storage.ceCount],
+      ['Local only', storage.byState.local, storage.byState.local > 0],
+      ['Not yet reconciled', storage.byState.unknown],
+      ['Browser storage', storage.usage != null
+        ? Math.round(storage.usage / 1048576) + ' MB of ' + Math.round((storage.quota || 0) / 1048576) + ' MB'
+        : Math.round(storage.lsBytes / 1024) + ' KB (estimated)'],
+      ['Store', storage.idb ? 'IndexedDB' : 'localStorage fallback', !storage.idb]
+    ].map(([label, val, warn], i) => /*#__PURE__*/React.createElement("div", { key: i },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: MT, textTransform: 'uppercase', letterSpacing: '0.06em' } }, label),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 15, fontWeight: 700, color: warn ? '#F59E0B' : TX } }, String(val))
+    ))
+  ),
+  storage && /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: MT, marginBottom: 8 } },
+    ['masterlist', 'sowlib', 'monitoring'].map(k => (storage.refs[k]
+      ? k + ' synced ' + new Date(storage.refs[k].syncedAt).toLocaleString()
+      : k + ' not cached yet')).join(' · ')),
+  /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 10, flexWrap: 'wrap' } },
+    /*#__PURE__*/React.createElement("button", { style: btn('info'), onClick: exportArchive }, 'Export full backup'),
+    /*#__PURE__*/React.createElement("button", { style: btn('ghost'), onClick: loadStorage, disabled: storageBusy }, storageBusy ? 'Checking...' : 'Refresh')
   ),
   /*#__PURE__*/React.createElement("div", { style: { borderTop: `1px solid ${BDR}`, margin: '14px 0 10px' } }),
   /*#__PURE__*/React.createElement("div", {

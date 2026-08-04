@@ -250,11 +250,33 @@ async function dbFindCEByNum(ceNum){
   }
   const all=LS.get('history')||[];
   const hit=all.find(h=>(((h.info&&h.info.ceNum)||h.ceNum||'')+'').trim().toUpperCase()===t.toUpperCase());
-  return hit?{id:hit.id,ceNum:t,savedBy:hit.savedBy||'',savedAt:hit.savedAt||'',_imported:hit._imported}:null;
+  if(hit)return{id:hit.id,ceNum:t,savedBy:hit.savedBy||'',savedAt:hit.savedAt||'',_imported:hit._imported};
+  /* Also consult the offline archive: history holds summaries after a sync and
+     may have been pruned, so a CE saved offline could otherwise look unused and
+     let a second CE claim the same number. */
+  try{
+    const rec=await ceGet(t);
+    if(rec)return{id:rec.id,ceNum:t,savedBy:rec.savedBy||'',savedAt:rec.savedAt||'',_imported:rec._imported};
+  }catch(_){}
+  return null;
 }
 async function dbGetHistory(username,isAdmin){if(USE_SP||getSiteURL()){try{const f=isAdmin?"":`shicSavedBy eq '${username}'`;const r=await spGet(spList('CEs'),f,'Id,Title,shicType,shicClient,shicDesc,shicTotal,shicSavedBy,shicSavedAt');return r.map(h=>({id:h.Id,ceNum:h.Title,ceType:h.shicType,client:h.shicClient||'',grand:h.shicTotal||0,savedBy:h.shicSavedBy||'',savedAt:h.shicSavedAt||h.Created,info:{ceNum:h.Title,client:h.shicClient||'',description:h.shicDesc||''}}));}catch(e){console.warn('dbGetHistory:',e.message);}}const all=LS.get('history')||[];return isAdmin?all:all.filter(h=>h.savedBy===username);}
-async function dbLoadCE(id){if(!(USE_SP||getSiteURL()))return null;try{const[hR,mR,rR]=await Promise.all([spGet(spList('CEs'),`Id eq ${id}`,'Id,Title,shicType,shicClient,shicDesc,shicTotal,shicSavedBy,shicSavedAt,shicScope,shicNotes,shicApprovers,shicMob,shicDemob,shicMisc,shicSOW'),spGet(spList('CE_MP'),`shicCEId eq ${id}`,'Id,shicRole,shicRate,shicShift,shicDays,shicQty,shicTaskId'),spGet(spList('CE_Resources'),`shicCEId eq ${id}`,'Id,shicTab,shicDesc,shicQty,shicUOM,shicCost,shicDays,shicTaskId')]);if(!hR.length)return null;const h=hR[0];return{id:h.Id,ceType:h.shicType||'onsite',grand:h.shicTotal||0,savedBy:h.shicSavedBy||'',savedAt:h.shicSavedAt||'',info:{ceNum:h.Title,client:h.shicClient||'',description:h.shicDesc||''},scope:h.shicScope||'',mp:mR.map(r=>({id:'sp'+r.Id,role:r.shicRole||'',rate:r.shicRate||0,shift:r.shicShift||'straight',days:r.shicDays||1,qty:r.shicQty||1,taskId:r.shicTaskId||''})),tools:rR.filter(r=>r.shicTab==='tools').map(r=>({id:'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,days:r.shicDays||1,taskId:r.shicTaskId||''})),mats:rR.filter(r=>r.shicTab==='mats').map(r=>({id:'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,taskId:r.shicTaskId||''})),ppe:rR.filter(r=>r.shicTab==='ppe').map(r=>({id:'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,taskId:r.shicTaskId||''})),misc:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};const{_addlCosts,_margin,...rest}=m;return rest;})(),addlCosts:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._addlCosts||[];})(),margin:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._margin||0;})(),sowItems:(()=>{try{return h.shicSOW?JSON.parse(h.shicSOW):[];}catch(_){return [];}})(),notes:h.shicNotes?JSON.parse(h.shicNotes):[],approvers:h.shicApprovers?JSON.parse(h.shicApprovers):[],mobVehicles:h.shicMob?JSON.parse(h.shicMob):[],demobVehicles:h.shicDemob?JSON.parse(h.shicDemob):[]};}catch(e){console.warn('dbLoadCE:',e.message);return null;}}
-async function dbSaveHistory(e){if(USE_SP||getSiteURL()){try{const existing=await spGet(spList('CEs'),`Title eq '${(e.info.ceNum||'').replace(/'/g,"''")}'`,'Id');const hdr={Title:e.info.ceNum,shicType:e.ceType,shicClient:e.info.client||'',shicDesc:e.info.description||'',shicTotal:Math.round((e.grand||0)*100)/100,shicSavedBy:e.savedBy||'',shicSavedAt:new Date().toISOString(),shicScope:e.scope||'',shicNotes:JSON.stringify(e.notes||[]),shicApprovers:JSON.stringify(e.approvers||[]),shicMob:JSON.stringify(e.mobVehicles||[]),shicDemob:JSON.stringify(e.demobVehicles||[]),shicMisc:JSON.stringify({...(e.misc||{}), _addlCosts:(e.addlCosts||[]), _margin:(e.margin||0)}),shicSOW:JSON.stringify(e.sowItems||[])};let ceId;if(existing.length){ceId=existing[0].Id;await spWithRetry(()=>spPatch(spList('CEs'),ceId,hdr));}else{const r=await spWithRetry(()=>spPost(spList('CEs'),hdr));ceId=r.Id;/* Race-condition guard: if two users POSTed simultaneously, keep the lowest Id and delete the duplicate */const dupes=await spGet(spList('CEs'),`Title eq '${(e.info.ceNum||'').replace(/'/g,"''")}'`,'Id,shicSavedBy');if(dupes.length>1){dupes.sort((a,b)=>a.Id-b.Id);const winner=dupes[0];if(winner.Id!==ceId){/* We lost the race — our row is the duplicate. Delete it, preserve our data locally, and surface a clear error to the user so they can save under a different CE number. The winner row is left completely untouched. */await spDelete(spList('CEs'),ceId).catch(()=>{});const _savedAt=new Date().toISOString();try{const h=LS.get('history')||[];LS.set('history',[{...e,id:Date.now(),savedAt:_savedAt,_raceConflict:true},...h.filter(x=>(x.info?.ceNum||x.ceNum)!==e.info.ceNum)]);LS.set('ce_cache:'+e.info.ceNum,{...e,id:Date.now(),savedAt:_savedAt});}catch(_){}throw new Error(`CE number "${e.info.ceNum}" was saved by "${winner.shicSavedBy||'another user'}" at the same time. Your data has been kept in this browser — load the local draft and save again with a different CE number.`);}else{for(const dup of dupes.slice(1))await spDelete(spList('CEs'),dup.Id).catch(()=>{});}}}const[om,or]=await Promise.all([spGet(spList('CE_MP'),`shicCEId eq ${ceId}`,'Id'),spGet(spList('CE_Resources'),`shicCEId eq ${ceId}`,'Id')]);/* Insert new rows FIRST — if any insert fails the old rows are still intact */const mpPayloads=(e.mp||[]).filter(r=>r.role).map(r=>({shicCEId:ceId,shicRole:r.role,shicRate:r.rate||0,shicShift:r.shift||'regular_day',shicDays:r.days||1,shicPax:r.pax||1,shicOTHours:r.otHours||0,shicPerDiem:r.perDiem||0,shicTaskId:r.taskId||''}));const resPayloads=[...(e.tools||[]).filter(r=>r.desc).map(r=>({shicCEId:ceId,shicTab:'tools',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicDays:r.days||1,shicTaskId:r.taskId||''})),...(e.mats||[]).filter(r=>r.desc).map(r=>({shicCEId:ceId,shicTab:'mats',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicTaskId:r.taskId||''})),...(e.ppe||[]).filter(r=>r.desc).map(r=>({shicCEId:ceId,shicTab:'ppe',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicTaskId:r.taskId||''}))];const insFns=[...mpPayloads.map(p=>()=>spWithRetry(()=>spPost(spList('CE_MP'),p))),...resPayloads.map(p=>()=>spWithRetry(()=>spPost(spList('CE_Resources'),p)))];let spErr=null;for(let i=0;i<insFns.length;i+=5){try{await Promise.all(insFns.slice(i,i+5).map(fn=>fn()));}catch(batchErr){spErr=batchErr;console.error('dbSaveHistory batch insert failed:',batchErr.message);break;}}if(spErr)throw spErr;/* Only delete OLD rows after new ones safely written */const dels=[...om.map(x=>()=>spDelete(spList('CE_MP'),x.Id)),...or.map(x=>()=>spDelete(spList('CE_Resources'),x.Id))];for(let i=0;i<dels.length;i+=5)await Promise.all(dels.slice(i,i+5).map(fn=>fn())).catch(()=>{});try{LS.set('ce_cache:'+e.info.ceNum,{...e,id:ceId,savedAt:hdr.shicSavedAt});}catch(_){}return;}catch(e2){const msg=e2.message||String(e2);console.warn('dbSaveHistory SP error:',msg);setTimeout(()=>(window._shicToast||console.warn)('SharePoint save failed ('+msg.slice(0,80)+') — CE stored locally.',true),100);}}const h=LS.get('history')||[];const _eid=Date.now();const _savedAt=new Date().toISOString();LS.set('history',[{...e,id:_eid,savedAt:_savedAt},...h.filter(x=>(x.info?.ceNum||x.ceNum)!==e.info.ceNum)]);try{LS.set('ce_cache:'+e.info.ceNum,{...e,id:_eid,savedAt:_savedAt});}catch(_){}}
+async function dbLoadCE(id){
+  /* Offline (or SharePoint unreachable) this returned null and the CE simply
+     would not open. The IndexedDB archive holds the full record -- line items
+     and all -- so serve it instead. SharePoint stays authoritative when online. */
+  if(!(USE_SP||getSiteURL()))return await _ceLoadLocal(id);
+  try{const[hR,mR,rR]=await Promise.all([spGet(spList('CEs'),`Id eq ${id}`,'Id,Title,shicType,shicClient,shicDesc,shicTotal,shicSavedBy,shicSavedAt,shicScope,shicNotes,shicApprovers,shicMob,shicDemob,shicMisc,shicSOW'),spGet(spList('CE_MP'),`shicCEId eq ${id}`,'Id,shicRole,shicRate,shicShift,shicDays,shicQty,shicTaskId'),spGet(spList('CE_Resources'),`shicCEId eq ${id}`,'Id,shicTab,shicDesc,shicQty,shicUOM,shicCost,shicDays,shicTaskId')]);if(!hR.length)return null;const h=hR[0];return{id:h.Id,ceType:h.shicType||'onsite',grand:h.shicTotal||0,savedBy:h.shicSavedBy||'',savedAt:h.shicSavedAt||'',info:{ceNum:h.Title,client:h.shicClient||'',description:h.shicDesc||''},scope:h.shicScope||'',mp:mR.map(r=>({id:'sp'+r.Id,role:r.shicRole||'',rate:r.shicRate||0,shift:r.shicShift||'straight',days:r.shicDays||1,qty:r.shicQty||1,taskId:r.shicTaskId||''})),tools:rR.filter(r=>r.shicTab==='tools').map(r=>({id:'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,days:r.shicDays||1,taskId:r.shicTaskId||''})),mats:rR.filter(r=>r.shicTab==='mats').map(r=>({id:'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,taskId:r.shicTaskId||''})),ppe:rR.filter(r=>r.shicTab==='ppe').map(r=>({id:'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,taskId:r.shicTaskId||''})),misc:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};const{_addlCosts,_margin,...rest}=m;return rest;})(),addlCosts:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._addlCosts||[];})(),margin:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._margin||0;})(),sowItems:(()=>{try{return h.shicSOW?JSON.parse(h.shicSOW):[];}catch(_){return [];}})(),notes:h.shicNotes?JSON.parse(h.shicNotes):[],approvers:h.shicApprovers?JSON.parse(h.shicApprovers):[],mobVehicles:h.shicMob?JSON.parse(h.shicMob):[],demobVehicles:h.shicDemob?JSON.parse(h.shicDemob):[]};}catch(e){console.warn('dbLoadCE:',e.message);return await _ceLoadLocal(id);}}
+/* Full CE from the offline archive, by SharePoint item Id. */
+async function _ceLoadLocal(id){
+  try{
+    const all=await ceAll();
+    const hit=all.find(r=>r.id===id);
+    if(hit)return hit;
+  }catch(e){console.warn('_ceLoadLocal:',e.message);}
+  return null;
+}
+async function dbSaveHistory(e){if(USE_SP||getSiteURL()){try{const existing=await spGet(spList('CEs'),`Title eq '${(e.info.ceNum||'').replace(/'/g,"''")}'`,'Id');const hdr={Title:e.info.ceNum,shicType:e.ceType,shicClient:e.info.client||'',shicDesc:e.info.description||'',shicTotal:Math.round((e.grand||0)*100)/100,shicSavedBy:e.savedBy||'',shicSavedAt:new Date().toISOString(),shicScope:e.scope||'',shicNotes:JSON.stringify(e.notes||[]),shicApprovers:JSON.stringify(e.approvers||[]),shicMob:JSON.stringify(e.mobVehicles||[]),shicDemob:JSON.stringify(e.demobVehicles||[]),shicMisc:JSON.stringify({...(e.misc||{}), _addlCosts:(e.addlCosts||[]), _margin:(e.margin||0)}),shicSOW:JSON.stringify(e.sowItems||[])};let ceId;if(existing.length){ceId=existing[0].Id;await spWithRetry(()=>spPatch(spList('CEs'),ceId,hdr));}else{const r=await spWithRetry(()=>spPost(spList('CEs'),hdr));ceId=r.Id;/* Race-condition guard: if two users POSTed simultaneously, keep the lowest Id and delete the duplicate */const dupes=await spGet(spList('CEs'),`Title eq '${(e.info.ceNum||'').replace(/'/g,"''")}'`,'Id,shicSavedBy');if(dupes.length>1){dupes.sort((a,b)=>a.Id-b.Id);const winner=dupes[0];if(winner.Id!==ceId){/* We lost the race — our row is the duplicate. Delete it, preserve our data locally, and surface a clear error to the user so they can save under a different CE number. The winner row is left completely untouched. */await spDelete(spList('CEs'),ceId).catch(()=>{});const _savedAt=new Date().toISOString();try{const h=LS.get('history')||[];LS.set('history',[{...e,id:Date.now(),savedAt:_savedAt,_raceConflict:true},...h.filter(x=>(x.info?.ceNum||x.ceNum)!==e.info.ceNum)]);LS.set('ce_cache:'+e.info.ceNum,{...e,id:Date.now(),savedAt:_savedAt});}catch(_){}/* 'local': we LOST the race and deleted our own SharePoint row, so this browser holds the only copy of the user's work. Nothing may ever delete a 'local' record. */try{await cePut({...e,ceNum:e.info.ceNum,savedAt:_savedAt,savedBy:e.savedBy||'',_syncState:'local',_raceConflict:true});}catch(_){}throw new Error(`CE number "${e.info.ceNum}" was saved by "${winner.shicSavedBy||'another user'}" at the same time. Your data has been kept in this browser — load the local draft and save again with a different CE number.`);}else{for(const dup of dupes.slice(1))await spDelete(spList('CEs'),dup.Id).catch(()=>{});}}}const[om,or]=await Promise.all([spGet(spList('CE_MP'),`shicCEId eq ${ceId}`,'Id'),spGet(spList('CE_Resources'),`shicCEId eq ${ceId}`,'Id')]);/* Insert new rows FIRST — if any insert fails the old rows are still intact */const mpPayloads=(e.mp||[]).filter(r=>r.role).map(r=>({shicCEId:ceId,shicRole:r.role,shicRate:r.rate||0,shicShift:r.shift||'regular_day',shicDays:r.days||1,shicPax:r.pax||1,shicOTHours:r.otHours||0,shicPerDiem:r.perDiem||0,shicTaskId:r.taskId||''}));const resPayloads=[...(e.tools||[]).filter(r=>r.desc).map(r=>({shicCEId:ceId,shicTab:'tools',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicDays:r.days||1,shicTaskId:r.taskId||''})),...(e.mats||[]).filter(r=>r.desc).map(r=>({shicCEId:ceId,shicTab:'mats',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicTaskId:r.taskId||''})),...(e.ppe||[]).filter(r=>r.desc).map(r=>({shicCEId:ceId,shicTab:'ppe',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicTaskId:r.taskId||''}))];const insFns=[...mpPayloads.map(p=>()=>spWithRetry(()=>spPost(spList('CE_MP'),p))),...resPayloads.map(p=>()=>spWithRetry(()=>spPost(spList('CE_Resources'),p)))];let spErr=null;for(let i=0;i<insFns.length;i+=5){try{await Promise.all(insFns.slice(i,i+5).map(fn=>fn()));}catch(batchErr){spErr=batchErr;console.error('dbSaveHistory batch insert failed:',batchErr.message);break;}}if(spErr)throw spErr;/* Only delete OLD rows after new ones safely written */const dels=[...om.map(x=>()=>spDelete(spList('CE_MP'),x.Id)),...or.map(x=>()=>spDelete(spList('CE_Resources'),x.Id))];for(let i=0;i<dels.length;i+=5)await Promise.all(dels.slice(i,i+5).map(fn=>fn())).catch(()=>{});try{LS.set('ce_cache:'+e.info.ceNum,{...e,id:ceId,savedAt:hdr.shicSavedAt});}catch(_){}/* Write through to IndexedDB alongside the localStorage cache. 'synced' -- SharePoint accepted it, so the migration may safely treat the two copies as agreeing. */try{await cePut({...e,ceNum:e.info.ceNum,id:ceId,savedAt:hdr.shicSavedAt,savedBy:e.savedBy||'',_syncState:'synced'});}catch(_){}return;}catch(e2){const msg=e2.message||String(e2);console.warn('dbSaveHistory SP error:',msg);setTimeout(()=>(window._shicToast||console.warn)('SharePoint save failed ('+msg.slice(0,80)+') — CE stored locally.',true),100);}}const h=LS.get('history')||[];const _eid=Date.now();const _savedAt=new Date().toISOString();LS.set('history',[{...e,id:_eid,savedAt:_savedAt},...h.filter(x=>(x.info?.ceNum||x.ceNum)!==e.info.ceNum)]);try{LS.set('ce_cache:'+e.info.ceNum,{...e,id:_eid,savedAt:_savedAt});}catch(_){}/* 'local': saved offline or after a SharePoint failure. Not yet uploaded. */try{await cePut({...e,ceNum:e.info.ceNum,id:_eid,savedAt:_savedAt,savedBy:e.savedBy||'',_syncState:'local'});}catch(_){}}
 /* Patch ONLY the stored grand total of a saved CE. Used by the Admin recompute so
    it never rewrites the CE's rows -- a full dbSaveHistory would delete and
    re-insert every CE_MP / CE_Resources row, which is far riskier than the fix. */
@@ -271,8 +293,24 @@ async function dbUpdateCETotal(ceNum, id, total){
     const c = LS.get('ce_cache:'+ceNum);
     if(c) LS.set('ce_cache:'+ceNum, {...c, grand:t});
   }catch(_){}
+  /* Same for the IndexedDB archive, or a recompute would leave the offline copy
+     showing the old total. Preserve _syncState -- do not silently re-mark. */
+  try{
+    const rec = await ceGet(ceNum);
+    if(rec) await cePut({...rec, grand:t});
+  }catch(_){}
 }
-async function dbDeleteHistory(id){if(USE_SP||getSiteURL()){try{const[m,r]=await Promise.all([spGet(spList('CE_MP'),`shicCEId eq ${id}`,'Id'),spGet(spList('CE_Resources'),`shicCEId eq ${id}`,'Id')]);const d=[...m.map(x=>spDelete(spList('CE_MP'),x.Id)),...r.map(x=>spDelete(spList('CE_Resources'),x.Id))];for(let i=0;i<d.length;i+=5)await Promise.all(d.slice(i,i+5));await spDelete(spList('CEs'),id);return;}catch(e){console.warn('dbDeleteHistory:',e.message);}}LS.set('history',(LS.get('history')||[]).filter(h=>h.id!==id));}
+async function dbDeleteHistory(id){if(USE_SP||getSiteURL()){try{const[m,r]=await Promise.all([spGet(spList('CE_MP'),`shicCEId eq ${id}`,'Id'),spGet(spList('CE_Resources'),`shicCEId eq ${id}`,'Id')]);const d=[...m.map(x=>spDelete(spList('CE_MP'),x.Id)),...r.map(x=>spDelete(spList('CE_Resources'),x.Id))];for(let i=0;i<d.length;i+=5)await Promise.all(d.slice(i,i+5));await spDelete(spList('CEs'),id);return;}catch(e){console.warn('dbDeleteHistory:',e.message);}}LS.set('history',(LS.get('history')||[]).filter(h=>h.id!==id));await _ceDeleteById(id);}
+/* Delete by SharePoint item Id. The archive is keyed by CE number, so find the
+   record through the by_id index first; falling back to a scan keeps a record
+   that predates the index from being orphaned. */
+async function _ceDeleteById(id){
+  try{
+    const all=await ceAll();
+    const hit=all.find(r=>r.id===id);
+    if(hit)await ceDelete(hit.ceNum);
+  }catch(_){}
+}
 async function dbGetML(){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Masterlist'),"Title eq 'config'",'Id,shicData');if(r.length&&r[0].shicData)return JSON.parse(r[0].shicData);}catch(e){console.warn('dbGetML:',e.message);}}return LS.get('masterlist');}
 async function dbGetAuditLog(limit=200){if(getSiteURL()){try{const r=await spGet(spList('AuditLog'),'','Id,shicAction,shicDetail,shicUser,shicTs');return r.sort((a,b)=>b.Id-a.Id).slice(0,limit).map(x=>({ts:x.shicTs||x.Created,action:x.shicAction||x.Title||'',detail:x.shicDetail||'',user:x.shicUser||''}));}catch(e){console.warn('dbGetAuditLog:',e.message);}}return(LS.get('auditlog')||[]).slice(0,limit);}
 
@@ -466,3 +504,126 @@ const session = {
     } catch {}
   }
 };
+/* ── One-time move of the CE archive into IndexedDB ──────────────────────────
+   localStorage held a full CE per estimate under ce_cache:<num> plus fat
+   records in `history`, which with 800+ CEs is what pushed it to ~4.7 MB of a
+   ~5 MB budget and started failing writes.
+
+   Safety rules, in order of importance:
+     1. A record with _syncState 'local' is NEVER deleted by anything here. It
+        exists only in this browser.
+     2. Nothing is removed from localStorage until the IndexedDB write has
+        actually committed.
+     3. Reconciliation is ONE bulk fetch, not 823 lookups: per-record calls
+        would be slow and a single throttled request could mis-mark a synced CE
+        as local-only.
+     4. If reconciliation cannot run (offline, or the fetch failed) we stop
+        without deleting anything and without setting the flag, so the next
+        open simply retries.
+     5. The flag is written LAST, so an interrupted run re-runs cleanly. */
+async function dbMigrateToIDB(username, isAdmin){
+  try{
+    if(!(await idbReady()))return{skipped:'no-indexeddb'};
+    if(await metaGet('migv3'))return{skipped:'done'};
+
+    let before=0;
+    try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);before+=((localStorage.getItem(k)||'').length+k.length)*2;}}catch(_){}
+
+    /* 1. Gather ce_cache:* — full CEs, provenance not yet known. */
+    const cacheKeys=[],staged={};
+    try{
+      for(let i=0;i<localStorage.length;i++){
+        const k=localStorage.key(i);
+        if(k&&k.indexOf('shic:ce_cache:')===0)cacheKeys.push(k);
+      }
+    }catch(_){}
+    for(const k of cacheKeys){
+      try{
+        const v=JSON.parse(localStorage.getItem(k));
+        const num=ceKey((v&&((v.info&&v.info.ceNum)||v.ceNum))||k.slice('shic:ce_cache:'.length));
+        if(num&&v)staged[num]={...v,ceNum:num,_syncState:'unknown'};
+      }catch(_){}
+    }
+
+    /* 2. Fat history records. A CE is "full" only if it carries line items; a
+       post-sync summary must never overwrite a record that already has them. */
+    const hist=LS.get('history')||[];
+    const isFull=r=>['mp','tools','mats','ppe','sowItems','notes'].some(f=>Array.isArray(r&&r[f]));
+    for(const r of hist){
+      const num=ceKey((r.info&&r.info.ceNum)||r.ceNum);
+      if(!num)continue;
+      if(isFull(r)&&!(staged[num]&&isFull(staged[num])))staged[num]={...r,ceNum:num,_syncState:'unknown'};
+    }
+
+    const nums=Object.keys(staged);
+    if(!nums.length){await metaPut('migv3',{at:new Date().toISOString(),moved:0,freedBytes:0,localOnly:0});return{moved:0};}
+
+    /* 3. Reconcile against SharePoint with a SINGLE listing. */
+    const spConfigured=!!(USE_SP||getSiteURL());
+    let spTitles=null;
+    if(spConfigured){
+      try{
+        const rows=await dbGetHistory(username,isAdmin);
+        if(Array.isArray(rows))spTitles=new Set(rows.map(r=>ceKey(r.ceNum||(r.info&&r.info.ceNum))).filter(Boolean));
+      }catch(e){console.warn('dbMigrateToIDB: reconciliation failed:',e.message);}
+      if(!spTitles){
+        /* Configured but unreachable: we cannot tell a synced CE from a
+           local-only one, and guessing wrong would delete the only copy.
+           Change nothing, set no flag, retry on the next open. */
+        console.info('dbMigrateToIDB: cannot reconcile (offline or fetch failed) — deferring.');
+        return{deferred:true};
+      }
+    }else{
+      /* No SharePoint at all — a purely local install. There is nothing to
+         reconcile against and nothing is "synced", so every record is
+         legitimately local-only. Still move them into IndexedDB (that is what
+         makes the archive available offline); rule 1 then keeps every
+         localStorage copy, so this frees no space but loses nothing either.
+         Without this branch the migration deferred forever and a local-only
+         install never got an archive at all. */
+      spTitles=new Set();
+    }
+    let localOnly=0;
+    for(const n of nums){
+      const synced=spTitles.has(n);
+      if(!synced)localOnly++;
+      staged[n]._syncState=synced?'synced':'local';
+    }
+
+    /* 4. Commit to IndexedDB in batches, then verify before deleting anything. */
+    const list=nums.map(n=>staged[n]);
+    for(let i=0;i<list.length;i+=50)await ceBulkPut(list.slice(i,i+50));
+    const stored=await ceCount();
+    if(stored<list.length){
+      console.warn('dbMigrateToIDB: only',stored,'of',list.length,'stored — not deleting anything.');
+      return{deferred:true,stored};
+    }
+
+    /* 5. Only now reclaim the space. Rule 1: a 'local' record keeps its
+       localStorage copy as well, belt and braces, until it has been uploaded. */
+    let removed=0;
+    for(const k of cacheKeys){
+      const num=ceKey(k.slice('shic:ce_cache:'.length));
+      if(staged[num]&&staged[num]._syncState==='local')continue;
+      try{localStorage.removeItem(k);removed++;}catch(_){}
+    }
+    /* history becomes summaries; local-only records keep their line items. */
+    try{
+      LS.set('history',hist.map(r=>{
+        const num=ceKey((r.info&&r.info.ceNum)||r.ceNum);
+        if(staged[num]&&staged[num]._syncState==='local')return r;
+        return{id:r.id,ceNum:r.ceNum,ceType:r.ceType,client:r.client||(r.info&&r.info.client)||'',grand:r.grand||0,savedBy:r.savedBy||'',savedAt:r.savedAt||'',info:r.info||{ceNum:r.ceNum}};
+      }));
+    }catch(_){}
+
+    let after=0;
+    try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);after+=((localStorage.getItem(k)||'').length+k.length)*2;}}catch(_){}
+    const freedBytes=Math.max(0,before-after);
+    /* Rule 5: flag last. Keep a manifest of what was removed — a list of CE
+       numbers is negligible in size and is the only support path if a record
+       is ever reported missing. */
+    await metaPut('migv3',{at:new Date().toISOString(),moved:list.length,removed,freedBytes,localOnly,manifest:nums});
+    console.info('dbMigrateToIDB: moved '+list.length+' CE(s), freed '+Math.round(freedBytes/1024)+' KB, '+localOnly+' local-only kept.');
+    return{moved:list.length,removed,freedBytes,localOnly};
+  }catch(e){console.warn('dbMigrateToIDB:',e.message);return{error:e.message};}
+}

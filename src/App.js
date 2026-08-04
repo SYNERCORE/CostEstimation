@@ -324,6 +324,12 @@ function App({
       try { const n = LS.pruneCeCache(60); if (n) console.info('Pruned ' + n + ' cached CE(s) from local storage.'); } catch (_e) {}
       loadHist();
       loadMonData();
+      /* Move the CE archive out of localStorage. Deliberately AFTER loadHist so
+         reconciliation can reuse a warm SharePoint result, and fire-and-forget
+         so it can never delay the UI. It defers itself when offline. */
+      dbMigrateToIDB(currentUser.username, isAdmin).then(r => {
+        if (r && r.moved) showToast('Moved ' + r.moved + ' CE(s) to offline storage, freeing ' + Math.round((r.freedBytes||0)/1024) + ' KB.');
+      }).catch(ex => console.warn('CE archive migration skipped:', ex.message));
       /* Notify admin of pending registrations */
       if(isAdmin){try{const all=await dbGetUsers();const pCount=all.filter(u=>u.status==='pending').length;if(pCount>0)setTimeout(()=>showToast(`👤 ${pCount} user${pCount>1?'s':''} awaiting approval — check Admin Panel → Users`),1500);}catch(_){}};
       /* Expose a global full-refresh so SyncStatusBar can trigger it */
@@ -2831,6 +2837,12 @@ function App({
     onClick: () => {
       loadHist();
       loadMonData();
+      /* Move the CE archive out of localStorage. Deliberately AFTER loadHist so
+         reconciliation can reuse a warm SharePoint result, and fire-and-forget
+         so it can never delay the UI. It defers itself when offline. */
+      dbMigrateToIDB(currentUser.username, isAdmin).then(r => {
+        if (r && r.moved) showToast('Moved ' + r.moved + ' CE(s) to offline storage, freeing ' + Math.round((r.freedBytes||0)/1024) + ' KB.');
+      }).catch(ex => console.warn('CE archive migration skipped:', ex.message));
     }
   }, "\u21BB Refresh"), /*#__PURE__*/React.createElement("button", {
     title: "Download a blank Excel template with the correct column headers for bulk import",

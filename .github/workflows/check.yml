@@ -26,6 +26,8 @@ jobs:
         run: node tools/test-cache-preservation.js
       - name: Reference data renders offline from cache
         run: node tools/test-offline-first.js
+      - name: CE archive migration is safe and idempotent
+        run: node tools/test-migration.js
       - name: Every tab renders something
         run: node tools/check-tab-coverage.js
       - name: Bulk upload mode expires and fails closed

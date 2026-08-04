@@ -24,6 +24,20 @@
     setStorageBusy(false);
   };
   useEffect(() => { loadStorage(); }, []);
+  /* Manual counterpart to the automatic reconnect sync, for when someone wants
+     to be certain the local-only CEs have left this machine before wiping it. */
+  const pushLocal = async () => {
+    setStorageBusy(true);
+    try {
+      const r = await dbPushLocalCEs({ requireOnline: false });
+      if (r.skipped === 'not-configured') setToast('SharePoint is not configured, so there is nowhere to upload to.');
+      else if (!r.pushed && !r.failed) setToast('Nothing to upload — every CE is already in SharePoint.');
+      else setToast('Uploaded ' + r.pushed + ' CE(s)' + (r.failed ? '; ' + r.failed + ' failed and are still saved here.' : '.'));
+      if (r.errors && r.errors.length) console.warn('push errors:', r.errors);
+      await loadStorage();
+    } catch (e) { setToast('Upload failed: ' + e.message); }
+    setStorageBusy(false);
+  };
   const exportArchive = async () => {
     try {
       const all = await ceAll();
@@ -804,6 +818,9 @@
       : k + ' not cached yet')).join(' · ')),
   /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 10, flexWrap: 'wrap' } },
     /*#__PURE__*/React.createElement("button", { style: btn('info'), onClick: exportArchive }, 'Export full backup'),
+    storage && storage.byState.local > 0 && /*#__PURE__*/React.createElement("button", {
+      style: btn('acc'), onClick: pushLocal, disabled: storageBusy
+    }, 'Upload ' + storage.byState.local + ' local-only CE' + (storage.byState.local === 1 ? '' : 's')),
     /*#__PURE__*/React.createElement("button", { style: btn('ghost'), onClick: loadStorage, disabled: storageBusy }, storageBusy ? 'Checking...' : 'Refresh')
   ),
   /*#__PURE__*/React.createElement("div", { style: { borderTop: `1px solid ${BDR}`, margin: '14px 0 10px' } }),

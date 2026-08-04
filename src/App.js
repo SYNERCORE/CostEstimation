@@ -301,6 +301,7 @@ function App({
        calling that first saveDraft, which serialises the INITIAL blank CE and
        writes it under the initial CE number, overwriting the real draft every
        3 minutes. */
+    let _cleanupReconnect = null;
     const autoTimer=setInterval(()=>{
       try{
         const live=_live.current;
@@ -332,6 +333,32 @@ function App({
       }).catch(ex => console.warn('CE archive migration skipped:', ex.message));
       /* Notify admin of pending registrations */
       if(isAdmin){try{const all=await dbGetUsers();const pCount=all.filter(u=>u.status==='pending').length;if(pCount>0)setTimeout(()=>showToast(`👤 ${pCount} user${pCount>1?'s':''} awaiting approval — check Admin Panel → Users`),1500);}catch(_){}};
+      /* Sync when the connection returns. Until now nothing did this: CEs
+         saved offline stayed local until someone found the admin push button.
+         Debounced, because 'online' can fire several times as an adapter
+         settles, and it re-pulls reference data afterwards so the tabs reflect
+         what other people changed while this browser was away. */
+      let _reconnectTimer = null;
+      const onReconnect = () => {
+        clearTimeout(_reconnectTimer);
+        _reconnectTimer = setTimeout(async () => {
+          try {
+            const r = await dbPushLocalCEs();
+            if (r && r.pushed) showToast('Back online — uploaded ' + r.pushed + ' CE(s) saved offline.');
+            if (r && r.failed) showToast(r.failed + ' offline CE(s) could not be uploaded; they are still saved here.', true);
+          } catch (ex) { console.warn('reconnect push failed:', ex.message); }
+          try { if (window._shicFullRefresh) await window._shicFullRefresh(); } catch (_e) {}
+        }, 2000);
+      };
+      window.addEventListener('shic-online', onReconnect);
+      _cleanupReconnect = () => { window.removeEventListener('shic-online', onReconnect); clearTimeout(_reconnectTimer); };
+      /* Also catch the case where the app STARTS online with a backlog — an
+         'online' event never fires when the connection was already there. */
+      if (navigator.onLine !== false) {
+        setTimeout(() => { dbPushLocalCEs().then(r => {
+          if (r && r.pushed) showToast('Uploaded ' + r.pushed + ' CE(s) that were saved offline.');
+        }).catch(() => {}); }, 6000);
+      }
       /* Expose a global full-refresh so SyncStatusBar can trigger it */
       window._shicFullRefresh = async () => {
         Object.keys(_monSpIdCache).forEach(k => delete _monSpIdCache[k]);
@@ -358,7 +385,7 @@ function App({
         }
       } catch(e) { console.warn('Draft URL parse failed:', e.message); }
     })();
-    return()=>{window.removeEventListener('keydown',onKey);window.removeEventListener('beforeunload',onUnload);clearInterval(autoTimer);clearInterval(histTimer);};
+    return()=>{window.removeEventListener('keydown',onKey);window.removeEventListener('beforeunload',onUnload);clearInterval(autoTimer);clearInterval(histTimer);if(_cleanupReconnect)_cleanupReconnect();};
   }, []);
   /* Refreshes the masterlist in the background. Mirrors the SharePoint copy
      locally so a browser that never edited the masterlist itself still has it

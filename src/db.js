@@ -627,3 +627,60 @@ async function dbMigrateToIDB(username, isAdmin){
     return{moved:list.length,removed,freedBytes,localOnly};
   }catch(e){console.warn('dbMigrateToIDB:',e.message);return{error:e.message};}
 }
+
+/* ── Upload CEs that exist only in this browser ──────────────────────────────
+   Audit finding: there was NO sync-on-reconnect at all. _spQueue was never
+   pushed to by anything, so the 'online' handler's _flushQ() always found it
+   empty and the OnlinePill's "N pending" was permanently 0 — which actively
+   implied a queue was working. A CE saved offline sat at _syncState:'local'
+   until somebody happened to find "Push Local Data" in the admin panel.
+
+   dbSaveHistory is the upload path: it looks up the CE number and PATCHes an
+   existing row rather than inserting, so re-sending is an upsert and cannot
+   duplicate. It also re-marks the record 'synced' on success and leaves it
+   'local' on failure, so this function does not have to track state itself. */
+let _pushRunning=false;
+async function dbPushLocalCEs(opts){
+  const o=opts||{};
+  if(!(USE_SP||getSiteURL()))return{skipped:'not-configured'};
+  if(_pushRunning)return{skipped:'already-running'};
+  const heedOnline=o.requireOnline!==false;
+  if(heedOnline&&navigator.onLine===false)return{skipped:'offline'};
+  _pushRunning=true;
+  try{
+    const all=await ceAll();
+    const pending=all.filter(r=>r&&r._syncState==='local');
+    if(!pending.length)return{pushed:0,failed:0};
+    let pushed=0,failed=0;const errors=[];
+    for(const rec of pending){
+      /* Stop the moment the connection drops again rather than burning the
+         whole list against a dead network -- unless the caller explicitly
+         overrode the check (the manual admin button), since navigator.onLine
+         reports false on some corporate networks that can still reach an
+         intranet SharePoint perfectly well. */
+      if(heedOnline&&navigator.onLine===false)break;
+      try{
+        await dbSaveHistory({...rec,info:rec.info||{ceNum:rec.ceNum}});
+        /* dbSaveHistory only reaches its 'synced' write when SharePoint
+           accepted it, so re-read rather than assuming success. */
+        const after=await ceGet(rec.ceNum);
+        if(after&&after._syncState==='synced'){
+          pushed++;
+          /* Now that SharePoint holds it, the localStorage copy the migration
+             deliberately kept is no longer the only one. Reclaim it. */
+          try{localStorage.removeItem('shic:ce_cache:'+ceKey(rec.ceNum));}catch(_){}
+        }else{failed++;errors.push(rec.ceNum+': SharePoint did not confirm the save');}
+      }catch(e){failed++;errors.push(rec.ceNum+': '+(e.message||String(e)));}
+      /* Throttle so a large backlog cannot trip SharePoint rate limiting. */
+      await new Promise(r=>setTimeout(r,300));
+    }
+    return{pushed,failed,errors,remaining:pending.length-pushed};
+  }catch(e){console.warn('dbPushLocalCEs:',e.message);return{error:e.message};}
+  finally{_pushRunning=false;}
+}
+
+/* How many CEs are waiting to be uploaded. Drives the connection pill, which
+   used to read the always-empty _spQueue. */
+async function dbPendingCount(){
+  try{const by=await ceCountBy();return by.local||0;}catch(_){return 0;}
+}

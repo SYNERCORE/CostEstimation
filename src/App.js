@@ -1,4 +1,23 @@
-﻿function App({
+﻿/* Every masterlist consumer indexes the four sections directly
+   (masterlist.manpower.slice(...)), so a cached or SharePoint-supplied value
+   that is missing one -- or is an array, or of the wrong shape -- crashes the
+   whole app at render. Backfill missing sections from DEFAULT_ML and return
+   null for anything unusable, so callers can fall back cleanly.
+
+   Deliberately defined HERE, next to its call sites, rather than in helpers.js:
+   App.js and helpers.js are separate cache entries, and a partially-updated
+   service-worker cache that pairs a new App.js with an old helpers.js would
+   white-screen the app on a missing helper. */
+function mlShape(ml) {
+  if (!ml || typeof ml !== 'object' || Array.isArray(ml)) return null;
+  const secs = ['manpower', 'tools', 'mats', 'ppe'];
+  if (!secs.some(k => Array.isArray(ml[k]) && ml[k].length)) return null;
+  const out = { ...ml };
+  secs.forEach(k => { if (!Array.isArray(out[k])) out[k] = (typeof DEFAULT_ML !== 'undefined' && Array.isArray(DEFAULT_ML[k])) ? DEFAULT_ML[k] : []; });
+  return out;
+}
+
+function App({
   currentUser,
   onLogout
 }) {
@@ -64,7 +83,16 @@
   const [printPreviewWin, setPrintPreviewWin] = useState(null);
   const [toastErr, setToastErr] = useState(false);
   const [undoToast, setUndoToast] = useState(null);
-  const [masterlist, setMasterlist] = useState(DEFAULT_ML);
+  /* Render the cached masterlist immediately. This used to be DEFAULT_ML, so
+     until SharePoint answered every user saw the 295 built-in rows instead of
+     their own rates — and offline, forever.
+
+     Everything downstream does masterlist.manpower.slice(...) and friends
+     unguarded, so a cached value of the wrong shape would now take down the
+     whole app at first render — a risk that did not exist while the cache was
+     ignored. mlShape backfills any missing section from DEFAULT_ML and rejects
+     anything that is not a usable object. */
+  const [masterlist, setMasterlist] = useState(() => mlShape(LS.get('masterlist')) || DEFAULT_ML);
   const [history, setHistory] = useState([]);
   const [histBusy, setHistBusy] = useState(false);
   const [monData, setMonData] = useState({});
@@ -195,21 +223,34 @@
     }
     return () => window.removeEventListener('shic:companies:updated', onStorage);
   }, []);
+  /* One writer for the scope-library cache. The key is the raw 'sy3:sowlib'
+     (no shic: prefix) that this component has always read; db.js's non-SP
+     branch wrote LS 'sy3:sowlib', which lands at 'shic:sy3:sowlib' — a key
+     nothing ever read. */
+  const cacheSowLib = lib => {
+    try { localStorage.setItem('sy3:sowlib', JSON.stringify(lib)); } catch (e) { console.warn('scope library not cached locally:', e && e.message); }
+    try { refPut('sowlib', lib, (USE_SP || getSiteURL()) ? 'sharepoint' : 'local'); } catch (_e) {}
+  };
+  const loadSowLib = async () => {
+    try {
+      const lib = await dbGetSowLib();
+      if (lib && lib.length) {
+        setSowLib(lib);
+        cacheSowLib(lib);
+        setSyncStatus({sowlib:'synced', lastSyncAt: new Date().toISOString()});
+      } else setSyncStatus({sowlib:'local'});
+    } catch (e) { console.warn('Scope library load failed:', e.message); setSyncStatus({sowlib:'error'}); }
+  };
   const saveSowLib = lib => {
     setSowLib(lib);
-    try { localStorage.setItem('sy3:sowlib', JSON.stringify(lib)); } catch (e) { console.warn('scope library not cached locally:', e && e.message); }
+    cacheSowLib(lib);
     if (USE_SP || getSiteURL()) dbSaveSowLib(lib).catch(()=>{});
   };
   useEffect(() => {
     if (!(USE_SP || getSiteURL())) return;
     /* Same as the masterlist: cache the SharePoint copy so the Scope Library is
        populated offline, not just on browsers that happened to edit it. */
-    dbGetSowLib().then(lib => {
-      if (lib && lib.length) {
-        setSowLib(lib);
-        try { localStorage.setItem('sy3:sowlib', JSON.stringify(lib)); } catch (e) { console.warn('scope library not cached locally:', e && e.message); }
-      }
-    }).catch(()=>{});
+    loadSowLib();
   }, []);
   const [sowSearch, setSowSearch] = useState('');
   const [sowCat, setSowCat] = useState('All');
@@ -273,14 +314,11 @@
     },180000);
     const histTimer=setInterval(()=>{if(USE_SP||getSiteURL())loadHist();},5*60*1000);
     (async () => {
-      try {
-        const ml = await dbGetML();
-        /* Mirror the SharePoint copy locally. Only dbSaveML wrote this cache, so
-           a browser that had never saved the masterlist itself fell back to
-           DEFAULT_ML when offline — the shared list looked empty. */
-        if (ml) { setMasterlist(ml); try { LS.set('masterlist', ml); } catch (e) { console.warn('masterlist not cached locally:', e && e.message); } setSyncStatus({masterlist:'synced', lastSyncAt: new Date().toISOString(), sp:'connected'}); }
-        else setSyncStatus({masterlist:'local'});
-      } catch(ex) { console.warn('Masterlist load failed:', ex.message); setSyncStatus({masterlist:'error', sp:'error'}); }
+      /* Do NOT await this. It was the single blocking gate at startup: offline,
+         the fetch sat there until the network timed out and history/monitoring
+         never even began loading. The cached masterlist is already on screen
+         (see the useState initialiser), so this only ever refreshes it. */
+      loadML();
       /* Trim the per-CE cache on open; it is the bulk of local storage use and
          nothing pruned it before, so it only ever grew. */
       try { const n = LS.pruneCeCache(60); if (n) console.info('Pruned ' + n + ' cached CE(s) from local storage.'); } catch (_e) {}
@@ -291,7 +329,16 @@
       /* Expose a global full-refresh so SyncStatusBar can trigger it */
       window._shicFullRefresh = async () => {
         Object.keys(_monSpIdCache).forEach(k => delete _monSpIdCache[k]);
-        await Promise.all([loadHist(), loadMonData()]);
+        /* All four, not two. The Refresh button optimistically marks masterlist,
+           monitoring AND drafts as 'saving', so anything not resolved here stays
+           amber forever. The finally downgrades whatever is still in-flight. */
+        try {
+          await Promise.all([loadHist(), loadMonData(), loadML(), loadSowLib()]);
+        } finally {
+          const st = getSyncStatus(), fix = {};
+          ['masterlist','monitoring','drafts','sowlib'].forEach(k => { if (st[k] === 'saving') fix[k] = 'local'; });
+          if (Object.keys(fix).length) setSyncStatus(fix);
+        }
       };
       /* Feature 7: load shared draft from URL ?draft= param */
       try {
@@ -307,6 +354,20 @@
     })();
     return()=>{window.removeEventListener('keydown',onKey);window.removeEventListener('beforeunload',onUnload);clearInterval(autoTimer);clearInterval(histTimer);};
   }, []);
+  /* Refreshes the masterlist in the background. Mirrors the SharePoint copy
+     locally so a browser that never edited the masterlist itself still has it
+     offline — previously only dbSaveML wrote that cache. */
+  const loadML = async () => {
+    try {
+      const ml = mlShape(await dbGetML());
+      if (ml) {
+        setMasterlist(ml);
+        try { LS.set('masterlist', ml); } catch (e) { console.warn('masterlist not cached locally:', e && e.message); }
+        try { refPut('masterlist', ml, (USE_SP || getSiteURL()) ? 'sharepoint' : 'local'); } catch (_e) {}
+        setSyncStatus({masterlist:'synced', lastSyncAt: new Date().toISOString(), sp:'connected'});
+      } else setSyncStatus({masterlist:'local'});
+    } catch (ex) { console.warn('Masterlist load failed:', ex.message); setSyncStatus({masterlist:'error', sp:'error'}); }
+  };
   const loadHist = async () => {
     setHistBusy(true);
     /* Paint the cached history immediately, then refresh from SharePoint in the
@@ -3478,7 +3539,7 @@
       setSpWizLog('Loading scope library from SharePoint…');
       try {
         const lib = await dbGetSowLib();
-        if (lib && lib.length) { setSowLib(lib); setSpWizLog('✅ Loaded ' + lib.length + ' services from SharePoint.'); }
+        if (lib && lib.length) { setSowLib(lib); cacheSowLib(lib); setSpWizLog('✅ Loaded ' + lib.length + ' services from SharePoint.'); }
         else setSpWizLog('⚠️ No data found on SharePoint yet. Publish first.');
       } catch(e) { setSpWizLog('❌ Error: ' + e.message); }
       setSpWizBusy(false);

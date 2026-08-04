@@ -125,7 +125,7 @@ async function dbGetMon(){
 }
 
 /* ── Sync status helpers ── */
-let _syncStatus={sp:'unknown',lastSyncAt:null,dirty:false,stale:false,masterlist:'unknown',monitoring:'unknown',drafts:'unknown'};
+let _syncStatus={sp:'unknown',lastSyncAt:null,dirty:false,stale:false,masterlist:'unknown',monitoring:'unknown',drafts:'unknown',sowlib:'unknown'};
 function getSyncStatus(){return _syncStatus;}
 function setSyncStatus(patch){_syncStatus={..._syncStatus,...patch};window.dispatchEvent(new Event('shic:sync:updated'));}
 
@@ -329,7 +329,11 @@ async function dbGetCompanies(){
   }
   try{const s=localStorage.getItem('shic:companies');return s?JSON.parse(s):null;}catch{return null;}
 }
-async function dbSaveML(data){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Masterlist'),"Title eq 'config'",'Id,Modified');if(r.length){/* Conflict guard: if SP was updated more recently than our local copy, warn before overwriting */const spModified=new Date(r[0].Modified||0).getTime();const localSavedAt=new Date(LS.get('masterlist_savedAt')||0).getTime();if(spModified>localSavedAt+5000)console.warn('dbSaveML: SP masterlist was modified by another user at',r[0].Modified,'— overwriting with local version');await spPatch(spList('Masterlist'),r[0].Id,{shicData:JSON.stringify(data)});}else await spPost(spList('Masterlist'),{Title:'config',shicData:JSON.stringify(data)});LS.set('masterlist_savedAt',new Date().toISOString());return;}catch(e){console.warn('dbSaveML:',e.message);}}LS.set('masterlist',data);LS.set('masterlist_savedAt',new Date().toISOString());}
+async function dbSaveML(data){/* Mirror locally FIRST, on both branches. The SharePoint branch used to
+   `return` before ever reaching the LS.set below, so saving the masterlist
+   while online left the offline cache stale forever. */
+LS.set('masterlist',data);LS.set('masterlist_savedAt',new Date().toISOString());
+if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Masterlist'),"Title eq 'config'",'Id,Modified');if(r.length){/* Conflict guard: if SP was updated more recently than our local copy, warn before overwriting */const spModified=new Date(r[0].Modified||0).getTime();const localSavedAt=new Date(LS.get('masterlist_savedAt')||0).getTime();if(spModified>localSavedAt+5000)console.warn('dbSaveML: SP masterlist was modified by another user at',r[0].Modified,'— overwriting with local version');await spPatch(spList('Masterlist'),r[0].Id,{shicData:JSON.stringify(data)});}else await spPost(spList('Masterlist'),{Title:'config',shicData:JSON.stringify(data)});return;}catch(e){console.warn('dbSaveML:',e.message);}}}
 async function dbSaveSowLib(lib){
   if(USE_SP||getSiteURL()){
     try{
@@ -356,7 +360,10 @@ async function dbSaveSowLib(lib){
       return true;
     }catch(e){console.warn('dbSaveSowLib:',e.message);}
   }
-  LS.set('sy3:sowlib',lib);return false;
+  /* Raw key, no shic: prefix — App.js reads localStorage['sy3:sowlib'] directly.
+     LS.set would write 'shic:sy3:sowlib', which nothing ever read. */
+  try{localStorage.setItem('sy3:sowlib',JSON.stringify(lib));}catch(e){console.warn('sowlib not cached locally:',e&&e.message);}
+  return false;
 }
 async function dbGetSowLib(){
   if(USE_SP||getSiteURL()){

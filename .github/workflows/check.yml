@@ -24,6 +24,8 @@ jobs:
         run: node tools/check-print-escaping.js
       - name: Local caches survive empty SharePoint responses
         run: node tools/test-cache-preservation.js
+      - name: Reference data renders offline from cache
+        run: node tools/test-offline-first.js
       - name: Every tab renders something
         run: node tools/check-tab-coverage.js
       - name: Bulk upload mode expires and fails closed

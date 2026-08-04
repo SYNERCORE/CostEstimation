@@ -21,6 +21,7 @@ function SyncStatusBar() {
   const entities = [
     {key:'masterlist', label:'Masterlist'},
     {key:'monitoring', label:'Monitoring'},
+    {key:'sowlib',     label:'Scope Lib'},
     {key:'drafts',     label:'Drafts'},
   ];
 

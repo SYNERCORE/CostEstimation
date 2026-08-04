@@ -64,9 +64,11 @@
   });
   const [createBusy, setCreateBusy] = useState(false);
   const [createErr, setCreateErr] = useState('');
-  const toast2 = msg => {
+  /* Errors explain what did not happen and why, so 3s is not long enough to
+     read one. Hold those longer. */
+  const toast2 = (msg, isError) => {
     setToast(msg);
-    setTimeout(() => setToast(''), 3000);
+    setTimeout(() => setToast(''), isError ? 9000 : 3000);
   };
   const load = async () => {
     setBusy(true);
@@ -83,49 +85,51 @@
   const pending = users.filter(u => u.status === 'pending'),
     active = users.filter(u => u.status === 'approved'),
     others = users.filter(u => u.status === 'rejected' || u.status === 'disabled');
+  /* Account changes live in the SharePoint Users list, so none of them can be
+     queued offline -- everyone else reads that list. These used to report
+     success unconditionally; now the write can fail, and a silent no-op would
+     be worse than the false success it replaced. Say what did not happen. */
+  const userAction = async (verb, fn) => {
+    try { await fn(); return true; }
+    catch (e) {
+      const offline = navigator.onLine === false ||
+        /not signed in|auth token|Failed to fetch|NetworkError/i.test(e.message || '');
+      toast2(offline
+        ? `Could not ${verb} — no connection to SharePoint. Account changes apply for everyone, so they cannot be made offline. Try again once reconnected.`
+        : `Could not ${verb}: ${e.message}`, true);
+      return false;
+    }
+  };
+  const setStatus = (u, status, verb, past) => userAction(verb + ' ' + u.username, async () => {
+    await dbUpdateUser(u.id, { status });
+    toast2(past + ' ' + u.username);
+    load();
+  });
   const approve = async u => {
-    await dbUpdateUser(u.id, {
-      status: 'approved'
-    });
-    auditLog('user_approve', u.username, currentUser?.username);
-    toast2('Approved ' + u.username);
-    load();
+    if (await setStatus(u, 'approved', 'approve', 'Approved'))
+      auditLog('user_approve', u.username, currentUser?.username);
   };
-  const reject = async u => {
-    await dbUpdateUser(u.id, {
-      status: 'rejected'
-    });
-    toast2('Rejected ' + u.username);
-    load();
-  };
-  const disable = async u => {
-    await dbUpdateUser(u.id, {
-      status: 'disabled'
-    });
-    toast2('Disabled ' + u.username);
-    load();
-  };
-  const enable = async u => {
-    await dbUpdateUser(u.id, {
-      status: 'approved'
-    });
-    toast2('Enabled ' + u.username);
-    load();
-  };
+  const reject = u => setStatus(u, 'rejected', 'reject', 'Rejected');
+  const disable = u => setStatus(u, 'disabled', 'disable', 'Disabled');
+  const enable = u => setStatus(u, 'approved', 'enable', 'Enabled');
   const del = async u => {
     if (!confirm('Delete "' + u.username + '"?')) return;
-    await dbDeleteUser(u.id);
-    auditLog('user_delete', u.username + ' (role: ' + (u.role||'user') + ')', currentUser?.username);
-    toast2('Deleted ' + u.username);
-    load();
+    await userAction('delete ' + u.username, async () => {
+      await dbDeleteUser(u.id);
+      auditLog('user_delete', u.username + ' (role: ' + (u.role||'user') + ')', currentUser?.username);
+      toast2('Deleted ' + u.username);
+      load();
+    });
   };
   const toggleRole = async u => {
     const r = u.role === 'admin' ? 'user' : 'admin';
     if (!confirm(`Change "${u.username}" role to ${r}?`)) return;
-    await dbUpdateUser(u.id, { role: r });
-    auditLog('role_change', `${u.username} → ${r}`, currentUser?.username);
-    toast2(u.username + ' is now ' + r);
-    load();
+    await userAction('change the role of ' + u.username, async () => {
+      await dbUpdateUser(u.id, { role: r });
+      auditLog('role_change', `${u.username} → ${r}`, currentUser?.username);
+      toast2(u.username + ' is now ' + r);
+      load();
+    });
   };
   const changePw = async () => {
     if (newPw.length < 6) {
@@ -133,12 +137,15 @@
       return;
     }
     const h = await hashPassword(newPw);
-    await dbUpdateUser(changePwUser.id, {
-      hash: h
+    /* Only clear the form once the new hash is actually stored. Reporting
+       "Password updated" on a failed write would leave the account on its old
+       password with nobody aware of it. */
+    await userAction('update the password for ' + changePwUser.username, async () => {
+      await dbUpdateUser(changePwUser.id, { hash: h });
+      setChangePwUser(null);
+      setNewPw('');
+      toast2('Password updated.');
     });
-    setChangePwUser(null);
-    setNewPw('');
-    toast2('Password updated.');
   };
   const runSetup = async () => {
     setSetupBusy(true);

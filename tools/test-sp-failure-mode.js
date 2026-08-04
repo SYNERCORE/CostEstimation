@@ -114,6 +114,38 @@ function runSpGet(opts) {
   ck('status is checked before the legacy hash is rewritten', iPending < iMigrate);
   ck('the gates are not duplicated below', login.split("u.status === 'pending'").length === 2);
 
+  /* ── Account writes must not report success they did not achieve ───────── */
+  console.log('\nAccount changes fail loudly rather than diverging the two stores:');
+  const cu = (db.match(/async function dbCreateUser[\s\S]*?\n(?=\/\*|async function)/) || [''])[0];
+  ck('dbCreateUser does not swallow the SharePoint failure', !/catch\(e\)\{console\.warn\('dbCreateUser/.test(cu),
+    'a registration offline becomes a local ghost the admin never sees');
+  ck('dbCreateUser writes locally only when SharePoint is not configured',
+    cu.indexOf('LS.set(\'users\'') > cu.indexOf('return{...u,id:r.Id};'));
+
+  const uu = (db.match(/async function dbUpdateUser[\s\S]*?\n\}/) || [''])[0];
+  ck('dbUpdateUser found', uu.length > 0);
+  ck('does not swallow a failed PATCH', !/catch\(e\)\{console\.warn\('dbUpdateUser/.test(uu),
+    'a password change reported success while SharePoint kept the old hash');
+  ck('writes to SharePoint BEFORE mirroring locally',
+    uu.indexOf('await spPatch(') < uu.indexOf('mirror();'),
+    'a failed write still leaves a divergent local copy');
+  ck('still mirrors after a successful write', /await spPatch\([\s\S]{0,40}mirror\(\);/.test(uu),
+    'the cached hash would go stale and the old password keep working offline');
+  ck('dbDeleteUser still rethrows', /catch\(e\)\{[^}]*throw e;/.test((db.match(/async function dbDeleteUser[\s\S]*?\n\}/) || [''])[0]));
+
+  console.log('\nThe UI reports what did not happen:');
+  const ap = rd('src/components/AdminPanel.js');
+  ck('admin account actions are wrapped', /const userAction = async \(verb, fn\)/.test(ap));
+  for (const fn of ['approve', 'reject', 'disable', 'enable', 'del', 'toggleRole', 'changePw'])
+    ck(fn + ' cannot silently no-op', new RegExp('(userAction|setStatus)\\(').test(ap) &&
+      new RegExp('const ' + fn + ' = ').test(ap));
+  ck('the password form is cleared only after the write lands',
+    ap.indexOf('await dbUpdateUser(changePwUser.id') < ap.indexOf('setChangePwUser(null)'));
+  ck('error toasts are held long enough to read', /isError \? 9000 : 3000/.test(ap));
+  ck('a self-service password change says the old one still applies',
+    /Password NOT changed/.test(rd('src/components/ChangePasswordModal.js')));
+  ck('registration says it needs a connection', /cannot be queued offline/.test(rd('src/components/RegisterPage.js')));
+
   console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nall SharePoint-failure-mode assertions passed');
   process.exit(fails ? 1 : 0);
 })();

@@ -232,14 +232,26 @@ async function dbGetUsers(){if(USE_SP||getSiteURL()){try{const r=await spGet(spL
    also the one thing an offline queue cannot help with: approval has to happen
    centrally. */
 async function dbCreateUser(u){if(USE_SP||getSiteURL()){const r=await spPost(spList('Users'),{Title:u.username,shicName:u.name,shicHash:u.hash,shicRole:u.role,shicStatus:u.status,shicEmail:u.email||''});return{...u,id:r.Id};}const all=LS.get('users')||[];const nu={...u,id:Date.now()};LS.set('users',[...all,nu]);return nu;}
+/* Mirrors the change into the local cache so a password change does not leave a
+   stale hash that would let the old password keep working offline. Only touches
+   a user already cached here -- it never adds one.
+
+   On a SharePoint install the remote write happens FIRST and its failure is
+   propagated. It used to write locally first and swallow the failure, which
+   diverged the two stores in the worst possible direction: a password change
+   reported "changed successfully" while SharePoint kept the old hash, so the
+   NEW password worked offline and the OLD one still worked online. Approving a
+   user had the same shape -- the admin saw success and the account stayed
+   pending for everyone else. */
 async function dbUpdateUser(id,data){
-  /* Update the local copy on BOTH branches. LoginPage caches the account that
-     signed in on this machine so it can sign in offline; if a password change
-     went only to SharePoint, that cached hash would go stale and the old
-     password would keep working offline. Only touches a user already cached
-     here -- it never adds one. */
-  try{const cur=LS.get('users')||[];if(cur.some(u=>u.id===id))LS.set('users',cur.map(u=>u.id===id?{...u,...data}:u));}catch(_){}
-  if(USE_SP||getSiteURL()){try{const sp={};if(data.status!==undefined)sp.shicStatus=data.status;if(data.role!==undefined)sp.shicRole=data.role;if(data.hash!==undefined)sp.shicHash=data.hash;if(data.name!==undefined)sp.shicName=data.name;await spPatch(spList('Users'),id,sp);return;}catch(e){console.warn('dbUpdateUser:',e.message);}}
+  const mirror=()=>{try{const cur=LS.get('users')||[];if(cur.some(u=>u.id===id))LS.set('users',cur.map(u=>u.id===id?{...u,...data}:u));}catch(_){}};
+  if(USE_SP||getSiteURL()){
+    const sp={};if(data.status!==undefined)sp.shicStatus=data.status;if(data.role!==undefined)sp.shicRole=data.role;if(data.hash!==undefined)sp.shicHash=data.hash;if(data.name!==undefined)sp.shicName=data.name;
+    await spPatch(spList('Users'),id,sp);
+    mirror();
+    return;
+  }
+  mirror();
   LS.set('users',(LS.get('users')||[]).map(u=>u.id===id?{...u,...data}:u));
 }
 /* Was called by the Admin panel's Delete button but never defined anywhere, so

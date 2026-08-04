@@ -31,7 +31,15 @@ function ChangePasswordModal({ currentUser }) {
       reset();
       setTimeout(close, 1800);
     } catch (ex) {
-      setErr('Error: ' + (ex.message || String(ex)));
+      /* The password lives in the SharePoint Users list. If the write did not
+         land, the old password is still the real one — say so, because the
+         alternative is the user believing they changed it. */
+      const m = ex.message || String(ex);
+      const offline = (USE_SP || getSiteURL()) &&
+        (navigator.onLine === false || /not signed in|auth token|Failed to fetch|NetworkError/i.test(m));
+      setErr(offline
+        ? 'Password NOT changed — no connection to SharePoint. Keep using your current password and try again once reconnected.'
+        : 'Error: ' + m);
     }
     setBusy(false);
   };

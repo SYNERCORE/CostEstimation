@@ -224,7 +224,14 @@ const LS = {
   } catch {}
 })();
 async function dbGetUsers(){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Users'),'','Id,Title,shicName,shicHash,shicRole,shicStatus,shicEmail,Created');return r.filter(u=>u&&u.Title).map(u=>({id:u.Id,username:u.Title,name:u.shicName||'',hash:u.shicHash||'',role:u.shicRole||'user',status:u.shicStatus||'pending',email:u.shicEmail||'',createdAt:u.Created}));}catch(e){console.warn('dbGetUsers:',e.message);}}return(LS.get('users')||[]).filter(u=>u&&u.username);}
-async function dbCreateUser(u){if(USE_SP||getSiteURL()){try{const r=await spPost(spList('Users'),{Title:u.username,shicName:u.name,shicHash:u.hash,shicRole:u.role,shicStatus:u.status,shicEmail:u.email||''});return{...u,id:r.Id};}catch(e){console.warn('dbCreateUser:',e.message);}}const all=LS.get('users')||[];const nu={...u,id:Date.now()};LS.set('users',[...all,nu]);return nu;}
+/* On a SharePoint install this must NOT fall back to a local write. The Users
+   list is where admins approve people; a locally written account is invisible
+   there and never syncs, so registering offline showed the "request submitted"
+   screen for a request nobody would ever receive. Fail loudly instead — the
+   caller reports it and the person can try again on the network. Accounts are
+   also the one thing an offline queue cannot help with: approval has to happen
+   centrally. */
+async function dbCreateUser(u){if(USE_SP||getSiteURL()){const r=await spPost(spList('Users'),{Title:u.username,shicName:u.name,shicHash:u.hash,shicRole:u.role,shicStatus:u.status,shicEmail:u.email||''});return{...u,id:r.Id};}const all=LS.get('users')||[];const nu={...u,id:Date.now()};LS.set('users',[...all,nu]);return nu;}
 async function dbUpdateUser(id,data){
   /* Update the local copy on BOTH branches. LoginPage caches the account that
      signed in on this machine so it can sign in offline; if a password change

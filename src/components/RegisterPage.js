@@ -54,7 +54,14 @@
       });
       setDone(true);
     } catch (e) {
-      setErr('Registration failed: ' + e.message);
+      /* Access requests are approved in the SharePoint Users list, so this is
+         the one action that genuinely cannot be done offline. Say so, rather
+         than showing a raw token/fetch error the person cannot act on. */
+      const offline = (USE_SP || getSiteURL()) &&
+        (navigator.onLine === false || /not signed in|auth token|Failed to fetch|NetworkError/i.test(e.message || ''));
+      setErr(offline
+        ? 'Registration needs a connection — access requests are approved centrally and cannot be queued offline. Reconnect and try again.'
+        : 'Registration failed: ' + e.message);
     }
     setBusy(false);
   };

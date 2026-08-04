@@ -1,18 +1,26 @@
 const CACHE='shic-ce-v29';
+/* The libraries now ship in ./vendor and are precached as part of APP, so the
+   app no longer needs the public internet at all after its first load. Only
+   MSAL is still fetched remotely, and only as a fallback behind the local copy
+   -- it is used solely to reach SharePoint, which implies being online. */
 const CDN=[
-  'https://unpkg.com/react@18/umd/react.production.min.js',
-  'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
-  'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js',
   'https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js'
 ];
 const SHELL=['./','./index.html','./manifest.json','./icon.svg'];
+/* Vendored libraries that are NOT <script> tags in index.html, so the precache
+   generator cannot see them: pdf.js loads its worker at runtime, and msal is
+   injected on demand. Both must be cached or the feature dies offline. */
+const EXTRA=['./vendor/pdf.worker.min.js','./vendor/msal-browser.min.js'];
 /* Every application script index.html loads, with the same ?v= query it uses.
    These were NOT precached before, so offline the shell loaded but none of the
    app did. Kept in step with index.html by tools/check-sw-precache.js.
    APP_START */
 const APP=[
+  './vendor/react.production.min.js?v=29',
+  './vendor/react-dom.production.min.js?v=29',
+  './vendor/xlsx.full.min.js?v=29',
+  './vendor/pdf.min.js?v=29',
+  './vendor/mammoth.browser.min.js?v=29',
   './src/constants.js?v=29',
   './src/helpers.js?v=29',
   './src/ai.js?v=29',
@@ -42,15 +50,18 @@ self.addEventListener('install',e=>{
     caches.open(CACHE).then(c=>
       /* App files decide whether the thing boots offline, so cache them first
          and let the CDN/shell attempts fail quietly. */
-      c.addAll(APP)
-        .catch(err=>{console.warn('SW: app precache failed',err);})
+      /* One request per file, NOT c.addAll(APP). addAll is atomic: a single
+         404 or flaky response rejects the whole batch and leaves NOTHING
+         cached, so one bad entry silently cost the app its entire offline
+         capability. Cache what we can and report what we could not. */
+      Promise.all(APP.concat(EXTRA).map(u=>fetch(u,{cache:'reload'}).then(r=>r.ok?c.put(u,r):Promise.reject(r.status)).catch(err=>{console.warn('SW: precache failed for',u,err);})))
         /* Fetch the shell with cache:'reload'. c.addAll() goes through the
            browser's own http cache, so a stale index.html could be copied into
            the SW cache — and index.html is what pins the ?v= every script is
            loaded with. That produced a mixed-version app offline: a new App.js
            calling a helper that the old cached helpers.js did not define. */
         .then(()=>Promise.all(SHELL.map(u=>fetch(u,{cache:'reload'}).then(r=>r.ok&&c.put(u,r)).catch(()=>{}))))
-        .then(()=>c.addAll(CDN).catch(()=>{}))
+        .then(()=>Promise.all(CDN.map(u=>caches.open(CACHE).then(cc=>cc.add(u)).catch(()=>{}))))
     ).then(()=>self.skipWaiting())
   );
 });
@@ -75,7 +86,7 @@ self.addEventListener('fetch',e=>{
      release, so a cached entry is always the build it belongs to and can be
      served without revalidation; a miss falls through to the network and is
      stored for next time. */
-  if(url.indexOf(self.registration.scope)===0&&/\/src\/.+\.js(\?|$)/.test(url)){
+  if(url.indexOf(self.registration.scope)===0&&/\/(src|vendor)\/.+\.js(\?|$)/.test(url)){
     e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>{
       if(res&&res.ok){const clone=res.clone();caches.open(CACHE).then(c=>c.put(e.request,clone));}
       return res;

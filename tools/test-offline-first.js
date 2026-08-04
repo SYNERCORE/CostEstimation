@@ -93,5 +93,25 @@ ck('the fallback shim implements the same CE/ref surface',
     .every(f => new RegExp('\\n  ' + f + '[({]').test(idb)));
 ck('open() has a timeout so it cannot hang forever', /setTimeout\([\s\S]{0,160}done\(null\)[\s\S]{0,20}, 3000\)/.test(idb));
 
+console.log('\nThe app carries its own libraries (no public internet at runtime):');
+/* React itself came from unpkg. If that precache failed the app was simply dead
+   offline -- and c.addAll is atomic, so ONE bad CDN entry discarded the whole
+   batch and cost the app its entire offline capability. */
+['react.production.min.js', 'react-dom.production.min.js', 'xlsx.full.min.js', 'pdf.min.js',
+ 'mammoth.browser.min.js', 'pdf.worker.min.js', 'msal-browser.min.js']
+  .forEach(f => ck(f + ' is committed', fs.existsSync(path.join(ROOT, 'vendor', f))));
+ck('index.html loads no remote <script>', !/<script src="https?:/.test(html), 'a CDN script tag is a hard online dependency');
+ck('pdf.js worker points at the local copy', /workerSrc = '\.\/vendor\/pdf\.worker\.min\.js'/.test(app));
+ck('msal tries the local copy first', /'\.\/vendor\/msal-browser\.min\.js',/.test(rd('src/sp.js')));
+ck('vendored libs are precached', /'\.\/vendor\/react\.production\.min\.js/.test(sw));
+ck('runtime-loaded libs are precached too', /const EXTRA=\['\.\/vendor\/pdf\.worker\.min\.js','\.\/vendor\/msal-browser\.min\.js'\]/.test(sw));
+ck('vendor is served cache-first', /\(src\|vendor\)/.test(sw));
+/* Strip comments first -- sw.js explains the addAll hazard in prose, and a
+   naive search would match that explanation rather than the code. */
+const swCode = sw.replace(/\/\*[\s\S]*?\*\//g, '');
+ck('precache is per-file, not an atomic addAll',
+  !/c\.addAll\(APP\)/.test(swCode) && /APP\.concat\(EXTRA\)\.map/.test(swCode),
+  'addAll(APP) discards everything if one entry fails');
+
 console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nall offline-first assertions passed');
 process.exit(fails ? 1 : 0);

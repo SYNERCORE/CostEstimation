@@ -12,6 +12,7 @@ async function _loadMSAL(){
   /* Try multiple CDNs */
   if(typeof msal!=='undefined')return true;
   const cdns=[
+    './vendor/msal-browser.min.js',
     'https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js',
     'https://unpkg.com/@azure/msal-browser@2.38.3/lib/msal-browser.min.js',
     'https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js'

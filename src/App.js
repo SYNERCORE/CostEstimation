@@ -617,7 +617,7 @@ function App({
     const ext = file.name.split('.').pop().toLowerCase();
     if (ext === 'pdf') {
       const lib = window.pdfjsLib;
-      if (lib) lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      if (lib) lib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js';
       const ab = await file.arrayBuffer();
       const pdf = await lib.getDocument({
         data: ab

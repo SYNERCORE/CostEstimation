@@ -446,6 +446,12 @@ async function ensureAdmin() {
     } catch (me) {
       console.warn('migration:', me);
     }
+    /* Never mint a local admin on a SharePoint-backed install. The admin lives
+       in the Users list; if we cannot read it we know nothing about who exists,
+       and inventing one is a privilege-escalation route — any user could open
+       the app offline and read the generated password straight off the toast.
+       Only a genuinely unconfigured install has a first run to seed. */
+    if (USE_SP || getSiteURL()) return;
     const u = await dbGetUsers();
     const admin = u.find(x => x && x.role === 'admin');
     if (!admin) {

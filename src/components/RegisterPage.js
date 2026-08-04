@@ -373,7 +373,7 @@ async function spAddField(listName, fieldName, fieldType, token, digest){
 }
 
 async function autoSetupSP(progressCb){
-  const tok=await getSPToken();
+  const tok=await getSPToken({interactive:true});
   if(!tok)throw new Error('Not authenticated');
   const{digest}=await spDigest();
   const pfx=spList('').replace(/_$/,''); /* get prefix without suffix */

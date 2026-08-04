@@ -30,6 +30,8 @@ jobs:
         run: node tools/test-migration.js
       - name: Offline CEs sync when the connection returns
         run: node tools/test-reconnect-sync.js
+      - name: Unreachable SharePoint is never read as "no data"
+        run: node tools/test-sp-failure-mode.js
       - name: Every tab renders something
         run: node tools/check-tab-coverage.js
       - name: Bulk upload mode expires and fails closed

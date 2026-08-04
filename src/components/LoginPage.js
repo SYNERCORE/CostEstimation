@@ -39,6 +39,19 @@
         return;
       }
       clearLoginRate(un);
+      /* Approval is checked BEFORE anything is written to this machine. These
+         gates used to sit below, so a pending or rejected account still had its
+         hash cached for offline sign-in and its legacy hash rewritten. */
+      if (u.status === 'pending') {
+        setErr('Account pending admin approval.');
+        setBusy(false);
+        return;
+      }
+      if (u.status !== 'approved') {
+        setErr('Access denied. Contact admin.');
+        setBusy(false);
+        return;
+      }
       /* Remember THIS user locally so they can sign in offline next time.
          dbGetUsers reads SharePoint and never cached anything, so a browser
          that had only ever authenticated online fell back to a local store
@@ -58,16 +71,6 @@
       if (u.hash && !u.hash.startsWith('pbkdf2:')) {
         const newHash = await hashPassword(pw);
         await dbUpdateUser(u.id, { hash: newHash }).catch(() => {});
-      }
-      if (u.status === 'pending') {
-        setErr('Account pending admin approval.');
-        setBusy(false);
-        return;
-      }
-      if (u.status !== 'approved') {
-        setErr('Access denied. Contact admin.');
-        setBusy(false);
-        return;
       }
       session.set({
         id: u.id,

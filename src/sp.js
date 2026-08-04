@@ -30,12 +30,24 @@ async function _loadMSAL(){
   return false;
 }
 
-async function getSPToken(){
+/* opts.interactive — allow a popup or a full-page redirect to Microsoft.
+   Only ever true for an action the user just clicked (Connect & Test, list
+   setup). Background reads must stay silent: dbGetUsers runs on every app
+   open, and the redirect branch below navigates the whole page away to
+   login.microsoftonline.com. Offline that destination is unreachable, so the
+   user got a browser error page instead of the offline app — before they had
+   touched anything. A redirect during a save would also discard the CE being
+   edited. */
+async function getSPToken(opts){
+  const interactive=!!(opts&&opts.interactive);
   const cfg=getSPConfig();
   if(!cfg.clientId){console.warn('SP: No Client ID configured');return null;}
   const su=getSiteURL();if(!su)return null;
   const scope=su.split('/').slice(0,3).join('/')+'/.default';
   if(_spToken&&Date.now()<_spExpiry-60000)return _spToken;
+  /* Definitively offline: there is nothing to acquire, and attempting it only
+     costs the caller an MSAL timeout on every single request. */
+  if(typeof navigator!=='undefined'&&navigator.onLine===false)return null;
   const loaded=await _loadMSAL();
   if(!loaded){console.error('MSAL failed to load from all CDNs');return null;}
   try{
@@ -57,6 +69,13 @@ async function getSPToken(){
     try{
       res=await _spMsalApp.acquireTokenSilent({scopes:[scope],account:accts[0]||null});
     }catch(e){
+      if(!interactive){
+        /* Silent refresh failed and nobody asked to sign in. Report it as "no
+           token" so the caller falls back to local data, rather than hijacking
+           the page. */
+        console.warn('SP: silent token failed; sign in via Connect & Test to refresh the session.');
+        return null;
+      }
       try{
         res=await _spMsalApp.acquireTokenPopup({scopes:[scope]});
       }catch(popErr){
@@ -88,7 +107,15 @@ const spH = (d, x = {}) => ({
 });
 async function spGet(l,f='',sel=''){
   const su=getSiteURL();if(!su)return[];
-  const tok=await getSPToken();if(!tok){console.warn('SP: No auth token — skipping '+l);return[];}
+  /* Throw, do not return []. An empty array means "SharePoint has no such
+     rows", and callers act on that: dbGetUsers returned it instead of falling
+     back to the offline account cache (so offline sign-in failed with "Account
+     not found"), ensureAdmin read it as "no admin exists" and minted a fresh
+     local admin — printing its password — on every load, and the save paths
+     that call spGet to check for an existing row read it as "not a duplicate"
+     and would POST a second copy. Failing loudly puts every one of those on its
+     local fallback instead. */
+  const tok=await getSPToken();if(!tok)throw new Error('SP '+l+': not signed in (offline or session expired)');
   const h={'Accept':'application/json;odata=nometadata','Authorization':'Bearer '+tok};
   let results=[];
   const qs=[];if(f)qs.push('$filter='+encodeURIComponent(f));if(sel)qs.push('$select='+sel);qs.push('$top=5000');

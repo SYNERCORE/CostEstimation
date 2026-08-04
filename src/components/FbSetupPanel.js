@@ -11,7 +11,7 @@
     setBusy(true);setStatus('connecting...');setProgress(null);
     try{
       saveSPConfig(cfg);_spToken=null;_spExpiry=0;_spMsalApp=null;
-      const tok=await getSPToken();
+      const tok=await getSPToken({interactive:true});
       if(!tok)throw new Error('Sign-in cancelled or failed');
       const h={'Accept':'application/json;odata=nometadata','Authorization':'Bearer '+tok};
       const r=await fetch(cfg.siteUrl.replace(/\/$/,'')+'/_api/web/currentuser',{credentials:'omit',headers:h});

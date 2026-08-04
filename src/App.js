@@ -3587,7 +3587,7 @@ function App({
       setSpWizBusy(true);
       setSpWizLog('Creating SharePoint list…');
       try {
-        const tok = await getSPToken();
+        const tok = await getSPToken({ interactive: true });
         if (!tok) throw new Error('Not authenticated. Log in first.');
         const {digest} = await spDigest();
         const wasCreated = await spCreateList(spList('SowLib'), tok, digest);

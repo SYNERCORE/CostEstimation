@@ -225,7 +225,16 @@ const LS = {
 })();
 async function dbGetUsers(){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Users'),'','Id,Title,shicName,shicHash,shicRole,shicStatus,shicEmail,Created');return r.filter(u=>u&&u.Title).map(u=>({id:u.Id,username:u.Title,name:u.shicName||'',hash:u.shicHash||'',role:u.shicRole||'user',status:u.shicStatus||'pending',email:u.shicEmail||'',createdAt:u.Created}));}catch(e){console.warn('dbGetUsers:',e.message);}}return(LS.get('users')||[]).filter(u=>u&&u.username);}
 async function dbCreateUser(u){if(USE_SP||getSiteURL()){try{const r=await spPost(spList('Users'),{Title:u.username,shicName:u.name,shicHash:u.hash,shicRole:u.role,shicStatus:u.status,shicEmail:u.email||''});return{...u,id:r.Id};}catch(e){console.warn('dbCreateUser:',e.message);}}const all=LS.get('users')||[];const nu={...u,id:Date.now()};LS.set('users',[...all,nu]);return nu;}
-async function dbUpdateUser(id,data){if(USE_SP||getSiteURL()){try{const sp={};if(data.status!==undefined)sp.shicStatus=data.status;if(data.role!==undefined)sp.shicRole=data.role;if(data.hash!==undefined)sp.shicHash=data.hash;if(data.name!==undefined)sp.shicName=data.name;await spPatch(spList('Users'),id,sp);return;}catch(e){console.warn('dbUpdateUser:',e.message);}}LS.set('users',(LS.get('users')||[]).map(u=>u.id===id?{...u,...data}:u));}
+async function dbUpdateUser(id,data){
+  /* Update the local copy on BOTH branches. LoginPage caches the account that
+     signed in on this machine so it can sign in offline; if a password change
+     went only to SharePoint, that cached hash would go stale and the old
+     password would keep working offline. Only touches a user already cached
+     here -- it never adds one. */
+  try{const cur=LS.get('users')||[];if(cur.some(u=>u.id===id))LS.set('users',cur.map(u=>u.id===id?{...u,...data}:u));}catch(_){}
+  if(USE_SP||getSiteURL()){try{const sp={};if(data.status!==undefined)sp.shicStatus=data.status;if(data.role!==undefined)sp.shicRole=data.role;if(data.hash!==undefined)sp.shicHash=data.hash;if(data.name!==undefined)sp.shicName=data.name;await spPatch(spList('Users'),id,sp);return;}catch(e){console.warn('dbUpdateUser:',e.message);}}
+  LS.set('users',(LS.get('users')||[]).map(u=>u.id===id?{...u,...data}:u));
+}
 /* Was called by the Admin panel's Delete button but never defined anywhere, so
    deleting a user threw a ReferenceError and the user stayed. */
 async function dbDeleteUser(id){

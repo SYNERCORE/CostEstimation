@@ -39,6 +39,21 @@
         return;
       }
       clearLoginRate(un);
+      /* Remember THIS user locally so they can sign in offline next time.
+         dbGetUsers reads SharePoint and never cached anything, so a browser
+         that had only ever authenticated online fell back to a local store
+         holding nobody, and offline login simply failed with "Account not
+         found" -- on an app whose whole point is working offline.
+
+         Only the account that actually signed in on this machine is stored,
+         not the whole user table: caching every hash on every device would
+         spread credentials far wider than the SharePoint-only setup does. The
+         hash is already a PBKDF2 digest and this mirrors what a local-only
+         install has always kept. */
+      try {
+        const cached = (LS.get('users') || []).filter(x => x && x.username && x.username.toLowerCase() !== u.username.toLowerCase());
+        LS.set('users', [...cached, { id: u.id, username: u.username, name: u.name || '', hash: u.hash, role: u.role || 'user', status: u.status, email: u.email || '' }]);
+      } catch (e) { console.warn('offline sign-in not enabled for this account:', e && e.message); }
       // Migrate legacy SHA-256 hash to PBKDF2 on successful login
       if (u.hash && !u.hash.startsWith('pbkdf2:')) {
         const newHash = await hashPassword(pw);

@@ -1,4 +1,4 @@
-const CACHE='shic-ce-v31';
+const CACHE='shic-ce-v32';
 /* The libraries now ship in ./vendor and are precached as part of APP, so the
    app no longer needs the public internet at all after its first load. Only
    MSAL is still fetched remotely, and only as a fallback behind the local copy
@@ -16,33 +16,33 @@ const EXTRA=['./vendor/pdf.worker.min.js','./vendor/msal-browser.min.js'];
    app did. Kept in step with index.html by tools/check-sw-precache.js.
    APP_START */
 const APP=[
-  './vendor/react.production.min.js?v=31',
-  './vendor/react-dom.production.min.js?v=31',
-  './vendor/xlsx.full.min.js?v=31',
-  './vendor/pdf.min.js?v=31',
-  './vendor/mammoth.browser.min.js?v=31',
-  './src/constants.js?v=31',
-  './src/helpers.js?v=31',
-  './src/ai.js?v=31',
-  './src/config.js?v=31',
-  './src/update.js?v=31',
-  './src/sp.js?v=31',
-  './src/idb.js?v=31',
-  './src/db.js?v=31',
-  './src/auth.js?v=31',
-  './src/components/LoginPage.js?v=31',
-  './src/components/RegisterPage.js?v=31',
-  './src/components/CompanyDBPanel.js?v=31',
-  './src/components/FbSetupPanel.js?v=31',
-  './src/components/LocalToSPSync.js?v=31',
-  './src/components/ChangePasswordModal.js?v=31',
-  './src/components/UpdatePublisher.js?v=31',
-  './src/components/AdminPanel.js?v=31',
-  './src/components/ResTab.js?v=31',
-  './src/App.js?v=31',
-  './src/widgets.js?v=31',
-  './src/tests.js?v=31',
-  './src/ml_utils.js?v=31'
+  './vendor/react.production.min.js?v=32',
+  './vendor/react-dom.production.min.js?v=32',
+  './vendor/xlsx.full.min.js?v=32',
+  './vendor/pdf.min.js?v=32',
+  './vendor/mammoth.browser.min.js?v=32',
+  './src/constants.js?v=32',
+  './src/helpers.js?v=32',
+  './src/ai.js?v=32',
+  './src/config.js?v=32',
+  './src/update.js?v=32',
+  './src/sp.js?v=32',
+  './src/idb.js?v=32',
+  './src/db.js?v=32',
+  './src/auth.js?v=32',
+  './src/components/LoginPage.js?v=32',
+  './src/components/RegisterPage.js?v=32',
+  './src/components/CompanyDBPanel.js?v=32',
+  './src/components/FbSetupPanel.js?v=32',
+  './src/components/LocalToSPSync.js?v=32',
+  './src/components/ChangePasswordModal.js?v=32',
+  './src/components/UpdatePublisher.js?v=32',
+  './src/components/AdminPanel.js?v=32',
+  './src/components/ResTab.js?v=32',
+  './src/App.js?v=32',
+  './src/widgets.js?v=32',
+  './src/tests.js?v=32',
+  './src/ml_utils.js?v=32'
 ];
 /* APP_END */
 self.addEventListener('install',e=>{

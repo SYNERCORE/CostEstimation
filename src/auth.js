@@ -33,22 +33,78 @@ async function spWithRetry(fn, attempts = 3) {
   throw last;
 }
 
-/* ── Audit log ───────────────────────────────────────────────────── */
-function auditLog(action, detail, user) {
-  const entry = { ts: new Date().toISOString(), action, detail, user: user || '' };
-  try {
-    const log = LS.get('auditlog') || [];
-    log.unshift(entry);
-    if (log.length > 500) log.length = 500;
-    LS.set('auditlog', log);
-  } catch {}
-  /* Fire-and-forget write to SP AuditLog list when connected */
-  if (getSiteURL()) {
-    Promise.resolve().then(() =>
-      spPost(spList('AuditLog'), { Title: action, shicAction: action, shicDetail: (detail||'').slice(0,255), shicUser: user||'', shicTs: entry.ts })
-    ).catch(() => {});
+/* ── Audit log ─────────────────────────────────────────────────────
+   The SharePoint write used to be fire-and-forget with an empty catch, so an
+   entry created offline existed only in this browser, capped at 500, and never
+   reached SharePoint. For a log that records who approved, deleted and changed
+   things, losing exactly the entries made while disconnected is the wrong
+   failure. Entries are now marked unsynced and pushed on reconnect, and the cap
+   evicts synced entries first — a synced entry is safe to drop because
+   SharePoint still has it, an unsynced one is the only copy. */
+const AUDIT_CAP = 500;        /* synced entries kept for offline viewing */
+const AUDIT_PENDING_CAP = 2000; /* hard ceiling so a long outage cannot fill localStorage */
+
+function _auditRead() { try { return LS.get('auditlog') || []; } catch { return []; } }
+function _auditWrite(log) { try { LS.set('auditlog', log); return true; } catch { return false; } }
+/* Keep every unsynced entry; spend the remaining budget on the newest synced
+   ones. Only if the unsynced backlog itself exceeds the hard ceiling do we drop
+   the oldest of those, and that is loud rather than silent. */
+function _auditTrim(log) {
+  const pending = log.filter(e => e && e._synced === false);
+  const synced = log.filter(e => !e || e._synced !== false);
+  let dropped = 0;
+  if (pending.length > AUDIT_PENDING_CAP) {
+    dropped = pending.length - AUDIT_PENDING_CAP;
+    pending.length = AUDIT_PENDING_CAP;
+    console.warn('auditLog: dropped ' + dropped + ' un-uploaded entries at the ' + AUDIT_PENDING_CAP + ' ceiling.');
   }
+  const room = Math.max(0, AUDIT_CAP - pending.length);
+  return pending.concat(synced.slice(0, room));
 }
+function auditLog(action, detail, user) {
+  const entry = {
+    /* A stable id: the push marks entries synced after the fact, and two
+       entries can share a millisecond. */
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    ts: new Date().toISOString(), action, detail, user: user || '',
+    _synced: false
+  };
+  _auditWrite(_auditTrim([entry].concat(_auditRead())));
+  if (getSiteURL()) Promise.resolve().then(() => _auditPushOne(entry)).catch(() => {});
+}
+async function _auditPushOne(entry) {
+  await spPost(spList('AuditLog'), {
+    Title: entry.action, shicAction: entry.action,
+    shicDetail: (entry.detail || '').slice(0, 255),
+    shicUser: entry.user || '', shicTs: entry.ts
+  });
+  /* Re-read rather than closing over the array: other entries may have been
+     appended while this request was in flight. Trim here as well as on append —
+     an entry becoming synced is what frees it to be evicted, so draining a long
+     backlog would otherwise leave the log at the pending ceiling until the next
+     unrelated write happened to trim it. */
+  _auditWrite(_auditTrim(_auditRead().map(e => (e && e.id === entry.id) ? { ...e, _synced: true } : e)));
+}
+/* Upload everything that never made it. Called on reconnect, alongside the CE
+   push. Sequential on purpose: an audit trail read in Id order should keep the
+   order things actually happened in, and a burst of parallel POSTs does not. */
+let _auditPushRunning = false;
+async function dbPushAuditLog() {
+  if (!(USE_SP || getSiteURL())) return { skipped: 'not-configured' };
+  if (_auditPushRunning) return { skipped: 'already-running' };
+  _auditPushRunning = true;
+  let pushed = 0, failed = 0;
+  try {
+    /* Oldest first, so the SharePoint Ids run in the same order as the events. */
+    const pending = _auditRead().filter(e => e && e._synced === false).reverse();
+    for (const e of pending) {
+      try { await _auditPushOne(e); pushed++; }
+      catch (err) { failed++; console.warn('auditLog push:', err.message); break; }
+    }
+  } finally { _auditPushRunning = false; }
+  return { pushed, failed };
+}
+function auditPendingCount() { return _auditRead().filter(e => e && e._synced === false).length; }
 
 /* ── Auto-backup counter ─────────────────────────────────────────── */
 let _saveCount = 0;

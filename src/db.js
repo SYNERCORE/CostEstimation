@@ -340,7 +340,23 @@ async function _ceDeleteById(id){
   }catch(_){}
 }
 async function dbGetML(){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Masterlist'),"Title eq 'config'",'Id,shicData');if(r.length&&r[0].shicData)return JSON.parse(r[0].shicData);}catch(e){console.warn('dbGetML:',e.message);}}return LS.get('masterlist');}
-async function dbGetAuditLog(limit=200){if(getSiteURL()){try{const r=await spGet(spList('AuditLog'),'','Id,shicAction,shicDetail,shicUser,shicTs');return r.sort((a,b)=>b.Id-a.Id).slice(0,limit).map(x=>({ts:x.shicTs||x.Created,action:x.shicAction||x.Title||'',detail:x.shicDetail||'',user:x.shicUser||''}));}catch(e){console.warn('dbGetAuditLog:',e.message);}}return(LS.get('auditlog')||[]).slice(0,limit);}
+/* Merges anything still waiting to upload into the SharePoint view. Showing the
+   remote list alone would hide entries made during an outage — precisely the
+   ones an admin needs to know exist. Pending entries are flagged so nobody
+   mistakes a local-only record for one everybody can see. */
+async function dbGetAuditLog(limit=200){
+  const localPending=(LS.get('auditlog')||[]).filter(e=>e&&e._synced===false);
+  if(getSiteURL()){
+    try{
+      const r=await spGet(spList('AuditLog'),'','Id,shicAction,shicDetail,shicUser,shicTs');
+      const remote=r.sort((a,b)=>b.Id-a.Id).map(x=>({ts:x.shicTs||x.Created,action:x.shicAction||x.Title||'',detail:x.shicDetail||'',user:x.shicUser||''}));
+      return localPending.concat(remote)
+        .sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||'')))
+        .slice(0,limit);
+    }catch(e){console.warn('dbGetAuditLog:',e.message);}
+  }
+  return(LS.get('auditlog')||[]).slice(0,limit);
+}
 
 /* &#9472;&#9472; ML Import persistence (shared across all users via SP) &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472; */
 async function spSaveMLImport(project){

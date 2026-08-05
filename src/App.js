@@ -347,6 +347,12 @@ function App({
             if (r && r.pushed) showToast('Back online — uploaded ' + r.pushed + ' CE(s) saved offline.');
             if (r && r.failed) showToast(r.failed + ' offline CE(s) could not be uploaded; they are still saved here.', true);
           } catch (ex) { console.warn('reconnect push failed:', ex.message); }
+          /* Audit entries written during the outage exist only here until this
+             runs. Separate try: a failed CE upload must not strand the log. */
+          try {
+            const a = await dbPushAuditLog();
+            if (a && a.pushed) console.info('audit log: uploaded ' + a.pushed + ' entr(y/ies) recorded offline.');
+          } catch (ex) { console.warn('reconnect audit push failed:', ex.message); }
           try { if (window._shicFullRefresh) await window._shicFullRefresh(); } catch (_e) {}
         }, 2000);
       };
@@ -358,6 +364,7 @@ function App({
         setTimeout(() => { dbPushLocalCEs().then(r => {
           if (r && r.pushed) showToast('Uploaded ' + r.pushed + ' CE(s) that were saved offline.');
         }).catch(() => {}); }, 6000);
+        setTimeout(() => { dbPushAuditLog().catch(() => {}); }, 8000);
       }
       /* Expose a global full-refresh so SyncStatusBar can trigger it */
       window._shicFullRefresh = async () => {

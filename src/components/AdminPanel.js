@@ -38,6 +38,17 @@
     } catch (e) { setToast('Upload failed: ' + e.message); }
     setStorageBusy(false);
   };
+  const pushAudit = async () => {
+    setStorageBusy(true);
+    try {
+      const r = await dbPushAuditLog();
+      if (r.skipped === 'not-configured') setToast('SharePoint is not configured, so there is nowhere to upload to.');
+      else if (r.failed) setToast('Uploaded ' + r.pushed + '; ' + r.failed + ' still pending — they are kept here.');
+      else setToast('Uploaded ' + r.pushed + ' audit entr' + (r.pushed === 1 ? 'y' : 'ies') + '.');
+      await loadStorage();
+    } catch (e) { setToast('Audit upload failed: ' + e.message); }
+    setStorageBusy(false);
+  };
   const exportArchive = async () => {
     try {
       const all = await ceAll();
@@ -810,6 +821,9 @@
       ['CEs offline', storage.ceCount],
       ['Local only', storage.byState.local, storage.byState.local > 0],
       ['Not yet reconciled', storage.byState.unknown],
+      /* Audit entries written during an outage live only here until they
+         upload, so they belong next to the other local-only counts. */
+      ['Audit entries to upload', auditPendingCount(), auditPendingCount() > 0],
       ['Browser storage', storage.usage != null
         ? Math.round(storage.usage / 1048576) + ' MB of ' + Math.round((storage.quota || 0) / 1048576) + ' MB'
         : Math.round(storage.lsBytes / 1024) + ' KB (estimated)'],
@@ -828,6 +842,9 @@
     storage && storage.byState.local > 0 && /*#__PURE__*/React.createElement("button", {
       style: btn('acc'), onClick: pushLocal, disabled: storageBusy
     }, 'Upload ' + storage.byState.local + ' local-only CE' + (storage.byState.local === 1 ? '' : 's')),
+    auditPendingCount() > 0 && /*#__PURE__*/React.createElement("button", {
+      style: btn('acc'), onClick: pushAudit, disabled: storageBusy
+    }, 'Upload ' + auditPendingCount() + ' audit entr' + (auditPendingCount() === 1 ? 'y' : 'ies')),
     /*#__PURE__*/React.createElement("button", { style: btn('ghost'), onClick: loadStorage, disabled: storageBusy }, storageBusy ? 'Checking...' : 'Refresh')
   ),
   /*#__PURE__*/React.createElement("div", { style: { borderTop: `1px solid ${BDR}`, margin: '14px 0 10px' } }),

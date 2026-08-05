@@ -78,7 +78,7 @@
       setToast('Exported ' + all.length + ' full CE(s).');
     } catch (e) { setToast('Export failed: ' + e.message); }
   };
-  const [bulkOn, setBulkOn] = useState(() => bulkMode.on());
+  const [bulkOn, setBulkOn] = useState(() => bulkMode.on(currentUser?.username));
   const [bulkMins, setBulkMins] = useState(60);
   const [setupMsg, setSetupMsg] = useState('');
   const [setupBusy, setSetupBusy] = useState(false);
@@ -242,8 +242,11 @@
     scanTotals();
   };
   /* Bulk upload mode: temporarily lifts the duplicate CE-number guard so
-     historical CEs can be loaded. Time-boxed and session-scoped by design --
+     historical CEs can be loaded. Time-boxed and bound to this account --
      see bulkMode in db.js. */
+  const BULK_CHOICES = [[15, '15 minutes'], [60, '1 hour'], [240, '4 hours'],
+                        [1440, '1 day'], [4320, '3 days'], [10080, '1 week']];
+  const bulkLabel = m => (BULK_CHOICES.find(c => c[0] === m) || [m, m + ' minutes'])[1];
   const toggleBulk = () => {
     if (bulkOn) {
       bulkMode.disable();
@@ -252,14 +255,21 @@
       toast2('Bulk upload mode off — duplicate protection restored.');
       return;
     }
+    const label = bulkLabel(bulkMins);
+    const long = bulkMins >= 1440;
     if (!window.confirm(
-      'Turn OFF duplicate CE-number protection for ' + bulkMins + ' minutes?' + String.fromCharCode(10, 10) +
-      'While it is off, saving a CE whose number already exists will OVERWRITE that CE instead of being blocked.' + String.fromCharCode(10, 10) +
-      'It switches back on automatically when the time is up, or when this tab is closed.')) return;
-    bulkMode.enable(bulkMins, currentUser?.username);
+      'Turn OFF duplicate CE-number protection for ' + label + '?' + String.fromCharCode(10, 10) +
+      'While it is off, saving a CE whose number already exists will OVERWRITE that CE — including one saved by someone else. Every replacement is recorded in the audit log.' + String.fromCharCode(10, 10) +
+      /* The old wording promised it ends when the tab closes. That stopped
+         being true when the window moved to localStorage to allow multi-day
+         imports, and a stale promise here is worse than no promise. */
+      'It switches back on automatically when the time is up. Closing the tab or the browser no longer ends it.' + String.fromCharCode(10, 10) +
+      'It applies only to you (' + (currentUser?.username || 'this account') + ') on this device.' +
+      (long ? String.fromCharCode(10, 10) + 'That is a long window to leave duplicate protection off. Turn it back on as soon as the import is done.' : ''))) return;
+    const mins = bulkMode.enable(bulkMins, currentUser?.username);
     setBulkOn(true);
-    auditLog('bulk_mode_on', bulkMins + ' min', currentUser?.username);
-    toast2('Bulk upload mode ON for ' + bulkMins + ' minutes.');
+    auditLog('bulk_mode_on', bulkLabel(mins) + ' (until ' + new Date(Date.now() + mins * 60000).toLocaleString() + ')', currentUser?.username);
+    toast2('Bulk upload mode ON for ' + label + '.');
   };
   const SBadge = ({
     s
@@ -821,14 +831,14 @@
     !bulkOn && /*#__PURE__*/React.createElement("label", { style: { fontSize: 11, color: MT, display: 'flex', alignItems: 'center', gap: 6 } },
       "for",
       /*#__PURE__*/React.createElement("select", {
-        style: { ...INP, width: 96, fontSize: 11, padding: '3px 6px' },
+        style: { ...INP, width: 118, fontSize: 11, padding: '3px 6px' },
         value: bulkMins,
         onChange: e => setBulkMins(Number(e.target.value) || 60)
-      }, [15, 30, 60, 120, 240].map(m => /*#__PURE__*/React.createElement("option", { key: m, value: m }, m + ' min')))
+      }, BULK_CHOICES.map(([m, label]) => /*#__PURE__*/React.createElement("option", { key: m, value: m }, label)))
     ),
     bulkOn && /*#__PURE__*/React.createElement("span", {
       style: { fontSize: 11, color: ERR, fontWeight: 700 }
-    }, "OFF — " + bulkMode.minutesLeft() + " min remaining"),
+    }, "OFF — " + bulkMode.timeLeftText() + " remaining"),
     /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: MT } },
       bulkOn ? 'Duplicate CE numbers are being accepted.' : 'Duplicate CE numbers are blocked (normal).')
   ),

@@ -516,35 +516,70 @@ async function ensureAdmin() {
 }
 /* ── Bulk upload mode ────────────────────────────────────────────────────────
    Admin-only, temporary bypass of the duplicate CE-number guard so historical
-   CEs can be loaded in. Deliberately constrained:
-     - sessionStorage, so it dies with the tab and never persists to another
-       machine or another day
-     - carries an expiry, so it cannot be left on and quietly permit duplicates
-       weeks later
-     - the caller still checks isAdmin; this only records the window
+   CEs can be loaded in.
+
+   Stored in localStorage, so it survives closing the tab. It used to live in
+   sessionStorage, which capped it at the life of one tab — that made any window
+   longer than a sitting meaningless, and a multi-day import is a real need. The
+   constraints that remain are therefore the only ones left, and each matters
+   more than it did:
+
+     - a hard expiry, clamped to BULK_MAX_MINUTES, so it cannot be left on
+       indefinitely by forgetting about it
+     - bound to the admin who enabled it: a shared browser is now a real
+       exposure, because tab lifetime no longer incidentally scopes this. Anyone
+       else signing in on the same machine gets normal duplicate protection
+     - anything malformed fails closed
+     - the caller still re-checks isAdmin on every save; this only records the
+       window, so a demoted account loses the bypass immediately
+
    NOTE: with the guard bypassed, saving a CE number that already exists UPDATES
    that CE (dbSaveHistory patches the row it finds by Title) rather than adding
-   a second one. */
+   a second one — and that row may belong to someone else. Every replacement
+   writes a bulk_overwrite audit entry. */
+const BULK_MAX_MINUTES = 7 * 24 * 60;   /* one week */
 const bulkMode = {
   get() {
     try {
-      const v = JSON.parse(sessionStorage.getItem('shic:bulk') || 'null');
+      const v = JSON.parse(localStorage.getItem('shic:bulk') || 'null');
       /* `until` must be a real number. A non-numeric value makes the comparison
          below NaN, which is never true, so a corrupted entry would leave the
          protection off indefinitely. Anything unexpected fails closed. */
-      if (!v || typeof v.until !== 'number' || !isFinite(v.until)) { sessionStorage.removeItem('shic:bulk'); return null; }
-      if (Date.now() > v.until) { sessionStorage.removeItem('shic:bulk'); return null; }
+      if (!v || typeof v.until !== 'number' || !isFinite(v.until)) { localStorage.removeItem('shic:bulk'); return null; }
+      if (Date.now() > v.until) { localStorage.removeItem('shic:bulk'); return null; }
+      /* Longer than the ceiling means the clock moved or the entry was edited;
+         either way, do not honour it. */
+      if (v.until - Date.now() > BULK_MAX_MINUTES * 60000) { localStorage.removeItem('shic:bulk'); return null; }
       return v;
     } catch (_e) { return null; }
   },
-  on() { return !!bulkMode.get(); },
+  /* Pass the signed-in username. Without a match the bypass does not apply —
+     this is what stops a second person on the same browser inheriting it. */
+  on(username) {
+    const v = bulkMode.get();
+    if (!v) return false;
+    if (username === undefined) return true;
+    return !!v.by && String(v.by).toLowerCase() === String(username || '').toLowerCase();
+  },
   minutesLeft() { const v = bulkMode.get(); return v ? Math.max(0, Math.ceil((v.until - Date.now()) / 60000)) : 0; },
+  /* "6d 4h" / "3h 20m" / "12 min" — minutes alone stopped being readable once
+     the window could run into days. */
+  timeLeftText() {
+    const m = bulkMode.minutesLeft();
+    if (!m) return 'expired';
+    const d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60;
+    if (d) return d + 'd ' + h + 'h';
+    if (h) return h + 'h ' + mm + 'm';
+    return mm + ' min';
+  },
   enable(minutes, by) {
-    try { sessionStorage.setItem('shic:bulk', JSON.stringify({ until: Date.now() + (minutes || 60) * 60000, by: by || '' })); } catch (_e) {}
+    const mins = Math.min(BULK_MAX_MINUTES, Math.max(1, Number(minutes) || 60));
+    try { localStorage.setItem('shic:bulk', JSON.stringify({ until: Date.now() + mins * 60000, by: by || '' })); } catch (_e) {}
     try { window.dispatchEvent(new Event('shic:bulk:changed')); } catch (_e) {}
+    return mins;
   },
   disable() {
-    try { sessionStorage.removeItem('shic:bulk'); } catch (_e) {}
+    try { localStorage.removeItem('shic:bulk'); } catch (_e) {}
     try { window.dispatchEvent(new Event('shic:bulk:changed')); } catch (_e) {}
   }
 };

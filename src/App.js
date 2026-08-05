@@ -271,11 +271,13 @@ function App({
   const [copyMenu, setCopyMenu] = useState(null); /* {fromShift, anchorEl} */
   const fileRef = useRef(null);
   const _lastAutoSig = useRef(null); /* skips no-op auto-saves */
-  const [bulkOn, setBulkOn] = useState(() => bulkMode.on());
+  /* Scoped to this account: the window now outlives the tab, so a colleague
+     signing in on the same browser must not inherit the bypass. */
+  const [bulkOn, setBulkOn] = useState(() => bulkMode.on(currentUser?.username));
   useEffect(() => {
     /* Poll as well as listen: the window expires on a timer, so the banner
        has to disappear on its own without another user action. */
-    const h = () => setBulkOn(bulkMode.on());
+    const h = () => setBulkOn(bulkMode.on(currentUser?.username));
     window.addEventListener('shic:bulk:changed', h);
     const t = setInterval(h, 5000); /* short, so the banner clears promptly when the window expires */
     return () => { window.removeEventListener('shic:bulk:changed', h); clearInterval(t); };
@@ -1034,7 +1036,7 @@ function App({
       /* Bulk upload mode lets an admin load historical CEs whose numbers already
          exist. Saving then UPDATES that CE rather than adding a second one, so
          say which one is being replaced instead of failing silently. */
-      if (!(isAdmin && bulkMode.on())) {
+      if (!(isAdmin && bulkMode.on(currentUser?.username))) {
         showToast('CE Number "' + ceNum + '" already exists in history (saved ' + new Date(dup.savedAt).toLocaleDateString() + '). Use a unique CE Number.', true);
         return;
       }
@@ -4935,7 +4937,7 @@ function App({
     /*#__PURE__*/React.createElement("span", { style: { color: MT } },
       "Duplicate CE-number checking is OFF. Saving a CE number that already exists will OVERWRITE it."),
     /*#__PURE__*/React.createElement("span", { style: { color: MT, marginLeft: 'auto' } },
-      bulkMode.minutesLeft() + " min left"),
+      bulkMode.timeLeftText() + " left"),
     /*#__PURE__*/React.createElement("button", {
       style: { ...btn('danger', true), fontSize: 11 },
       onClick: () => { bulkMode.disable(); setBulkOn(false); showToast('Bulk upload mode off — duplicate protection restored.'); }

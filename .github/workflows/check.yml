@@ -32,6 +32,8 @@ jobs:
         run: node tools/test-reconnect-sync.js
       - name: Unreachable SharePoint is never read as "no data"
         run: node tools/test-sp-failure-mode.js
+      - name: Owner role cannot be taken by a delegated admin
+        run: node tools/test-ownership.js
       - name: Audit entries written offline survive and upload
         run: node tools/test-audit-sync.js
       - name: Every tab renders something

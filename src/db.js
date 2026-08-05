@@ -502,7 +502,9 @@ async function ensureAdmin() {
        Only a genuinely unconfigured install has a first run to seed. */
     if (USE_SP || getSiteURL()) return;
     const u = await dbGetUsers();
-    const admin = u.find(x => x && x.role === 'admin');
+    /* An owner counts — they hold every admin power, so a fresh admin must not
+       be minted alongside one. */
+    const admin = u.find(x => x && hasAdminPowers(x.role));
     if (!admin) {
       /* Generate a random first-run password — never hardcoded in source */
       const tmpPw = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(36)).join('').slice(0,10) + 'A1!';
@@ -514,6 +516,96 @@ async function ensureAdmin() {
     console.warn('seed admin:', e);
   }
 }
+/* ── Roles and ownership ─────────────────────────────────────────────────────
+   Three roles: owner > admin > user. Exactly one owner.
+
+   The point of `owner` is that delegated admins can run the day to day without
+   being able to remove or demote the person who delegated to them. The owner
+   picks their own successor; nobody else can.
+
+   HONEST LIMIT: this is enforced in the app, not by SharePoint. The real
+   boundary is the Users list permissions — anyone who can write shicRole there
+   (via the list UI, Graph, or the browser console) can still change roles. This
+   stops a delegated admin from doing it by accident or on impulse through the
+   app, and every attempt is audit-logged. It is not a defence against someone
+   with direct list access. Restrict write access to the Users list in
+   SharePoint if that matters.                                                */
+const ROLE_OWNER='owner', ROLE_ADMIN='admin', ROLE_USER='user';
+const _role=u=>String((u&&u.role)||u||'').toLowerCase();
+const isOwnerRole=r=>_role(r)===ROLE_OWNER;
+/* The owner keeps every admin power; `admin` alone is the delegated tier. */
+const hasAdminPowers=r=>{const x=_role(r);return x===ROLE_OWNER||x===ROLE_ADMIN;};
+const findOwner=users=>(users||[]).find(u=>u&&isOwnerRole(u.role))||null;
+const sameUser=(a,b)=>{const x=String((a&&a.username)||a||'').toLowerCase(),y=String((b&&b.username)||b||'').toLowerCase();return !!x&&x===y;};
+
+/* One place that answers "may this person change that account?".
+   `change` is the field being touched: 'role' | 'status' | 'delete' | 'password'
+   | 'email' | 'name'. Returns {ok, reason} so callers can explain a refusal
+   rather than just hiding a button. */
+function canManageUser(actor, target, change){
+  if(!hasAdminPowers(actor&&actor.role)) return {ok:false, reason:'Only an admin can change accounts.'};
+  const actorIsOwner=isOwnerRole(actor&&actor.role);
+  const targetIsOwner=isOwnerRole(target&&target.role);
+  const self=sameUser(actor,target);
+
+  /* Nobody deletes the owner — not even the owner. Removing the last owner
+     would leave the app with no one able to appoint another. Transfer first. */
+  if(change==='delete'&&targetIsOwner)
+    return {ok:false, reason:'The owner account cannot be deleted. Transfer ownership first, then delete it.'};
+
+  /* The owner's account is off limits to everyone else. This is the whole
+     point of the role: a delegated admin cannot lock the owner out, demote
+     them, reset their password, or quietly change their email. */
+  if(targetIsOwner&&!self)
+    return {ok:false, reason:'Only the owner can change the owner account.'};
+
+  /* The owner role moves by transfer alone, so a stray "make admin" click can
+     neither create a second owner nor leave the app without one. */
+  if(change==='role'){
+    if(targetIsOwner&&self)
+      return {ok:false, reason:'Use Transfer ownership to hand the owner role to someone else.'};
+    if(!actorIsOwner&&targetIsOwner)
+      return {ok:false, reason:'Only the owner can change the owner role.'};
+  }
+
+  /* An admin disabling or rejecting themselves is how people lock themselves
+     out; the existing UI already hides it, this makes it a rule. */
+  if(self&&(change==='status'||change==='delete'))
+    return {ok:false, reason:'You cannot change your own access.'};
+
+  return {ok:true, reason:''};
+}
+
+/* Hand the owner role to someone else. Two writes, and the order is deliberate:
+   promote the successor FIRST. If the second write fails there are briefly two
+   owners, which is recoverable by either of them. Demoting first and then
+   failing would leave NO owner and no way to appoint one. */
+async function dbTransferOwnership(currentOwner, successor){
+  if(!isOwnerRole(currentOwner&&currentOwner.role)) throw new Error('Only the owner can transfer ownership.');
+  if(!successor||successor.id===undefined) throw new Error('Pick the account that should become owner.');
+  if(sameUser(currentOwner,successor)) throw new Error('That is already the owner.');
+  if(String(successor.status||'')!=='approved') throw new Error('Ownership can only go to an approved account.');
+  await dbUpdateUser(successor.id,{role:ROLE_OWNER});
+  try{
+    await dbUpdateUser(currentOwner.id,{role:ROLE_ADMIN});
+  }catch(e){
+    throw new Error('Ownership was granted to '+successor.username+', but your own account could not be stepped down ('+e.message+'). There are two owners right now — either of you can fix it from the Users tab.');
+  }
+  return {from:currentOwner.username, to:successor.username};
+}
+
+/* One-time bootstrap for an install that predates the owner role. Only offered
+   while NO owner exists, and only to an admin. Deliberately a deliberate act
+   rather than an automatic assignment: picking "oldest admin" would quietly
+   hand the app to whichever account happened to be created first. */
+async function dbClaimOwnership(actor, users){
+  if(!hasAdminPowers(actor&&actor.role)) throw new Error('Only an admin can claim ownership.');
+  const existing=findOwner(users);
+  if(existing) throw new Error('This app already has an owner ('+existing.username+'). Only they can transfer it.');
+  await dbUpdateUser(actor.id,{role:ROLE_OWNER});
+  return actor.username;
+}
+
 /* ── Bulk upload mode ────────────────────────────────────────────────────────
    Admin-only, temporary bypass of the duplicate CE-number guard so historical
    CEs can be loaded in.

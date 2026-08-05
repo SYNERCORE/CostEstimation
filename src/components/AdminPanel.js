@@ -19,6 +19,7 @@
   const [storageBusy, setStorageBusy] = useState(false);
   const [editEmail, setEditEmail] = useState(null);
   const [emailBusy, setEmailBusy] = useState(false);
+  const [ownerBusy, setOwnerBusy] = useState(false);
   const loadStorage = async () => {
     setStorageBusy(true);
     try { setStorage(await storageReport()); }
@@ -41,6 +42,7 @@
     setStorageBusy(false);
   };
   const saveEmail = async u => {
+    if (!allow(u, 'email')) { setEditEmail(null); return; }
     const value = (editEmail.value || '').trim();
     if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) { setToast('That does not look like an email address.'); return; }
     if (value === (u.email || '')) { setEditEmail(null); return; }
@@ -127,19 +129,34 @@
       return false;
     }
   };
+  /* Every account change runs through the ownership policy first. Buttons that
+     are not permitted are hidden, but a refusal is also enforced here — hiding
+     a control is presentation, not a rule, and the rule is what matters. The
+     attempt is logged either way, so a delegated admin probing at the owner
+     account leaves a trace. */
+  const allow = (u, change) => {
+    const v = canManageUser(currentUser, u, change);
+    if (!v.ok) {
+      auditLog('denied_' + change, 'on ' + u.username + ' — ' + v.reason, currentUser?.username);
+      toast2(v.reason, true);
+    }
+    return v.ok;
+  };
   const setStatus = (u, status, verb, past) => userAction(verb + ' ' + u.username, async () => {
     await dbUpdateUser(u.id, { status });
     toast2(past + ' ' + u.username);
     load();
   });
   const approve = async u => {
+    if (!allow(u, 'status')) return;
     if (await setStatus(u, 'approved', 'approve', 'Approved'))
       auditLog('user_approve', u.username, currentUser?.username);
   };
-  const reject = u => setStatus(u, 'rejected', 'reject', 'Rejected');
-  const disable = u => setStatus(u, 'disabled', 'disable', 'Disabled');
-  const enable = u => setStatus(u, 'approved', 'enable', 'Enabled');
+  const reject = u => allow(u, 'status') && setStatus(u, 'rejected', 'reject', 'Rejected');
+  const disable = u => allow(u, 'status') && setStatus(u, 'disabled', 'disable', 'Disabled');
+  const enable = u => allow(u, 'status') && setStatus(u, 'approved', 'enable', 'Enabled');
   const del = async u => {
+    if (!allow(u, 'delete')) return;
     if (!confirm('Delete "' + u.username + '"?')) return;
     await userAction('delete ' + u.username, async () => {
       await dbDeleteUser(u.id);
@@ -149,6 +166,10 @@
     });
   };
   const toggleRole = async u => {
+    if (!allow(u, 'role')) return;
+    /* Only ever moves between user and admin. The owner role is reachable by
+       transfer alone, so this cannot mint a second owner or strand the app
+       without one. */
     const r = u.role === 'admin' ? 'user' : 'admin';
     if (!confirm(`Change "${u.username}" role to ${r}?`)) return;
     await userAction('change the role of ' + u.username, async () => {
@@ -158,7 +179,42 @@
       load();
     });
   };
+  const owner = findOwner(users);
+  const iAmOwner = isOwnerRole(currentUser?.role);
+  const transferOwnership = async u => {
+    if (!iAmOwner) { toast2('Only the owner can transfer ownership.', true); return; }
+    if (!confirm(
+      'Make "' + u.username + '" the owner of this app?' + String.fromCharCode(10, 10) +
+      'They will be able to manage every account including yours, and to hand ownership on again.' + String.fromCharCode(10, 10) +
+      'You will step down to admin. Only ' + u.username + ' will be able to give it back.')) return;
+    if (!confirm('Last check — transfer ownership to "' + u.username + '"? This cannot be undone from your side.')) return;
+    setOwnerBusy(true);
+    await userAction('transfer ownership to ' + u.username, async () => {
+      const r = await dbTransferOwnership(currentUser, u);
+      auditLog('ownership_transfer', r.from + ' → ' + r.to, currentUser?.username);
+      toast2('Ownership transferred to ' + r.to + '. You are now an admin.');
+      load();
+    });
+    setOwnerBusy(false);
+  };
+  const claimOwnership = async () => {
+    if (!confirm(
+      'Claim ownership of this app?' + String.fromCharCode(10, 10) +
+      'No owner is set yet. The owner cannot be demoted, disabled or deleted by other admins, and is the only account that can appoint a successor.' + String.fromCharCode(10, 10) +
+      'Do this once, on the account that should hold it.')) return;
+    setOwnerBusy(true);
+    await userAction('claim ownership', async () => {
+      const who = await dbClaimOwnership(currentUser, users);
+      auditLog('ownership_claim', who, currentUser?.username);
+      toast2('You are now the owner. Sign out and back in to refresh your role everywhere.');
+      load();
+    });
+    setOwnerBusy(false);
+  };
   const changePw = async () => {
+    /* Resetting the owner's password would be the simplest way for a delegated
+       admin to take the account, so it goes through the same gate. */
+    if (!allow(changePwUser, 'password')) { setChangePwUser(null); setNewPw(''); return; }
     if (newPw.length < 6) {
       alert('Min 6 chars.');
       return;
@@ -349,11 +405,12 @@
     style: TDS
   }, /*#__PURE__*/React.createElement("span", {
     style: {
-      color: u.role === 'admin' ? ACC : MT,
-      fontWeight: u.role === 'admin' ? 700 : 400,
+      color: isOwnerRole(u.role) ? '#A855F7' : (u.role === 'admin' ? ACC : MT),
+      fontWeight: hasAdminPowers(u.role) ? 700 : 400,
       fontSize: 11
-    }
-  }, u.role)), /*#__PURE__*/React.createElement("td", {
+    },
+    title: isOwnerRole(u.role) ? 'Owner — cannot be changed by other admins' : undefined
+  }, isOwnerRole(u.role) ? '★ owner' : u.role)), /*#__PURE__*/React.createElement("td", {
     style: TDS
   }, /*#__PURE__*/React.createElement(SBadge, {
     s: u.status
@@ -369,28 +426,37 @@
       justifyContent: 'flex-end',
       flexWrap: 'wrap'
     }
-  }, u.status === 'pending' && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+    /* Controls are hidden when the policy would refuse them, so a delegated
+       admin is not invited to click something that cannot work. canManageUser
+       still enforces it — hiding is presentation, not the rule. */
+  }, u.status === 'pending' && canManageUser(currentUser, u, 'status').ok && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
     style: btn('ok', true),
     onClick: () => approve(u)
   }, "Approve"), /*#__PURE__*/React.createElement("button", {
     style: btn('danger', true),
     onClick: () => reject(u)
-  }, "Reject")), u.status === 'approved' && u.username !== currentUser.username && /*#__PURE__*/React.createElement("button", {
+  }, "Reject")), u.status === 'approved' && canManageUser(currentUser, u, 'status').ok && /*#__PURE__*/React.createElement("button", {
     style: btn('def', true),
     onClick: () => disable(u)
-  }, "Disable"), (u.status === 'rejected' || u.status === 'disabled') && /*#__PURE__*/React.createElement("button", {
+  }, "Disable"), (u.status === 'rejected' || u.status === 'disabled') && canManageUser(currentUser, u, 'status').ok && /*#__PURE__*/React.createElement("button", {
     style: btn('def', true),
     onClick: () => enable(u)
-  }, "Enable"), u.username !== currentUser.username && /*#__PURE__*/React.createElement("button", {
+  }, "Enable"), canManageUser(currentUser, u, 'role').ok && /*#__PURE__*/React.createElement("button", {
     style: btn('def', true),
     onClick: () => toggleRole(u)
-  }, u.role === 'admin' ? '->User' : '->Admin'), /*#__PURE__*/React.createElement("button", {
+  }, u.role === 'admin' ? '->User' : '->Admin'),
+    /* Ownership moves only from the owner, only to an approved account. */
+    iAmOwner && !isOwnerRole(u.role) && u.status === 'approved' && /*#__PURE__*/React.createElement("button", {
+      style: btn('acc', true), disabled: ownerBusy, title: 'Hand ownership of this app to ' + u.username,
+      onClick: () => transferOwnership(u)
+    }, "★ Make owner"),
+    canManageUser(currentUser, u, 'password').ok && /*#__PURE__*/React.createElement("button", {
     style: btn('def', true),
     onClick: () => {
       setChangePwUser(u);
       setNewPw('');
     }
-  }, "Pwd"), u.username !== currentUser.username && /*#__PURE__*/React.createElement("button", {
+  }, "Pwd"), canManageUser(currentUser, u, 'delete').ok && /*#__PURE__*/React.createElement("button", {
     style: btn('danger', true),
     onClick: () => del(u)
   }, "Del"))));
@@ -423,7 +489,10 @@
         username: username.trim(),
         name: name.trim(),
         hash: h,
-        role,
+        /* Never mint an owner here. The dropdown offers only user and admin,
+           but creation must not be a second route to the role — ownership is
+           claimed once, then only ever transferred. */
+        role: role === 'admin' ? 'admin' : 'user',
         status: 'approved'
       });
       await load();
@@ -510,7 +579,33 @@
   }, "Cancel"), /*#__PURE__*/React.createElement("button", {
     style: btn('acc'),
     onClick: changePw
-  }, "Update")))), /*#__PURE__*/React.createElement("div", {
+  }, "Update")))),
+  /* Who holds the app, stated plainly. Until someone claims it every admin can
+     still change every other admin, so an install that has not been claimed
+     needs to say so rather than look settled. */
+  /*#__PURE__*/React.createElement("div", {
+    style: { ...CS, borderColor: (owner ? '#A855F7' : '#F59E0B') + '55',
+             display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }
+  },
+    /*#__PURE__*/React.createElement("span", { style: { fontWeight: 700, color: owner ? '#A855F7' : '#F59E0B' } },
+      owner ? '★ Owner' : '⚠ No owner set'),
+    /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, color: TX } },
+      owner
+        ? (owner.name || owner.username) + ' (' + owner.username + ')' + (iAmOwner ? ' — that is you' : '')
+        : 'Any admin can currently change any other admin.'),
+    /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: MT, flexBasis: '100%' } },
+      owner
+        ? (iAmOwner
+            ? 'Other admins cannot demote, disable, delete or reset the password on your account. Use “★ Make owner” on an approved account to hand it over.'
+            : 'This account is managed by its owner only. You can manage every other account as normal.')
+        : 'The owner cannot be demoted, disabled or deleted by other admins, and is the only account that can appoint a successor. Claim it on the account that should hold it.'),
+    !owner && /*#__PURE__*/React.createElement("button", {
+      style: { ...btn('acc', true), marginLeft: 'auto' }, disabled: ownerBusy, onClick: claimOwnership
+    }, ownerBusy ? 'Claiming…' : 'Claim ownership'),
+    /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: MT, flexBasis: '100%' } },
+      'Enforced in the app and recorded in the audit log. Anyone with direct write access to the SharePoint Users list can still change roles there — restrict that list if it matters.')
+  ),
+  /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
       borderColor: ACC + '44'

@@ -283,7 +283,9 @@ function App({
     return () => { window.removeEventListener('shic:bulk:changed', h); clearInterval(t); };
   }, []);
   const _live = useRef(null);       /* current state for the auto-save timer */
-  const isAdmin = currentUser.role === 'admin';
+  /* The owner holds every admin power on top of being unmanageable by them. */
+  const isAdmin = hasAdminPowers(currentUser.role);
+  const isOwner = isOwnerRole(currentUser.role);
   const cfg = CE_CFG[ceType] || CE_CFG.onsite || {};
   const TABS = [...CE_TABS, ...(isAdmin ? [{
     id: 'admin',

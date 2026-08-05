@@ -164,8 +164,14 @@ function runSpGet(opts) {
   for (const fn of ['approve', 'reject', 'disable', 'enable', 'del', 'toggleRole', 'changePw'])
     ck(fn + ' cannot silently no-op', new RegExp('(userAction|setStatus)\\(').test(ap) &&
       new RegExp('const ' + fn + ' = ').test(ap));
+  /* Scoped to the success path. changePw also clears the form when the
+     ownership policy refuses the reset, which is correct but sits earlier in
+     the file, so a whole-file index comparison compares the wrong two things. */
+  const pwWrite = (ap.match(/await userAction\('update the password[\s\S]*?\n    \}\);/) || [''])[0];
+  ck('the password write block was found', pwWrite.length > 0);
   ck('the password form is cleared only after the write lands',
-    ap.indexOf('await dbUpdateUser(changePwUser.id') < ap.indexOf('setChangePwUser(null)'));
+    pwWrite.indexOf('await dbUpdateUser(changePwUser.id') < pwWrite.indexOf('setChangePwUser(null)'),
+    'reporting "Password updated" before the write leaves the old password live');
   ck('error toasts are held long enough to read', /isError \? 9000 : 3000/.test(ap));
   ck('a self-service password change says the old one still applies',
     /Password NOT changed/.test(rd('src/components/ChangePasswordModal.js')));

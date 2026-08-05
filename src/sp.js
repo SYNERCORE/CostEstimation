@@ -8,6 +8,18 @@ function saveSPConfig(cfg){try{localStorage.setItem(SP_CFG_KEY,JSON.stringify(cf
 function getSiteURL(){const cfg=getSPConfig();if(cfg.siteUrl)return cfg.siteUrl.replace(/\/$/,'');const m=window.location.href.match(/(https:\/\/[^\/]+\/sites\/[^\/]+)/);return m?m[1]:null;}
 function spList(n){const cfg=getSPConfig();const p=(cfg.listPrefix||'SHICCE').replace(/[^a-zA-Z0-9_]/g,'');return p+'_'+n;}
 let _spMsalApp=null,_spToken=null,_spExpiry=0;
+/* True once a silent token refresh has failed while the app is otherwise
+   online. The UI reads this to offer a Sign in button; without it the user is
+   simply locked out with nothing to click. */
+let _spNeedsSignIn=false;
+function spNeedsSignIn(){return _spNeedsSignIn&&!!getSiteURL();}
+/* The one place that performs a user-initiated sign-in. Clears the flag on
+   success so the banner disappears without a reload. */
+async function spSignIn(){
+  const tok=await getSPToken({interactive:true});
+  if(tok){_spNeedsSignIn=false;try{window.dispatchEvent(new Event('shic-auth-ok'));}catch(_e){}}
+  return tok;
+}
 async function _loadMSAL(){
   /* Try multiple CDNs */
   if(typeof msal!=='undefined')return true;
@@ -72,8 +84,14 @@ async function getSPToken(opts){
       if(!interactive){
         /* Silent refresh failed and nobody asked to sign in. Report it as "no
            token" so the caller falls back to local data, rather than hijacking
-           the page. */
-        console.warn('SP: silent token failed; sign in via Connect & Test to refresh the session.');
+           the page.
+
+           But do NOT stop there: tokens expire routinely, and refusing to
+           prompt while offering no other way in left users online, connected,
+           and locked out of every list with only a console warning. Raise the
+           state so the UI can show a Sign in button. */
+        _spNeedsSignIn=true;
+        try{window.dispatchEvent(new Event('shic-auth-required'));}catch(_e){}
         return null;
       }
       try{
@@ -89,6 +107,7 @@ async function getSPToken(opts){
     }
     _spToken=res.accessToken;
     _spExpiry=res.expiresOn?res.expiresOn.getTime():Date.now()+3600000;
+    _spNeedsSignIn=false;
     return _spToken;
   }catch(e){
     console.warn('SP token:',e.message||e);

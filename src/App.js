@@ -3068,9 +3068,24 @@ function App({
       width: 80,
       minWidth: 80,
       padding: '6px 8px',
-      fontSize: 10
+      fontSize: 10,
+      /* Matches the pinned body cells below, so the header stays aligned with
+         its column while the table scrolls sideways. */
+      position: 'sticky',
+      right: 0,
+      zIndex: 3,
+      background: SURF,
+      borderLeft: `1px solid ${BDR}`
     }
-  }, "Actions"))), /*#__PURE__*/React.createElement("tbody", null, sortedHistory.slice(monPage * MON_PAGE_SIZE, (monPage + 1) * MON_PAGE_SIZE).map((e, rowIdx) => {
+  }, "Actions"))),/*#__PURE__*/React.createElement("tbody", null, sortedHistory.slice(monPage * MON_PAGE_SIZE, (monPage + 1) * MON_PAGE_SIZE).map((e, rowIdx) => {
+    /* The 16 columns total ~1570px, so on any normal screen Actions sits past
+       the right edge and the row has to be scrolled sideways to reach it —
+       which is why people reported the buttons as missing rather than
+       off-screen. Pinning the column keeps Edit/Attach/Del reachable at any
+       scroll position. Needs an opaque background: the row's own is
+       semi-transparent on alternate rows, and cells would scroll visibly
+       underneath it. */
+    const stickyBg = rowIdx % 2 === 0 ? CARD : SURF;
     const m = monData[e.id] || {};
     const ceNum = e.info?.ceNum || e.ceNum || '';
     const jobTitle = e.info?.description || '';
@@ -3357,7 +3372,12 @@ function App({
     }) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11,color:MT}}, m.remarks||'—')), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
-        padding: '4px 6px'
+        padding: '4px 6px',
+        position: 'sticky',
+        right: 0,
+        zIndex: 2,
+        background: stickyBg,
+        borderLeft: `1px solid ${BDR}`
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -4906,7 +4926,7 @@ function App({
       fontSize: 13
     },
     onClick: () => copyMenu && setCopyMenu(null)
-  }, /*#__PURE__*/React.createElement(SyncStatusBar, null),
+  }, /*#__PURE__*/React.createElement(SignInBanner, null), /*#__PURE__*/React.createElement(SyncStatusBar, null),
   bulkOn && isAdmin && /*#__PURE__*/React.createElement("div", {
     style: { background: ERR + '22', borderBottom: `1px solid ${ERR}55`, padding: '6px 16px',
              display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }

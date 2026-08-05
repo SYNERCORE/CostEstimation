@@ -72,13 +72,29 @@ function runSpGet(opts) {
   console.log('\ngetSPToken never hijacks the page on its own:');
   ck('takes an explicit interactive opt-in', /async function getSPToken\(opts\)/.test(sp));
   ck('defaults to non-interactive', /const interactive\s*=\s*!!\(opts&&opts\.interactive\)/.test(sp));
-  ck('a silent failure returns null when nobody asked to sign in',
-    /if\(!interactive\)\{[\s\S]{0,300}return null;/.test(sp),
-    'still falls through to acquireTokenPopup/Redirect on a background read');
-  /* Order matters: the guard must sit BEFORE the popup/redirect branch.
-     Compare positions in comment-stripped source -- sp.js explains the redirect
-     hazard in prose above the guard, and a naive indexOf matches that prose. */
+  /* Comment-stripped: sp.js explains the redirect hazard in prose right where
+     the guard sits, which both pads the body past any length bound and makes a
+     naive indexOf match the explanation instead of the code. */
   const spCode = sp.replace(/\/\*[\s\S]*?\*\//g, '');
+  ck('a silent failure returns null when nobody asked to sign in',
+    /if\(!interactive\)\{[\s\S]{0,300}return null;/.test(spCode),
+    'still falls through to acquireTokenPopup/Redirect on a background read');
+  /* ...but it must not be a dead end: tokens expire hourly, and a silent
+     refusal with nothing to click locked users out of every list. */
+  ck('the failure is raised so the UI can offer a sign-in',
+    /_spNeedsSignIn=true/.test(spCode) && /shic-auth-required/.test(spCode));
+  ck('a user-initiated sign-in exists', /async function spSignIn\(\)/.test(spCode));
+  ck('a successful token clears the flag', /_spNeedsSignIn=false/.test(spCode));
+  ck('the banner offers it in-app', /function SignInBanner/.test(rd('src/widgets.js')));
+  ck('the banner is rendered', /React\.createElement\(SignInBanner, null\)/.test(rd('src/App.js')));
+  ck('the login screen offers it too', /spSignIn\(\)/.test(login));
+  ck('login blames the connection, not the account, when the list was unread',
+    /userListIsStale\(\)/.test(login) && /_userListStale=true/.test(db),
+    '"Account not found" for an account that exists sends people after the wrong problem');
+  ck('a connection failure is not counted as a failed login attempt',
+    login.indexOf('userListIsStale()') < login.indexOf('recordLoginFail(un);\n        setErr(\'Account not found.'),
+    'a lockout over a network problem would be gratuitous');
+  /* Order matters: the guard must sit BEFORE the popup/redirect branch. */
   ck('the guard precedes the redirect branch',
     spCode.indexOf('if(!interactive)') < spCode.indexOf('acquireTokenRedirect'),
     'redirect is still reachable without opt-in');
@@ -132,6 +148,15 @@ function runSpGet(opts) {
   ck('still mirrors after a successful write', /await spPatch\([\s\S]{0,40}mirror\(\);/.test(uu),
     'the cached hash would go stale and the old password keep working offline');
   ck('dbDeleteUser still rethrows', /catch\(e\)\{[^}]*throw e;/.test((db.match(/async function dbDeleteUser[\s\S]*?\n\}/) || [''])[0]));
+  /* Every editable field must reach SharePoint. shicEmail was missing, so an
+     email edit patched nothing and reported success. */
+  ck('dbUpdateUser maps email', /data\.email!==undefined\)sp\.shicEmail=data\.email/.test(uu),
+    'an email change is silently dropped');
+  for (const f of ['status', 'role', 'hash', 'name', 'email'])
+    ck('  maps ' + f, new RegExp('data\\.' + f + '!==undefined').test(uu));
+  ck('a patch that maps to nothing throws instead of faking success',
+    /if\(!Object\.keys\(sp\)\.length\)throw/.test(uu));
+  ck('the admin panel can actually edit an email', /const saveEmail = async u =>/.test(rd('src/components/AdminPanel.js')));
 
   console.log('\nThe UI reports what did not happen:');
   const ap = rd('src/components/AdminPanel.js');

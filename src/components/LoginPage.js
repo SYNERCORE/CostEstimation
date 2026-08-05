@@ -7,6 +7,23 @@
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [showReset, setShowReset] = useState(false);
+  const [needsSP, setNeedsSP] = useState(false);
+  const [spBusy, setSpBusy] = useState(false);
+  /* User-initiated, so an MSAL popup (or the redirect it falls back to on
+     GitHub Pages, where COOP blocks popups) is legitimate here — there is no
+     unsaved work to lose on the login screen. */
+  const signInSP = async () => {
+    setSpBusy(true);
+    setErr('');
+    try {
+      const tok = await spSignIn();
+      if (tok) { setNeedsSP(false); setErr('Signed in to SharePoint. Enter your username and password again.'); }
+      else setErr('SharePoint sign-in did not complete. Try again, or check the connection settings with your admin.');
+    } catch (e) {
+      setErr('SharePoint sign-in failed: ' + (e.message || e));
+    }
+    setSpBusy(false);
+  };
   const go = async e => {
     e.preventDefault();
     if (!un.trim() || !pw.trim()) {
@@ -25,6 +42,16 @@
       const users = await dbGetUsers();
       const u = users.find(x => x && x.username && x.username.toLowerCase() === un.toLowerCase().trim());
       if (!u) {
+        /* Do not blame the account when we never managed to read the list.
+           Offer the sign-in that actually unblocks them, and do not count it
+           as a failed attempt — locking someone out over a connection problem
+           would be gratuitous. */
+        if (userListIsStale()) {
+          setNeedsSP(true);
+          setErr('Could not reach SharePoint, so your account could not be checked. Sign in to SharePoint below, or connect once online to enable offline sign-in on this device.');
+          setBusy(false);
+          return;
+        }
         recordLoginFail(un);
         setErr('Account not found.');
         setBusy(false);
@@ -181,7 +208,19 @@
       fontSize: 12,
       marginBottom: 12
     }
-  }, err), /*#__PURE__*/React.createElement("button", {
+  }, err), needsSP && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: signInSP,
+    disabled: spBusy,
+    style: {
+      ...btn('info'),
+      width: '100%',
+      justifyContent: 'center',
+      padding: '10px 0',
+      fontSize: 13,
+      marginBottom: 12
+    }
+  }, spBusy ? 'Opening Microsoft sign-in…' : 'Sign in to SharePoint'), /*#__PURE__*/React.createElement("button", {
     type: "submit",
     style: {
       ...btn('acc'),

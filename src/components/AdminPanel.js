@@ -17,6 +17,8 @@
      ONLY here (never uploaded), which is the number that actually matters. */
   const [storage, setStorage] = useState(null);
   const [storageBusy, setStorageBusy] = useState(false);
+  const [editEmail, setEditEmail] = useState(null);
+  const [emailBusy, setEmailBusy] = useState(false);
   const loadStorage = async () => {
     setStorageBusy(true);
     try { setStorage(await storageReport()); }
@@ -37,6 +39,20 @@
       await loadStorage();
     } catch (e) { setToast('Upload failed: ' + e.message); }
     setStorageBusy(false);
+  };
+  const saveEmail = async u => {
+    const value = (editEmail.value || '').trim();
+    if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) { setToast('That does not look like an email address.'); return; }
+    if (value === (u.email || '')) { setEditEmail(null); return; }
+    setEmailBusy(true);
+    const done = await userAction('update the email for ' + u.username, async () => {
+      await dbUpdateUser(u.id, { email: value });
+      auditLog('user_email_change', u.username + ' → ' + (value || '(cleared)'), currentUser?.username);
+      toast2('Email updated for ' + u.username);
+      load();
+    });
+    if (done) setEditEmail(null);
+    setEmailBusy(false);
   };
   const pushAudit = async () => {
     setStorageBusy(true);
@@ -301,12 +317,25 @@
     }
   }, u.username)), /*#__PURE__*/React.createElement("td", {
     style: TDS
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: MT,
-      fontSize: 11
-    }
-  }, u.email || '--')), /*#__PURE__*/React.createElement("td", {
+  }, editEmail && editEmail.id === u.id
+    /* There was no way to change an email at all — the cell only ever
+       displayed one, so an account created with the wrong address stayed
+       wrong. Editing happens in place; Enter saves, Escape cancels. */
+    ? /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 4, alignItems: 'center' } },
+        /*#__PURE__*/React.createElement("input", {
+          style: { ...INP, fontSize: 11, padding: '3px 6px', width: 180 },
+          value: editEmail.value, autoFocus: true, type: 'email',
+          placeholder: 'name@company.com',
+          onChange: e => setEditEmail({ id: u.id, value: e.target.value }),
+          onKeyDown: e => { if (e.key === 'Enter') saveEmail(u); if (e.key === 'Escape') setEditEmail(null); }
+        }),
+        /*#__PURE__*/React.createElement("button", { style: btn('ok', true), onClick: () => saveEmail(u), disabled: emailBusy }, emailBusy ? '…' : 'Save'),
+        /*#__PURE__*/React.createElement("button", { style: btn('ghost', true), onClick: () => setEditEmail(null) }, 'Cancel'))
+    : /*#__PURE__*/React.createElement("span", {
+        style: { color: MT, fontSize: 11, cursor: 'pointer', borderBottom: `1px dashed ${BDR}` },
+        title: 'Click to edit this email',
+        onClick: () => setEditEmail({ id: u.id, value: u.email || '' })
+      }, u.email || '-- set email')), /*#__PURE__*/React.createElement("td", {
     style: TDS
   }, /*#__PURE__*/React.createElement("span", {
     style: {

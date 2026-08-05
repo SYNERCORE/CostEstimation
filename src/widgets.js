@@ -1,4 +1,44 @@
 ﻿function OnlinePill(){const[on,setOn]=React.useState(navigator.onLine);const[q,setQ]=React.useState(0);React.useEffect(()=>{const a=()=>setOn(true),b=()=>setOn(false);window.addEventListener('shic-online',a);window.addEventListener('shic-offline',b);/* Was _spQueue.length, which nothing ever pushed to -- the count was permanently 0 while real work sat unsynced. Count the CEs actually waiting to upload. */const poll=()=>{try{dbPendingCount().then(n=>setQ(n)).catch(()=>{});}catch(_e){}};poll();const t=setInterval(poll,10000);return()=>{window.removeEventListener('shic-online',a);window.removeEventListener('shic-offline',b);clearInterval(t);};},[]);const c=on?OK:'#F59E0B';return React.createElement('span',{title:on?(q?q+' CE(s) saved here not yet uploaded':'Connected — everything uploaded'):(q?'Offline — '+q+' CE(s) waiting to upload':'Offline'),style:{display:'flex',alignItems:'center',gap:4,fontSize:10,padding:'2px 8px',borderRadius:10,background:c+'22',color:c,border:'1px solid '+c+'44',cursor:'default',userSelect:'none',flexShrink:0}},React.createElement('span',{style:{width:6,height:6,borderRadius:'50%',background:c,display:'inline-block'}}),on?(q?q+' to upload':'Online'):'Offline');}
+/* A SharePoint token lasts about an hour. When the silent refresh fails, every
+   list read starts failing while the app still looks online — and because
+   background reads deliberately never prompt (an unattended redirect would
+   throw away the CE being edited), there was nothing to click and no way back
+   in short of a reload. This is that way back. */
+function SignInBanner() {
+  const [need, setNeed] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  React.useEffect(() => {
+    const up = () => setNeed(spNeedsSignIn());
+    window.addEventListener('shic-auth-required', up);
+    window.addEventListener('shic-auth-ok', up);
+    up();
+    const t = setInterval(up, 5000);
+    return () => { window.removeEventListener('shic-auth-required', up); window.removeEventListener('shic-auth-ok', up); clearInterval(t); };
+  }, []);
+  if (!need) return null;
+  return React.createElement('div', {
+    style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+      padding: '8px 14px', background: '#F59E0B18', borderBottom: '1px solid #F59E0B44', color: '#F59E0B', fontSize: 12 }
+  },
+    React.createElement('span', { style: { fontWeight: 700 } }, 'SharePoint session expired'),
+    React.createElement('span', { style: { color: MT } },
+      'Saved work is kept on this device and will upload once you sign in again.'),
+    React.createElement('button', {
+      style: { ...btn('acc', true), marginLeft: 'auto' }, disabled: busy,
+      onClick: async () => {
+        setBusy(true);
+        try {
+          if (await spSignIn()) {
+            setNeed(false);
+            if (window._shicFullRefresh) await window._shicFullRefresh();
+            if (window._shicToast) window._shicToast('Signed back in — refreshing your data.');
+          }
+        } catch (e) { if (window._shicToast) window._shicToast('Sign-in failed: ' + (e.message || e), true); }
+        setBusy(false);
+      }
+    }, busy ? 'Opening Microsoft sign-in…' : 'Sign in')
+  );
+}
 function SyncStatusBar() {
   const [sync, setSync] = React.useState(() => getSyncStatus());
   React.useEffect(() => {

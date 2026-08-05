@@ -223,7 +223,14 @@ const LS = {
     localStorage.setItem('shic:_migv2', '1');
   } catch {}
 })();
-async function dbGetUsers(){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Users'),'','Id,Title,shicName,shicHash,shicRole,shicStatus,shicEmail,Created');return r.filter(u=>u&&u.Title).map(u=>({id:u.Id,username:u.Title,name:u.shicName||'',hash:u.shicHash||'',role:u.shicRole||'user',status:u.shicStatus||'pending',email:u.shicEmail||'',createdAt:u.Created}));}catch(e){console.warn('dbGetUsers:',e.message);}}return(LS.get('users')||[]).filter(u=>u&&u.username);}
+/* True when the last dbGetUsers could not read SharePoint and fell back to the
+   handful of accounts cached on this machine. The login screen needs to tell
+   those apart: an unread user list looks identical to "no such account", and
+   reporting "Account not found" to someone whose account plainly exists sends
+   them hunting for the wrong problem. */
+let _userListStale=false;
+function userListIsStale(){return _userListStale;}
+async function dbGetUsers(){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Users'),'','Id,Title,shicName,shicHash,shicRole,shicStatus,shicEmail,Created');_userListStale=false;return r.filter(u=>u&&u.Title).map(u=>({id:u.Id,username:u.Title,name:u.shicName||'',hash:u.shicHash||'',role:u.shicRole||'user',status:u.shicStatus||'pending',email:u.shicEmail||'',createdAt:u.Created}));}catch(e){console.warn('dbGetUsers:',e.message);_userListStale=true;}}else{_userListStale=false;}return(LS.get('users')||[]).filter(u=>u&&u.username);}
 /* On a SharePoint install this must NOT fall back to a local write. The Users
    list is where admins approve people; a locally written account is invisible
    there and never syncs, so registering offline showed the "request submitted"
@@ -246,7 +253,14 @@ async function dbCreateUser(u){if(USE_SP||getSiteURL()){const r=await spPost(spL
 async function dbUpdateUser(id,data){
   const mirror=()=>{try{const cur=LS.get('users')||[];if(cur.some(u=>u.id===id))LS.set('users',cur.map(u=>u.id===id?{...u,...data}:u));}catch(_){}};
   if(USE_SP||getSiteURL()){
-    const sp={};if(data.status!==undefined)sp.shicStatus=data.status;if(data.role!==undefined)sp.shicRole=data.role;if(data.hash!==undefined)sp.shicHash=data.hash;if(data.name!==undefined)sp.shicName=data.name;
+    /* Every editable field must be mapped. shicEmail was missing, so editing a
+       user's email patched nothing and silently reported success — the change
+       appeared locally, vanished on the next SharePoint read, and never
+       reached anyone else. */
+    const sp={};if(data.status!==undefined)sp.shicStatus=data.status;if(data.role!==undefined)sp.shicRole=data.role;if(data.hash!==undefined)sp.shicHash=data.hash;if(data.name!==undefined)sp.shicName=data.name;if(data.email!==undefined)sp.shicEmail=data.email;
+    /* A patch that maps to nothing is a silent no-op; say so rather than
+       reporting a success that changed nothing. */
+    if(!Object.keys(sp).length)throw new Error('dbUpdateUser: no updatable field in '+JSON.stringify(Object.keys(data)));
     await spPatch(spList('Users'),id,sp);
     mirror();
     return;

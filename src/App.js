@@ -4956,6 +4956,12 @@ function App({
     /*#__PURE__*/React.createElement("span", { style: { fontWeight: 700, color: ERR } }, "⚠ BULK UPLOAD MODE"),
     /*#__PURE__*/React.createElement("span", { style: { color: MT } },
       "Duplicate CE-number checking is OFF. Saving a CE number that already exists will OVERWRITE it."),
+    /* A week-long window is easy to forget about, and "5d 2h left" reads like
+       there is plenty of time rather than like it has been running unattended
+       since Monday. Say how long it has actually been open once that passes a
+       day, and say it in the same red as the warning. */
+    bulkMode.isStale() && /*#__PURE__*/React.createElement("span", { style: { color: ERR, fontWeight: 700 } },
+      "Open for " + bulkMode.openForText() + " — still meant to be on?"),
     /*#__PURE__*/React.createElement("span", { style: { color: MT, marginLeft: 'auto' } },
       bulkMode.timeLeftText() + " left"),
     /*#__PURE__*/React.createElement("button", {

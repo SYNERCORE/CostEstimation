@@ -918,7 +918,7 @@
     }
   }, "Bulk CE Upload"), /*#__PURE__*/React.createElement("div", {
     style: { color: MT, fontSize: 11, marginBottom: 8, lineHeight: 1.5 }
-  }, "Saving is normally blocked when a CE number already exists. Turn that off temporarily to load historical CEs. While it is off, saving a CE number that already exists ", /*#__PURE__*/React.createElement("b", { style: { color: ERR } }, "overwrites"), " that CE. It restores itself when the time runs out or the tab is closed."),
+  }, "Saving is normally blocked when a CE number already exists. Turn that off temporarily to load historical CEs. While it is off, saving a CE number that already exists ", /*#__PURE__*/React.createElement("b", { style: { color: ERR } }, "overwrites"), " that CE. It restores itself when the time runs out — closing the tab no longer ends it, so pick the shortest window that will do."),
   /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
     /*#__PURE__*/React.createElement("button", {
       style: bulkOn ? btn('danger') : btn('def'), onClick: toggleBulk
@@ -933,7 +933,7 @@
     ),
     bulkOn && /*#__PURE__*/React.createElement("span", {
       style: { fontSize: 11, color: ERR, fontWeight: 700 }
-    }, "OFF — " + bulkMode.timeLeftText() + " remaining"),
+    }, "OFF — " + bulkMode.timeLeftText() + " remaining" + (bulkMode.isStale() ? ", open for " + bulkMode.openForText() : '')),
     /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: MT } },
       bulkOn ? 'Duplicate CE numbers are being accepted.' : 'Duplicate CE numbers are blocked (normal).')
   ),

@@ -250,7 +250,24 @@ async function dbCreateUser(u){if(USE_SP||getSiteURL()){const r=await spPost(spL
    NEW password worked offline and the OLD one still worked online. Approving a
    user had the same shape -- the admin saw success and the account stayed
    pending for everyone else. */
-async function dbUpdateUser(id,data){
+/* The owner role moves by dbTransferOwnership / dbClaimOwnership alone, which
+   validate first and then set `_ownership`. Any other code path that writes
+   `role:'owner'`, or strips it off the current owner, is a bug -- that is
+   exactly how LocalToSPSync came to PATCH shicRole from an editable local
+   cache and hand the owner role back to whoever held it in that browser.
+
+   This is a guard against wrong code, NOT a security boundary: the console can
+   pass `_ownership` as easily as the real callers can. The boundary is
+   SharePoint's Users list permissions, as the ownership block below says. */
+async function dbUpdateUser(id,data,opts){
+  if(data&&data.role!==undefined&&!(opts&&opts._ownership)){
+    if(isOwnerRole(data.role))
+      throw new Error('dbUpdateUser: the owner role is granted by transfer only. Use dbTransferOwnership or dbClaimOwnership.');
+    const known=(()=>{try{return LS.get('users')||[];}catch(_){return [];}})();
+    const target=known.find(u=>u&&u.id===id);
+    if(target&&isOwnerRole(target.role))
+      throw new Error('dbUpdateUser: the owner cannot be demoted directly. Transfer ownership instead.');
+  }
   const mirror=()=>{try{const cur=LS.get('users')||[];if(cur.some(u=>u.id===id))LS.set('users',cur.map(u=>u.id===id?{...u,...data}:u));}catch(_){}};
   if(USE_SP||getSiteURL()){
     /* Every editable field must be mapped. shicEmail was missing, so editing a
@@ -585,9 +602,9 @@ async function dbTransferOwnership(currentOwner, successor){
   if(!successor||successor.id===undefined) throw new Error('Pick the account that should become owner.');
   if(sameUser(currentOwner,successor)) throw new Error('That is already the owner.');
   if(String(successor.status||'')!=='approved') throw new Error('Ownership can only go to an approved account.');
-  await dbUpdateUser(successor.id,{role:ROLE_OWNER});
+  await dbUpdateUser(successor.id,{role:ROLE_OWNER},{_ownership:true});
   try{
-    await dbUpdateUser(currentOwner.id,{role:ROLE_ADMIN});
+    await dbUpdateUser(currentOwner.id,{role:ROLE_ADMIN},{_ownership:true});
   }catch(e){
     throw new Error('Ownership was granted to '+successor.username+', but your own account could not be stepped down ('+e.message+'). There are two owners right now — either of you can fix it from the Users tab.');
   }
@@ -602,7 +619,7 @@ async function dbClaimOwnership(actor, users){
   if(!hasAdminPowers(actor&&actor.role)) throw new Error('Only an admin can claim ownership.');
   const existing=findOwner(users);
   if(existing) throw new Error('This app already has an owner ('+existing.username+'). Only they can transfer it.');
-  await dbUpdateUser(actor.id,{role:ROLE_OWNER});
+  await dbUpdateUser(actor.id,{role:ROLE_OWNER},{_ownership:true});
   return actor.username;
 }
 
@@ -664,9 +681,26 @@ const bulkMode = {
     if (h) return h + 'h ' + mm + 'm';
     return mm + ' min';
   },
+  /* How long the window has been open. A week-long window is a real need, but
+     it is also long enough to forget about, and "6d 4h left" reads like
+     something with plenty of time rather than something running unattended
+     since Monday. `since` is optional -- a window opened before this shipped
+     simply reports nothing rather than a wrong age. */
+  openedAt() { const v = bulkMode.get(); const t = v && Number(v.since); return isFinite(t) && t > 0 ? t : 0; },
+  /* Clamped at 0: a `since` in the future (a clock change, or an edited entry)
+     would otherwise report "-1 days", which looks like a bug sitting next to a
+     destructive setting. No age is better than a wrong one. */
+  openHours() { const t = bulkMode.openedAt(); return t ? Math.max(0, Math.floor((Date.now() - t) / 3600000)) : 0; },
+  isStale() { return bulkMode.openHours() >= 24; },
+  openForText() {
+    const h = bulkMode.openHours();
+    if (!h) return '';
+    const d = Math.floor(h / 24);
+    return d ? d + ' day' + (d === 1 ? '' : 's') : h + ' hour' + (h === 1 ? '' : 's');
+  },
   enable(minutes, by) {
     const mins = Math.min(BULK_MAX_MINUTES, Math.max(1, Number(minutes) || 60));
-    try { localStorage.setItem('shic:bulk', JSON.stringify({ until: Date.now() + mins * 60000, by: by || '' })); } catch (_e) {}
+    try { localStorage.setItem('shic:bulk', JSON.stringify({ until: Date.now() + mins * 60000, by: by || '', since: Date.now() })); } catch (_e) {}
     try { window.dispatchEvent(new Event('shic:bulk:changed')); } catch (_e) {}
     return mins;
   },

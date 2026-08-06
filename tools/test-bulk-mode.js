@@ -103,5 +103,36 @@ ck('the dialog warns that someone else\'s CE can be overwritten', /including one
 ck('long windows get an extra warning', /That is a long window/.test(ap));
 ck('the window is recorded in the audit log with its end time', /bulk_mode_on[\s\S]{0,120}until /.test(ap));
 
+/* A week-long window is a real need and also long enough to forget about.
+   "5d 2h left" reads like there is time to spare; how long it has ALREADY been
+   open is the number that tells you it is running unattended. */
+console.log('\na window left open is called out:');
+bulkMode.disable();
+bulkMode.enable(10080, 'admin');
+ck('a window opened just now is not stale', bulkMode.isStale() === false);
+ck('and reports no age yet', bulkMode.openForText() === '');
+const reopen = (hoursAgo, minsLeft) => {
+  store['shic:bulk'] = JSON.stringify({ until: Date.now() + (minsLeft || 4000) * 60000, by: 'admin', since: Date.now() - hoursAgo * 3600000 });
+};
+reopen(23);
+ck('23 hours in is not yet stale', bulkMode.isStale() === false, bulkMode.openHours());
+reopen(24);
+ck('a full day is', bulkMode.isStale() === true);
+ck('and says so in days', bulkMode.openForText() === '1 day', bulkMode.openForText());
+reopen(24 * 5 + 3);
+ck('five days reads as days, not hours', bulkMode.openForText() === '5 days', bulkMode.openForText());
+/* A window enabled before `since` shipped has no age to report. Guessing one
+   would put a confident wrong number next to a destructive setting. */
+store['shic:bulk'] = JSON.stringify({ until: Date.now() + 3600000, by: 'admin' });
+ck('a window from before this shipped still works', bulkMode.on('admin') === true);
+ck('and reports no age rather than a wrong one', bulkMode.openForText() === '' && bulkMode.isStale() === false);
+ck('a corrupted `since` is ignored, not trusted',
+  (() => { store['shic:bulk'] = JSON.stringify({ until: Date.now() + 3600000, by: 'admin', since: 'yesterday' }); return bulkMode.openForText() === '' && bulkMode.on('admin') === true; })());
+ck('a `since` in the future does not report a negative age',
+  (() => { reopen(-5); return bulkMode.openHours() <= 0 && bulkMode.openForText() === ''; })(), bulkMode.openForText());
+ck('the banner shows the age once it is stale', /bulkMode\.isStale\(\)[\s\S]{0,200}bulkMode\.openForText\(\)/.test(app),
+  'the warning has to be where the person saving CEs will see it');
+ck('the admin panel shows it too', /bulkMode\.isStale\(\) \? ", open for "/.test(ap));
+
 console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nall bulkMode assertions passed');
 process.exit(fails ? 1 : 0);

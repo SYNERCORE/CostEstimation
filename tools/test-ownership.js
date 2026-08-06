@@ -211,6 +211,53 @@ for (const change of ['role', 'status', 'delete', 'password', 'email'])
   ck('allows a normal https link', safe('https://example.com/app.zip') === 'https://example.com/app.zip');
   ck('allows a normal http link', safe('http://example.com/app.zip') === 'http://example.com/app.zip');
 
+  /* Until now only the Admin panel asked canManageUser, so any OTHER code path
+     that wrote a role went straight through -- which is exactly how
+     LocalToSPSync came to PATCH shicRole from an editable local cache. The
+     guard inside dbUpdateUser catches that class of mistake at the write.
+
+     It is a guard against wrong code, not a security boundary: the console can
+     pass `_ownership` as easily as the real callers can. The boundary is
+     SharePoint's Users list permissions, as the module says. */
+  console.log('\nThe write itself refuses a role change it should not make:');
+  const uuSrc = (db.match(/async function dbUpdateUser\(id,data,opts\)\{[\s\S]*?\n\}/) || [''])[0];
+  ck('dbUpdateUser found with its opts argument', uuSrc.length > 0);
+  const cached = [{ id: 1, username: 'jhuniel', role: 'owner' }, { id: 2, username: 'delegate', role: 'admin' }];
+  const uctx = {
+    JSON, Object, Array, String, Number, Boolean, Promise, Error,
+    USE_SP: false, getSiteURL: () => '', spPatch: async () => {}, spList: n => n,
+    LS: { get: () => cached.map(u => ({ ...u })), set: () => {} },
+    isOwnerRole: E._isOwner
+  };
+  vm.createContext(uctx);
+  vm.runInContext(uuSrc + '\nglobalThis._uu=dbUpdateUser;', uctx);
+  const refused = async (label, id, data, opts) => {
+    let msg = '';
+    try { await uctx._uu(id, data, opts); } catch (e) { msg = e.message; }
+    return msg;
+  };
+  const results = await Promise.all([
+    refused('grant', 2, { role: 'owner' }),
+    refused('demote', 1, { role: 'admin' }),
+    refused('demote to user', 1, { role: 'user' }),
+    refused('normal promotion', 2, { role: 'admin' }),
+    refused('transfer grant', 2, { role: 'owner' }, { _ownership: true }),
+    refused('transfer step-down', 1, { role: 'admin' }, { _ownership: true }),
+    refused('unrelated field on the owner', 1, { email: 'a@b.c' })
+  ]);
+  ck('granting owner outside a transfer is refused', /transfer only/.test(results[0]), results[0]);
+  ck('demoting the owner is refused', /cannot be demoted/.test(results[1]), results[1]);
+  ck('...to any role, not just admin', /cannot be demoted/.test(results[2]), results[2]);
+  ck('an ordinary promotion still works', results[3] === '', results[3]);
+  ck('the real transfer is allowed through', results[4] === '', results[4]);
+  ck('and so is the owner stepping down as part of it', results[5] === '', results[5]);
+  ck('non-role edits to the owner are untouched by this guard', results[6] === '', results[6]);
+  ck('the guard is honest about what it is', /NOT a security boundary/.test(db),
+    'claiming more than it delivers is worse than the gap');
+  ck('the two ownership functions pass the flag',
+    (db.match(/\{_ownership:true\}/g) || []).length === 3,
+    'a missing flag would break transfer entirely');
+
   console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nall ownership assertions passed');
   process.exit(fails ? 1 : 0);
 })();

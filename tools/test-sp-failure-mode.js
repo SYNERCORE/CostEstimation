@@ -177,6 +177,49 @@ function runSpGet(opts) {
     /Password NOT changed/.test(rd('src/components/ChangePasswordModal.js')));
   ck('registration says it needs a connection', /cannot be queued offline/.test(rd('src/components/RegisterPage.js')));
 
+  /* Saving a CE issues dozens of spWithRetry calls in batches of five. Offline,
+     every one of them used to burn a 1s then a 2s sleep on attempts that could
+     not succeed, so the user waited roughly half a minute to be told the work
+     had been stored locally -- which was already decided by the first failure. */
+  /* The OneDrive scanner reports failures by writing the caught message into
+     innerHTML. That message can carry a file or folder name someone else chose,
+     so it has to be escaped like any other borrowed text. */
+  console.log('\nA failure message shown to the user is escaped:');
+  const ml = rd('src/ml_utils.js');
+  ck('the scan error is escaped', /_esc\(e\.message\)/.test(ml));
+  ck('no raw message reaches innerHTML', !/innerHTML=[^;\n]*\+e\.message/.test(ml),
+    'a OneDrive file name is not our text');
+
+  console.log('\nOffline writes fail fast instead of sleeping through a backoff:');
+  const retrySrc = (rd('src/auth.js').match(/async function spWithRetry\(fn, attempts = 3\) \{[\s\S]*?\n\}/) || [''])[0];
+  ck('spWithRetry found', retrySrc.length > 0);
+  const runRetry = async (online, failures) => {
+    let calls = 0, slept = 0;
+    const ctx = {
+      navigator: { onLine: online }, Promise, Error, Math,
+      setTimeout: (fn, ms) => { slept += ms; fn(); }
+    };
+    vm.createContext(ctx);
+    vm.runInContext(retrySrc + '\nglobalThis._r=spWithRetry;', ctx);
+    let threw = false;
+    try {
+      await ctx._r(async () => { calls++; if (calls <= failures) throw new Error('network'); return 'ok'; });
+    } catch (_e) { threw = true; }
+    return { calls, slept, threw };
+  };
+  const off = await runRetry(false, 9);
+  ck('offline, it tries once', off.calls === 1, off.calls);
+  ck('offline, it never sleeps', off.slept === 0, off.slept + 'ms');
+  ck('offline, the caller still gets the error', off.threw === true,
+    'swallowing it would hide the failure from the local-save path');
+  const on = await runRetry(true, 9);
+  ck('online, all three attempts still happen', on.calls === 3, on.calls);
+  ck('online, the backoff is still 1s then 2s', on.slept === 3000, on.slept + 'ms');
+  const flaky = await runRetry(true, 1);
+  ck('a transient failure still recovers on the second try', flaky.calls === 2 && !flaky.threw, flaky.calls);
+  const unknown = await runRetry(undefined, 9);
+  ck('an environment with no navigator.onLine keeps retrying', unknown.calls === 3, unknown.calls);
+
   console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nall SharePoint-failure-mode assertions passed');
   process.exit(fails ? 1 : 0);
 })();

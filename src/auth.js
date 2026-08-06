@@ -27,6 +27,12 @@ async function spWithRetry(fn, attempts = 3) {
   for (let i = 0; i < attempts; i++) {
     try { return await fn(); } catch (e) {
       last = e;
+      /* Offline, the retry cannot succeed and each round costs the caller a 1s
+         then a 2s wait. Saving a CE issues dozens of these in batches of five,
+         so the user sat through half a minute of backoff before being told the
+         work had been stored locally -- which was decided the moment the first
+         call failed. Give up now and let the local path take over. */
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) break;
       if (i < attempts - 1) await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)));
     }
   }

@@ -2174,9 +2174,7 @@ function App({
         },
         value: r.uom || 'Day',
         onChange: e => updML(r.id, 'uom', e.target.value)
-      }, ['Day', 'Lot', 'Pcs', 'Set', 'Unit', 'M', 'Kg', 'L', 'Box', 'Pack', 'Roll', 'Pair'].map(u => /*#__PURE__*/React.createElement("option", {
-        key: u
-      }, u)))), /*#__PURE__*/React.createElement("td", {
+      }, uomOptionEls(r.uom || 'Day'))), /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, /*#__PURE__*/React.createElement("button", {
         onClick: () => delML(r.id),
@@ -3742,7 +3740,6 @@ function App({
       showToast('Library reset to defaults.');
     };
     const allCats = [...new Set(sowLib.map(s => s.cat))].sort();
-    const uomOpts = ['Day', 'Lot', 'Pcs', 'Set', 'Unit', 'M', 'Kg', 'L', 'Box', 'Pack', 'Roll', 'Pair'];
 
     /* Resource table for one type (mp/tools/mats/ppe) */
     const ResEditor = ({
@@ -3904,9 +3901,7 @@ function App({
         },
         value: r.uom || 'Day',
         onChange: e => upd(r.id, 'uom', e.target.value)
-      }, uomOpts.map(u => /*#__PURE__*/React.createElement("option", {
-        key: u
-      }, u)))), /*#__PURE__*/React.createElement("td", {
+      }, uomOptionEls(r.uom || 'Day'))), /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, /*#__PURE__*/React.createElement("button", {
         onClick: () => del(r.id),
@@ -5807,7 +5802,7 @@ function App({
 
 /* ── SOW Breakdown: assign resources per scope task ── */
 tab === 'sowbreak' && (() => {
-  const UOMS = ['Lot', 'Pcs', 'Set', 'Unit', 'M', 'Kg', 'L', 'Box', 'Pack', 'Roll', 'Pair', 'Day'];
+  const UOMS = UOM_OPTIONS;
   const named = t => t.rows.filter(r => r[t.nameKey]);
   const _miscNamed = miscFlat().filter(r => r.desc);
   /* A row counts as unassigned if it has no task OR points at a task that no
@@ -8064,9 +8059,7 @@ tab === 'dashboard' && (() => {
         },
         value: r.uom || 'Lot',
         onChange: e => updItem(r.id, 'uom', e.target.value)
-      }, ['Lot', 'Pcs', 'Set', 'Unit', 'Day', 'M', 'Kg', 'L', 'Box', 'Pack', 'Roll', 'Pair'].map(u => /*#__PURE__*/React.createElement("option", {
-        key: u
-      }, u)))), /*#__PURE__*/React.createElement("td", {
+      }, uomOptionEls(r.uom || 'Lot'))), /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, /*#__PURE__*/React.createElement("input", {
         style: {

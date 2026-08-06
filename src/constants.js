@@ -76,3 +76,44 @@ const LBL = {
   textTransform: "uppercase",
   letterSpacing: "0.06em"
 };
+
+/* ── Units of measure ────────────────────────────────────────────────────────
+   One list, used by every UOM control. There were five near-identical copies of
+   a twelve-item list across App.js and ResTab.js, in three different orders, so
+   adding a unit meant finding all five and the Materials tab could offer
+   something the Masterlist could not.
+
+   Grouped because a flat list this long is hard to scan; the groups render as
+   <optgroup> in a select and are flattened for the free-text datalist.        */
+const UOM_GROUPS = [
+  ['Count',     ['Pcs', 'Unit', 'Set', 'Lot', 'Pair', 'Dozen', 'Assy', 'Kit', 'Bundle',
+                 'Sheet', 'Plate', 'Bar', 'Rod', 'Length', 'Joint', 'Roll', 'Coil', 'Spool', 'Ream']],
+  ['Container', ['Box', 'Carton', 'Case', 'Pack', 'Bag', 'Sack', 'Can', 'Gallon', 'Pail',
+                 'Drum', 'Tank', 'Bottle', 'Jar', 'Tube', 'Cartridge', 'Cylinder', 'Sachet']],
+  ['Length',    ['mm', 'cm', 'M', 'Km', 'Inch', 'Ft', 'Yard', 'L.M.']],
+  ['Area',      ['sq.mm', 'sq.m', 'sq.ft']],
+  ['Volume',    ['mL', 'L', 'cu.m', 'cu.ft']],
+  ['Weight',    ['g', 'Kg', 'Ton', 'lb']],
+  ['Time',      ['Hour', 'Shift', 'Day', 'Week', 'Month', 'Man-day', 'Trip']]
+];
+const UOM_OPTIONS = UOM_GROUPS.reduce((all, g) => all.concat(g[1]), []);
+
+/* Renders the grouped <option>s for a select.
+
+   `current` is the value already on the row. Saved CEs and xlsx imports carry
+   whatever UOM the source used ("SET/S", "pc", "LM"), and a select with no
+   matching option displays the first one instead — misrepresenting the saved
+   row, and rewriting it for real the moment anyone touches the control. An
+   unrecognised value is therefore kept and offered at the top rather than
+   quietly dropped. */
+function uomOptionEls(current) {
+  const cur = String(current == null ? '' : current).trim();
+  const known = cur && UOM_OPTIONS.some(u => u.toLowerCase() === cur.toLowerCase());
+  const groups = UOM_GROUPS.map(g => React.createElement('optgroup', { key: g[0], label: g[0] },
+    g[1].map(u => React.createElement('option', { key: u, value: u }, u))));
+  if (cur && !known) {
+    groups.unshift(React.createElement('optgroup', { key: '_cur', label: 'From this record' },
+      React.createElement('option', { key: cur, value: cur }, cur)));
+  }
+  return groups;
+}

@@ -36,6 +36,8 @@ jobs:
         run: node tools/test-ownership.js
       - name: Audit entries written offline survive and upload
         run: node tools/test-audit-sync.js
+      - name: Units of measure are shared and preserve imported values
+        run: node tools/test-uom.js
       - name: Every tab renders something
         run: node tools/check-tab-coverage.js
       - name: Bulk upload mode expires and fails closed

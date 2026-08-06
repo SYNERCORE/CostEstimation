@@ -182,9 +182,7 @@ const ResTab = ({
       ...x,
       uom: e.target.value
     } : x))
-  }, ['Lot', 'Pcs', 'Set', 'Unit', 'M', 'Kg', 'L', 'Box', 'Pack', 'Roll', 'Pair', 'Day'].map(u => /*#__PURE__*/React.createElement("option", {
-    key: u
-  }, u)))), /*#__PURE__*/React.createElement("td", {
+  }, uomOptionEls(r.uom))), /*#__PURE__*/React.createElement("td", {
     style: TDS
   }, /*#__PURE__*/React.createElement("input", {
     style: {

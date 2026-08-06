@@ -46,6 +46,8 @@ jobs:
         run: node tools/test-taskid-remap.js src/App.js
       - name: SOW Breakdown - row cost formulas
         run: node tools/test-row-cost.js src/App.js
+      - name: SOW Breakdown - parent roll-up and breakdown notes
+        run: node tools/test-sow-rollup.js src/App.js
       - name: Check CE - pre-flight rules
         run: node tools/test-preflight.js src/App.js
       - name: Saved-total recompute agrees with the editor

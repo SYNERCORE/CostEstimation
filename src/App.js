@@ -637,6 +637,12 @@ function App({
     for (let j = i + 1; j < list.length && list[j].type === 'sub'; j++) ids.push(list[j].id);
     return ids;
   };
+  /* A main task's own resources are usually only part of the story -- the work
+     is costed on its sub-tasks. Rolled-up figures let the parent card answer
+     "what does this whole scope step cost?" without expanding it. For a
+     sub-task (or a main task with no subs) the roll-up is just its own. */
+  const taskCostRollup = item => sowTaskGroup(item).reduce((s, id) => s + taskCost(id), 0);
+  const taskResCountRollup = item => sowTaskGroup(item).reduce((s, id) => s + taskResCount(id), 0);
   const sowUnassignedCount = (() => {
     const valid = new Set((sowItems || []).map(s => s.id));
     const bad = r => !r.taskId || !valid.has(r.taskId);
@@ -4766,7 +4772,10 @@ function App({
       ${hlRows.length ? hlRows.map(r=>`<tr class="tot"><td colspan="2" class="b r">${esc(hlLabel(r).toUpperCase())}:</td><td class="r b">${fmt(hlAmt(r))}</td></tr>`).join('') : ''}
     </table>`;
 
-    const notesList = notes.length ? `<div style="margin-top:4px"><b>NOTE:</b><ol style="margin:1px 0 0 14px;padding:0;font-size:7.5pt">${notes.map(n=>`<li>${esc(n.text)}</li>`).join('')}</ol></div>` : '';
+    /* Breakdown notes written on the SOW Breakdown tab print with the CE notes,
+       after the manually written ones, each labelled with its scope number. */
+    const sowNotes = (sowItems || []).filter(s => String(s.note || '').trim());
+    const notesList = (notes.length || sowNotes.length) ? `<div style="margin-top:4px"><b>NOTE:</b><ol style="margin:1px 0 0 14px;padding:0;font-size:7.5pt">${notes.map(n=>`<li>${esc(n.text)}</li>`).join('')}${sowNotes.map(s=>`<li><b>Scope ${esc(sowLabels[s.id]||'')}</b> &#8212; ${esc(String(s.note).trim())}</li>`).join('')}</ol></div>` : '';
     const sigBlock = `<table style="width:100%;border-collapse:collapse;margin-top:20px;table-layout:fixed" class="sig">
       <tr>${approvers.map(a=>`<td style="border:1px solid #000;padding:4px 8px;font-size:8pt;font-weight:bold;vertical-align:top"><b>${esc(a.role)}:</b></td>`).join('')}</tr>
       <tr>${approvers.map((a,i)=>{const sigImg=signatures[a.id||i]?`<img src="${signatures[a.id||i]}" style="height:36px;max-width:100%;display:block;margin:0 auto 2px"/>`:'';return`<td style="border:1px solid #000;padding:4px 8px;vertical-align:bottom"><div style="min-height:46px;text-align:center">${sigImg}</div><div style="border-top:1px solid #000;padding-top:3px;text-align:center"><b style="font-size:8pt">${esc(a.name||'')}</b><br><span style="font-size:7.5pt">${esc(a.title||a.role||'')}</span></div></td>`;}).join('')}</tr>
@@ -6077,11 +6086,15 @@ tab === 'sowbreak' && (() => {
     (sowItems || []).map(it => {
       const n = taskResCount(it.id);
       const cost = taskCost(it.id);
+      const grp = sowTaskGroup(it);
+      const hasSubs = grp.length > 1;
+      const rollN = hasSubs ? taskResCountRollup(it) : n;
+      const rollCost = hasSubs ? taskCostRollup(it) : cost;
       const open = !sbCollapsed[it.id];
       const others = (sowItems || []).filter(o => o.id !== it.id && taskResCount(o.id) > 0);
       return /*#__PURE__*/React.createElement("div", {
         key: it.id,
-        style: { ...CS, marginBottom: 8, borderColor: n ? OK + '33' : BDR, marginLeft: it.type === 'sub' ? 18 : 0, padding: open ? undefined : '8px 12px' }
+        style: { ...CS, marginBottom: 8, borderColor: rollN ? OK + '33' : BDR, marginLeft: it.type === 'sub' ? 18 : 0, padding: open ? undefined : '8px 12px' }
       },
         /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: open ? 8 : 0 } },
           /*#__PURE__*/React.createElement("button", {
@@ -6095,10 +6108,18 @@ tab === 'sowbreak' && (() => {
             onClick: () => setSbCollapsed(p => ({ ...p, [it.id]: open }))
           }, it.text || /*#__PURE__*/React.createElement("i", { style: { color: MT } }, "(untitled task)")),
           /*#__PURE__*/React.createElement("span", { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 } },
-            cost > 0 && /*#__PURE__*/React.createElement("span", { style: { ...MONO, fontSize: 11, fontWeight: 700, color: ACC }, title: "Total cost of the resources assigned to this task" }, "₱" + ph(cost)),
+            /* Collapsed cards hide the note, so flag that one exists. */
+            String(it.note || '').trim() && /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: INFO }, title: String(it.note).trim() }, "📝"),
+            rollCost > 0 && /*#__PURE__*/React.createElement("span", { style: { ...MONO, fontSize: 11, fontWeight: 700, color: ACC },
+              title: hasSubs ? "Total cost of this task and its " + (grp.length - 1) + " sub-task" + (grp.length === 2 ? '' : 's')
+                             : "Total cost of the resources assigned to this task" }, "₱" + ph(rollCost)),
+            /* When a parent carries resources of its own, show them separately so
+               the rolled-up figure above is never mistaken for its own line items. */
+            hasSubs && cost > 0 && /*#__PURE__*/React.createElement("span", { style: { ...MONO, fontSize: 10, color: MT }, title: "Charged directly to this task, before its sub-tasks" }, "(own ₱" + ph(cost) + ")"),
             /*#__PURE__*/React.createElement("span", {
-              style: { fontSize: 10, color: n ? OK : MT, background: (n ? OK : MT) + '18', borderRadius: 8, padding: '1px 7px', whiteSpace: 'nowrap' }
-            }, n ? n + " resource" + (n === 1 ? '' : 's') : "no resources"),
+              style: { fontSize: 10, color: rollN ? OK : MT, background: (rollN ? OK : MT) + '18', borderRadius: 8, padding: '1px 7px', whiteSpace: 'nowrap' },
+              title: hasSubs ? "Resource rows on this task and its sub-tasks" : undefined
+            }, rollN ? rollN + " resource" + (rollN === 1 ? '' : 's') + (hasSubs ? " incl. sub-tasks" : '') : "no resources"),
             open && others.length > 0 && /*#__PURE__*/React.createElement("select", {
               style: { ...INP, width: 132, fontSize: 10, padding: '2px 4px' }, value: '',
               title: "Copy all resources from another task into this one",
@@ -6111,7 +6132,23 @@ tab === 'sowbreak' && (() => {
         ),
         open && RES_TABS.map(t => group(t, it.id)),
         open && miscGroup(it.id),
-        open && addLine(it.id)
+        open && addLine(it.id),
+
+        /* Why this task is broken down the way it is. Kept on the scope item
+           itself so it travels with the task -- copy, reorder and delete all
+           carry it -- and printed with the CE notes so the reviewer sees the
+           reasoning next to the number it explains. */
+        open && /*#__PURE__*/React.createElement("div", { style: { marginTop: 10, borderTop: `1px solid ${BDR}`, paddingTop: 8 } },
+          /*#__PURE__*/React.createElement("div", { style: { ...LBL, marginBottom: 4 } }, "Breakdown note"),
+          /*#__PURE__*/React.createElement("textarea", {
+            style: { ...INP, height: 46, resize: 'vertical', fontSize: 11.5 },
+            value: it.note || '',
+            placeholder: "How this task was costed — assumptions, crew mix, why the quantities are what they are...",
+            onChange: e => { const v = e.target.value; setSowItems(p => p.map(s => s.id === it.id ? { ...s, note: v } : s)); }
+          }),
+          /*#__PURE__*/React.createElement("div", { style: { color: MT, fontSize: 10, marginTop: 3 } },
+            "Appears in Notes / Remarks and on the printed CE, labelled ", /*#__PURE__*/React.createElement("b", null, "Scope " + (sowLabels[it.id] || '')), ".")
+        )
       );
     }),
 
@@ -8930,7 +8967,30 @@ tab === 'dashboard' && (() => {
       ...n,
       seq: i + 1
     })))
-  }, "x"))))), /*#__PURE__*/React.createElement("div", {
+  }, "x"))))),
+
+  /* Breakdown notes live on the scope items, so they are shown here read-only
+     rather than copied -- one place to edit, and no chance of the two drifting.
+     They print with the notes above. */
+  (() => {
+    const sn = (sowItems || []).filter(s => String(s.note || '').trim());
+    if (!sn.length) return null;
+    return /*#__PURE__*/React.createElement("div", { style: { ...CS, borderColor: INFO + '44' } },
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' } },
+        /*#__PURE__*/React.createElement("span", { style: { fontWeight: 700, fontSize: 12 } }, "From the SOW Breakdown"),
+        /*#__PURE__*/React.createElement("span", { style: { color: MT, fontSize: 11 } }, sn.length + " breakdown note" + (sn.length === 1 ? '' : 's') + " — these print with the notes above"),
+        /*#__PURE__*/React.createElement("button", { style: { ...btn('def', true), marginLeft: 'auto' }, onClick: () => setTab('sowbreak') }, "Edit in SOW Breakdown")
+      ),
+      sn.map(s => /*#__PURE__*/React.createElement("div", { key: s.id, style: { display: 'flex', gap: 8, marginBottom: 6, alignItems: 'flex-start' } },
+        /*#__PURE__*/React.createElement("span", { style: { ...MONO, color: ACC, fontWeight: 700, fontSize: 11, minWidth: 34, paddingTop: 1 } }, sowLabels[s.id] || ''),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11.5, whiteSpace: 'pre-wrap', flex: 1 } },
+          /*#__PURE__*/React.createElement("div", { style: { color: MT, fontSize: 10, marginBottom: 1 } }, s.text || '(untitled task)'),
+          String(s.note).trim())
+      ))
+    );
+  })(),
+
+  /*#__PURE__*/React.createElement("div", {
     style: CS
   }, /*#__PURE__*/React.createElement("div", {
     style: {

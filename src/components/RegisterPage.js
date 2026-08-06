@@ -388,7 +388,14 @@ async function autoSetupSP(progressCb){
   const lists={
     [spList('Users')]:    [[2,'shicName'],[3,'shicHash'],[2,'shicRole'],[2,'shicStatus'],[2,'shicEmail']],
     [spList('CEs')]:      [[2,'shicType'],[2,'shicClient'],[3,'shicDesc'],[9,'shicTotal'],[2,'shicSavedBy'],[2,'shicSavedAt'],[3,'shicScope'],[3,'shicNotes'],[3,'shicApprovers'],[3,'shicMob'],[3,'shicDemob'],[3,'shicMisc'],[3,'shicSOW']],
-    [spList('CE_MP')]:    [[9,'shicCEId'],[2,'shicRole'],[9,'shicRate'],[2,'shicShift'],[9,'shicDays'],[9,'shicQty'],[2,'shicTaskId']],
+    /* shicPax / shicOTHours / shicPerDiem were added to the manpower payload
+       long before they were added here, so no site had the columns and EVERY
+       CE_MP insert came back 400 InvalidClientQueryException. The CE header had
+       already been written by then, leaving SharePoint holding a CE with a
+       total and no manpower behind it. tools/check-sp-schema.js now fails the
+       build if a payload and this list ever drift apart again.
+       shicQty stays: rows written before shicPax existed keep their pax there. */
+    [spList('CE_MP')]:    [[9,'shicCEId'],[2,'shicRole'],[9,'shicRate'],[2,'shicShift'],[9,'shicDays'],[9,'shicQty'],[9,'shicPax'],[9,'shicOTHours'],[9,'shicPerDiem'],[2,'shicTaskId']],
     [spList('CE_Resources')]:[[9,'shicCEId'],[2,'shicTab'],[2,'shicDesc'],[9,'shicQty'],[2,'shicUOM'],[9,'shicCost'],[9,'shicDays'],[2,'shicTaskId']],
     [spList('CE_Documents')]:[[9,'shicCEId'],[2,'shicFileName'],[2,'shicFileType'],[3,'shicFileData']],
     [spList('Monitoring')]:  [[9,'shicCEId'],[3,'shicMonData']],
@@ -396,7 +403,10 @@ async function autoSetupSP(progressCb){
     [spList('SowLib')]:      [[3,'shicData']],
     [spList('Companies')]:   [[3,'shicData']],
     [spList('Drafts')]:      [[2,'shicSavedBy'],[3,'shicData']],
-    [spList('AuditLog')]:   [[2,'shicAction'],[3,'shicDetail'],[2,'shicUser'],[2,'shicTs']]
+    [spList('AuditLog')]:   [[2,'shicAction'],[3,'shicDetail'],[2,'shicUser'],[2,'shicTs']],
+    /* The document-analysis feature has been reading and writing this list
+       since it shipped, on a site where nothing ever created it. */
+    [spList('ML_Imports')]: [[3,'shicData']]
   };
 
   const names=Object.keys(lists);

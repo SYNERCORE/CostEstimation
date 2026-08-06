@@ -75,6 +75,50 @@ check('night shift multiplier applies', cNight > c1, c1 + ' -> ' + cNight);
 check('zero pax costs nothing', api.rowCost('mp', { ...base, pax: 0 }) === 0, api.rowCost('mp', { ...base, pax: 0 }));
 check('no NaN on empty manpower row', Number.isFinite(api.rowCost('mp', {})), api.rowCost('mp', {}));
 
+/* OT hours are entered PER DAY, matching the OT HRS column on the company's own
+   manpower sheet. They used to be treated as a total for the whole engagement,
+   so "3" on a ten-day job charged three hours, not thirty, and every CE with
+   overtime was undercharged by a factor of the day count. */
+console.log('\novertime is per day, not per engagement:');
+const ot3 = { ...base, pax: 1, days: 1, rate: 800, otHours: 3 };
+const otCost = d => api.rowCost('mp', { ...ot3, days: d }) - api.rowCost('mp', { ...ot3, days: d, otHours: 0 });
+const ot1d = otCost(1), ot10d = otCost(10);
+/* 1 pax x 3 hrs x (800/8) x 1.25 = 375 for one day. */
+check('one day of 3 OT hours costs 375', Math.abs(ot1d - 375) < 0.01, ot1d);
+check('ten days of the same 3 hrs costs ten times that', Math.abs(ot10d - 3750) < 0.01, ot10d);
+check('OT scales with the day count', Math.abs(ot10d - 10 * ot1d) < 0.01, ot1d + ' -> ' + ot10d);
+check('OT still scales with pax', Math.abs(otCost(1) * 2 - (api.rowCost('mp', { ...ot3, pax: 2 }) - api.rowCost('mp', { ...ot3, pax: 2, otHours: 0 }))) < 0.01);
+check('no OT hours costs no OT', otCost(5) > 0 && api.rowCost('mp', { ...ot3, days: 5, otHours: 0 }) > 0);
+/* The shift multiplier applies to overtime as well as regular pay. */
+const otNight = api.rowCost('mp', { ...ot3, shift: 'night' }) - api.rowCost('mp', { ...ot3, shift: 'night', otHours: 0 });
+check('the shift multiplier still applies to OT', Math.abs(otNight - 375 * 1.25) < 0.01, otNight);
+
+/* Overtime is costed in seven places -- the editor, the SOW breakdown, the
+   grand total, the CE comparison, the printed CE, the Excel export and the row
+   badge. Any one of them left on the old meaning would disagree with the other
+   six, and the disagreement would only show up as a number nobody could
+   reconcile. Every OT expression must carry a day factor. */
+console.log('\nevery OT formula in the codebase agrees:');
+const path2 = require('path');
+const otSites = [];
+/* `src` is the file this suite was handed on the command line -- reading
+   src/App.js by name here would test the repo instead of the argument, and a
+   mutation test would silently pass. */
+const sources = [['(source under test)', src],
+                 ['src/helpers.js', require('fs').readFileSync(path2.join(__dirname, '..', 'src/helpers.js'), 'utf8')]];
+for (const [f, text] of sources) {
+  for (const line of text.split('\n')) {
+    if (!/otHours/.test(line) || !/1\.25/.test(line)) continue;
+    /* Split a line that costs several rows into its individual OT terms. */
+    for (const term of line.match(/[^;{}]*otHours[^;{}]*?1\.25[^;{}]*/g) || [])
+      otSites.push({ f, term: term.trim() });
+  }
+}
+check('found every OT cost site', otSites.length >= 7, otSites.length);
+for (const s of otSites)
+  check(s.f + ': ' + s.term.slice(-58), /days/.test(s.term),
+    'this one still treats OT as a total for the whole engagement');
+
 console.log('\nblank starter row must be free (calcBen SIL adds pax*30):');
 /* mkMP() defaults pax:1, days:1, rate:0 -- with no role this is an empty row the
    user has not filled in. It previously cost P30, so every new CE opened showing

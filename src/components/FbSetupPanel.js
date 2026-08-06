@@ -40,6 +40,20 @@
     }
     setBusy(false);
   };
+  const handleRepair=async()=>{
+    setBusy(true);setProgress(null);
+    try{
+      const result=await autoSetupSP(p=>{setProgress(p);if(p.step!=='done')addLog(p.msg);});
+      addLog(result.added
+        ? 'Repair done: '+result.added+' column(s) added'+(result.created?', '+result.created+' list(s) created':'')+'. Re-save any CE that failed.'
+        : 'Repair done: nothing was missing.');
+      if(result.errors&&result.errors.length){
+        addLog('⚠ '+result.errors.length+' problem(s) — see below:');
+        result.errors.slice(0,6).forEach(e=>addLog('   '+e));
+      }
+    }catch(e){addLog('Repair failed: '+e.message.slice(0,120));}
+    setProgress(null);setBusy(false);
+  };
   React.useEffect(()=>{
     const saved=getSPConfig();
     if(saved.siteUrl&&saved.clientId)handleConnect();
@@ -61,7 +75,12 @@
       React.createElement('b',{style:{color:TX}},'Lists: '),pfx+'_Users | '+pfx+'_CEs | '+pfx+'_CE_MP | '+pfx+'_CE_Resources | '+pfx+'_Masterlist | '+pfx+'_Drafts'
     ),
     React.createElement('div',{style:{display:'flex',gap:8}},
-      status!=='connected'?React.createElement('button',{style:btn('acc'),disabled:busy||!cfg.siteUrl,onClick:handleConnect},busy?'Working...':'Connect & Auto-Setup'):React.createElement('button',{style:btn('danger'),onClick:()=>{_spToken=null;setStatus('idle');}},'Disconnect')
+      status!=='connected'?React.createElement('button',{style:btn('acc'),disabled:busy||!cfg.siteUrl,onClick:handleConnect},busy?'Working...':'Connect & Auto-Setup'):React.createElement('button',{style:btn('danger'),onClick:()=>{_spToken=null;setStatus('idle');}},'Disconnect'),
+      /* Once connected, the only button used to be Disconnect -- so a site set
+         up by an older version had no way to receive a column added since,
+         short of disconnecting and reconnecting. autoSetupSP only ever adds
+         what is missing, so running it again is safe at any time. */
+      status==='connected'&&React.createElement('button',{style:btn('info'),disabled:busy,title:'Adds any list or column this version needs and the site does not have. Existing data is never touched.',onClick:handleRepair},busy?'Working...':'Repair lists & columns')
     ),
     progress&&React.createElement('div',{style:{marginTop:8,padding:'8px 10px',background:SURF,borderRadius:6}},
       React.createElement('div',{style:{fontSize:11,color:TX,marginBottom:6}},progress.msg),

@@ -106,7 +106,7 @@ function ceMpRowCost(r) {
   const mult = (typeof SHIFTS !== 'undefined' && SHIFTS[r.shift] && SHIFTS[r.shift].mult) || 1;
   const pax = N(r.pax), days = N(r.days), rate = N(r.rate) * mult;
   const reg = pax * days * N(r.rate) * mult;
-  const ot = pax * (N(r.otHours || 0) / 8) * N(r.rate) * 1.25 * mult;
+  const ot = pax * days * (N(r.otHours || 0) / 8) * N(r.rate) * 1.25 * mult;
   const thirteenth = rate / 12 * days * pax;
   const sss = rate * 0.25 * 0.75 * days * pax / 26;
   const hdmf = rate * 0.16 * days * pax / 26 * 2;

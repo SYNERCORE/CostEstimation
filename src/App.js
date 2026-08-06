@@ -496,7 +496,7 @@ function App({
     if (!r.role) return s; /* blank starter row is not a cost */
     const mult = SHIFTS[r.shift]?.mult || 1;
     const reg = N(r.pax) * N(r.days) * N(r.rate) * mult;
-    const ot = N(r.pax) * (N(r.otHours || 0) / 8) * N(r.rate) * 1.25 * mult;
+    const ot = N(r.pax) * N(r.days) * (N(r.otHours || 0) / 8) * N(r.rate) * 1.25 * mult;
     return s + reg + ot;
   }, 0), [mp]);
   const calcBen = r => {
@@ -623,7 +623,7 @@ function App({
     if (!r.role) return 0; /* blank row: no role, no cost (calcBen SIL adds pax*30) */
     const mult = SHIFTS[r.shift]?.mult || 1;
     const reg = N(r.pax) * N(r.days) * N(r.rate) * mult;
-    const ot = N(r.pax) * (N(r.otHours || 0) / 8) * N(r.rate) * 1.25 * mult;
+    const ot = N(r.pax) * N(r.days) * (N(r.otHours || 0) / 8) * N(r.rate) * 1.25 * mult;
     return reg + ot + calcBen(r).total;
   };
   const taskCost = id => RES_TABS.reduce((s, t) => s + t.rows.filter(r => r.taskId === id).reduce((a, r) => a + rowCost(t.key, r), 0), 0)
@@ -2572,7 +2572,9 @@ function App({
             const daysCnt = Number(row[dI]) || 1;
             const rate = Number(row[wtI]) || 0;
             const otPerDay = Number(row[otI]) || 0;
-            mp.push({id:uid(), role, pax, days:daysCnt, otHours:otPerDay*daysCnt, shift, rate, perDiem:0});
+            /* The sheet's OT HRS column is per day, and so is otHours now -- it used to
+               be multiplied out to a total here. */
+            mp.push({id:uid(), role, pax, days:daysCnt, otHours:otPerDay, shift, rate, perDiem:0});
           }
           console.log('[CE Import] BOL →', mp.length, 'manpower rows');
           return mp;
@@ -3544,7 +3546,7 @@ function App({
     const ceB = b?.info?.ceNum || 'CE B';
     const calcSections = ce => {
       if (!ce) return {};
-      const mpT = (ce.mp||[]).reduce((s,r)=>s+N(r.pax)*N(r.days)*N(r.rate)*(SHIFTS[r.shift]?.mult||1)+N(r.pax)*N(r.otHours)*(N(r.rate)/8)*1.25+N(r.pax)*N(r.days)*N(r.perDiem),0);
+      const mpT = (ce.mp||[]).reduce((s,r)=>s+N(r.pax)*N(r.days)*N(r.rate)*(SHIFTS[r.shift]?.mult||1)+N(r.pax)*N(r.days)*N(r.otHours)*(N(r.rate)/8)*1.25+N(r.pax)*N(r.days)*N(r.perDiem),0);
       const toolT = (ce.tools||[]).reduce((s,r)=>s+N(r.qty)*resDays(r)*N(r.cost),0);
       const matT = (ce.mats||[]).reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
       const ppeT = (ce.ppe||[]).reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
@@ -4789,10 +4791,13 @@ function App({
       if(!rows.length)return'';
       const info2=SHIFTS[sk];const mult=info2?.mult||1;
       const subA=rows.reduce((s,r)=>s+N(r.pax)*N(r.days)*N(r.rate)*mult,0);
-      const subB=rows.reduce((s,r)=>s+N(r.pax)*(N(r.otHours)/8)*N(r.rate)*1.25*mult,0);
+      const subB=rows.reduce((s,r)=>s+N(r.pax)*N(r.days)*(N(r.otHours)/8)*N(r.rate)*1.25*mult,0);
       return`<div class="sub">${info2?.label||sk.toUpperCase()}</div>
       <table><tr style="background:#eee"><th class="c" style="width:28px">ITEM</th><th>MANPOWER LOADING</th><th class="c" style="width:28px">QTY</th><th class="c" style="width:30px">UOM</th><th class="c" style="width:36px">DAYS</th><th class="r" style="width:60px">RATE/DAY</th><th class="r" style="width:70px">SUBTOTAL</th><th class="c" style="width:30px">AOT</th><th class="r" style="width:55px">RATE OT</th><th class="r" style="width:70px">TOTAL</th></tr>
-      ${rows.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.role||'')}</td><td class="c">${esc(r.pax||1)}</td><td class="c">pax</td><td class="c">${esc(r.days||1)}</td><td class="r">${fmt(r.rate)}</td><td class="r">${fmt(N(r.pax)*N(r.days)*N(r.rate)*mult)}</td><td class="c">${esc(r.otHours||0)}</td><td class="r">${fmt(N(r.rate)/8*1.25*mult)}</td><td class="r b">${fmt(N(r.pax)*N(r.days)*N(r.rate)*mult+N(r.pax)*(N(r.otHours)/8)*N(r.rate)*1.25*mult)}</td></tr>`).join('')}
+      ${rows.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.role||'')}</td><td class="c">${esc(r.pax||1)}</td><td class="c">pax</td><td class="c">${esc(r.days||1)}</td><td class="r">${fmt(r.rate)}</td><td class="r">${fmt(N(r.pax)*N(r.days)*N(r.rate)*mult)}</td>${/* AOT is the ACCUMULATED overtime on the printed form: the reader multiplies
+      this column by RATE OT. otHours is now per day, so the total is what
+      belongs here -- printing the per-day figure would understate the row
+      against its own TOTAL column. */''}<td class="c">${esc(N(r.otHours)*N(r.days)||0)}</td><td class="r">${fmt(N(r.rate)/8*1.25*mult)}</td><td class="r b">${fmt(N(r.pax)*N(r.days)*N(r.rate)*mult+N(r.pax)*N(r.days)*(N(r.otHours)/8)*N(r.rate)*1.25*mult)}</td></tr>`).join('')}
       <tr class="tot"><td colspan="9" class="r b">SUB TOTAL:</td><td class="r b">${fmt(subA+subB)}</td></tr></table>`;
     }).join('');
 
@@ -4905,11 +4910,11 @@ function App({
     XLSX.utils.book_append_sheet(wb, aoa(sumRows), 'Summary');
     /* Manpower */
     if (mp.filter(r=>r.role||r.desc).length) {
-      const mpRows = [['Role','Pax','Days','OT Hours','Shift','Rate (₱/Day)','Per Diem (₱)','Total (₱)'],
+      const mpRows = [['Role','Pax','Days','OT Hrs/Day','Shift','Rate (₱/Day)','Per Diem (₱)','Total (₱)'],
         ...mp.filter(r=>r.role||r.desc).map(r=>{
           const sm=shiftMult[r.shift]||1;
           const base=N(r.pax)*N(r.days)*N(r.rate)*sm;
-          const ot=N(r.pax)*N(r.otHours)*(N(r.rate)/8)*1.25;
+          const ot=N(r.pax)*N(r.days)*N(r.otHours)*(N(r.rate)/8)*1.25;
           const pd=N(r.pax)*N(r.days)*N(r.perDiem);
           return[r.role||r.desc,N(r.pax),N(r.days),N(r.otHours),shiftLabel[r.shift]||r.shift,N(r.rate),N(r.perDiem),base+ot+pd];
         })];
@@ -7462,12 +7467,12 @@ tab === 'dashboard' && (() => {
         borderCollapse: 'collapse',
         fontSize: 12
       }
-    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Role / Position', 'PAX', 'Days', 'OT Hrs', 'Day Rate (P)', 'Row Total', ''].map(h => /*#__PURE__*/React.createElement("th", {
+    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Role / Position', 'PAX', 'Days', 'OT Hrs/Day', 'Day Rate (P)', 'Row Total', ''].map(h => /*#__PURE__*/React.createElement("th", {
       key: h,
       style: THS
     }, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map(r => {
       const regAmt = N(r.pax) * N(r.days) * N(r.rate) * shiftInfo.mult;
-      const otAmt = N(r.pax) * (N(r.otHours || 0) / 8) * N(r.rate) * 1.25 * shiftInfo.mult;
+      const otAmt = N(r.pax) * N(r.days) * (N(r.otHours || 0) / 8) * N(r.rate) * 1.25 * shiftInfo.mult;
       const tot = regAmt + otAmt;
       return /*#__PURE__*/React.createElement("tr", {
         key: r.id
@@ -7530,7 +7535,7 @@ tab === 'dashboard' && (() => {
         step: 0.5,
         value: r.otHours || 0,
         onChange: e => updRow(setMp, r.id, 'otHours', Math.max(0, parseFloat(e.target.value) || 0)),
-        title: "Overtime hours (1 day = 8 hrs, charged at 1.25x day rate)"
+        title: "Overtime hours PER DAY, charged at 1.25x the hourly rate (day rate / 8) for every day in the Days column. 3 hrs over 10 days = 30 OT hours."
       })), /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, /*#__PURE__*/React.createElement("input", {
@@ -7571,7 +7576,7 @@ tab === 'dashboard' && (() => {
           display: 'block',
           fontWeight: 400
         }
-      }, "OT: P", ph(N(r.pax) * (N(r.otHours) / 8) * N(r.rate) * 1.25 * (shiftInfo.mult || 1)))), /*#__PURE__*/React.createElement("td", {
+      }, "OT: P", ph(N(r.pax) * N(r.days) * (N(r.otHours) / 8) * N(r.rate) * 1.25 * (shiftInfo.mult || 1)))), /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, /*#__PURE__*/React.createElement("button", {
         onClick: () => delRow(setMp, r.id),

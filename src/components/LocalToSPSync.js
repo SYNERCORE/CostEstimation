@@ -12,28 +12,47 @@ function LocalToSPSync() {
 
     let totalOk = 0, totalFail = 0;
 
-    // 1. Users
+    /* 1. Users — CREATE ONLY, never update.
+       This used to PATCH shicRole/shicStatus for any locally cached account,
+       which made it a way around every account rule in the app:
+         - the local cache is editable from the browser console, so an admin
+           could set their own role to owner (or the owner's to user) and press
+           this button to write it to SharePoint, bypassing canManageUser
+           entirely and undoing the whole point of the owner role;
+         - even with nobody acting in bad faith, a stale cached copy silently
+           reverted roles and statuses — someone demoted or disabled in
+           SharePoint would be restored by whichever browser still held the old
+           record.
+       Accounts that already exist in SharePoint are now left exactly as they
+       are. That keeps the genuine first-run use (an empty Users list, every
+       account a fresh insert) and removes the write that could rewrite an
+       existing role. */
     try {
       addLog('Syncing users…');
       const localUsers = (LS.get('users') || []).filter(u => u && u.username);
-      let uOk = 0, uFail = 0;
+      let uOk = 0, uFail = 0, uSkip = 0;
       for (const u of localUsers) {
         try {
-          // Check if already exists first to avoid relying on POST error as branch signal
-          const ex = await spGet(spList('Users'), `Title eq '${(u.username||'').replace(/'/g,"''")}'`, 'Id');
-          const payload = {
-            shicName: u.name || '', shicHash: u.hash || '',
-            shicRole: u.role || 'user', shicStatus: u.status || 'pending', shicEmail: u.email || ''
-          };
+          const ex = await spGet(spList('Users'), `Title eq '${(u.username||'').replace(/'/g,"''")}'`, 'Id,shicRole');
           if (ex.length) {
-            await spWithRetry(() => spPatch(spList('Users'), ex[0].Id, payload));
-          } else {
-            await spWithRetry(() => spPost(spList('Users'), { Title: u.username, ...payload }));
+            uSkip++;
+            addLog(`  — ${u.username}: already in SharePoint, left unchanged`);
+            continue;
           }
+          /* Ownership is claimed or transferred in the app, never pushed from a
+             cache. Clamp anything claiming to be an owner down to admin. */
+          const role = String(u.role || 'user').toLowerCase() === 'owner' ? 'admin' : (u.role || 'user');
+          if (role !== (u.role || 'user')) addLog(`  ⚠ ${u.username}: pushed as admin — the owner role is set in the app, not here`);
+          await spWithRetry(() => spPost(spList('Users'), {
+            Title: u.username,
+            shicName: u.name || '', shicHash: u.hash || '',
+            shicRole: role, shicStatus: u.status || 'pending', shicEmail: u.email || ''
+          }));
           uOk++;
         } catch (e2) { uFail++; addLog(`  ✗ ${u.username}: ${e2.message.slice(0,80)}`); }
       }
-      addLog(`✅ Users: ${uOk}/${localUsers.length} synced${uFail ? ', ' + uFail + ' failed' : ''}`);
+      addLog(`✅ Users: ${uOk} created${uSkip ? ', ' + uSkip + ' already existed' : ''}${uFail ? ', ' + uFail + ' failed' : ''}`);
+      if (uSkip) addLog(`   Existing accounts are never overwritten from here — change roles in the Users tab.`);
       totalOk += uOk; totalFail += uFail;
     } catch (e) { addLog('❌ Users error: ' + e.message); }
 
@@ -54,12 +73,19 @@ function LocalToSPSync() {
       for (let i = 0; i < hist.length; i++) {
         const e = hist[i];
         const ceNum = e.info?.ceNum || e.ceNum || '(no CE#)';
-        // Prefer full cached data (has mp/tools/mats/ppe); fall back to history summary
-        const full = (ceNum !== '(no CE#)' && LS.get('ce_cache:' + ceNum)) || e;
+        /* The CE archive moved to IndexedDB and the migration removes the
+           shic:ce_cache:* keys it copied, so reading localStorage alone found
+           almost nothing here and reported every CE as a failure. Ask the
+           archive first; ce_cache is now only the pre-migration fallback. */
+        let full = e;
+        if (ceNum !== '(no CE#)') {
+          try { full = (await ceGet(ceNum)) || LS.get('ce_cache:' + ceNum) || e; }
+          catch (_e) { full = LS.get('ce_cache:' + ceNum) || e; }
+        }
         // Skip if history summary only (no detail tabs) — would overwrite SP with empty rows
         const hasDetail = Array.isArray(full.mp) || Array.isArray(full.tools);
         if (!hasDetail) {
-          addLog(`  ⚠ ${ceNum}: no detail data in cache — skipped (load & re-save this CE to sync it)`);
+          addLog(`  ⚠ ${ceNum}: no line items stored locally — skipped (open and re-save this CE to sync it)`);
           ceFail++;
           continue;
         }
@@ -96,7 +122,7 @@ function LocalToSPSync() {
   return React.createElement('div', null,
     React.createElement('div', {style:{fontWeight:700,fontSize:13,marginBottom:4,color:OK}}, '☁ Push Local Data to SharePoint'),
     React.createElement('div', {style:{fontSize:11,color:MT,marginBottom:10,lineHeight:1.6}},
-      'After connecting SharePoint for the first time, use this to upload the local CEs, users, and masterlist stored in THIS browser to SP so other computers can access them. Each user must run this from their own browser to sync their own data.'
+      'After connecting SharePoint for the first time, use this to upload the CEs, accounts and masterlist stored in THIS browser so other computers can see them. Each person runs it from their own browser for their own data. Accounts that already exist in SharePoint are left untouched — roles and access are changed in the Users tab, never from a local copy.'
     ),
     !connected && React.createElement('div', {style:{fontSize:11,color:ERR,marginBottom:8}},
       '⚠ SharePoint not connected. Complete the SP setup above first.'

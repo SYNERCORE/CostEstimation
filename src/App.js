@@ -8,6 +8,20 @@
    App.js and helpers.js are separate cache entries, and a partially-updated
    service-worker cache that pairs a new App.js with an old helpers.js would
    white-screen the app on a missing helper. */
+/* Returns the URL only if it is an ordinary web link, otherwise ''. Used for
+   any href built from data the app did not author — a javascript: or data: URL
+   in an href executes in this origin when clicked, which would hand over the
+   session and the whole local CE archive. Lives here rather than helpers.js so
+   it cannot go missing from a partially-updated service worker cache while its
+   call sites are already live. */
+function safeHttpUrl(u) {
+  const s = String(u == null ? '' : u).trim();
+  if (!s) return '';
+  try {
+    const parsed = new URL(s, window.location.href);
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') ? parsed.href : '';
+  } catch (_e) { return ''; }
+}
 function mlShape(ml) {
   if (!ml || typeof ml !== 'object' || Array.isArray(ml)) return null;
   const secs = ['manpower', 'tools', 'mats', 'ppe'];
@@ -4964,10 +4978,15 @@ function App({
       color: MT,
       fontSize: 11
     }
-  }, "\u2014 ", updateInfo.notes), updateInfo.downloadUrl && /*#__PURE__*/React.createElement("a", {
-    href: updateInfo.downloadUrl,
+  }, "\u2014 ", updateInfo.notes), safeHttpUrl(updateInfo.downloadUrl) && /*#__PURE__*/React.createElement("a", {
+    /* The whole banner comes from a JSON document fetched off the network, so
+       downloadUrl is remote input rendered straight into an href. React does
+       not block a javascript: URL there \u2014 one click would run it in the app's
+       origin, with the session and every cached CE in reach. Only http(s)
+       survives the check. */
+    href: safeHttpUrl(updateInfo.downloadUrl),
     target: "_blank",
-    rel: "noopener",
+    rel: "noopener noreferrer",
     style: {
       ...btn('acc', true),
       fontSize: 11,

@@ -167,6 +167,50 @@ for (const change of ['role', 'status', 'delete', 'password', 'email'])
   ck('the app-level limit is stated in the UI', /SharePoint Users list can still change roles/.test(ap),
     'users should not believe this is stronger than it is');
 
+  /* ── The bulk push must not be a back door round the rules above ────────
+     "Push All Local Data to SharePoint" used to PATCH shicRole/shicStatus for
+     every locally cached account. The local cache is editable from the browser
+     console, so a delegated admin could set their own role to owner (or the
+     owner's to user) and press that button — writing it to SharePoint without
+     canManageUser ever being consulted. Even with nobody acting in bad faith, a
+     stale cached copy silently reverted a demotion or a disable. */
+  console.log('\nThe bulk push cannot rewrite existing accounts:');
+  const sync = rd('src/components/LocalToSPSync.js');
+  ck('it no longer patches users', !/spPatch\(spList\('Users'\)/.test(sync),
+    'a cached role could be written over the live one, bypassing every ownership rule');
+  ck('an existing account is skipped, not updated', /already in SharePoint, left unchanged/.test(sync));
+  ck('it still creates accounts that do not exist yet', /spPost\(spList\('Users'\)/.test(sync),
+    'the first-run migration is the whole point of the tool');
+  ck('the owner role can never be pushed from a cache',
+    /=== 'owner' \? 'admin'/.test(sync),
+    'ownership is claimed or transferred in the app, never uploaded');
+  ck('the UI says existing accounts are untouched', /never from a local copy/.test(sync));
+
+  /* The CE archive moved to IndexedDB and the migration deletes the ce_cache
+     keys it copied, so this tool read an empty store and called every CE a
+     failure. */
+  console.log('\nThe bulk push reads the archive CEs actually live in:');
+  ck('it asks IndexedDB for the line items', /await ceGet\(ceNum\)/.test(sync),
+    'post-migration localStorage no longer holds them');
+  ck('ce_cache remains as the pre-migration fallback', /LS\.get\('ce_cache:' \+ ceNum\)/.test(sync));
+
+  /* ── Remote data must not become an executable link ───────────────────── */
+  console.log('\nA URL from a fetched document cannot execute:');
+  ck('safeHttpUrl exists', /function safeHttpUrl\(u\)/.test(app));
+  ck('the update banner runs its href through it', /href: safeHttpUrl\(updateInfo\.downloadUrl\)/.test(app),
+    'a javascript: URL in an href runs in this origin when clicked');
+  ck('the link is only rendered when the URL survives', /safeHttpUrl\(updateInfo\.downloadUrl\) &&/.test(app));
+  ck('it lives in App.js beside its call site', !/function safeHttpUrl/.test(rd('src/helpers.js')),
+    'a cross-file helper can go missing from a partially-updated cache');
+  const safe = eval('(' + (app.match(/function safeHttpUrl\(u\) \{[\s\S]*?\n\}/) || [''])[0] + ')');
+  global.window = { location: { href: 'https://app.example.com/ce/' } };
+  global.URL = URL;
+  for (const bad of ['javascript:alert(1)', 'JaVaScRiPt:alert(1)', '  javascript:alert(1)  ',
+                     'data:text/html,<script>x</script>', 'vbscript:msgbox(1)', '', null, undefined])
+    ck('blocks ' + JSON.stringify(bad), safe(bad) === '');
+  ck('allows a normal https link', safe('https://example.com/app.zip') === 'https://example.com/app.zip');
+  ck('allows a normal http link', safe('http://example.com/app.zip') === 'http://example.com/app.zip');
+
   console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nall ownership assertions passed');
   process.exit(fails ? 1 : 0);
 })();

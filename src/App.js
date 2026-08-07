@@ -269,6 +269,19 @@ function App({
   const [sowSearch, setSowSearch] = useState('');
   const [sowCat, setSowCat] = useState('All');
   const [sowSel, setSowSel] = useState({}); /* {id:qty} */
+  /* Scope Library editor state -- see the note in ScopeLibraryEditor for why it
+     cannot live inside that component. */
+  const [_libSearch, _setLibSearch] = useState('');
+  const [_libCat, _setLibCat] = useState('All');
+  const [_editSvc, _setEditSvc] = useState(null);
+  const [_editDraft, _setEditDraft] = useState(null);
+  const [_resTab, _setResTab] = useState('mp');
+  /* Merge a role or item shared by two services into one row. Off by default:
+     a merged row can only be filed against one scope task, so the other task
+     shows no cost for work it really does need -- and once a role carries its
+     own duration, merging a 3-day welder with a 5-day one produces a row that
+     is neither. On is still offered for a short, flat resource list. */
+  const [sowMergeAcross, setSowMergeAcross] = useState(false);
   const [sowEdit, setSowEdit] = useState(null); /* service being edited in Scope Library tab */
   const [collapsedShifts, setCollapsedShifts] = useState({
     regular_day: false,
@@ -1357,88 +1370,104 @@ function App({
         return;
       }
 
+      /* Build the SOW tasks FIRST, so every resource can be filed against the
+         scope step that needs it. Before this, resources were merged into one
+         flat pile with no taskId and every one of them landed in "Unassigned"
+         -- the library already knew the answer and threw it away. */
+      const newSow = [];
+      const taskOf = {};   /* svc.id -> {main, steps:[ids]} */
+      selected.forEach(svc => {
+        const q = sowSel[svc.id] || 1;
+        const mainId = uid();
+        newSow.push({ id: mainId, type: 'main', text: (q > 1 ? 'x' + q + ' ' : '') + svc.title });
+        const steps = [];
+        (svc.scope || []).forEach(line => {
+          if (!String(line).trim()) { steps.push(mainId); return; }
+          const sid = uid();
+          steps.push(sid);
+          newSow.push({ id: sid, type: 'sub', text: String(line).trim() });
+        });
+        taskOf[svc.id] = { main: mainId, steps };
+      });
+      /* A resource whose step was deleted, or which predates per-step storage,
+         belongs to the service as a whole -- its main task. */
+      const taskFor = (svc, step) => {
+        const t = taskOf[svc.id];
+        if (!t) return '';
+        return t.steps[Number.isFinite(step) ? step : -1] || t.main;
+      };
+
       /* Accumulate all items, then merge duplicates by name */
-      const mpMap = {},
-        toolMap = {},
-        matMap = {},
-        ppeMap = {};
+      const mpMap = {}, toolMap = {}, matMap = {}, ppeMap = {};
+      const miscAdds = [];
       const scopeParts = [];
+      /* With merging ON a role shared by two services becomes ONE row, which can
+         only be filed against one task -- the first that asked for it. The other
+         task then shows no cost for work it really does need. Turning it off
+         keeps a row per service, so the per-task totals are exact. */
+      const mkey = (svc, step, name, days) => sowMergeAcross
+        ? name.toUpperCase().trim() + '|' + (days || '')
+        : svc.id + '|' + (Number.isFinite(step) ? step : -1) + '|' + name.toUpperCase().trim() + '|' + (days || '');
       selected.forEach(svc => {
         const qty = sowSel[svc.id] || 1;
         scopeParts.push('[x' + qty + '] ' + svc.title + ': ' + ((svc.scope||[])[0] || ''));
         for (let i = 0; i < qty; i++) {
-          /* Helper: resolve item \u2014 accepts string or {name,qty} */
-          const resolve = item => typeof item === 'string' ? {name: item, qty: 1} : {name: item.name||'', qty: item.qty||1};
-          /* Manpower: merge by role \u2014 add pax (multiplied by item qty) */
-          svc.mp.forEach(raw => {
-            const {name: role, qty: iq} = resolve(raw);
+          /* Helper: resolve item — accepts string or {name,qty,step} */
+          const resolve = item => typeof item === 'string'
+            ? {name: item, qty: 1, step: 0}
+            : {name: item.name||'', qty: item.qty||1, step: item.step, miscCat: item.miscCat};
+          /* Manpower: merge by role — add pax (multiplied by item qty) */
+          (svc.mp || []).forEach(raw => {
+            const {name: role, qty: iq, step} = resolve(raw);
             if (!role) return;
-            const key = role.toUpperCase().trim();
+            const key = mkey(svc, step, role, raw && raw.days);
             if (mpMap[key]) {
               mpMap[key].pax += iq;
             } else {
               mpMap[key] = {
-                id: uid(),
-                role,
-                pax: iq,
-                days: N(info.days) || 1,
+                id: uid(), role, pax: iq,
+                /* A role with its own duration works only its step; one without
+                   reports from day 1 to completion, which is what every service
+                   did before durations existed. */
+                days: Number(raw && raw.days) > 0 ? Number(raw.days) : (N(info.days) || 1),
                 shift: 'regular_day',
                 rate: findRate(role),
                 otHours: 0,
-                perDiem: findPerDiem(role)
+                perDiem: findPerDiem(role),
+                taskId: taskFor(svc, step)
               };
             }
           });
-          /* Tools: merge by description \u2014 add qty */
-          svc.tools.forEach(raw => {
-            const {name: desc, qty: iq} = resolve(raw);
+          /* Tools: merge by description — add qty */
+          (svc.tools || []).forEach(raw => {
+            const {name: desc, qty: iq, step} = resolve(raw);
             if (!desc) return;
-            const key = desc.toUpperCase().trim();
-            if (toolMap[key]) {
-              toolMap[key].qty += iq;
-            } else {
-              toolMap[key] = {
-                id: uid(),
-                desc,
-                qty: iq,
-                uom: 'Lot',
-                cost: findToolCost(desc)
-              };
-            }
+            const key = mkey(svc, step, desc);
+            if (toolMap[key]) toolMap[key].qty += iq;
+            else toolMap[key] = { id: uid(), desc, qty: iq, uom: 'Lot', cost: findToolCost(desc), taskId: taskFor(svc, step) };
           });
-          /* Materials: merge by description \u2014 add qty */
-          svc.mats.forEach(raw => {
-            const {name: desc, qty: iq} = resolve(raw);
+          /* Consumables: merge by description — add qty */
+          (svc.mats || []).forEach(raw => {
+            const {name: desc, qty: iq, step} = resolve(raw);
             if (!desc) return;
-            const key = desc.toUpperCase().trim();
-            if (matMap[key]) {
-              matMap[key].qty += iq;
-            } else {
-              matMap[key] = {
-                id: uid(),
-                desc,
-                qty: iq,
-                uom: 'Lot',
-                cost: findMatCost(desc)
-              };
-            }
+            const key = mkey(svc, step, desc);
+            if (matMap[key]) matMap[key].qty += iq;
+            else matMap[key] = { id: uid(), desc, qty: iq, uom: 'Lot', cost: findMatCost(desc), taskId: taskFor(svc, step) };
           });
-          /* PPE: merge by description \u2014 add qty */
-          svc.ppe.forEach(raw => {
-            const {name: desc, qty: iq} = resolve(raw);
+          /* PPE: merge by description — add qty */
+          (svc.ppe || []).forEach(raw => {
+            const {name: desc, qty: iq, step} = resolve(raw);
             if (!desc) return;
-            const key = desc.toUpperCase().trim();
-            if (ppeMap[key]) {
-              ppeMap[key].qty += iq;
-            } else {
-              ppeMap[key] = {
-                id: uid(),
-                desc,
-                qty: iq,
-                uom: 'Pcs',
-                cost: findPpeCost(desc)
-              };
-            }
+            const key = mkey(svc, step, desc);
+            if (ppeMap[key]) ppeMap[key].qty += iq;
+            else ppeMap[key] = { id: uid(), desc, qty: iq, uom: 'Pcs', cost: findPpeCost(desc), taskId: taskFor(svc, step) };
+          });
+          /* Miscellaneous: keyed by category as well as name, because the same
+             description means different things under Transportation and Admin. */
+          (svc.misc || []).forEach(raw => {
+            const {name: desc, qty: iq, step, miscCat} = resolve(raw);
+            if (!desc) return;
+            miscAdds.push({ cat: miscCat || 'requirements', desc, qty: iq, step, svc });
           });
         }
       });
@@ -1447,23 +1476,18 @@ function App({
       const newMats = Object.values(matMap);
       const newPpe = Object.values(ppeMap);
       if (addMode) {
-        /* ADD mode: merge into existing, skip duplicates */
-        setMp(prev => {
-          const ex = new Set(prev.map(x => x.role.toUpperCase()));
-          return [...prev, ...newMp.filter(r => !ex.has(r.role.toUpperCase()))];
+        /* ADD mode: merge into existing, skip duplicates. The key includes the
+           task -- the same role on two different scope tasks is two real rows,
+           and matching on the name alone would silently drop the second. */
+        const dk = (name, r) => String(name || '').toUpperCase() + '@' + (r.taskId || '');
+        const addTo = (setter, nameKey, rows) => setter(prev => {
+          const ex = new Set(prev.map(x => dk(x[nameKey], x)));
+          return [...prev, ...rows.filter(r => !ex.has(dk(r[nameKey], r)))];
         });
-        setTools(prev => {
-          const ex = new Set(prev.map(x => x.desc.toUpperCase()));
-          return [...prev, ...newTools.filter(r => !ex.has(r.desc.toUpperCase()))];
-        });
-        setMats(prev => {
-          const ex = new Set(prev.map(x => x.desc.toUpperCase()));
-          return [...prev, ...newMats.filter(r => !ex.has(r.desc.toUpperCase()))];
-        });
-        setPpe(prev => {
-          const ex = new Set(prev.map(x => x.desc.toUpperCase()));
-          return [...prev, ...newPpe.filter(r => !ex.has(r.desc.toUpperCase()))];
-        });
+        addTo(setMp, 'role', newMp);
+        addTo(setTools, 'desc', newTools);
+        addTo(setMats, 'desc', newMats);
+        addTo(setPpe, 'desc', newPpe);
       } else {
         if (newMp.length > 0) setMp(newMp);
         if (newTools.length > 0) setTools(newTools);
@@ -1471,25 +1495,22 @@ function App({
         if (newPpe.length > 0) setPpe(newPpe);
       }
       setScope(scopeParts.join('\n\n'));
-      /* Build SOW items from service scope descriptions */
-      const newSow = [];
-      selected.forEach(svc => {
-        const qty = sowSel[svc.id] || 1;
-        const title = (qty > 1 ? 'x' + qty + ' ' : '') + svc.title;
-        newSow.push({
-          id: uid(),
-          type: 'main',
-          text: title
-        });
-        (svc.scope || []).forEach(line => {
-          if (line.trim()) newSow.push({
-            id: uid(),
-            type: 'sub',
-            text: line.trim()
-          });
-        });
-      });
+      /* The SOW tasks were built at the top, before the resources, so the rows
+         above already carry the taskId of the step that needs them. */
       if (newSow.length) setSowItems(addMode ? prev => [...prev, ...newSow] : newSow);
+      /* Miscellaneous goes through its own setter: it is an object of category
+         arrays, not one flat list. A category the current CE type does not have
+         falls back to its first, so nothing is dropped on the floor. */
+      if (miscAdds.length) setMisc(prev => {
+        const valid = (MISC_DEF[ceType] || MISC_DEF['onsite']).map(([k]) => k);
+        const next = addMode ? { ...prev } : {};
+        miscAdds.forEach(m => {
+          const k = valid.includes(m.cat) ? m.cat : valid[0];
+          if (!k) return;
+          next[k] = [...(next[k] || []), { ...mkMiscRow(), desc: m.desc, qty: m.qty, uom: 'Lot', cost: 0, taskId: taskFor(m.svc, m.step) }];
+        });
+        return next;
+      });
       if (!addMode) setInfo(p => ({
         ...p,
         description: selected.map(s => sowSel[s.id] > 1 ? 'x' + sowSel[s.id] + ' ' + s.title : s.title).join('; ')
@@ -1745,7 +1766,21 @@ function App({
         fontSize: 11,
         marginTop: 2
       }
-    }, sowLib.filter(s => sowSel[s.id]).map(s => `${s.title}${sowSel[s.id] > 1 ? ' x' + sowSel[s.id] : ''}`).join(' + '))), /*#__PURE__*/React.createElement("button", {
+    }, sowLib.filter(s => sowSel[s.id]).map(s => `${s.title}${sowSel[s.id] > 1 ? ' x' + sowSel[s.id] : ''}`).join(' + '))),
+    /* Resources are filed against the scope step that needs them. Merging a
+       shared role across services collapses it onto one task, so the other
+       task shows no cost for work it does need -- worth a visible switch
+       rather than a silent rule. */
+    /*#__PURE__*/React.createElement("label", {
+      style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: MT, cursor: 'pointer', userSelect: 'none', maxWidth: 210, lineHeight: 1.4 },
+      title: sowMergeAcross
+        ? "On: a role used by two services becomes one row, filed under the first service that asked for it. The other task will show no cost for it."
+        : "Off: each service keeps its own rows, so every scope task carries exactly what it needs. More rows, exact per-task totals."
+    }, /*#__PURE__*/React.createElement("input", {
+      type: 'checkbox', checked: sowMergeAcross,
+      onChange: e => setSowMergeAcross(e.target.checked)
+    }), "Merge duplicates across services (shorter list, less exact per task)"),
+    /*#__PURE__*/React.createElement("button", {
       style: btn('acc'),
       onClick: applySelected
     }, addMode ? 'Add to CE' : 'Apply to CE')) : /*#__PURE__*/React.createElement("div", {
@@ -3606,11 +3641,17 @@ function App({
   );
   /* ---- Scope Library Editor (Scope Library tab) ---- */
   const ScopeLibraryEditor = () => {
-    const [libSearch, setLibSearch] = useState('');
-    const [libCat, setLibCat] = useState('All');
-    const [editSvc, setEditSvc] = useState(null);
-    const [editDraft, setEditDraft] = useState(null);
-    const [resTab, setResTab] = useState('mp');
+    /* These live on App, not here. ScopeLibraryEditor is a closure created
+       fresh on every App render, so React sees a NEW component type each time
+       and remounts it -- wiping any state held locally. That is why adding a
+       service never opened its editor: startEdit ran, saveSowLib re-rendered
+       App, and the remount threw the selection away. Hence "go to the bottom,
+       click Edit, come back up". */
+    const [libSearch, setLibSearch] = [_libSearch, _setLibSearch];
+    const [libCat, setLibCat] = [_libCat, _setLibCat];
+    const [editSvc, setEditSvc] = [_editSvc, _setEditSvc];
+    const [editDraft, setEditDraft] = [_editDraft, _setEditDraft];
+    const [resTab, setResTab] = [_resTab, _setResTab];
     const [showSpWiz, setShowSpWiz] = useState(false);
     const [spWizLog, setSpWizLog] = useState('');
     const [spWizBusy, setSpWizBusy] = useState(false);
@@ -3682,20 +3723,46 @@ function App({
           name: r.name || r.role || r.desc || '',
           qty: r.qty || 1,
           cost: r.cost || r.rate || 0,
-          uom: r.uom || 'Lot'
+          uom: r.uom || 'Lot',
+          /* Blank means "on site for the whole project", which is what every
+             service written before this did -- apply stamped the project's day
+             count onto every row. A number means this role is only needed for
+             that many days of its step. */
+          days: Number.isFinite(Number(r.days)) && Number(r.days) > 0 ? Number(r.days) : '',
+          miscCat: r.miscCat || 'requirements',
+          /* Which scope step needs this. Stored as an index into `scope`;
+             every service written before this existed has none, so it parks on
+             step 1 rather than disappearing. */
+          step: Number.isFinite(r.step) ? r.step : 0
         };
       });
     };
-    const serialise = rows => rows.map(r => r.name ? {name: r.name, qty: r.qty || 1} : null).filter(Boolean);
+    const serialise = (rows, isMisc) => rows.map(r => r.name ? (
+      {name: r.name, qty: r.qty || 1, step: Number.isFinite(r.step) ? r.step : 0,
+       ...(Number(r.days) > 0 ? {days: Number(r.days)} : {}),
+       ...(isMisc ? {miscCat: r.miscCat || 'requirements'} : {})}
+    ) : null).filter(Boolean);
+    /* Scope rows carry a stable id for the whole edit, and every resource
+       points at one by id rather than by position -- otherwise deleting step 1
+       would silently move every resource under it to whatever took its place. */
+    const mkScopeRows = svc => (svc.scope || []).map((t, i) => ({
+      id: 'sr' + i + '_' + uid(),
+      type: i === 0 || !String(t).match(/^[a-z]\./i) ? 'main' : 'sub',
+      text: t
+    }));
     const startEdit = svc => {
+      const rows = mkScopeRows(svc);
+      const toId = arr => arr.map(r => ({ ...r, step: (rows[r.step] || rows[0] || {}).id || '' }));
       setEditSvc(svc);
       setEditDraft({
         ...svc,
-        scope: [...svc.scope],
-        mp: normalise(svc.mp, 'mp'),
-        tools: normalise(svc.tools, 'tools'),
-        mats: normalise(svc.mats, 'mats'),
-        ppe: normalise(svc.ppe, 'ppe')
+        scope: [...(svc.scope || [])],
+        scopeRows: rows,
+        mp: toId(normalise(svc.mp, 'mp')),
+        tools: toId(normalise(svc.tools, 'tools')),
+        mats: toId(normalise(svc.mats, 'mats')),
+        ppe: toId(normalise(svc.ppe, 'ppe')),
+        misc: toId(normalise(svc.misc, 'mats')).map(r => ({ ...r, cat: r.miscCat }))
       });
       setResTab('mp');
     };
@@ -3704,17 +3771,20 @@ function App({
       setEditDraft(null);
     };
     const saveEdit = () => {
+      /* Blank steps are dropped on save, so the index a resource points at must
+         be its position in the KEPT rows, not in the edited list. */
+      const kept = (editDraft.scopeRows || []).filter(r => String(r.text || '').trim());
+      const idx = {};
+      kept.forEach((r, i) => { idx[r.id] = i; });
+      const toIdx = arr => (arr || []).map(r => ({ ...r, step: idx[r.step] !== undefined ? idx[r.step] : 0 }));
       const saved = {
         ...editDraft,
-        scope: (editDraft.scopeRows || editDraft.scope.map((t, i) => ({
-          type: i === 0 ? 'main' : 'sub',
-          text: t
-        }))).map(r => r.text).filter(Boolean),
-        scopeRows: undefined,
-        mp: serialise(editDraft.mp),
-        tools: serialise(editDraft.tools),
-        mats: serialise(editDraft.mats),
-        ppe: serialise(editDraft.ppe)
+        scope: kept.map(r => r.text),
+        mp: serialise(toIdx(editDraft.mp)),
+        tools: serialise(toIdx(editDraft.tools)),
+        mats: serialise(toIdx(editDraft.mats)),
+        ppe: serialise(toIdx(editDraft.ppe)),
+        misc: serialise(toIdx(editDraft.misc).map(r => ({ ...r, miscCat: r.cat || 'requirements' })), true)
       };
       delete saved.scopeRows;
       saveSowLib(sowLib.map(s => s.id === saved.id ? saved : s));
@@ -3736,11 +3806,15 @@ function App({
         mp: [],
         tools: [],
         mats: [],
-        ppe: []
+        ppe: [],
+        misc: []
       };
-      saveSowLib([...sowLib, blank]);
+      /* At the TOP. It used to be appended, so a new service landed below 131
+         others: you scrolled to the bottom to find it, and back up to the
+         editor to fill it in, for every single edit. */
+      saveSowLib([blank, ...sowLib]);
       startEdit(blank);
-      showToast('New service added.');
+      showToast('New service added — it is the first one in the list.');
     };
     const resetLib = () => {
       if (!confirm('Reset to defaults? All custom changes will be lost.')) return;
@@ -3753,7 +3827,13 @@ function App({
     const ResEditor = ({
       rows,
       setRows,
-      type
+      type,
+      /* When the caller groups rows by scope step it passes the other steps and
+         a mover, so a row can be re-filed without deleting and retyping it.
+         Every service written before per-step storage has all its resources on
+         step 1, and this is how they get where they belong. */
+      steps,
+      onMoveStep
     }) => {
       const safeRows = Array.isArray(rows) ? rows : [];
       const mlMap = {
@@ -3772,34 +3852,42 @@ function App({
           setNewRowId(null);
         }
       }, [newRowId]);
+      /* Updater form, not a new array built from props: two edits landing in one
+         React batch both read the same rendered snapshot, so the second would
+         quietly undo the first. Callers that only accept an array still work --
+         `apply` falls back to the rows this render was given. */
+      const apply = fn => setRows(prev => fn(Array.isArray(prev) ? prev : safeRows));
       const addRow = () => {
         const newId = uid();
         setNewRowId(newId);
-        setRows([...safeRows, {
+        apply(rs => [...rs, {
           id: newId,
           code: '',
-          cat: 'General',
+          cat: type === 'misc' ? 'requirements' : 'General',
           name: '',
           qty: 1,
           cost: 0,
           uom: type === 'mp' ? 'Day' : 'Lot'
         }]);
       };
-      const upd = (id, k, v) => setRows(safeRows.map(r => r.id === id ? {
+      const upd = (id, k, v) => apply(rs => rs.map(r => r.id === id ? {
         ...r,
         [k]: v
       } : r));
-      const del = id => setRows(safeRows.filter(r => r.id !== id));
+      const del = id => apply(rs => rs.filter(r => r.id !== id));
       const autoFill = (id, name) => {
         const m = mlItems.find(x => (x.role || x.desc || '').toUpperCase() === name.toUpperCase());
-        if (m) setRows(safeRows.map(r => r.id === id ? {
+        /* Same updater rule as upd/del: typing a name that matches the
+           masterlist fires this in the same batch as the keystroke itself, and
+           the array form put the row back to what it was before the keystroke. */
+        if (m) apply(rs => rs.map(r => r.id === id ? {
           ...r,
           name,
           code: m.code || r.code,
           cat: m.category || r.cat,
           cost: m.rate || m.cost || r.cost,
           uom: m.uom || r.uom
-        } : r));else setRows(safeRows.map(r => r.id === id ? {
+        } : r));else apply(rs => rs.map(r => r.id === id ? {
           ...r,
           name
         } : r));
@@ -3832,7 +3920,7 @@ function App({
           borderCollapse: 'collapse',
           fontSize: 11
         }
-      }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Item Code', 'Category', 'Role / Description', 'Qty', 'Cost (PHP)', 'UOM', ''].map(h => /*#__PURE__*/React.createElement("th", {
+      }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Item Code', 'Category', 'Role / Description', type === 'mp' ? 'Pax' : 'Qty', 'Cost (PHP)', 'UOM'].concat(type === 'mp' ? ['Days'] : []).concat(steps && steps.length > 1 ? ['Step'] : []).concat(['']).map(h => /*#__PURE__*/React.createElement("th", {
         key: h,
         style: {
           ...THS,
@@ -3909,7 +3997,22 @@ function App({
         },
         value: r.uom || 'Day',
         onChange: e => upd(r.id, 'uom', e.target.value)
-      }, uomOptionEls(r.uom || 'Day'))), /*#__PURE__*/React.createElement("td", {
+      }, uomOptionEls(r.uom || 'Day'))), type === 'mp' && /*#__PURE__*/React.createElement("td", {
+        style: TDS
+      }, /*#__PURE__*/React.createElement("input", {
+        style: { ...INP, ...MONO, width: 62, fontSize: 10 },
+        type: "number", min: 0, value: r.days === undefined || r.days === null ? '' : r.days,
+        placeholder: "full",
+        title: "Days this role is needed for THIS step. Leave blank if they report from day 1 to completion — then the project's No. of Days is used, which is what every service did before this existed.",
+        onChange: e => upd(r.id, 'days', e.target.value === '' ? '' : Math.max(0, parseFloat(e.target.value) || 0))
+      })), steps && steps.length > 1 && /*#__PURE__*/React.createElement("td", {
+        style: TDS
+      }, /*#__PURE__*/React.createElement("select", {
+        style: { ...INP, width: 74, fontSize: 10 },
+        value: r.step || '',
+        title: "Move this item to another scope step",
+        onChange: e => onMoveStep && onMoveStep(r, e.target.value)
+      }, steps.map(st => /*#__PURE__*/React.createElement("option", { key: st.id, value: st.id }, st.label)))), /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, /*#__PURE__*/React.createElement("button", {
         onClick: () => del(r.id),
@@ -3964,6 +4067,236 @@ function App({
     /*#__PURE__*/React.createElement("div", {style:{display:'flex',justifyContent:'flex-end'}},
       /*#__PURE__*/React.createElement("button", {style:btn('def',true), onClick:()=>setShowSpWiz(false)}, "Close")
     )));
+    /* Resources hang off a SCOPE STEP, the same way a SOW Breakdown task owns
+       its rows -- that is what lets an applied service arrive already filed
+       against 1.1 rather than in one flat "Unassigned" pile. The names match
+       the Breakdown's, including Consumables, which the library used to call
+       Materials while the rest of the app called it something else again. */
+    const LIB_RES_TYPES = [['mp', 'Manpower'], ['tools', 'Tools & Equipment'], ['mats', 'Consumables'], ['ppe', 'PPE'], ['misc', 'Miscellaneous']];
+    /* "1.", "a.", "2." -- the same numbering the scope list above shows, so the
+       dropdown reads like the steps it points at. */
+    const stepLabels = () => {
+      let mc = 0, sc = 0;
+      return ((editDraft && editDraft.scopeRows) || []).map(r => {
+        if (r.type === 'main') { mc++; sc = 0; } else { sc++; }
+        return { id: r.id, label: (r.type === 'main' ? mc + '.' : mc + '.' + String.fromCharCode(96 + sc)) };
+      });
+    };
+    const stepRowsOf = (type, stepId) => ((editDraft && editDraft[type]) || []).filter(r => r.step === stepId);
+    /* Every write re-stamps the step, so a row added by ResEditor -- which knows
+       nothing about steps -- lands on the right one. */
+    const setStepRows = (type, stepId, rows) => setEditDraft(p => {
+      /* `rows` may be an updater. ResEditor builds the next array from the props
+         it was rendered with, so two edits landing in one React batch would see
+         the same stale snapshot and the second would undo the first. */
+      const cur = ((p && p[type]) || []);
+      const next = typeof rows === 'function' ? rows(cur.filter(r => r.step === stepId)) : rows;
+      return { ...p, [type]: [...cur.filter(r => r.step !== stepId), ...next.map(r => ({ ...r, step: stepId }))] };
+    });
+    const addFirstRow = (type, stepId) => setStepRows(type, stepId, [...stepRowsOf(type, stepId), {
+      id: uid(), code: '', cat: type === 'misc' ? 'requirements' : 'General', name: '', qty: 1, cost: 0,
+      uom: type === 'mp' ? 'Day' : 'Lot'
+    }]);
+    const stepResources = stepId => {
+      const used = LIB_RES_TYPES.filter(([t]) => stepRowsOf(t, stepId).length);
+      const empty = LIB_RES_TYPES.filter(([t]) => !stepRowsOf(t, stepId).length);
+      return /*#__PURE__*/React.createElement("div", { style: { marginLeft: 22, marginTop: 4, marginBottom: 8 } },
+        used.map(([t, label]) => /*#__PURE__*/React.createElement("div", { key: t, style: { marginBottom: 8 } },
+          /*#__PURE__*/React.createElement("div", { style: { ...LBL, marginBottom: 3 } }, label),
+          /*#__PURE__*/React.createElement(ResEditor, {
+            rows: stepRowsOf(t, stepId),
+            setRows: rows => setStepRows(t, stepId, rows),
+            type: t,
+            steps: stepLabels(),
+            onMoveStep: (row, toId) => setEditDraft(p => ({
+              ...p,
+              [t]: ((p && p[t]) || []).map(x => x.id === row.id ? { ...x, step: toId } : x)
+            }))
+          })
+        )),
+        empty.length > 0 && /*#__PURE__*/React.createElement("div", {
+          style: { display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }
+        },
+          /*#__PURE__*/React.createElement("span", { style: { color: MT, fontSize: 10 } }, "Add:"),
+          empty.map(([t, label]) => /*#__PURE__*/React.createElement("button", {
+            key: t, style: { ...btn('def', true), fontSize: 10 },
+            onClick: () => addFirstRow(t, stepId)
+          }, "+ " + label))
+        )
+      );
+    };
+    /* The whole edit form, rendered inside whichever card is open. Kept as a
+       plain function rather than a component so React does not remount it on
+       every keystroke and steal the focus out of the field being typed in. */
+    const editorBody = () => /*#__PURE__*/React.createElement("div", {
+      style: {
+        ...CS,
+        borderColor: '#A78BFA88',
+        background: '#A78BFA08'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 700,
+        marginBottom: 12,
+        fontSize: 13,
+        color: '#A78BFA'
+      }
+    }, "Editing: ", editSvc.title), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: 12,
+        marginBottom: 10
+      }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+      style: LBL
+    }, "Title"), /*#__PURE__*/React.createElement("input", {
+      style: INP,
+      value: editDraft.title,
+      onChange: e => setEditDraft(p => ({
+        ...p,
+        title: e.target.value
+      }))
+    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+      style: LBL
+    }, "Category"), /*#__PURE__*/React.createElement("input", {
+      style: INP,
+      list: "sowcats",
+      value: editDraft.cat,
+      onChange: e => setEditDraft(p => ({
+        ...p,
+        cat: e.target.value
+      }))
+    }), /*#__PURE__*/React.createElement("datalist", {
+      id: "sowcats"
+    }, allCats.map(c => /*#__PURE__*/React.createElement("option", {
+      key: c,
+      value: c
+    }))))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: 14
+      }
+    }, /*#__PURE__*/React.createElement("label", {
+      style: LBL
+    }, "Scope Description", /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: MT,
+        fontWeight: 400,
+        marginLeft: 8,
+        fontSize: 10
+      }
+    }, "\u2014 structured as main steps and sub-steps")), (() => {
+      let mc = 0,
+        sc = 0;
+      const scopeRows = editDraft.scopeRows || editDraft.scope.map((t, i) => ({
+        id: String(i),
+        type: i === 0 || !t.match(/^[a-z]\./i) ? 'main' : 'sub',
+        text: t
+      }));
+      const setRows = fn => setEditDraft(p => {
+        const nr = fn(p.scopeRows || p.scope.map((t, i) => ({
+          id: String(i),
+          type: i === 0 ? 'main' : 'sub',
+          text: t
+        })));
+        return {
+          ...p,
+          scopeRows: nr,
+          scope: nr.map(r => r.text)
+        };
+      });
+      return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: 'flex',
+          gap: 5,
+          marginBottom: 6
+        }
+      }, /*#__PURE__*/React.createElement("button", {
+        style: btn('def', true),
+        onClick: () => setRows(p => [...p, {
+          id: uid(),
+          type: 'main',
+          text: ''
+        }])
+      }, "+ Main"), /*#__PURE__*/React.createElement("button", {
+        style: btn('info', true),
+        onClick: () => setRows(p => [...p, {
+          id: uid(),
+          type: 'sub',
+          text: ''
+        }])
+      }, "+ Sub-step")), scopeRows.map((item, idx) => {
+        if (item.type === 'main') {
+          mc++;
+          sc = 0;
+        } else {
+          sc++;
+        }
+        const lbl = item.type === 'main' ? mc + '.' : String.fromCharCode(96 + sc) + '.';
+        return /*#__PURE__*/React.createElement("div", {
+          key: item.id,
+          style: { marginBottom: 6, paddingLeft: item.type === 'main' ? 0 : 16 }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: { display: 'flex', gap: 6, marginBottom: 3, alignItems: 'flex-start' }
+        }, /*#__PURE__*/React.createElement("span", {
+          style: {
+            ...MONO,
+            fontSize: 11,
+            color: item.type === 'main' ? TX : MT,
+            fontWeight: item.type === 'main' ? 700 : 400,
+            minWidth: 20,
+            paddingTop: 5
+          }
+        }, lbl), /*#__PURE__*/React.createElement("input", {
+          style: {
+            ...INP,
+            flex: 1,
+            fontWeight: item.type === 'main' ? 600 : 400
+          },
+          value: item.text,
+          onChange: e => setRows(p => p.map(r => r.id === item.id ? {
+            ...r,
+            text: e.target.value
+          } : r)),
+          placeholder: item.type === 'main' ? 'Main scope step...' : 'Sub-step detail...'
+        }), /*#__PURE__*/React.createElement("button", {
+          onClick: () => setRows(p => p.filter(r => r.id !== item.id)),
+          style: {
+            background: 'none',
+            border: 'none',
+            color: ERR,
+            cursor: 'pointer',
+            fontSize: 13,
+            padding: '2px 4px',
+            flexShrink: 0
+          }
+        }, "x")), stepResources(item.id));
+      }));
+    })()),
+    /* The four resource tabs used to sit here, one flat list per type for the
+       whole service. They are now rendered under the scope step that needs
+       them, above. */
+    /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 8
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      style: btn('def'),
+      onClick: cancelEdit
+    }, "Cancel"), /*#__PURE__*/React.createElement("button", {
+      style: btn('acc'),
+      onClick: saveEdit
+    }, "Save Service"), /*#__PURE__*/React.createElement("button", {
+      style: {
+        ...btn('danger', true),
+        marginLeft: 'auto'
+      },
+      onClick: () => {
+        delSvc(editDraft.id);
+        cancelEdit();
+      }
+    }, "Delete Service")));
     return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SpWizModal, null), /*#__PURE__*/React.createElement("div", {
       style: {
         ...CS,
@@ -4142,318 +4475,54 @@ function App({
         setLibSearch('');
         setLibCat('All');
       }
-    }, "Clear"))), editDraft && /*#__PURE__*/React.createElement("div", {
-      style: {
-        ...CS,
-        borderColor: '#A78BFA88',
-        background: '#A78BFA08'
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontWeight: 700,
-        marginBottom: 12,
-        fontSize: 13,
-        color: '#A78BFA'
-      }
-    }, "Editing: ", editSvc.title), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: 12,
-        marginBottom: 10
-      }
-    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-      style: LBL
-    }, "Title"), /*#__PURE__*/React.createElement("input", {
-      style: INP,
-      value: editDraft.title,
-      onChange: e => setEditDraft(p => ({
-        ...p,
-        title: e.target.value
-      }))
-    })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
-      style: LBL
-    }, "Category"), /*#__PURE__*/React.createElement("input", {
-      style: INP,
-      list: "sowcats",
-      value: editDraft.cat,
-      onChange: e => setEditDraft(p => ({
-        ...p,
-        cat: e.target.value
-      }))
-    }), /*#__PURE__*/React.createElement("datalist", {
-      id: "sowcats"
-    }, allCats.map(c => /*#__PURE__*/React.createElement("option", {
-      key: c,
-      value: c
-    }))))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        marginBottom: 14
-      }
-    }, /*#__PURE__*/React.createElement("label", {
-      style: LBL
-    }, "Scope Description", /*#__PURE__*/React.createElement("span", {
-      style: {
-        color: MT,
-        fontWeight: 400,
-        marginLeft: 8,
-        fontSize: 10
-      }
-    }, "\u2014 structured as main steps and sub-steps")), (() => {
-      let mc = 0,
-        sc = 0;
-      const scopeRows = editDraft.scopeRows || editDraft.scope.map((t, i) => ({
-        id: String(i),
-        type: i === 0 || !t.match(/^[a-z]\./i) ? 'main' : 'sub',
-        text: t
-      }));
-      const setRows = fn => setEditDraft(p => {
-        const nr = fn(p.scopeRows || p.scope.map((t, i) => ({
-          id: String(i),
-          type: i === 0 ? 'main' : 'sub',
-          text: t
-        })));
-        return {
-          ...p,
-          scopeRows: nr,
-          scope: nr.map(r => r.text)
-        };
-      });
-      return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: 'flex',
-          gap: 5,
-          marginBottom: 6
-        }
-      }, /*#__PURE__*/React.createElement("button", {
-        style: btn('def', true),
-        onClick: () => setRows(p => [...p, {
-          id: uid(),
-          type: 'main',
-          text: ''
-        }])
-      }, "+ Main"), /*#__PURE__*/React.createElement("button", {
-        style: btn('info', true),
-        onClick: () => setRows(p => [...p, {
-          id: uid(),
-          type: 'sub',
-          text: ''
-        }])
-      }, "+ Sub-step")), scopeRows.map((item, idx) => {
-        if (item.type === 'main') {
-          mc++;
-          sc = 0;
-        } else {
-          sc++;
-        }
-        const lbl = item.type === 'main' ? mc + '.' : String.fromCharCode(96 + sc) + '.';
+    }, "Clear"))),
+    /* One card per service, collapsed by default and edited IN PLACE. The
+       editor used to be a fixed panel above a 131-row table: adding a service
+       appended it to the bottom, so every edit meant scrolling to the end of
+       the list to press Edit and back to the top to type. Same shape as a SOW
+       Breakdown task, because it is the same idea. */
+    /*#__PURE__*/React.createElement("div", null,
+      filtered.length === 0 && /*#__PURE__*/React.createElement("div", {
+        style: { ...CS, textAlign: 'center', padding: 28, color: MT }
+      }, "No services match. Clear the filter."),
+      filtered.map(svc => {
+        const open = !!(editSvc && editSvc.id === svc.id);
+        const counts = ['MP:' + (svc.mp || []).length, 'TL:' + (svc.tools || []).length,
+                        'CN:' + (svc.mats || []).length, 'PP:' + (svc.ppe || []).length]
+                       .concat((svc.misc || []).length ? ['MS:' + (svc.misc || []).length] : []).join(' ');
+        const toggle = () => open ? cancelEdit() : startEdit(svc);
         return /*#__PURE__*/React.createElement("div", {
-          key: item.id,
-          style: {
-            display: 'flex',
-            gap: 6,
-            marginBottom: 5,
-            paddingLeft: item.type === 'main' ? 0 : 16,
-            alignItems: 'flex-start'
-          }
-        }, /*#__PURE__*/React.createElement("span", {
-          style: {
-            ...MONO,
-            fontSize: 11,
-            color: item.type === 'main' ? TX : MT,
-            fontWeight: item.type === 'main' ? 700 : 400,
-            minWidth: 20,
-            paddingTop: 5
-          }
-        }, lbl), /*#__PURE__*/React.createElement("input", {
-          style: {
-            ...INP,
-            flex: 1,
-            fontWeight: item.type === 'main' ? 600 : 400
+          key: svc.id,
+          style: { ...CS, marginBottom: 8, borderColor: open ? '#A78BFA88' : BDR,
+                   background: open ? '#A78BFA08' : CARD, padding: open ? 16 : '9px 14px' }
+        },
+          /*#__PURE__*/React.createElement("div", {
+            style: { display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: open ? 12 : 0 }
           },
-          value: item.text,
-          onChange: e => setRows(p => p.map(r => r.id === item.id ? {
-            ...r,
-            text: e.target.value
-          } : r)),
-          placeholder: item.type === 'main' ? 'Main scope step...' : 'Sub-step detail...'
-        }), /*#__PURE__*/React.createElement("button", {
-          onClick: () => setRows(p => p.filter(r => r.id !== item.id)),
-          style: {
-            background: 'none',
-            border: 'none',
-            color: ERR,
-            cursor: 'pointer',
-            fontSize: 13,
-            padding: '2px 4px',
-            flexShrink: 0
-          }
-        }, "x"));
-      }));
-    })()), /*#__PURE__*/React.createElement("div", {
-      style: {
-        marginBottom: 14
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        gap: 4,
-        marginBottom: 10,
-        borderBottom: `1px solid ${BDR}`,
-        paddingBottom: 8
-      }
-    }, [['mp', 'Manpower', editDraft.mp.length], ['tools', 'Tools & Equipment', editDraft.tools.length], ['mats', 'Materials', editDraft.mats.length], ['ppe', 'PPE', editDraft.ppe.length]].map(([tabId, tabLabel, tabCount]) => /*#__PURE__*/React.createElement("button", {
-      key: tabId,
-      onClick: () => setResTab(tabId),
-      style: {
-        ...btn(resTab === tabId ? 'acc' : 'def', true),
-        fontSize: 11
-      }
-    }, tabLabel, tabCount > 0 && /*#__PURE__*/React.createElement("span", {
-      style: {
-        marginLeft: 4,
-        background: '#0003',
-        borderRadius: 3,
-        padding: '0 5px',
-        fontSize: 10
-      }
-    }, tabCount)))), resTab === 'mp' && /*#__PURE__*/React.createElement(ResEditor, {
-      rows: editDraft.mp,
-      setRows: r => setEditDraft(p => ({
-        ...p,
-        mp: r
-      })),
-      type: "mp"
-    }), resTab === 'tools' && /*#__PURE__*/React.createElement(ResEditor, {
-      rows: editDraft.tools,
-      setRows: r => setEditDraft(p => ({
-        ...p,
-        tools: r
-      })),
-      type: "tools"
-    }), resTab === 'mats' && /*#__PURE__*/React.createElement(ResEditor, {
-      rows: editDraft.mats,
-      setRows: r => setEditDraft(p => ({
-        ...p,
-        mats: r
-      })),
-      type: "mats"
-    }), resTab === 'ppe' && /*#__PURE__*/React.createElement(ResEditor, {
-      rows: editDraft.ppe,
-      setRows: r => setEditDraft(p => ({
-        ...p,
-        ppe: r
-      })),
-      type: "ppe"
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        gap: 8
-      }
-    }, /*#__PURE__*/React.createElement("button", {
-      style: btn('def'),
-      onClick: cancelEdit
-    }, "Cancel"), /*#__PURE__*/React.createElement("button", {
-      style: btn('acc'),
-      onClick: saveEdit
-    }, "Save Service"), /*#__PURE__*/React.createElement("button", {
-      style: {
-        ...btn('danger', true),
-        marginLeft: 'auto'
-      },
-      onClick: () => {
-        delSvc(editDraft.id);
-        cancelEdit();
-      }
-    }, "Delete Service"))), /*#__PURE__*/React.createElement("div", {
-      style: CS
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        overflowX: 'auto'
-      }
-    }, /*#__PURE__*/React.createElement("table", {
-      style: {
-        width: '100%',
-        borderCollapse: 'collapse',
-        fontSize: 12
-      }
-    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
-      style: {
-        ...THS,
-        width: 70
-      }
-    }, "SY3 ID"), /*#__PURE__*/React.createElement("th", {
-      style: THS
-    }, "Title"), /*#__PURE__*/React.createElement("th", {
-      style: THS
-    }, "Category"), /*#__PURE__*/React.createElement("th", {
-      style: {
-        ...THS,
-        width: 90
-      }
-    }, "Resources"), /*#__PURE__*/React.createElement("th", {
-      style: {
-        ...THS,
-        width: 60,
-        textAlign: 'right'
-      }
-    }, "Actions"))), /*#__PURE__*/React.createElement("tbody", null, filtered.map(svc => /*#__PURE__*/React.createElement("tr", {
-      key: svc.id,
-      style: {
-        background: editSvc && editSvc.id === svc.id ? '#A78BFA0A' : 'transparent'
-      }
-    }, /*#__PURE__*/React.createElement("td", {
-      style: {
-        ...TDS,
-        ...MONO,
-        fontSize: 10,
-        color: MT
-      }
-    }, "SY3-", String(svc.id).padStart(2, '0')), /*#__PURE__*/React.createElement("td", {
-      style: TDS
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontWeight: 600
-      }
-    }, svc.title), /*#__PURE__*/React.createElement("div", {
-      style: {
-        color: MT,
-        fontSize: 10,
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
-        maxWidth: 320
-      }
-    }, ((svc.scope||[])[0] || '').slice(0, 90), ((svc.scope||[])[0] || '').length > 90 ? '...' : '')), /*#__PURE__*/React.createElement("td", {
-      style: TDS
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        color: '#A78BFA',
-        fontSize: 11
-      }
-    }, svc.cat)), /*#__PURE__*/React.createElement("td", {
-      style: TDS
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        color: MT,
-        fontSize: 10,
-        lineHeight: 1.7
-      }
-    }, "MP:", (svc.mp || []).length, " TL:", (svc.tools || []).length, /*#__PURE__*/React.createElement("br", null), "MT:", (svc.mats || []).length, " PP:", (svc.ppe || []).length)), /*#__PURE__*/React.createElement("td", {
-      style: {
-        ...TDS,
-        textAlign: 'right'
-      }
-    }, /*#__PURE__*/React.createElement("button", {
-      style: btn('info', true),
-      onClick: () => editSvc && editSvc.id === svc.id ? cancelEdit() : startEdit(svc)
-    }, editSvc && editSvc.id === svc.id ? 'Close' : 'Edit'))))))), filtered.length === 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        textAlign: 'center',
-        padding: 28,
-        color: MT
-      }
-    }, "No services match. Clear the filter.")));
+            /*#__PURE__*/React.createElement("button", {
+              title: open ? 'Close' : 'Edit', onClick: toggle,
+              style: { background: 'none', border: 'none', color: MT, cursor: 'pointer', fontSize: 11, padding: 0, width: 14 }
+            }, open ? "▾" : "▸"),
+            /*#__PURE__*/React.createElement("span", { style: { ...MONO, fontSize: 10, color: MT, minWidth: 54 } },
+              /* The seeded services are numbered; one you just added has a uid,
+                 and padStart printed all 36 characters of it across the row. */
+              "SY3-", /^\d+$/.test(String(svc.id)) ? String(svc.id).padStart(2, '0') : 'NEW'),
+            /*#__PURE__*/React.createElement("div", { style: { minWidth: 200, flex: 1, cursor: 'pointer' }, onClick: toggle },
+              /*#__PURE__*/React.createElement("div", { style: { fontWeight: 600, fontSize: 12 } },
+                svc.title || /*#__PURE__*/React.createElement("i", { style: { color: MT } }, "(untitled service)")),
+              !open && /*#__PURE__*/React.createElement("div", {
+                style: { color: MT, fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 420 }
+              }, ((svc.scope || [])[0] || '').slice(0, 90) + (((svc.scope || [])[0] || '').length > 90 ? '...' : ''))),
+            /*#__PURE__*/React.createElement("span", { style: { color: '#A78BFA', fontSize: 11 } }, svc.cat),
+            /*#__PURE__*/React.createElement("span", { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 } },
+              /*#__PURE__*/React.createElement("span", { style: { ...MONO, color: MT, fontSize: 10 } }, counts),
+              /*#__PURE__*/React.createElement("button", { style: btn('info', true), onClick: toggle }, open ? 'Close' : 'Edit')
+            )
+          ),
+          open && editDraft && editorBody()
+        );
+      })
+    ));
   };
 
   /* ---- Picker modal ---- */

@@ -116,6 +116,25 @@ async function getSPToken(opts){
   }
 }
 async function spDigest(){const su=getSiteURL();const tok=await getSPToken();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json',...(tok?{'Authorization':'Bearer '+tok}:{})};const r=await fetch(`${su}/_api/contextinfo`,{method:'POST',credentials:'omit',headers:h});const d=await r.json();return{digest:d.FormDigestValue,token:tok};}
+/* A 403 is not a network problem and will never resolve itself, but it used to
+   arrive as the bare string "SP get Users:403" and land in the same catch as
+   being offline -- so the app quietly fell back to the stale local copy and
+   carried on as if nothing had happened.
+
+   Every SharePoint call runs on the SIGNED-IN USER'S OWN token: the app has no
+   service identity. So the permission that matters is that person's permission
+   on that list, which is why granting someone elevated site access "fixes"
+   syncing for them and nobody else. */
+function spDenied(e){/* Digit-bounded, not \b: a CE number like SHIC-CE-2026-0403 must not
+   read as a permission error. */
+  return /(^|[^0-9])(401|403)([^0-9]|$)|access is denied|unauthoriz/i.test(String((e&&e.message)||e||''));}
+function spErr(verb,list,status,body){
+  if(status===403||status===401)
+    return new Error('SP '+verb+' '+list+': '+status+' access denied — this SharePoint account is not allowed to '+
+      (verb==='get'?'read':'write to')+' the "'+list+'" list. Ask a site owner to give them Contribute on it '+
+      '(Site contents → '+list+' → Settings → Permissions). Everyone who uses the app needs this; it is not the Azure app registration.');
+  return new Error('SP '+verb+' '+list+':'+status+(body?' '+String(body).slice(0,100):''));
+}
 const spH = (d, x = {}) => ({
   Accept: 'application/json;odata=nometadata',
   'Content-Type': 'application/json;odata=nometadata',
@@ -142,16 +161,16 @@ async function spGet(l,f='',sel=''){
   /* Follow odata.nextLink to page through lists larger than 5000 items */
   while(url){
     const r=await fetch(url,{credentials:'omit',headers:h});
-    if(!r.ok)throw new Error('SP get '+l+':'+r.status);
+    if(!r.ok)throw spErr('get',l,r.status);
     const json=await r.json();
     results=results.concat(json.value||[]);
     url=json['odata.nextLink']||null;
   }
   return results;
 }
-async function spPost(l,data){const su=getSiteURL();if(!su)throw new Error('SP not configured');const{digest,token}=await spDigest();if(!token)throw new Error('SP: No auth token. Please sign in via Connect & Test first.');const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'Authorization':'Bearer '+token};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items`,{method:'POST',credentials:'omit',headers:h,body:JSON.stringify(data)});if(!r.ok){const t=await r.text();throw new Error('SP post '+l+':'+r.status+' '+t.slice(0,100));}return r.json();}
-async function spPatch(l,id,data){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*','X-HTTP-Method':'MERGE',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'PATCH',credentials:'omit',headers:h,body:JSON.stringify(data)});if(!r.ok)throw new Error('SP patch '+l+':'+r.status);}
-async function spDelete(l,id){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'DELETE',credentials:'omit',headers:h});if(!r.ok)throw new Error('SP delete '+l+':'+r.status);}
+async function spPost(l,data){const su=getSiteURL();if(!su)throw new Error('SP not configured');const{digest,token}=await spDigest();if(!token)throw new Error('SP: No auth token. Please sign in via Connect & Test first.');const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'Authorization':'Bearer '+token};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items`,{method:'POST',credentials:'omit',headers:h,body:JSON.stringify(data)});if(!r.ok){const t=await r.text();throw spErr('post',l,r.status,t);}return r.json();}
+async function spPatch(l,id,data){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*','X-HTTP-Method':'MERGE',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'PATCH',credentials:'omit',headers:h,body:JSON.stringify(data)});if(!r.ok)throw spErr('patch',l,r.status);}
+async function spDelete(l,id){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'DELETE',credentials:'omit',headers:h});if(!r.ok)throw spErr('delete',l,r.status);}
 
 async function spGetAttachments(listName, itemId){
   const su=getSiteURL(); if(!su) return [];

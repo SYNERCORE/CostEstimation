@@ -54,6 +54,22 @@
     }catch(e){addLog('Repair failed: '+e.message.slice(0,120));}
     setProgress(null);setBusy(false);
   };
+  const[access,setAccess]=React.useState(null);
+  /* "It works for me" proves nothing: every SharePoint call runs on the
+     signed-in user's own token, so permission is per person, per list. Have
+     the person who cannot sync press this and read the row that says DENIED. */
+  const handleCheckAccess=async()=>{
+    setBusy(true);setAccess(null);addLog('Checking what this account can read and write...');
+    try{
+      const rows=await spCheckAccess(p=>setProgress({msg:'Checking '+p.name+'...',progress:p.i/p.total}));
+      setAccess(rows);
+      const bad=rows.filter(r=>r.read!=='yes'||r.write!=='yes');
+      addLog(bad.length?('⚠ '+bad.length+' list(s) this account cannot use: '+bad.map(r=>r.list).join(', ')):'All lists readable and writable by this account.');
+      const left=rows.filter(r=>r.leftover);
+      if(left.length)addLog('⚠ Probe rows left behind (delete them by hand): '+left.map(r=>r.list+' #'+r.leftover).join(', '));
+    }catch(e){addLog('Access check failed: '+e.message.slice(0,120));}
+    setProgress(null);setBusy(false);
+  };
   React.useEffect(()=>{
     const saved=getSPConfig();
     if(saved.siteUrl&&saved.clientId)handleConnect();
@@ -80,7 +96,22 @@
          up by an older version had no way to receive a column added since,
          short of disconnecting and reconnecting. autoSetupSP only ever adds
          what is missing, so running it again is safe at any time. */
-      status==='connected'&&React.createElement('button',{style:btn('info'),disabled:busy,title:'Adds any list or column this version needs and the site does not have. Existing data is never touched.',onClick:handleRepair},busy?'Working...':'Repair lists & columns')
+      status==='connected'&&React.createElement('button',{style:btn('info'),disabled:busy,title:'Adds any list or column this version needs and the site does not have. Existing data is never touched.',onClick:handleRepair},busy?'Working...':'Repair lists & columns'),
+      React.createElement('button',{style:btn('def'),disabled:busy,title:'Tries a read and a write on every list AS THE SIGNED-IN ACCOUNT. Run it from the machine of whoever cannot sync.',onClick:handleCheckAccess},busy?'Working...':'Check my access')
+    ),
+    access&&React.createElement('div',{style:{marginTop:10,padding:'10px 12px',background:SURF,borderRadius:6}},
+      React.createElement('div',{style:{fontSize:11,color:TX,fontWeight:700,marginBottom:6}},'What this account can do'),
+      React.createElement('div',{style:{fontSize:10,color:MT,marginBottom:8,lineHeight:1.6}},
+        'The app has no service account: it acts as whoever is signed in. A list marked DENIED here works for you and fails for them until a site owner grants that person ',
+        React.createElement('b',{style:{color:TX}},'Contribute'),' on it.'),
+      React.createElement('table',{style:{width:'100%',borderCollapse:'collapse',fontSize:10}},
+        React.createElement('thead',null,React.createElement('tr',null,
+          ['List','Read','Write','Needed for'].map(h=>React.createElement('th',{key:h,style:{...THS,fontSize:9}},h)))),
+        React.createElement('tbody',null,access.map(r=>React.createElement('tr',{key:r.list},
+          React.createElement('td',{style:{...TDS,fontFamily:"'JetBrains Mono',monospace"}},r.list),
+          ...['read','write'].map(k=>React.createElement('td',{key:k,style:{...TDS,color:r[k]==='yes'?OK:ERR,fontWeight:700}},r[k]==='yes'?'ok':r[k])),
+          React.createElement('td',{style:{...TDS,color:MT}},r.note||r.why))))
+      )
     ),
     progress&&React.createElement('div',{style:{marginTop:8,padding:'8px 10px',background:SURF,borderRadius:6}},
       React.createElement('div',{style:{fontSize:11,color:TX,marginBottom:6}},progress.msg),

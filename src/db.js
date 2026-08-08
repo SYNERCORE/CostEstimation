@@ -229,8 +229,49 @@ const LS = {
    reporting "Account not found" to someone whose account plainly exists sends
    them hunting for the wrong problem. */
 let _userListStale=false;
+/* Separate from stale-because-offline. A refusal never fixes itself: the person
+   keeps working against a local copy that drifts further from SharePoint every
+   day, and nothing on screen says why. This is what "accounts do not sync until
+   you make them an admin" looks like from the inside. */
+let _userListDenied=false;
 function userListIsStale(){return _userListStale;}
-async function dbGetUsers(){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Users'),'','Id,Title,shicName,shicHash,shicRole,shicStatus,shicEmail,Created');_userListStale=false;return r.filter(u=>u&&u.Title).map(u=>({id:u.Id,username:u.Title,name:u.shicName||'',hash:u.shicHash||'',role:u.shicRole||'user',status:u.shicStatus||'pending',email:u.shicEmail||'',createdAt:u.Created}));}catch(e){console.warn('dbGetUsers:',e.message);_userListStale=true;}}else{_userListStale=false;}return(LS.get('users')||[]).filter(u=>u&&u.username);}
+function userListDenied(){return _userListDenied;}
+async function dbGetUsers(){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Users'),'','Id,Title,shicName,shicHash,shicRole,shicStatus,shicEmail,Created');_userListStale=false;_userListDenied=false;return r.filter(u=>u&&u.Title).map(u=>({id:u.Id,username:u.Title,name:u.shicName||'',hash:u.shicHash||'',role:u.shicRole||'user',status:u.shicStatus||'pending',email:u.shicEmail||'',createdAt:u.Created}));}catch(e){console.warn('dbGetUsers:',e.message);_userListStale=true;_userListDenied=spDenied(e);if(_userListDenied){try{window.dispatchEvent(new CustomEvent('shic-sp-denied',{detail:{list:spList('Users'),op:'read'}}));}catch(_e){}}}}else{_userListStale=false;_userListDenied=false;}return(LS.get('users')||[]).filter(u=>u&&u.username);}
+
+/* Which lists this signed-in account can actually read and write.
+   Every call the app makes runs on the user's own delegated token -- there is
+   no service identity -- so "it works for me" tells you nothing about whether
+   it works for them. This answers that per list, per person. The write probe
+   creates one row and deletes it again; on a list where the account can create
+   but not delete, the row is left behind and named in the result rather than
+   hidden. */
+const SP_PROBE_LISTS=[['Users','the sign-in list — everyone needs this'],
+  ['CEs','saving a CE'],['CE_MP','manpower rows'],['CE_Resources','tools / consumables / PPE rows'],
+  ['Monitoring','the CE Monitoring tab'],['Drafts','shared drafts'],['AuditLog','the audit trail'],
+  ['Masterlist','rates'],['SowLib','the Scope Library'],['Companies','issuing companies'],
+  ['ML_Imports','document analysis']];
+async function spCheckAccess(onProgress){
+  const out=[];
+  for(let i=0;i<SP_PROBE_LISTS.length;i++){
+    const [key,why]=SP_PROBE_LISTS[i];
+    const name=spList(key);
+    const row={list:name,why,read:'?',write:'?',note:'',leftover:0};
+    onProgress&&onProgress({name,i,total:SP_PROBE_LISTS.length});
+    try{await spGet(name,'','Id');row.read='yes';}
+    catch(e){row.read=spDenied(e)?'DENIED':'error';row.note=String(e.message||e).slice(0,120);}
+    if(row.read==='yes'){
+      let created=null;
+      try{created=await spPost(name,{Title:'__shic_access_probe__'});row.write='yes';}
+      catch(e){row.write=spDenied(e)?'DENIED':'error';if(!row.note)row.note=String(e.message||e).slice(0,120);}
+      if(created&&created.Id!==undefined){
+        try{await spDelete(name,created.Id);}
+        catch(_e){row.leftover=created.Id;row.note='probe row '+created.Id+' could not be deleted — this account can add but not remove rows';}
+      }
+    }
+    out.push(row);
+  }
+  return out;
+}
 /* On a SharePoint install this must NOT fall back to a local write. The Users
    list is where admins approve people; a locally written account is invisible
    there and never syncs, so registering offline showed the "request submitted"

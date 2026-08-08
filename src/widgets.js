@@ -4,6 +4,34 @@
    background reads deliberately never prompt (an unattended redirect would
    throw away the CE being edited), there was nothing to click and no way back
    in short of a reload. This is that way back. */
+/* A permission refusal is NOT a session problem and no amount of signing in
+   again will clear it, so it needs its own banner. Without one the app quietly
+   drops to the local copy and the person carries on for days, their accounts
+   and CEs drifting further from SharePoint, with nothing on screen to explain
+   why -- which is what "it only works if you make them an admin" looks like
+   from the user's side. */
+function SPDeniedBanner() {
+  const [hit, setHit] = React.useState(null);
+  React.useEffect(() => {
+    const on = e => setHit((e && e.detail) || { list: 'a SharePoint list', op: 'use' });
+    window.addEventListener('shic-sp-denied', on);
+    return () => window.removeEventListener('shic-sp-denied', on);
+  }, []);
+  if (!hit) return null;
+  return React.createElement('div', {
+    style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+      padding: '8px 14px', background: ERR + '18', borderBottom: '1px solid ' + ERR + '44', color: ERR, fontSize: 12 }
+  },
+    React.createElement('span', { style: { fontWeight: 700 } }, 'SharePoint denied access'),
+    React.createElement('span', { style: { color: MT } },
+      'Your Microsoft account cannot ' + (hit.op === 'read' ? 'read' : 'write to') + ' "' + hit.list +
+      '", so this device is working from its own copy and changes are not reaching the team. ' +
+      'A site owner needs to give you Contribute on that list — signing in again will not help.'),
+    React.createElement('button', {
+      style: { ...btn('def', true), marginLeft: 'auto' }, onClick: () => setHit(null)
+    }, 'Dismiss')
+  );
+}
 function SignInBanner() {
   const [need, setNeed] = React.useState(false);
   const [busy, setBusy] = React.useState(false);

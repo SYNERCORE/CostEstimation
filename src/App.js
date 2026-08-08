@@ -864,6 +864,14 @@ function App({
         ...misc
       },
       addlCosts: [...addlCosts],
+      /* The margin % was in the unsaved-changes signature but in neither this
+         object nor the draft, so `_margin` was written as 0 every time. You set
+         15%, watched the SELLING PRICE line appear on screen and on the printed
+         CE, saved, reopened -- and the margin was 0 and the line was gone. */
+      margin,
+      /* Likewise the scope description: saved as an empty string into a
+         SharePoint column, read back, and then ignored by the loader. */
+      scope,
       notes: [...notes],
       sowItems: [...sowItems],
       approvers: [...approvers],
@@ -952,6 +960,7 @@ function App({
         ...misc
       },
       addlCosts: [...addlCosts],
+      margin,
       notes: [...notes],
       sowItems: [...sowItems],
       approvers: [...approvers],
@@ -1208,6 +1217,7 @@ function App({
     })));
     setAddlCosts((d.addlCosts || []).map(r => ({...r, id: r.id || uid()})));
     setMargin(d.margin || 0);
+    setScope(d.scope || '');
     setDocFile(d.docRef ? {
       name: d.docRef.name,
       spUrl: d.docRef.spUrl,
@@ -5012,7 +5022,9 @@ function App({
      stale closure. */
   _live.current = {
     saveDraft, hasUnsavedWork,
-    sig: JSON.stringify([info, mp, tools, mats, ppe, misc, sowItems, notes, addlCosts, margin, mobVehicles, demobVehicles])
+    /* Everything mkEntry persists belongs here, or an edit to it leaves the CE
+       looking saved when it is not. ceType, approvers and scope were missing. */
+    sig: JSON.stringify([ceType, info, mp, tools, mats, ppe, misc, sowItems, notes, addlCosts, margin, approvers, scope, mobVehicles, demobVehicles])
   };
   return /*#__PURE__*/React.createElement("div", {
     style: {

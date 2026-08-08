@@ -54,5 +54,7 @@ jobs:
         run: node tools/test-scopelib.js src/App.js
       - name: Check CE - pre-flight rules
         run: node tools/test-preflight.js src/App.js
+      - name: A CE keeps every field through SharePoint and back
+        run: node tools/test-ce-roundtrip.js
       - name: Saved-total recompute agrees with the editor
         run: node tools/test-recompute.js

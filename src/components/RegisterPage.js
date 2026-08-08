@@ -387,7 +387,7 @@ async function autoSetupSP(progressCb){
 
   const lists={
     [spList('Users')]:    [[2,'shicName'],[3,'shicHash'],[2,'shicRole'],[2,'shicStatus'],[2,'shicEmail']],
-    [spList('CEs')]:      [[2,'shicType'],[2,'shicClient'],[3,'shicDesc'],[9,'shicTotal'],[2,'shicSavedBy'],[2,'shicSavedAt'],[3,'shicScope'],[3,'shicNotes'],[3,'shicApprovers'],[3,'shicMob'],[3,'shicDemob'],[3,'shicMisc'],[3,'shicSOW']],
+    [spList('CEs')]:      [[2,'shicType'],[2,'shicClient'],[3,'shicDesc'],[9,'shicTotal'],[2,'shicSavedBy'],[2,'shicSavedAt'],[3,'shicScope'],[3,'shicNotes'],[3,'shicApprovers'],[3,'shicMob'],[3,'shicDemob'],[3,'shicMisc'],[3,'shicSOW'],[3,'shicInfo']],
     /* shicPax / shicOTHours / shicPerDiem were added to the manpower payload
        long before they were added here, so no site had the columns and EVERY
        CE_MP insert came back 400 InvalidClientQueryException. The CE header had

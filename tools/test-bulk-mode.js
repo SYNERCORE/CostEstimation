@@ -134,5 +134,15 @@ ck('the banner shows the age once it is stale', /bulkMode\.isStale\(\)[\s\S]{0,2
   'the warning has to be where the person saving CEs will see it');
 ck('the admin panel shows it too', /bulkMode\.isStale\(\) \? ", open for "/.test(ap));
 
+console.log('\nthe banner keeps its own time:');
+ck('a tick forces the countdown to redraw', /setBulkTick\(n => n \+ 1\)/.test(app),
+  'bulkOn is a boolean, so re-setting it to true never re-renders and the numbers froze');
+ck('it only ticks while a window is open', /if \(bulkMode\.on\(currentUser\?\.username\)\) setBulkTick/.test(app),
+  'a permanent 60s re-render of the whole app is a poor trade for a clock');
+ck('once a minute, not every 5 seconds', /\}, 60000\)/.test(app),
+  'the displayed unit is minutes, so a faster tick buys nothing');
+ck('both intervals are cleared', /clearInterval\(t\); clearInterval\(tick\)/.test(app),
+  'a leaked interval outlives the component');
+
 console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nall bulkMode assertions passed');
 process.exit(fails ? 1 : 0);

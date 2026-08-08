@@ -301,13 +301,23 @@ function App({
   /* Scoped to this account: the window now outlives the tab, so a colleague
      signing in on the same browser must not inherit the bypass. */
   const [bulkOn, setBulkOn] = useState(() => bulkMode.on(currentUser?.username));
+  const [, setBulkTick] = useState(0);
   useEffect(() => {
     /* Poll as well as listen: the window expires on a timer, so the banner
        has to disappear on its own without another user action. */
     const h = () => setBulkOn(bulkMode.on(currentUser?.username));
     window.addEventListener('shic:bulk:changed', h);
     const t = setInterval(h, 5000); /* short, so the banner clears promptly when the window expires */
-    return () => { window.removeEventListener('shic:bulk:changed', h); clearInterval(t); };
+    /* bulkOn is a boolean, so setting it to true again never re-renders -- the
+       banner's "3d 23h left", and the "open for N days" warning that appears
+       after a day, stayed frozen at whatever they were when some unrelated
+       action last redrew the page. A separate tick redraws them, once a minute
+       and only while the window is actually open, because App is a large tree
+       to re-render for a clock. */
+    const tick = setInterval(() => {
+      if (bulkMode.on(currentUser?.username)) setBulkTick(n => n + 1);
+    }, 60000);
+    return () => { window.removeEventListener('shic:bulk:changed', h); clearInterval(t); clearInterval(tick); };
   }, []);
   const _live = useRef(null);       /* current state for the auto-save timer */
   /* The owner holds every admin power on top of being unmanageable by them. */
@@ -1378,6 +1388,24 @@ function App({
       if (!selected.length) {
         showToast('Select at least one service first.', true);
         return;
+      }
+      /* Add to CE is additive by design: each press builds a fresh set of scope
+         tasks and files a fresh set of resources against them. Pressing it
+         twice for the same service is therefore a doubled CE, and the only
+         signal used to be the totals quietly growing. Ask first, and name the
+         services rather than warning in the abstract. */
+      if (addMode) {
+        const already = selected.filter(svc => {
+          const t = String(svc.title || '').trim().toUpperCase();
+          return t && (sowItems || []).some(it => it.type === 'main' &&
+            String(it.text || '').replace(/^x\d+\s+/i, '').trim().toUpperCase() === t);
+        });
+        if (already.length && !confirm(
+          (already.length === 1 ? 'This service is' : 'These ' + already.length + ' services are') +
+          ' already in this CE:\n\n  ' + already.map(s => s.title).join('\n  ') +
+          '\n\nAdding again creates a SECOND set of scope tasks and a second set of ' +
+          'resources, so the total will roughly double for them.\n\n' +
+          'To change what is already there, edit it in SOW Breakdown instead.\n\nAdd anyway?')) return;
       }
 
       /* Build the SOW tasks FIRST, so every resource can be filed against the

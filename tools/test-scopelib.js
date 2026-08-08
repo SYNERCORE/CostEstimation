@@ -117,5 +117,25 @@ ck('the library calls it Consumables, like the Breakdown', /\['mats', 'Consumabl
   'it used to say Materials on one screen and Consumables on the other');
 ck('and offers Miscellaneous, which it never had', /\['misc', 'Miscellaneous'\]/.test(src));
 
+/* Add to CE is additive by design: each press builds a fresh set of scope tasks
+   and files a fresh set of resources against them. Pressing it twice for the
+   same service is a doubled CE, and the only signal was the totals growing. */
+console.log('\nAdding the same service twice is confirmed, not silent:');
+ck('Add to CE checks what is already in the CE', /const already = selected\.filter/.test(src));
+ck('only in add mode', /if \(addMode\) \{[\s\S]{0,80}const already/.test(src),
+  'replace mode wipes and rebuilds, so it cannot double anything');
+ck('the quantity prefix does not hide a match', /replace\(\/\^x\\d\+\\s\+\/i, ''\)/.test(src),
+  '"x2 Rebabbitting" is the same service as "Rebabbitting"');
+ck('the warning names the services', /already\.map\(s => s\.title\)\.join/.test(src),
+  'a warning you cannot act on is noise');
+ck('it says what to do instead', /edit it in SOW Breakdown instead/.test(src));
+/* The guard has to be WIRED to the finding, not merely present beside it --
+   `if (false && !confirm(...))` keeps every other assertion here happy. */
+ck('the warning actually fires on a match', /if \(already\.length && !confirm\(/.test(src),
+  'a guard that never triggers passes every check that only looks for its parts');
+ck('and returns without applying when declined', /Add anyway\?'\)\) return;/.test(src));
+ck('it is a confirm, not a block', /Add anyway\?/.test(src),
+  'adding a service twice on purpose is legitimate');
+
 console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nall scope-library assertions passed');
 process.exit(fails ? 1 : 0);

@@ -5034,51 +5034,195 @@ function App({
     if (!confirmZeroCost('Proceed with generating CE?')) return;
     handleGenerateCE();
   };
+  /* Export the CE to Excel as the same document the printer produces: one
+     worksheet per printed page, in the same order, with the same section
+     headings, the same columns and the same totals.
+
+     It used to be a data dump -- a flat sheet per resource type with generic
+     headers -- which was fine for re-importing figures and useless to anyone
+     expecting the CE. Numbers are written as NUMBERS with a peso format, not
+     as pre-formatted text, so the recipient can still total a column.
+
+     HONEST LIMIT: the bundled SheetJS is the community build, which ignores
+     cell styling on write. Layout, merges, column widths and number formats
+     survive; bold text, the black header bars and cell borders do not. */
   const handleExportXLSX = () => {
     const wb = XLSX.utils.book_new();
-    const aoa = (rows) => XLSX.utils.aoa_to_sheet(rows);
-    const shiftLabel = {regular_day:'Regular Day',regular_night:'Regular Night',sunday:'Sunday',holiday:'Holiday'};
-    const shiftMult = {regular_day:1,regular_night:1.25,sunday:1.3,holiday:2};
-    /* Summary */
-    const sumRows = [
-      ['SHIC COST ESTIMATE'],[''],
-      ['CE Number:', info.ceNum], ['Date:', info.date], ['Client:', info.client||''], ['Location:', info.location||''], ['Description:', info.description||''],
-      [''],['SECTION','AMOUNT (₱)'],
-      ...summaryRows.map(([l,v])=>[l, v]),
-      [''],['GRAND TOTAL (Cost)', grand],
-      ['Margin %', margin+'%'],
-      ['SELLING PRICE', grand*(1+margin/100)]
-    ];
-    XLSX.utils.book_append_sheet(wb, aoa(sumRows), 'Summary');
-    /* Manpower */
-    if (mp.filter(r=>r.role||r.desc).length) {
-      const mpRows = [['Role','Pax','Days','OT Hrs/Day','Shift','Rate (₱/Day)','Per Diem (₱)','Total (₱)'],
-        ...mp.filter(r=>r.role||r.desc).map(r=>{
-          const sm=shiftMult[r.shift]||1;
-          const base=N(r.pax)*N(r.days)*N(r.rate)*sm;
-          const ot=N(r.pax)*N(r.days)*N(r.otHours)*(N(r.rate)/8)*1.25;
-          const pd=N(r.pax)*N(r.days)*N(r.perDiem);
-          return[r.role||r.desc,N(r.pax),N(r.days),N(r.otHours),shiftLabel[r.shift]||r.shift,N(r.rate),N(r.perDiem),base+ot+pd];
-        })];
-      XLSX.utils.book_append_sheet(wb, aoa(mpRows), 'Manpower');
-    }
-    /* Tools */
-    if (tools.filter(r=>r.desc).length) {
-      const tRows=[['Description','Qty','Days','UOM','Cost (₱)','Total (₱)'],...tools.filter(r=>r.desc).map(r=>[r.desc,N(r.qty),resDays(r),r.uom,N(r.cost),N(r.qty)*resDays(r)*N(r.cost)])];
-      XLSX.utils.book_append_sheet(wb, aoa(tRows), 'Tools');
-    }
-    /* Materials */
-    if (mats.filter(r=>r.desc).length) {
-      const mRows=[['Description','Qty','UOM','Cost (₱)','Total (₱)'],...mats.filter(r=>r.desc).map(r=>[r.desc,N(r.qty),r.uom,N(r.cost),N(r.qty)*N(r.cost)])];
-      XLSX.utils.book_append_sheet(wb, aoa(mRows), 'Materials');
-    }
-    /* PPE */
-    if (ppe.filter(r=>r.desc).length) {
-      const pRows=[['Description','Qty','UOM','Cost (₱)','Total (₱)'],...ppe.filter(r=>r.desc).map(r=>[r.desc,N(r.qty),r.uom,N(r.cost),N(r.qty)*N(r.cost)])];
-      XLSX.utils.book_append_sheet(wb, aoa(pRows), 'PPE');
-    }
-    XLSX.writeFile(wb, (info.ceNum||'CE') + '_' + (info.client||'export').replace(/[^a-z0-9]/gi,'_') + '.xlsx');
-    showToast('Exported to Excel.');
+    const PESO = '#,##0.00';
+    /* Resolved exactly as the printed CE does, so the two headers agree. */
+    const _cos = getCompanies();
+    const coI = _cos.find(c => String(c.id) === String(info.companyId)) || _cos[0] || {};
+    const co = {
+      name: coI.name || 'SYNERCORE', sub: coI.sub || 'HEAVY INDUSTRIES CORP.',
+      doc: coI.docNo || coI.doc || 'SHIC-F-TSG025', revNo: coI.revNo || '0', revDate: coI.revDate || ''
+    };
+    const shiftLabel = k => (SHIFTS[k] && SHIFTS[k].label) || k;
+
+    /* Build one sheet: rows of cells, where a cell is a plain value or
+       {v, n:true} to force a peso number format. Merges are collected as we go
+       so a title row spans the table beneath it. */
+    const sheet = (name, build) => {
+      const rows = [], merges = [];
+      const api = {
+        row: (...cells) => { rows.push(cells); return rows.length - 1; },
+        blank: () => { rows.push([]); },
+        /* A full-width heading over `span` columns, like the black bars on the
+           printed form. */
+        title: (text, span) => {
+          const r = rows.length;
+          rows.push([text]);
+          if (span > 1) merges.push({ s: { r, c: 0 }, e: { r, c: span - 1 } });
+        },
+        money: v => ({ v: Math.round(N(v) * 100) / 100, n: true })
+      };
+      build(api);
+      const aoa = rows.map(r => r.map(c => (c && typeof c === 'object' && 'v' in c) ? c.v : (c === undefined ? '' : c)));
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      /* Re-apply the peso format to the cells that asked for it. */
+      rows.forEach((r, ri) => r.forEach((c, ci) => {
+        if (c && typeof c === 'object' && c.n) {
+          const ref = XLSX.utils.encode_cell({ r: ri, c: ci });
+          if (ws[ref]) { ws[ref].t = 'n'; ws[ref].z = PESO; }
+        }
+      }));
+      if (merges.length) ws['!merges'] = merges;
+      const widest = rows.reduce((m, r) => Math.max(m, r.length), 0);
+      ws['!cols'] = Array.from({ length: widest }, (_, i) => ({ wch: i === 1 ? 42 : i === 0 ? 7 : 13 }));
+      XLSX.utils.book_append_sheet(wb, ws, name);
+    };
+
+    /* The document header that tops every printed page. */
+    const docHead = (a, title, span) => {
+      a.row(co.name + ' — ' + co.sub, '', '', 'Document No.:', co.doc);
+      a.row('COST ESTIMATE SUMMARY', '', '', 'Revision No.:', co.revNo);
+      a.row('', '', '', 'Revision Date:', co.revDate);
+      a.title(title, span);
+      a.row('CE No.:', info.ceNum || '', 'CE TYPE:', ceType.toUpperCase(), 'DATE:', info.date || '');
+      a.blank();
+    };
+
+    /* ── Page 1: cost estimate summary ── */
+    sheet('CE Summary', a => {
+      docHead(a, 'COST ESTIMATE SUMMARY', 7);
+      a.row('PROJECT DESCRIPTION:', info.description || '');
+      a.row('CLIENT NAME:', info.client || '', '', 'CLIENT LOCATION:', info.location || '');
+      a.row('ATTENTION:', info.attention || 'SALES DEPARTMENT', '', 'QUANTITY:', (info.qty || 1) + ' LOT');
+      a.row('END USER:', info.endUser || 'C/O SALES', '', 'NO. OF DAYS:', (info.days || '') + ' DAYS');
+      a.row('DISCIPLINE:', info.projType || '', '', 'STATUS:', info.status || '');
+      a.blank();
+      a.row('ITEM', 'DESCRIPTION', 'TOTAL COST');
+      summaryRows.forEach(([l, v]) => {
+        const parts = String(l).trim().split(/\s+/);
+        const isItem = /^[A-Z]\.$/.test(parts[0]);
+        a.row(isItem ? parts[0] : '', isItem ? parts.slice(1).join(' ') : l, a.money(v));
+      });
+      a.blank();
+      a.row('', 'TOTAL AMOUNT:', a.money(grand));
+      a.row('', 'UNIT PRICE (qty ' + (N(info.qty) || 1) + '):', a.money(unitP));
+      if (margin !== 0) a.row('', 'SELLING PRICE (' + (margin > 0 ? '+' : '') + margin + '% margin):', a.money(grand * (1 + margin / 100)));
+      hlRows.forEach(r => a.row('', String(hlLabel(r)).toUpperCase() + ':', a.money(hlAmt(r))));
+      /* Notes, including the breakdown notes, exactly as the CE prints them. */
+      const sowNotes = (sowItems || []).filter(x => String(x.note || '').trim());
+      if (notes.length || sowNotes.length) {
+        a.blank();
+        a.title('NOTE', 3);
+        notes.forEach((n, i) => a.row(i + 1, n.text || ''));
+        sowNotes.forEach((x, i) => a.row(notes.length + i + 1, 'Scope ' + (sowLabels[x.id] || '') + ' — ' + String(x.note).trim()));
+      }
+      if (approvers && approvers.length) {
+        a.blank();
+        a.title('SIGNATORIES', 3);
+        approvers.forEach(ap => a.row(ap.role || '', ap.name || '', ap.title || ''));
+      }
+    });
+
+    /* ── Page 2: manpower loading, one block per shift ── */
+    const mpActive = mp.filter(r => r.role && (N(r.rate) > 0 || N(r.pax) > 0));
+    if (mpActive.length) sheet('Manpower', a => {
+      docHead(a, 'BILL OF MANPOWER LOADING', 10);
+      [...new Set(mpActive.map(r => r.shift || 'regular_day'))].forEach(sk => {
+        const rows = mpActive.filter(r => (r.shift || 'regular_day') === sk);
+        const mult = (SHIFTS[sk] && SHIFTS[sk].mult) || 1;
+        a.title(shiftLabel(sk), 10);
+        a.row('ITEM', 'MANPOWER LOADING', 'QTY', 'UOM', 'DAYS', 'RATE/DAY', 'SUBTOTAL', 'AOT', 'RATE OT', 'TOTAL');
+        let subA = 0, subB = 0;
+        rows.forEach((r, i) => {
+          const base = N(r.pax) * N(r.days) * N(r.rate) * mult;
+          const ot = N(r.pax) * N(r.days) * (N(r.otHours) / 8) * N(r.rate) * 1.25 * mult;
+          subA += base; subB += ot;
+          a.row(i + 1, r.role || '', N(r.pax), 'pax', N(r.days), a.money(r.rate),
+            a.money(base), N(r.otHours) * N(r.days), a.money(N(r.rate) / 8 * 1.25 * mult), a.money(base + ot));
+        });
+        a.row('', '', '', '', '', '', '', '', 'SUB TOTAL:', a.money(subA + subB));
+        a.blank();
+      });
+      /* Benefits table, matching section C.7 on the printed form. */
+      const benRows = mpActive.filter(r => N(r.monthlyRate) > 0 || (r.benefits && Object.values(r.benefits).some(v => N(v) > 0)));
+      if (benRows.length) {
+        a.title('BENEFITS AND OTHERS', 11);
+        a.row('ITEM', 'MANPOWER LOADING', 'QTY', 'UOM', 'TOTAL DAYS', 'MONTHLY RATE', '13TH PAY', 'SSS', 'HDMF & PHIC', 'SIL & ECC', 'TOTAL');
+        let bt = 0;
+        benRows.forEach((r, i) => {
+          const b = r.benefits || {};
+          const tot = N(b.thirteenth) + N(b.sss) + N(b.hdmf) + N(b.sil);
+          bt += tot;
+          a.row(i + 1, r.role || '', N(r.pax), 'pax', N(r.days), a.money(r.monthlyRate),
+            a.money(b.thirteenth), a.money(b.sss), a.money(b.hdmf), a.money(b.sil), a.money(tot));
+        });
+        a.row('', '', '', '', '', '', '', '', '', 'SUB TOTAL:', a.money(bt));
+      }
+      a.blank();
+      a.row('', 'MANPOWER COST TOTAL:', '', '', '', '', '', '', '', a.money(mpTot));
+    });
+
+    /* ── Resource pages, each mirroring its printed bill ── */
+    const bill = (name, heading, rows, withDays, total) => {
+      if (!rows.length) return;
+      sheet(name, a => {
+        docHead(a, heading, withDays ? 7 : 6);
+        a.row('ITEM', 'DESCRIPTION', 'QTY', 'UOM', ...(withDays ? ['DAYS'] : []), 'UNIT PRICE', 'TOTAL');
+        rows.forEach((r, i) => {
+          const d = withDays ? resDays(r) : 1;
+          a.row(i + 1, r.desc || '', N(r.qty), r.uom || 'Lot', ...(withDays ? [d] : []),
+            a.money(r.cost), a.money(N(r.qty) * d * N(r.cost)));
+        });
+        a.blank();
+        a.row('', 'TOTAL:', '', '', ...(withDays ? [''] : []), '', a.money(total));
+      });
+    };
+    bill('Tools & Equipment', 'BILL OF TOOLS AND EQUIPMENT', tools.filter(r => r.desc), true, toolsT);
+    bill('Materials', 'BILL OF MATERIALS AND CONSUMABLES', mats.filter(r => r.desc), false, matsT);
+    bill('PPE', 'PERSONAL PROTECTIVE EQUIPMENTS', ppe.filter(r => r.desc), false, ppeT);
+
+    /* ── Miscellaneous, grouped by its categories ── */
+    const miscCatsX = (MISC_DEF[ceType] || MISC_DEF.onsite);
+    const miscAny = miscCatsX.some(([k]) => (Array.isArray(misc[k]) ? misc[k] : []).some(r => r.desc));
+    if (miscAny) sheet('Miscellaneous', a => {
+      docHead(a, 'MISCELLANEOUS', 6);
+      miscCatsX.forEach(([k, label]) => {
+        const rows = (Array.isArray(misc[k]) ? misc[k] : []).filter(r => r.desc);
+        if (!rows.length) return;
+        a.title(label, 6);
+        a.row('ITEM', 'DESCRIPTION', 'QTY', 'UOM', 'UNIT PRICE', 'TOTAL');
+        rows.forEach((r, i) => a.row(i + 1, r.desc, N(r.qty), r.uom || 'Lot', a.money(r.cost), a.money(N(r.qty) * N(r.cost))));
+        a.row('', 'Sub total:', '', '', '', a.money(rows.reduce((s2, r) => s2 + N(r.qty) * N(r.cost), 0)));
+        a.blank();
+      });
+      a.row('', 'MISCELLANEOUS TOTAL:', '', '', '', a.money(miscT));
+    });
+
+    /* ── Scope of work, numbered as the CE prints it ── */
+    if ((sowItems || []).length) sheet('Scope of Work', a => {
+      docHead(a, 'SCOPE OF WORK', 3);
+      let mc = 0, sc = 0;
+      sowItems.forEach(it => {
+        if (it.type === 'main') { mc++; sc = 0; a.row(mc + '.', it.text || ''); }
+        else { sc++; a.row(mc + '.' + sc, '   ' + (it.text || '')); }
+      });
+    });
+
+    XLSX.writeFile(wb, (info.ceNum || 'CE') + '_' + (info.client || 'export').replace(/[^a-z0-9]/gi, '_') + '.xlsx');
+    showToast('Exported to Excel — one sheet per page of the CE.');
   };
   const [showDraftBanner, setShowDraftBanner] = React.useState(() => hasDraft());
   /* Refreshed on every render so the auto-save timer never works from a

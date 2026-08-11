@@ -7438,7 +7438,43 @@ tab === 'dashboard' && (() => {
         }));
         showToast(updated ? `Updated ${updated} rate(s) from masterlist.` : 'No matching roles found in masterlist.', !updated);
       }
-    }, "↺ Sync Rates"), /*#__PURE__*/React.createElement("label", {
+    }, "↺ Sync Rates"),
+    /* Combines rows that are the same in every way that affects the cost AND
+       sit on the same scope task, by adding their PAX together. Two rows for
+       one role are usually NOT that -- they are different crews on different
+       tasks, or the same role for a different number of days -- and folding
+       those together would either misstate the deployment or empty a task that
+       really does need the people. Those are left alone and reported. */
+    /*#__PURE__*/React.createElement("button", {
+      style: btn('info', true),
+      title: "Add together rows in this shift that have the same role, rate, days, OT and scope task",
+      onClick: () => {
+        const key = r => [String(r.role || '').trim().toUpperCase(), N(r.rate), N(r.days), N(r.otHours || 0), N(r.perDiem || 0), r.taskId || ''].join('|');
+        const rows = mp.filter(r => r.shift === shiftKey && r.role);
+        const groups = {};
+        rows.forEach(r => { (groups[key(r)] = groups[key(r)] || []).push(r); });
+        const dupes = Object.values(groups).filter(g => g.length > 1);
+        if (!dupes.length) {
+          /* Say WHY nothing merged -- otherwise a button that does nothing reads
+             as broken, which is exactly the confusion this is here to answer. */
+          const byRole = {};
+          rows.forEach(r => { const k = String(r.role || '').trim().toUpperCase(); (byRole[k] = byRole[k] || []).push(r); });
+          const split = Object.entries(byRole).filter(([, g]) => g.length > 1);
+          showToast(split.length
+            ? 'Nothing to combine. ' + split.map(([k, g]) => k + ' appears ' + g.length + ' times').join(', ') +
+              ' — but those rows differ in days, rate or scope task, so adding them together would change what the CE says.'
+            : 'No duplicate rows in this shift.', true);
+          return;
+        }
+        const merged = dupes.reduce((n, g) => n + g.length - 1, 0);
+        const keep = new Set(dupes.map(g => g[0].id));
+        const drop = new Set(dupes.flatMap(g => g.slice(1)).map(r => r.id));
+        const addPax = {};
+        dupes.forEach(g => { addPax[g[0].id] = g.reduce((t, r) => t + N(r.pax), 0); });
+        setMp(p => p.filter(r => !drop.has(r.id)).map(r => keep.has(r.id) ? { ...r, pax: addPax[r.id] } : r));
+        showToast('Combined ' + merged + ' duplicate row' + (merged === 1 ? '' : 's') + '. The total is unchanged.');
+      }
+    }, "⇊ Combine duplicates"), /*#__PURE__*/React.createElement("label", {
       style: {...btn('def', true), cursor: 'pointer'},
       title: "Import from Excel — columns: Role, PAX, Days, Rate"
     }, "📥 XLS", /*#__PURE__*/React.createElement("input", {
@@ -7576,7 +7612,7 @@ tab === 'dashboard' && (() => {
         borderCollapse: 'collapse',
         fontSize: 12
       }
-    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Role / Position', 'PAX', 'Days', 'OT Hrs/Day', 'Day Rate (P)', 'Row Total', ''].map(h => /*#__PURE__*/React.createElement("th", {
+    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Role / Position', 'PAX', 'Days', 'OT Hrs/Day', 'Day Rate (P)'].concat((sowItems || []).length ? ['Scope Task'] : []).concat(['Row Total', '']).map(h => /*#__PURE__*/React.createElement("th", {
       key: h,
       style: THS
     }, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map(r => {
@@ -7669,7 +7705,23 @@ tab === 'dashboard' && (() => {
           "Avg: ₱"+ph(avg)+" ("+rates.length+" CE"+(rates.length>1?"s":"")+")"
         );
       })()
-      ), /*#__PURE__*/React.createElement("td", {
+      ),
+      /* Which scope task this row belongs to. Two rows for the same role are
+         normal once tasks own their resources -- one crew on 1.1, another on
+         1.2 -- but with nothing on screen saying so the tab just looked like it
+         had failed to merge them. */
+      (sowItems || []).length > 0 && /*#__PURE__*/React.createElement("td", {
+        style: TDS
+      }, /*#__PURE__*/React.createElement("select", {
+        style: { ...INP, width: 150, fontSize: 10, padding: '3px 4px' },
+        value: r.taskId || '',
+        title: "The scope task this row is costed under. Change it here or in SOW Breakdown.",
+        onChange: e => updRow(setMp, r.id, 'taskId', e.target.value)
+      },
+        /*#__PURE__*/React.createElement("option", { value: '' }, "— unassigned —"),
+        (sowItems || []).map(it => /*#__PURE__*/React.createElement("option", { key: it.id, value: it.id },
+          (sowLabels[it.id] || '') + '  ' + (it.text || '(untitled)').slice(0, 28)))
+      )), /*#__PURE__*/React.createElement("td", {
         style: {
           ...TDS,
           ...MONO,

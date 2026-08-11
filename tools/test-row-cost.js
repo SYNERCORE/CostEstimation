@@ -147,5 +147,31 @@ check('main "b" takes only b1', JSON.stringify(g({ id: 'b', type: 'main' })) ===
 check('main with no subs returns itself', JSON.stringify(g({ id: 'c', type: 'main' })) === '["c"]', JSON.stringify(g({ id: 'c', type: 'main' })));
 check('deleting a sub does not touch siblings', JSON.stringify(g({ id: 'a1', type: 'sub' })) === '["a1"]', JSON.stringify(g({ id: 'a1', type: 'sub' })));
 
+/* Two rows for the same role in a resource tab are normal once scope tasks own
+   their resources -- one crew on 1.1, another on 1.2. With nothing on screen
+   saying which task a row belonged to, that read as a failure to consolidate. */
+console.log('\nduplicate-looking rows explain themselves:');
+check('the resource tab shows which scope task a row belongs to', /Scope Task/.test(src),
+  'without it the tab looks like it failed to merge them');
+check('the column only appears once a scope exists', /\(sowItems \|\| \[\]\)\.length \? \['Scope Task'\] : \[\]/.test(src));
+check('and the row can be re-filed from there', /updRow\(setMp, r\.id, 'taskId', e\.target\.value\)/.test(src));
+check('including back to unassigned', /— unassigned —/.test(src));
+
+console.log('\ncombining duplicates is lossless or it does not happen:');
+const combo = (src.match(/const key = r => \[String\(r\.role[\s\S]*?Combined ' \+ merged/) || [''])[0];
+check('the combine action exists', combo.length > 0);
+check('rows must match on role, rate, days, OT, per diem AND task',
+  /r\.role[\s\S]{0,160}r\.rate[\s\S]{0,60}r\.days[\s\S]{0,60}r\.otHours[\s\S]{0,60}r\.perDiem[\s\S]{0,60}r\.taskId/.test(combo),
+  'merging across tasks would empty a task that really does need the people');
+check('it adds the pax together', /pax: addPax\[r\.id\]/.test(src));
+check('so the grand total cannot move', /The total is unchanged/.test(src));
+/* Wired to the finding, not merely present near it: `showToast(false ? ...)`
+   leaves every message string in the source and passes a check that only
+   looks for the words. */
+check('a refusal names the roles it looked at',
+  /showToast\(split\.length[\s\S]{0,40}Nothing to combine/.test(src) && /appears ' \+ g\.length \+ ' times/.test(src),
+  'a button that silently does nothing reads as broken');
+check('and says why they were left alone', /differ in days, rate or scope task/.test(src));
+
 console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nall cost/grouping assertions passed');
 process.exit(fails ? 1 : 0);

@@ -67,6 +67,49 @@ const ResTab = ({
     showToast(updated ? `Updated ${updated} rate(s) from masterlist.` : 'No matching items found in masterlist.', !updated);
   }
 }, "↺ Sync Rates"), /*#__PURE__*/React.createElement("button", {
+  style: btn('info', true),
+  title: showDays
+    ? "Combine repeated items into what you actually mobilise: the largest quantity any task needs, for the total number of days"
+    : "Add the quantities together — a consumable used on two tasks is bought once, for the total",
+  onClick: () => {
+    const NL = String.fromCharCode(10);
+    /* Equipment follows the crew rule: one compressor covers both tasks, so you
+       hire the largest number any task needs for the whole duration. A
+       consumable is used up instead, so its quantities simply add. */
+    const groups = {};
+    rows.forEach(r => {
+      if (!r.desc) return;
+      const k = String(r.desc).trim().toUpperCase() + '|' + N(r.cost);
+      (groups[k] = groups[k] || []).push(r);
+    });
+    const dupes = Object.values(groups).filter(g => g.length > 1);
+    if (!dupes.length) { showToast('No repeated items — nothing to combine.', true); return; }
+    const plan = dupes.map(g => ({
+      g,
+      qty: showDays ? Math.max(...g.map(r => N(r.qty))) : g.reduce((a, r) => a + N(r.qty), 0),
+      days: showDays ? g.reduce((a, r) => a + rowDays(r), 0) : undefined
+    }));
+    const preview = plan.map(p => '  ' + p.g[0].desc + ':  ' +
+      p.g.map(r => N(r.qty) + (showDays ? ' x ' + rowDays(r) + 'd' : ' ' + (r.uom || ''))).join('  +  ') +
+      '   ->   ' + p.qty + (showDays ? ' x ' + p.days + ' days' : ' ' + (p.g[0].uom || ''))).join(NL);
+    if (!confirm('Combine ' + plan.length + ' item' + (plan.length === 1 ? '' : 's') + '?' + NL + NL + preview +
+      (showDays
+        ? NL + NL + 'The largest quantity any task needs, kept for the total number of days — this normally costs MORE than the rows added up, because the equipment is on hire for the whole duration.'
+        : NL + NL + 'Quantities are added together. The total is unchanged.') +
+      NL + NL + 'SOW Breakdown will still show each item under every task it serves.')) return;
+    const drop = new Set(), patch = {};
+    plan.forEach(p => {
+      const keep = p.g[0];
+      const shares = p.g.flatMap(r => (Array.isArray(r.shares) && r.shares.length ? r.shares
+        : [{ taskId: r.taskId || '', weight: showDays ? N(r.qty) * rowDays(r) : N(r.qty) }]));
+      patch[keep.id] = { qty: p.qty, ...(showDays ? { days: p.days } : {}), shares: shares.filter(x => x.taskId) };
+      p.g.slice(1).forEach(r => drop.add(r.id));
+    });
+    set(prev => prev.filter(r => !drop.has(r.id)).map(r => patch[r.id] ? {...r, ...patch[r.id]} : r));
+    showToast('Combined ' + plan.length + ' item' + (plan.length === 1 ? '' : 's') + '.' +
+      (showDays ? ' The cost rose — the equipment is now charged for the whole duration.' : ' The total is unchanged.'));
+  }
+}, "⇊ Combine"), /*#__PURE__*/React.createElement("button", {
   style: btn('def', true),
   onClick: () => { const nid = uid(); _rtSetNewId(nid); set(p => [...p, {...mkRes(), id: nid}]); }
 }, "+ Add"), /*#__PURE__*/React.createElement("label", {

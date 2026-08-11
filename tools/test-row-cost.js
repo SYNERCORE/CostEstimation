@@ -147,31 +147,63 @@ check('main "b" takes only b1', JSON.stringify(g({ id: 'b', type: 'main' })) ===
 check('main with no subs returns itself', JSON.stringify(g({ id: 'c', type: 'main' })) === '["c"]', JSON.stringify(g({ id: 'c', type: 'main' })));
 check('deleting a sub does not touch siblings', JSON.stringify(g({ id: 'a1', type: 'sub' })) === '["a1"]', JSON.stringify(g({ id: 'a1', type: 'sub' })));
 
-/* Two rows for the same role in a resource tab are normal once scope tasks own
-   their resources -- one crew on 1.1, another on 1.2. With nothing on screen
-   saying which task a row belonged to, that read as a failure to consolidate. */
-console.log('\nduplicate-looking rows explain themselves:');
-check('the resource tab shows which scope task a row belongs to', /Scope Task/.test(src),
-  'without it the tab looks like it failed to merge them');
-check('the column only appears once a scope exists', /\(sowItems \|\| \[\]\)\.length \? \['Scope Task'\] : \[\]/.test(src));
-check('and the row can be re-filed from there', /updRow\(setMp, r\.id, 'taskId', e\.target\.value\)/.test(src));
-check('including back to unassigned', /— unassigned —/.test(src));
+/* ── Consolidation ──────────────────────────────────────────────────────────
+   One crew works across several scope tasks. If task 1 needs 1 electrician and
+   task 2 needs 3, you mobilise 3 for the whole job and pay them for the whole
+   duration: MAX of the pax, SUM of the days. That deliberately costs MORE than
+   adding the per-task rows up, because the crew is on site and paid whether or
+   not every task needs all of them. Consumables are the opposite -- they are
+   used up, so quantities add and there are no days. */
+console.log('\nthe crew rule: max pax, summed days:');
+const conso = grab(/const key = r => \[String\(r\.role[\s\S]*?showToast\('Consolidated/, 'consolidate action');
+check('pax takes the largest any task needs', /Math\.max\(\.\.\.g\.map\(r => N\(r\.pax\)\)\)/.test(conso),
+  'summing the pax would invent people who were never mobilised');
+check('days add up across the tasks', /g\.reduce\(\(a, r\) => a \+ N\(r\.days\), 0\)/.test(conso),
+  'the crew is on site for both durations');
+check('OT hrs/day and per diem carry the peak too', /otHours: Math\.max/.test(conso) && /perDiem: Math\.max/.test(conso),
+  'they are per-day rates, so they follow the pax rule');
+check('it says the cost will rise', /COSTS MORE than the rows added up/.test(src),
+  'a consolidation that silently raises the CE would be a nasty surprise');
+check('and shows the arithmetic before doing it', /pax x ' \+ N\(r\.days\) \+ 'd'/.test(conso));
+check('the confirm is honoured', /\)\) return;/.test(conso));
 
-console.log('\ncombining duplicates is lossless or it does not happen:');
-const combo = (src.match(/const key = r => \[String\(r\.role[\s\S]*?Combined ' \+ merged/) || [''])[0];
-check('the combine action exists', combo.length > 0);
-check('rows must match on role, rate, days, OT, per diem AND task',
-  /r\.role[\s\S]{0,160}r\.rate[\s\S]{0,60}r\.days[\s\S]{0,60}r\.otHours[\s\S]{0,60}r\.perDiem[\s\S]{0,60}r\.taskId/.test(combo),
-  'merging across tasks would empty a task that really does need the people');
-check('it adds the pax together', /pax: addPax\[r\.id\]/.test(src));
-check('so the grand total cannot move', /The total is unchanged/.test(src));
-/* Wired to the finding, not merely present near it: `showToast(false ? ...)`
-   leaves every message string in the source and passes a check that only
-   looks for the words. */
-check('a refusal names the roles it looked at',
-  /showToast\(split\.length[\s\S]{0,40}Nothing to combine/.test(src) && /appears ' \+ g\.length \+ ' times/.test(src),
-  'a button that silently does nothing reads as broken');
-check('and says why they were left alone', /differ in days, rate or scope task/.test(src));
+console.log('\nconsumables add up instead:');
+const res = require('fs').readFileSync(path2.join(__dirname, '..', 'src/components/ResTab.js'), 'utf8');
+check('quantities are summed when there are no days',
+  /showDays \? Math\.max\(\.\.\.g\.map\(r => N\(r\.qty\)\)\) : g\.reduce\(\(a, r\) => a \+ N\(r\.qty\), 0\)/.test(res),
+  '5 L on one task and 8 on another means you buy 13');
+check('equipment still uses max qty and summed days',
+  /days: showDays \? g\.reduce\(\(a, r\) => a \+ rowDays\(r\), 0\) : undefined/.test(res));
+check('and only equipment claims the cost rises', /the equipment is now charged for the whole duration/.test(res));
+check('consumables say the total is unchanged', /Quantities are added together\. The total is unchanged\./.test(res));
+
+/* A consolidated row is costed ONCE and split between the tasks that need it,
+   in proportion to what each originally asked for. Without that split the
+   breakdown would either lose the resource or double-count it. */
+console.log('\na shared row is split, and the pieces add back up:');
+const shareSrc = grab(/const _weight = \(key, r\)[\s\S]*?\n  \};\n/, 'share attribution');
+const shareApi = new Function('N', 'rowCost', shareSrc + ' return { rowServesTask, rowCostForTask, _weight };')(N, () => 17000);
+const shared = { id: 'x', role: 'ELECTRICIAN', shares: [{ taskId: 't1', weight: 2 }, { taskId: 't2', weight: 15 }] };
+const s1 = shareApi.rowCostForTask('mp', shared, 't1'), s2 = shareApi.rowCostForTask('mp', shared, 't2');
+check('task 1 carries the slice it asked for', Math.abs(s1 - 17000 * 2 / 17) < 0.01, s1);
+check('task 2 carries the rest', Math.abs(s2 - 17000 * 15 / 17) < 0.01, s2);
+check('the slices add back to the whole row', Math.abs(s1 + s2 - 17000) < 0.01, s1 + s2);
+check('a task it does not serve gets nothing', shareApi.rowCostForTask('mp', shared, 't9') === 0);
+check('the row is listed under every task it serves',
+  shareApi.rowServesTask(shared, 't1') && shareApi.rowServesTask(shared, 't2') && !shareApi.rowServesTask(shared, 't9'));
+check('an unshared row is unaffected',
+  shareApi.rowCostForTask('mp', { taskId: 't1' }, 't1') === 17000 && shareApi.rowCostForTask('mp', { taskId: 't1' }, 't2') === 0);
+/* Zero-weight shares must not divide by zero and silently drop the cost. */
+const zero = { shares: [{ taskId: 'a', weight: 0 }, { taskId: 'b', weight: 0 }] };
+check('zero weights split evenly rather than vanishing',
+  Math.abs(shareApi.rowCostForTask('mp', zero, 'a') + shareApi.rowCostForTask('mp', zero, 'b') - 17000) < 0.01,
+  shareApi.rowCostForTask('mp', zero, 'a'));
+
+console.log('\nthe breakdown shows the share, not the whole row:');
+check('the row cost cell uses the task slice', /ph\(rowCostForTask\(t\.key, r, taskId\)\)/.test(src),
+  'showing the full row beside a subtotal of its slice reads as a contradiction');
+check('the section subtotal does too', /rows\.reduce\(\(a, r\) => a \+ rowCostForTask\(t\.key, r, taskId\), 0\)/.test(src));
+check('and a shared row says so', /shared crew across/.test(src));
 
 console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nall cost/grouping assertions passed');
 process.exit(fails ? 1 : 0);

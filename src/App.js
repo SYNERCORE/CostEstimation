@@ -636,8 +636,43 @@ function App({
   const miscDel = (cat, id) => setMisc(p => ({ ...p, [cat]: (p[cat] || []).filter(r => r.id !== id) }));
   const miscAdd = (cat, taskId, item) => setMisc(p => ({ ...p, [cat]: [...(p[cat] || []), { ...mkMiscRow(), desc: item ? item.desc : '', uom: item ? item.uom : 'Lot', cost: item ? item.cost : 0, taskId: taskId || '' }] }));
   const miscClearTask = taskId => setMisc(p => { const n = { ...p }; Object.keys(n).forEach(k => { if (Array.isArray(n[k])) n[k] = n[k].filter(r => r.taskId !== taskId); }); return n; });
-  const taskResCount = id => RES_TABS.reduce((s, t) => s + t.rows.filter(r => r.taskId === id).length, 0)
-    + miscFlat().filter(r => r.taskId === id).length;
+  /* ── Consolidation ──────────────────────────────────────────────────────────
+     One crew works across several scope tasks. If task 1 needs 1 electrician
+     and task 2 needs 3, you mobilise 3 for the whole job and pay them for the
+     whole duration -- so the charged row is MAX of the pax and the SUM of the
+     days, not the sum of the individual rows. That deliberately costs MORE than
+     the per-task rows added up (3 x 7 days beats 1x2 + 3x5), because the crew
+     is on site and paid whether or not every task needs all of them.
+
+     Consumables are the opposite: 5 L on one task and 8 L on another means you
+     buy 13. Quantities add, and there are no days.
+
+     A consolidated row keeps `shares` -- what each task originally asked for --
+     so the SOW Breakdown can still show it under every task it serves and
+     split its cost between them in proportion. Without that the breakdown
+     would lose the resource entirely. */
+  const isPeopleOrPlant = key => key === 'mp' || key === 'tools';
+  /* What a row originally contributed, for splitting a shared cost back out. */
+  const _weight = (key, r) => isPeopleOrPlant(key)
+    ? Math.max(0, N(r.pax !== undefined ? r.pax : r.qty)) * Math.max(0, N(r.days === undefined || r.days === '' ? 1 : r.days))
+    : Math.max(0, N(r.qty));
+  const rowShares = r => Array.isArray(r && r.shares) && r.shares.length ? r.shares : null;
+  const rowServesTask = (r, id) => r.taskId === id || (rowShares(r) || []).some(sh => sh.taskId === id);
+  /* A shared row is costed once. Each task it serves carries the slice it asked
+     for, so the per-task figures still add up to the row -- and to the grand
+     total. A task that asked for nothing measurable gets an equal slice rather
+     than a divide-by-zero. */
+  const rowCostForTask = (key, r, id) => {
+    const sh = rowShares(r);
+    const full = rowCost(key, r);
+    if (!sh) return r.taskId === id ? full : 0;
+    const tot = sh.reduce((a, x) => a + Math.max(0, N(x.weight)), 0);
+    const mine = sh.filter(x => x.taskId === id).reduce((a, x) => a + Math.max(0, N(x.weight)), 0);
+    if (tot <= 0) return sh.some(x => x.taskId === id) ? full / sh.length : 0;
+    return full * (mine / tot);
+  };
+  const taskResCount = id => RES_TABS.reduce((s, t) => s + t.rows.filter(r => rowServesTask(r, id)).length, 0)
+    + miscFlat().filter(r => rowServesTask(r, id)).length;
   /* Cost of a single row, using the same formulas that drive the section totals
      so a per-task subtotal can never disagree with the Grand Total. */
   const rowCost = (kind, r) => {
@@ -649,8 +684,8 @@ function App({
     const ot = N(r.pax) * N(r.days) * (N(r.otHours || 0) / 8) * N(r.rate) * 1.25 * mult;
     return reg + ot + calcBen(r).total;
   };
-  const taskCost = id => RES_TABS.reduce((s, t) => s + t.rows.filter(r => r.taskId === id).reduce((a, r) => a + rowCost(t.key, r), 0), 0)
-    + miscFlat().filter(r => r.taskId === id).reduce((a, r) => a + rowCost('misc', r), 0);
+  const taskCost = id => RES_TABS.reduce((s, t) => s + t.rows.filter(r => rowServesTask(r, id)).reduce((a, r) => a + rowCostForTask(t.key, r, id), 0), 0)
+    + miscFlat().filter(r => rowServesTask(r, id)).reduce((a, r) => a + rowCostForTask('misc', r, id), 0);
   /* A main task owns the consecutive sub-tasks that follow it in the flat list. */
   const sowTaskGroup = item => {
     const list = sowItems || [];
@@ -5981,7 +6016,9 @@ tab === 'sowbreak' && (() => {
 
   /* One resource group (Manpower / Tools / Consumables / PPE) inside a task card. */
   const group = (t, taskId) => {
-    const rows = t.rows.filter(r => r.taskId === taskId);
+    /* A consolidated row serves several tasks, so it is listed under each of
+       them -- carrying the slice of its cost that this task asked for. */
+    const rows = t.rows.filter(r => rowServesTask(r, taskId));
     if (!rows.length) return null;
     const isMp = t.key === 'mp';
     const hasDays = isMp || t.key === 'tools'; /* tools are charged qty x days x cost */
@@ -5991,7 +6028,7 @@ tab === 'sowbreak' && (() => {
         /*#__PURE__*/React.createElement("button", { style: { ...btn('def', true), fontSize: 10 }, onClick: () => addTo(t, taskId, true) }, "+ Masterlist"),
         /*#__PURE__*/React.createElement("button", { style: { ...btn('def', true), fontSize: 10 }, onClick: () => addTo(t, taskId, false) }, "+ Blank"),
         /*#__PURE__*/React.createElement("span", { style: { ...MONO, marginLeft: 'auto', fontSize: 10, color: MT }, title: t.label + " subtotal for this task" },
-          "₱" + ph(rows.reduce((a, r) => a + rowCost(t.key, r), 0)))
+          "₱" + ph(rows.reduce((a, r) => a + rowCostForTask(t.key, r, taskId), 0)))
       ),
       /*#__PURE__*/React.createElement("table", { style: { width: '100%', borderCollapse: 'collapse', fontSize: 11, marginBottom: 2 } },
         hdr([['Item description'], [isMp ? 'Pax' : 'Qty', 58], ...(hasDays ? [['Days', 56]] : []), ...(isMp ? [] : [['UOM', 66]]), [isMp ? 'Rate' : 'Unit cost', 92], ['Cost', 92], ['', 56]]),
@@ -6002,7 +6039,14 @@ tab === 'sowbreak' && (() => {
                 style: { ...INP, width: '100%', fontSize: 11, padding: '2px 6px' },
                 value: r[t.nameKey] || '', placeholder: "Item description...",
                 onChange: e => updRow(t.set, r.id, t.nameKey, e.target.value)
-              })
+              }),
+              /* One consolidated crew shown under each task it serves. Without
+                 this the same row appearing in two places, at two different
+                 costs, would look like a duplicate rather than a share. */
+              rowShares(r) && /*#__PURE__*/React.createElement("div", {
+                style: { fontSize: 9.5, color: INFO, marginTop: 2 },
+                title: "One consolidated row costed once and split between the tasks that need it. Editing it here changes it everywhere."
+              }, "shared crew across " + rowShares(r).length + " tasks · costed once at ₱" + ph(rowCost(t.key, r)))
             ),
             numCell(r[t.qtyKey] || 0, e => updRow(t.set, r.id, t.qtyKey, N(e.target.value)), isMp ? 'PAX' : 'QTY', 58),
             /* Store the raw value like the resource tabs do, so a cleared field
@@ -6018,7 +6062,12 @@ tab === 'sowbreak' && (() => {
               })
             ),
             numCell(r[t.costKey] || 0, e => updRow(t.set, r.id, t.costKey, N(e.target.value)), isMp ? 'Daily rate' : 'Cost per unit', 92),
-            /*#__PURE__*/React.createElement("td", { style: { ...TDS, ...MONO, width: 92, textAlign: 'right', color: MT, fontSize: 10 }, title: "Row cost (recomputed)" }, "₱" + ph(rowCost(t.key, r))),
+            /*#__PURE__*/React.createElement("td", {
+              style: { ...TDS, ...MONO, width: 92, textAlign: 'right', color: MT, fontSize: 10 },
+              title: rowShares(r)
+                ? "This task's share of a consolidated row costing ₱" + ph(rowCost(t.key, r)) + " in total"
+                : "Row cost (recomputed)"
+            }, "₱" + ph(rowCostForTask(t.key, r, taskId))),
             /*#__PURE__*/React.createElement("td", { style: { ...TDS, width: 56, textAlign: 'right' } },
               /*#__PURE__*/React.createElement("button", {
                 title: "Unassign from this task (keeps the row in the " + t.label + " tab)",
@@ -6039,7 +6088,7 @@ tab === 'sowbreak' && (() => {
 
   /* Miscellaneous group -- same columns, but spans the misc categories. */
   const miscGroup = taskId => {
-    const rows = miscFlat().filter(r => r.taskId === taskId);
+    const rows = miscFlat().filter(r => rowServesTask(r, taskId));
     if (!rows.length) return null;
     return /*#__PURE__*/React.createElement("div", { key: 'misc', style: { marginBottom: 6 } },
       /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 } },
@@ -7439,42 +7488,62 @@ tab === 'dashboard' && (() => {
         showToast(updated ? `Updated ${updated} rate(s) from masterlist.` : 'No matching roles found in masterlist.', !updated);
       }
     }, "↺ Sync Rates"),
-    /* Combines rows that are the same in every way that affects the cost AND
-       sit on the same scope task, by adding their PAX together. Two rows for
-       one role are usually NOT that -- they are different crews on different
-       tasks, or the same role for a different number of days -- and folding
-       those together would either misstate the deployment or empty a task that
-       really does need the people. Those are left alone and reported. */
+    /* Consolidates the crew the way the estimate is actually priced: MAX of the
+       pax and the SUM of the days. One electrician on task 1 and three on task
+       2 is three electricians mobilised for both durations -- they are on site
+       and paid whether or not every task needs all of them. The total goes UP,
+       and that is the point; adding the rows up understates what the job costs.
+
+       OT hours per day and per diem are per-day RATES, so the peak is carried
+       across the whole duration for the same reason the pax is.
+
+       The row keeps what each task originally asked for, so SOW Breakdown still
+       lists it under both and splits its cost between them in proportion. */
     /*#__PURE__*/React.createElement("button", {
       style: btn('info', true),
-      title: "Add together rows in this shift that have the same role, rate, days, OT and scope task",
+      title: "Combine rows for the same role into the crew you actually mobilise: the largest PAX any task needs, for the total number of days",
       onClick: () => {
-        const key = r => [String(r.role || '').trim().toUpperCase(), N(r.rate), N(r.days), N(r.otHours || 0), N(r.perDiem || 0), r.taskId || ''].join('|');
+        const key = r => [String(r.role || '').trim().toUpperCase(), N(r.rate)].join('|');
         const rows = mp.filter(r => r.shift === shiftKey && r.role);
         const groups = {};
         rows.forEach(r => { (groups[key(r)] = groups[key(r)] || []).push(r); });
         const dupes = Object.values(groups).filter(g => g.length > 1);
-        if (!dupes.length) {
-          /* Say WHY nothing merged -- otherwise a button that does nothing reads
-             as broken, which is exactly the confusion this is here to answer. */
-          const byRole = {};
-          rows.forEach(r => { const k = String(r.role || '').trim().toUpperCase(); (byRole[k] = byRole[k] || []).push(r); });
-          const split = Object.entries(byRole).filter(([, g]) => g.length > 1);
-          showToast(split.length
-            ? 'Nothing to combine. ' + split.map(([k, g]) => k + ' appears ' + g.length + ' times').join(', ') +
-              ' — but those rows differ in days, rate or scope task, so adding them together would change what the CE says.'
-            : 'No duplicate rows in this shift.', true);
-          return;
-        }
-        const merged = dupes.reduce((n, g) => n + g.length - 1, 0);
-        const keep = new Set(dupes.map(g => g[0].id));
-        const drop = new Set(dupes.flatMap(g => g.slice(1)).map(r => r.id));
-        const addPax = {};
-        dupes.forEach(g => { addPax[g[0].id] = g.reduce((t, r) => t + N(r.pax), 0); });
-        setMp(p => p.filter(r => !drop.has(r.id)).map(r => keep.has(r.id) ? { ...r, pax: addPax[r.id] } : r));
-        showToast('Combined ' + merged + ' duplicate row' + (merged === 1 ? '' : 's') + '. The total is unchanged.');
+        if (!dupes.length) { showToast('No repeated roles in this shift — nothing to consolidate.', true); return; }
+        const before = rows.reduce((a, r) => a + rowCost('mp', r), 0);
+        const plan = dupes.map(g => {
+          const pax = Math.max(...g.map(r => N(r.pax)));
+          const days = g.reduce((a, r) => a + N(r.days), 0);
+          return { g, pax, days, role: g[0].role };
+        });
+        const preview = plan.map(p2 =>
+          '  ' + p2.role + ':  ' + p2.g.map(r => N(r.pax) + ' pax x ' + N(r.days) + 'd').join('  +  ') +
+          '   ->   ' + p2.pax + ' pax x ' + p2.days + ' days').join('\n');
+        if (!confirm('Consolidate ' + plan.length + ' role' + (plan.length === 1 ? '' : 's') +
+          ' into the crew you mobilise?\n\n' + preview +
+          '\n\nThe largest PAX any task needs, kept for the total number of days. ' +
+          'This normally COSTS MORE than the rows added up, because the crew is on site for the whole duration.' +
+          '\n\nSOW Breakdown will still show each role under every task it serves, with the cost split between them.')) return;
+        const drop = new Set(), patch = {};
+        plan.forEach(p2 => {
+          const keep = p2.g[0];
+          /* Record what each task asked for BEFORE the merge, so the breakdown
+             can split the consolidated cost back out in proportion. */
+          const shares = p2.g.flatMap(r => (rowShares(r) || [{ taskId: r.taskId || '', weight: _weight('mp', r) }]));
+          patch[keep.id] = {
+            pax: p2.pax, days: p2.days,
+            otHours: Math.max(...p2.g.map(r => N(r.otHours || 0))),
+            perDiem: Math.max(...p2.g.map(r => N(r.perDiem || 0))),
+            shares: shares.filter(x => x.taskId)
+          };
+          p2.g.slice(1).forEach(r => drop.add(r.id));
+        });
+        setMp(p2 => p2.filter(r => !drop.has(r.id)).map(r => patch[r.id] ? { ...r, ...patch[r.id] } : r));
+        const after = plan.reduce((a, p2) => a + p2.pax * p2.days * N(p2.g[0].rate) * (shiftInfo.mult || 1), 0)
+          + rows.filter(r => !dupes.flat().includes(r)).reduce((a, r) => a + rowCost('mp', r), 0);
+        showToast('Consolidated ' + plan.length + ' role' + (plan.length === 1 ? '' : 's') + '. ' +
+          (after > before ? 'The manpower cost rose — the crew is now costed for the whole duration.' : 'Totals updated.'));
       }
-    }, "⇊ Combine duplicates"), /*#__PURE__*/React.createElement("label", {
+    }, "⇊ Consolidate crew"), /*#__PURE__*/React.createElement("label", {
       style: {...btn('def', true), cursor: 'pointer'},
       title: "Import from Excel — columns: Role, PAX, Days, Rate"
     }, "📥 XLS", /*#__PURE__*/React.createElement("input", {

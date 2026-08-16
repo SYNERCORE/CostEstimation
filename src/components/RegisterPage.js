@@ -395,8 +395,8 @@ async function autoSetupSP(progressCb){
        total and no manpower behind it. tools/check-sp-schema.js now fails the
        build if a payload and this list ever drift apart again.
        shicQty stays: rows written before shicPax existed keep their pax there. */
-    [spList('CE_MP')]:    [[9,'shicCEId'],[2,'shicRole'],[9,'shicRate'],[2,'shicShift'],[9,'shicDays'],[9,'shicQty'],[9,'shicPax'],[9,'shicOTHours'],[9,'shicPerDiem'],[2,'shicTaskId']],
-    [spList('CE_Resources')]:[[9,'shicCEId'],[2,'shicTab'],[2,'shicDesc'],[9,'shicQty'],[2,'shicUOM'],[9,'shicCost'],[9,'shicDays'],[2,'shicTaskId']],
+    [spList('CE_MP')]:    [[9,'shicCEId'],[2,'shicRole'],[9,'shicRate'],[2,'shicShift'],[9,'shicDays'],[9,'shicQty'],[9,'shicPax'],[9,'shicOTHours'],[9,'shicPerDiem'],[2,'shicTaskId'],[3,'shicShares']],
+    [spList('CE_Resources')]:[[9,'shicCEId'],[2,'shicTab'],[2,'shicDesc'],[9,'shicQty'],[2,'shicUOM'],[9,'shicCost'],[9,'shicDays'],[2,'shicTaskId'],[3,'shicShares']],
     [spList('CE_Documents')]:[[9,'shicCEId'],[2,'shicFileName'],[2,'shicFileType'],[3,'shicFileData']],
     [spList('Monitoring')]:  [[9,'shicCEId'],[3,'shicMonData']],
     [spList('Masterlist')]:  [[3,'shicData']],

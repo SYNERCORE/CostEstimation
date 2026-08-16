@@ -113,5 +113,43 @@ const sig = (app.match(/sig: JSON\.stringify\(\[(.*?)\]\)/) || ['', ''])[1].spli
 for (const f of ['ceType', 'info', 'mp', 'tools', 'mats', 'ppe', 'misc', 'sowItems', 'notes', 'addlCosts', 'margin', 'approvers', 'scope', 'mobVehicles', 'demobVehicles'])
   ck(f + ' marks the CE dirty', sig.includes(f), 'editing it would leave the CE looking already saved');
 
+/* A consolidated crew is the one row whose cost belongs to SEVERAL scope tasks.
+   "Consolidate crew" and "Combine" record that split in `shares`; every other
+   row field has a column of its own and this one did not, so it was written to
+   state and dropped on save. The grand total was unaffected -- which is exactly
+   why nobody noticed -- but on reload the single surviving taskId absorbed all
+   of the merged cost and every other task it served showed no manpower.
+   The breakdown is the part of the CE a reviewer reads, so it was wrong where
+   it mattered most. */
+console.log('\nA consolidated crew keeps the tasks it serves:');
+const ROWS = [['CE_MP', 'mpPayloads', 'a shared crew'], ['CE_Resources', 'resPayloads', 'shared tools']];
+for (const [list, payload, what] of ROWS) {
+  const body = (db.match(new RegExp('const ' + payload + '=[\\s\\S]*?;const ')) || [''])[0];
+  ck(what + ' is written with its shares', /shicShares:_shDump\(r\.shares\)/.test(body),
+    'without this the merged cost lands entirely on one task');
+  ck('the ' + list + ' column is provisioned', new RegExp("\\[spList\\('" + list + "'\\)\\][^\\n]*\\[3,'shicShares'\\]").test(reg),
+    'an unprovisioned column 400s the whole save');
+}
+/* dbSaveHistory also queries these lists for 'Id' alone, to delete the previous
+   revision's rows. Only the selects that actually load a row need the column. */
+for (const sel of (db.match(/spGet\(spList\('CE_(?:MP|Resources)'\),`shicCEId eq \$\{id\}`,'[^']*'/g) || [])
+                  .filter(s => !/,'Id'$/.test(s)))
+  ck('shares are selected back out of ' + (sel.includes('CE_MP') ? 'CE_MP' : 'CE_Resources'), /shicShares/.test(sel),
+    'writing a column without selecting it changes nothing');
+ck('every row type parses them back', (db.match(/shares:_shParse\(r\.shicShares\)/g) || []).length === 4,
+  'manpower, tools, materials and PPE -- Combine works on all of them');
+ck('a row that was never consolidated stays clean', /Array\.isArray\(v\)&&v\.length\?JSON\.stringify\(v\):''/.test(db),
+  'writing "[]" into every row would bloat the list for no reason');
+ck('and malformed JSON cannot break the load', /catch\(_\)\{return \[\];\}/.test(db),
+  'one bad row must not take the whole CE down');
+/* The parsers must survive what the writer produces, including the empty
+   string a normal row carries. */
+const shDump = new Function('return ' + (db.match(/const _shDump=[^;]*/) || [''])[0].replace('const _shDump=', '') + ';')();
+const shParse = new Function('return ' + (db.match(/const _shParse=s=>\{[\s\S]*?\};/) || [''])[0].replace('const _shParse=', '').replace(/;$/, '') + ';')();
+const SH = [{ taskId: 't1', weight: 2 }, { taskId: 't2', weight: 15 }];
+ck('shares survive the trip unchanged', JSON.stringify(shParse(shDump(SH))) === JSON.stringify(SH));
+ck('an ordinary row round-trips to no shares', JSON.stringify(shParse(shDump(undefined))) === '[]');
+ck('a truncated column does not throw', JSON.stringify(shParse('[{"taskId"')) === '[]');
+
 console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nall CE round-trip assertions passed');
 process.exit(fails ? 1 : 0);

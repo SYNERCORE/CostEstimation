@@ -80,5 +80,34 @@ ck('the company header is resolved the same way', /_cos\.find\(c => String\(c\.i
 ck('breakdown notes are included, labelled by scope', /'Scope ' \+ \(sowLabels\[x\.id\] \|\| ''\)/.test(exp));
 ck('empty sections are skipped, as the print skips empty pages', /if \(!rows\.length\) return;/.test(exp));
 
+/*
+ * The OTHER export -- the top-bar "Export CE" button -- had the signatories and
+ * the notes written into the source. Five real people's names and three
+ * boilerplate sentences went out with every workbook, no matter who prepared
+ * the estimate or who the Summary tab named. The workbook and the printed CE
+ * disagreed about who had approved the figures, which is the one thing on a
+ * cost estimate that must never be guessed at.
+ */
+console.log('\nThe top-bar export names nobody the CE does not name:');
+const exp1 = grab(/const handleExport = \(\) => \{[\s\S]*?showToast\('Excel exported[^\n]*\n  \};/, 'handleExport');
+/* The same names appear in the DEFAULT approvers state, which is correct --
+   that is the roster the estimator starts from and can edit. What must not
+   happen is the export reaching past that list to a copy of its own. */
+for (const name of ['Jhuniel Ubana', 'Fernando Bautista', 'Warren Maralit', 'Kenneth Mendoza', 'RADIM ASAULA'])
+  ck('no "' + name + '" written into the export itself', !exp1.includes(name),
+    'a real person signing a CE they never saw');
+ck('and no job titles hardcoded either', !/'(?:Cost Estimator|TSG - Head|Operations Director|Dir\. Sales & Technical|Cost Supervisor|FS MANAGER)'/.test(exp1),
+  'a title bound to a column is the same bug wearing a hat');
+ck('signatories come from the approvers list', /approvers \|\| \[\]\)\.filter/.test(exp1),
+  'the same list the printed CE and Export Detailed both read');
+ck('the role, name and title all come from the row', /a\.role \|\| ''\) \+ ':'[\s\S]{0,120}a\.name \|\| ''[\s\S]{0,80}a\.title \|\| a\.role/.test(exp1));
+ck('no boilerplate notes', !/Additional scope not in original SOW is excluded|Lead time assumes no interruptions/.test(src),
+  'sentences nobody wrote, on a document people sign');
+ck('notes come from the CE', /notes\.map\(n => String\(n\.text \|\| ''\)\)/.test(exp1));
+ck('breakdown notes ride along, labelled by scope', /'Scope ' \+ \(sowLabels\[x\.id\] \|\| ''\)/.test(exp1),
+  'the same line Export Detailed and the print produce');
+ck('an empty NOTE heading is not printed', /lines\.length \? \[\[\], \['NOTE:'\]/.test(exp1),
+  'a heading over nothing reads like something went missing');
+
 console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nall XLSX export assertions passed');
 process.exit(fails ? 1 : 0);

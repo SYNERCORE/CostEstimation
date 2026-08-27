@@ -1,5 +1,16 @@
 ﻿const APP_VERSION = '1.0.0';
-const APP_BUILD = '20260528';
+/* Derived, not typed. This was the literal '20260528' and nothing bumped it,
+   so it named a build from months ago while the app served a newer one -- a
+   version marker that lies is worse than none, because it is believed. Every
+   script is loaded with the release's ?v=, so the tag that loaded THIS file
+   already carries the answer. */
+const APP_BUILD = (function () {
+  try {
+    const s = document.currentScript || document.querySelector('script[src*="update.js"]');
+    const m = s && s.src.match(/[?&]v=([^&]+)/);
+    return m ? m[1] : 'dev';
+  } catch (e) { return 'dev'; }
+})();
 const UPDATE_CHECK_KEY = 'shic_update_cfg';
 function getUpdateCfg() {
   try {

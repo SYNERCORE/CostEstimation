@@ -64,6 +64,20 @@ const extraInSw = have.filter(u => !wanted.includes(u));
 if (missingFromSw.length) problems.push('sw.js does not precache:\n     ' + missingFromSw.join('\n     '));
 if (extraInSw.length) problems.push('sw.js precaches files index.html no longer loads:\n     ' + extraInSw.join('\n     '));
 
+/* The build marker the UI shows must be derived from the release, not typed.
+   It was the literal '20260528' and nothing ever bumped it, so the app told
+   you it was running a build from months earlier than it was. A version marker
+   that lies is worse than none, because it gets believed -- two bug reports
+   were filed against builds that had already been fixed, and the only reliable
+   way to tell which build was live was reading ?v= off a DevTools stack
+   trace. */
+try {
+  const upd = fs.readFileSync(path.join(ROOT, 'src/update.js'), 'utf8');
+  const lit = upd.match(/const APP_BUILD\s*=\s*['"][^'"]+['"]/);
+  if (lit) problems.push('src/update.js hardcodes ' + lit[0].trim() + ' — derive it from the script tag\'s ?v= instead, or it goes stale the first time nobody bumps it');
+  else if (!/const APP_BUILD\s*=\s*\(/.test(upd)) problems.push('src/update.js no longer defines APP_BUILD; the UI build marker will read "?"');
+} catch (_) { /* update.js is optional */ }
+
 if (problems.length) {
   console.error('\nservice worker precache is out of step with index.html:\n');
   problems.forEach(p => console.error('  - ' + p));

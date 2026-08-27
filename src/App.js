@@ -9669,7 +9669,14 @@ tab === 'dashboard' && (() => {
       fontSize: 10
     },
     onClick: () => setTab('history')
-  }, "View All")))));
+  }, "View All"),
+  /* Which build is actually running. Without this the only way to tell was
+     reading ?v= off a stack trace in DevTools, and two bug reports were filed
+     against a build that had already been fixed. */
+  /*#__PURE__*/React.createElement("div", {
+    style: { color: MT, fontSize: 9, textAlign: 'center', marginTop: 10, opacity: .6 },
+    title: 'Build version. Reload the page if this is behind the current release.'
+  }, "build ", typeof APP_BUILD === 'undefined' ? '?' : APP_BUILD)))));
 }
 class AppBoundary extends React.Component {
   constructor(props) {

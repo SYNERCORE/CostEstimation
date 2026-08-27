@@ -796,53 +796,35 @@ function App({
       const mlRoles = masterlist.manpower.map(r => r.role + ':P' + r.rate).join(', ');
       const tlList = masterlist.tools.slice(0, 30).map(r => r.desc).join(', ');
       const mtList = masterlist.materials.slice(0, 30).map(r => r.desc).join(', ');
-      const prompt = ['You are a cost estimation assistant for Synergy3 Corp, a Philippine mechanical/electrical contractor.', '\nExtract ALL project data from the document below and return ONLY valid JSON.\n', '\nDOCUMENT:\n---\n', preview, '\n---\n\n', 'Available manpower roles: ', mlRoles, '\nAvailable tools: ', tlList, '\nAvailable materials: ', mtList, '\n\nRespond ONLY with valid JSON matching this schema exactly (no markdown, no extra text):\n', '{"client":"","location":"","description":"","material":"","qty":"1","days":"","projType":"mechanical","attention":"","endUser":"",', '"manpower":[{"role":"","pax":1,"days":1,"shift":"regular_day","rate":0}],', '"tools":[{"desc":"","qty":1,"uom":"Lot","cost":0}],', '"materials":[{"desc":"","qty":1,"uom":"Lot","cost":0}],', '"ppe":[{"desc":"","qty":1,"uom":"Pcs","cost":0}],', '"sow":[{"type":"main","text":""},{"type":"sub","text":""}],', '"notes":""}', '\n\nRules:', '\n- projType: "electrical" or "mechanical" only', '\n- description: 1-2 sentence scope summary', '\n- manpower: extract all roles mentioned; use available roles list for rate matching', '\n- tools: extract all equipment and tools mentioned', '\n- materials: extract all materials, consumables, spare parts mentioned', '\n- ppe: extract all PPE items mentioned', '\n- sow: convert the scope of work into structured items. type="main" for numbered steps, type="sub" for lettered sub-steps', '\n- notes: any disclaimers, assumptions, special conditions', '\n- Use empty arrays [] if section not found. Empty string "" if field not found.'].join('');
-      const raw = await callAI(prompt, 2500);
-      const ex = JSON.parse(raw.replace(/```json|```/g, '').trim());
-      /* Apply project info */
+      const prompt = ['You are a cost estimation assistant for Synergy3 Corp, a Philippine mechanical/electrical contractor.', '\nExtract ALL project data from the document below and return ONLY valid JSON.\n', '\nDOCUMENT:\n---\n', preview, '\n---\n\n', 'Available manpower roles: ', mlRoles, '\nAvailable tools: ', tlList, '\nAvailable materials: ', mtList, '\n\nRespond ONLY with valid JSON matching this schema exactly (no markdown, no extra text):\n', 'PROJECT INFO (respond with this object as "info"):\n', '{"client":"","location":"","description":"","material":"","qty":"1","days":"","projType":"mechanical","attention":"","endUser":""}', '\nPLAN (respond with these keys at the top level):\n', AI_PLAN_SCHEMA, AI_PLAN_RULES, , '\n\nRules:', '\n- projType: "electrical" or "mechanical" only', '\n- description: 1-2 sentence scope summary', '\n- manpower: extract all roles mentioned; use available roles list for rate matching', '\n- tools: extract all equipment and tools mentioned', '\n- materials: extract all materials, consumables, spare parts mentioned', '\n- ppe: extract all PPE items mentioned', '\n- sow: convert the scope of work into structured items. type="main" for numbered steps, type="sub" for lettered sub-steps', '\n- notes: any disclaimers, assumptions, special conditions', '\n- Use empty arrays [] if section not found. Empty string "" if field not found.'].join('');
+      const raw = await callAI(prompt, AI_MAX_TOKENS);
+      const ex = aiParseJSON(raw);
+      const plan = aiLinkPlan(ex);
+      /* Project info: the model may return it nested under `info` or flat. */
+      const src = (ex && typeof ex.info === 'object' && ex.info) ? ex.info : ex;
       const infoFields = ['client', 'location', 'description', 'material', 'qty', 'days', 'projType', 'attention', 'endUser'];
-      const infoUpdate = Object.fromEntries(infoFields.map(k => [k, ex[k] || '']).filter(([, v]) => v));
+      const infoUpdate = Object.fromEntries(infoFields.map(k => [k, src[k] || '']).filter(([, v]) => v));
       if (Object.keys(infoUpdate).length) setInfo(p => ({
         ...p,
         ...infoUpdate
       }));
-      /* Apply resources */
-      if (ex.manpower?.length) setMp(ex.manpower.map(r => ({
-        ...r,
-        id: uid(),
-        otHours: 0,
-        perDiem: 0
-      })));
-      if (ex.tools?.length) setTools(ex.tools.map(r => ({
-        ...r,
-        id: uid()
-      })));
-      if (ex.materials?.length) setMats(ex.materials.map(r => ({
-        ...r,
-        id: uid()
-      })));
-      if (ex.ppe?.length) setPpe(ex.ppe.map(r => ({
-        ...r,
-        id: uid()
-      })));
-      /* Apply Scope of Work */
-      if (ex.sow?.length) setSowItems(ex.sow.map(s => ({
-        ...s,
-        id: uid()
-      })));
-      /* Apply notes */
+      if (plan.sowItems.length) setSowItems(plan.sowItems);
+      if (plan.mp.length) setMp(plan.mp);
+      if (plan.tools.length) setTools(plan.tools);
+      if (plan.mats.length) setMats(plan.mats);
+      if (plan.ppe.length) setPpe(plan.ppe);
       if (ex.notes) setNotes(p => [...p, {
         id: uid(),
         seq: p.length + 1,
-        text: ex.notes
+        text: String(ex.notes)
       }]);
       const filled = [];
-      if (ex.manpower?.length) filled.push(ex.manpower.length + ' manpower');
-      if (ex.tools?.length) filled.push(ex.tools.length + ' tools');
-      if (ex.materials?.length) filled.push(ex.materials.length + ' materials');
-      if (ex.ppe?.length) filled.push(ex.ppe.length + ' PPE');
-      if (ex.sow?.length) filled.push(ex.sow.length + ' scope items');
-      showToast('Extracted: ' + filled.join(', ') + '. Review all tabs.');
+      if (plan.mp.length) filled.push(plan.mp.length + ' manpower');
+      if (plan.tools.length) filled.push(plan.tools.length + ' tools');
+      if (plan.mats.length) filled.push(plan.mats.length + ' materials');
+      if (plan.ppe.length) filled.push(plan.ppe.length + ' PPE');
+      if (plan.sowItems.length) filled.push(plan.sowItems.length + ' scope items');
+      showToast('Extracted: ' + filled.join(', ') + '. ' + aiLinkNote(plan) + ' Review all tabs.');
     } catch (e) {
       showToast('Extraction failed: ' + e.message, true);
     }
@@ -857,37 +839,20 @@ function App({
     const tlList = masterlist.tools.slice(0, 30).map(r => r.desc).join(', ');
     const mtList = masterlist.materials.slice(0, 30).map(r => r.desc).join(', ');
     try {
-      const prompt = ['Philippine contractor Synergy3 Corp. CE Type: ', ceType.toUpperCase(), '.\nScope description: ', scope, '\n\nAvailable manpower roles & rates: ', rlist, '\nAvailable tools: ', tlList, '\nAvailable materials: ', mtList, '\n\nRespond ONLY in valid JSON (no markdown):\n', '{"manpower":[{"role":"","pax":1,"days":1,"shift":"regular_day","rate":0}],', '"tools":[{"desc":"","qty":1,"uom":"Lot","cost":0}],', '"materials":[{"desc":"","qty":1,"uom":"Lot","cost":0}],', '"ppe":[{"desc":"","qty":1,"uom":"Pcs","cost":0}],', '"sow":[{"type":"main","text":""},{"type":"sub","text":""}]}', '\nShifts: regular_day,regular_night,sunday_day,sunday_night,holiday_day,holiday_night.', '\nBased on the scope description, generate:', '\n- Realistic manpower roles with appropriate pax, days, and rates from available list', '\n- Required tools and equipment', '\n- Necessary materials and consumables', '\n- Required PPE', '\n- Detailed Scope of Work items (main numbered steps and lettered sub-steps)'].join('');
-      const raw = await callAI(prompt, 2000);
-      const p = JSON.parse(raw.replace(/```json|```/g, '').trim());
-      if (p.manpower?.length) setMp(p.manpower.map(r => ({
-        ...r,
-        id: uid(),
-        otHours: 0,
-        perDiem: 0
-      })));
-      if (p.tools?.length) setTools(p.tools.map(r => ({
-        ...r,
-        id: uid()
-      })));
-      if (p.materials?.length) setMats(p.materials.map(r => ({
-        ...r,
-        id: uid()
-      })));
-      if (p.ppe?.length) setPpe(p.ppe.map(r => ({
-        ...r,
-        id: uid()
-      })));
-      if (p.sow?.length) setSowItems(p.sow.map(s => ({
-        ...s,
-        id: uid()
-      })));
+      const prompt = ['Philippine contractor Synergy3 Corp. CE Type: ', ceType.toUpperCase(), '.\nScope description: ', scope, '\n\nAvailable manpower roles & rates: ', rlist, '\nAvailable tools: ', tlList, '\nAvailable materials: ', mtList, '\n\nRespond ONLY in valid JSON (no markdown):\n', AI_PLAN_SCHEMA, AI_PLAN_RULES,'\nBased on the scope description, generate:', '\n- Realistic manpower roles with appropriate pax, days, and rates from available list', '\n- Required tools and equipment', '\n- Necessary materials and consumables', '\n- Required PPE', '\n- Detailed Scope of Work items (main numbered steps and lettered sub-steps)'].join('');
+      const raw = await callAI(prompt, AI_MAX_TOKENS);
+      const plan = aiLinkPlan(aiParseJSON(raw));
+      if (plan.sowItems.length) setSowItems(plan.sowItems);
+      if (plan.mp.length) setMp(plan.mp);
+      if (plan.tools.length) setTools(plan.tools);
+      if (plan.mats.length) setMats(plan.mats);
+      if (plan.ppe.length) setPpe(plan.ppe);
       setTab('manpower');
       const filled = [];
-      if (p.manpower?.length) filled.push(p.manpower.length + ' manpower');
-      if (p.tools?.length) filled.push(p.tools.length + ' tools');
-      if (p.sow?.length) filled.push(p.sow.length + ' SOW items');
-      showToast('Generated: ' + filled.join(', ') + '. Review all tabs.');
+      if (plan.mp.length) filled.push(plan.mp.length + ' manpower');
+      if (plan.tools.length) filled.push(plan.tools.length + ' tools');
+      if (plan.sowItems.length) filled.push(plan.sowItems.length + ' SOW items');
+      showToast('Generated: ' + filled.join(', ') + '. ' + aiLinkNote(plan) + ' Review all tabs.');
     } catch (e) {
       showToast('AI failed: ' + e.message, true);
     }

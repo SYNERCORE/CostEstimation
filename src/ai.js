@@ -107,21 +107,24 @@ const AI_MODELS = {
    None of that tells an estimator what to DO. Map the status onto the action,
    and keep the provider's own words after it for anyone who wants them. */
 function aiHttpError(label, provider, status, detail) {
-  const model = AI_MODELS[provider] || '';
+  /* Tagged so callAI knows this is the retryable one. */
+  const _isModel = aiIsModelError(status, detail);
+  const _tag = err => { err._modelError = _isModel; return err; };
+  const model = aiModel(provider) || AI_MODELS[provider] || '';
   const tail = detail ? ' (' + label + ': ' + detail + ')' : ' (' + label + ' error ' + status + ')';
   if (status === 401 || status === 403)
     return new Error('The ' + label + ' API key was rejected. Click the key button in the top bar and paste a current one.' + tail);
   if (status === 404)
-    return new Error(label + ' does not recognise the model "' + model + '". It has most likely been retired -- update AI_MODELS in src/ai.js, or switch provider.' + tail);
+    return _tag(new Error(label + ' does not recognise the model "' + model + '". It has most likely been retired, or your account does not have access to it.' + tail));
   if (status === 429)
     return new Error(label + ' is rate limiting or the free quota is used up. Wait a minute, or switch provider.' + tail);
   if (status >= 500)
     return new Error(label + ' is having trouble at their end. Try again shortly, or switch provider.' + tail);
   if (status === 400 && /model|not found|not supported|deprecat/i.test(String(detail || '')))
-    return new Error(label + ' rejected the model "' + model + '" -- it has most likely been retired. Update AI_MODELS in src/ai.js, or switch provider.' + tail);
+    return _tag(new Error(label + ' rejected the model "' + model + '" -- it has most likely been retired, or your account does not have access to it.' + tail));
   if (status === 400 && /api key|api_key|credential/i.test(String(detail || '')))
     return new Error('The ' + label + ' API key was rejected. Click the key button in the top bar and paste a current one.' + tail);
-  return new Error(label + ' rejected the request.' + tail);
+  return _tag(new Error(label + ' rejected the request.' + tail));
 }
 
 async function aiFetch(url, opts) {
@@ -140,7 +143,43 @@ async function aiFetch(url, opts) {
     throw e;
   }
 }
+/* One attempt with whatever model is currently resolved. */
+/* A model the key cannot reach is the one failure worth retrying, because the
+   fix is mechanical: ask which models this key CAN reach, pick one, remember
+   it, go again. Anything else is passed straight through -- a bad key does not
+   get better on a second attempt.
+
+   Only ever one retry, and only after the model has actually changed, so a
+   provider that 404s everything cannot spin. */
 async function callAI(prompt, maxTokens) {
+  const provider = getProvider();
+  try {
+    return await callAIOnce(prompt, maxTokens);
+  } catch (e) {
+    if (!e || !e._modelError) throw e;
+    const was = aiModel(provider);
+    let ids;
+    try { ids = await aiListModels(provider, getApiKey()); }
+    catch (_) { throw e; }   /* cannot ask -- report the original failure */
+    const pick = aiPickModel(provider, ids);
+    if (!pick || pick === was) {
+      const few = (ids || []).filter(id => !AI_MODEL_REJECT.test(id)).slice(0, 8).join(', ');
+      throw new Error(e.message + (few ? ' Models this key can use: ' + few + '.' : ' This key has no usable chat models.'));
+    }
+    setModelOverride(provider, pick);
+    try {
+      const out = await callAIOnce(prompt, maxTokens);
+      if (typeof showToast === 'function') showToast('"' + was + '" is not available on your account. Switched to "' + pick + '".');
+      return out;
+    } catch (e2) {
+      /* The replacement failed too -- do not leave a bad choice remembered. */
+      clearModelOverride(provider);
+      throw e2;
+    }
+  }
+}
+
+async function callAIOnce(prompt, maxTokens) {
   maxTokens = maxTokens || 1000;
   const provider = getProvider(),
     key = getApiKey();
@@ -148,7 +187,7 @@ async function callAI(prompt, maxTokens) {
 
   /* -- Google Gemini -- */
   if (provider === 'gemini') {
-    const r = await aiFetch('https://generativelanguage.googleapis.com/v1beta/models/' + AI_MODELS.gemini + ':generateContent?key=' + key, {
+    const r = await aiFetch('https://generativelanguage.googleapis.com/v1beta/models/' + aiModel('gemini') + ':generateContent?key=' + key, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -179,7 +218,7 @@ async function callAI(prompt, maxTokens) {
         'Authorization': 'Bearer ' + key
       },
       body: JSON.stringify({
-        model: AI_MODELS.groq,
+        model: aiModel('groq'),
         max_tokens: maxTokens,
         temperature: 0.1,
         messages: [{
@@ -202,7 +241,7 @@ async function callAI(prompt, maxTokens) {
         'Authorization': 'Bearer ' + key
       },
       body: JSON.stringify({
-        model: AI_MODELS.kimi,
+        model: aiModel('kimi'),
         max_tokens: maxTokens,
         temperature: 0.1,
         messages: [{
@@ -225,7 +264,7 @@ async function callAI(prompt, maxTokens) {
         'Authorization': 'Bearer ' + key
       },
       body: JSON.stringify({
-        model: AI_MODELS.openai,
+        model: aiModel('openai'),
         max_tokens: maxTokens,
         temperature: 0.1,
         messages: [{
@@ -273,7 +312,7 @@ async function callAI(prompt, maxTokens) {
       'anthropic-dangerous-direct-browser-access': 'true'
     },
     body: JSON.stringify({
-      model: AI_MODELS.anthropic,
+      model: aiModel('anthropic'),
       max_tokens: maxTokens,
       messages: [{
         role: 'user',

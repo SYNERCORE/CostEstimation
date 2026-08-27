@@ -49,7 +49,7 @@ const permits = host => allowed.some(src => {
 });
 
 /* ---- every absolute URL the app fetches ---------------------------------- */
-const SRC = ['src/ai.js', 'src/db.js', 'src/sp.js'];
+const SRC = ['src/ai.js', 'src/ai_models.js', 'src/db.js', 'src/sp.js'];
 const found = [];
 for (const f of SRC) {
   let body;

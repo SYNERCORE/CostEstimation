@@ -62,6 +62,8 @@ jobs:
         run: node tools/test-xlsx-export.js src/App.js
       - name: Every host the app calls is allowed by the CSP
         run: node tools/check-csp-connect.js
+      - name: A model the key cannot reach falls back to one it can
+        run: node tools/test-ai-fallback.js
       - name: AI output still fits the app data model
         run: node tools/test-ai-plan.js src/ai.js
       - name: Saved-total recompute agrees with the editor

@@ -85,6 +85,45 @@ const setAzureEndpoint = v => localStorage.setItem('sy3:azureEndpoint', v);
    everyone looked first. The AI endpoints were in fact missing from
    connect-src in index.html and every AI call had been dead on the deployed
    site since the CSP landed. Name the likely cause instead of the symptom. */
+
+/* Every model id the app sends, in ONE place.
+
+   Google shut gemini-2.0-flash down and the app went on POSTing to it. Gemini
+   is the DEFAULT provider, so out of the box the AI answered 400 Bad Request
+   and the toast relayed Google's wording, which never says "this model no
+   longer exists". Six ids scattered through six near-identical fetch blocks is
+   how that goes unnoticed; one table is something you can actually check
+   against a provider's deprecation page. */
+const AI_MODELS = {
+  gemini: 'gemini-2.5-flash',
+  groq: 'llama-3.3-70b-versatile',
+  kimi: 'moonshot-v1-8k',
+  openai: 'gpt-4o-mini',
+  anthropic: 'claude-opus-5'
+};
+
+/* Providers answer failures with their own vocabulary, and the app used to
+   relay it verbatim: "API key not valid", "model_not_found", "Bad Request".
+   None of that tells an estimator what to DO. Map the status onto the action,
+   and keep the provider's own words after it for anyone who wants them. */
+function aiHttpError(label, provider, status, detail) {
+  const model = AI_MODELS[provider] || '';
+  const tail = detail ? ' (' + label + ': ' + detail + ')' : ' (' + label + ' error ' + status + ')';
+  if (status === 401 || status === 403)
+    return new Error('The ' + label + ' API key was rejected. Click the key button in the top bar and paste a current one.' + tail);
+  if (status === 404)
+    return new Error(label + ' does not recognise the model "' + model + '". It has most likely been retired -- update AI_MODELS in src/ai.js, or switch provider.' + tail);
+  if (status === 429)
+    return new Error(label + ' is rate limiting or the free quota is used up. Wait a minute, or switch provider.' + tail);
+  if (status >= 500)
+    return new Error(label + ' is having trouble at their end. Try again shortly, or switch provider.' + tail);
+  if (status === 400 && /model|not found|not supported|deprecat/i.test(String(detail || '')))
+    return new Error(label + ' rejected the model "' + model + '" -- it has most likely been retired. Update AI_MODELS in src/ai.js, or switch provider.' + tail);
+  if (status === 400 && /api key|api_key|credential/i.test(String(detail || '')))
+    return new Error('The ' + label + ' API key was rejected. Click the key button in the top bar and paste a current one.' + tail);
+  return new Error(label + ' rejected the request.' + tail);
+}
+
 async function aiFetch(url, opts) {
   try {
     return await fetch(url, opts);
@@ -109,7 +148,7 @@ async function callAI(prompt, maxTokens) {
 
   /* -- Google Gemini -- */
   if (provider === 'gemini') {
-    const r = await aiFetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key, {
+    const r = await aiFetch('https://generativelanguage.googleapis.com/v1beta/models/' + AI_MODELS.gemini + ':generateContent?key=' + key, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -127,7 +166,7 @@ async function callAI(prompt, maxTokens) {
       })
     });
     const d = await r.json();
-    if (!r.ok) throw new Error(d.error && d.error.message || 'Gemini error ' + r.status);
+    if (!r.ok) throw aiHttpError('Gemini', 'gemini', r.status, d.error && d.error.message);
     return d.candidates && d.candidates[0] && d.candidates[0].content && d.candidates[0].content.parts && d.candidates[0].content.parts[0] && d.candidates[0].content.parts[0].text || '';
   }
 
@@ -140,7 +179,7 @@ async function callAI(prompt, maxTokens) {
         'Authorization': 'Bearer ' + key
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        model: AI_MODELS.groq,
         max_tokens: maxTokens,
         temperature: 0.1,
         messages: [{
@@ -150,7 +189,7 @@ async function callAI(prompt, maxTokens) {
       })
     });
     const d = await r.json();
-    if (!r.ok) throw new Error(d.error && d.error.message || 'Groq error ' + r.status);
+    if (!r.ok) throw aiHttpError('Groq', 'groq', r.status, d.error && d.error.message);
     return d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content || '';
   }
 
@@ -163,7 +202,7 @@ async function callAI(prompt, maxTokens) {
         'Authorization': 'Bearer ' + key
       },
       body: JSON.stringify({
-        model: 'moonshot-v1-8k',
+        model: AI_MODELS.kimi,
         max_tokens: maxTokens,
         temperature: 0.1,
         messages: [{
@@ -173,7 +212,7 @@ async function callAI(prompt, maxTokens) {
       })
     });
     const d = await r.json();
-    if (!r.ok) throw new Error(d.error && d.error.message || 'Kimi error ' + r.status);
+    if (!r.ok) throw aiHttpError('Kimi', 'kimi', r.status, d.error && d.error.message);
     return d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content || '';
   }
 
@@ -186,7 +225,7 @@ async function callAI(prompt, maxTokens) {
         'Authorization': 'Bearer ' + key
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: AI_MODELS.openai,
         max_tokens: maxTokens,
         temperature: 0.1,
         messages: [{
@@ -196,7 +235,7 @@ async function callAI(prompt, maxTokens) {
       })
     });
     const d = await r.json();
-    if (!r.ok) throw new Error(d.error && d.error.message || 'OpenAI error ' + r.status);
+    if (!r.ok) throw aiHttpError('OpenAI', 'openai', r.status, d.error && d.error.message);
     return d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content || '';
   }
 
@@ -220,7 +259,7 @@ async function callAI(prompt, maxTokens) {
       })
     });
     const d = await r.json();
-    if (!r.ok) throw new Error(d.error && d.error.message || 'Copilot/Azure error ' + r.status);
+    if (!r.ok) throw aiHttpError('Copilot/Azure', 'copilot', r.status, d.error && d.error.message);
     return d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content || '';
   }
 
@@ -234,7 +273,7 @@ async function callAI(prompt, maxTokens) {
       'anthropic-dangerous-direct-browser-access': 'true'
     },
     body: JSON.stringify({
-      model: 'claude-opus-5',
+      model: AI_MODELS.anthropic,
       max_tokens: maxTokens,
       messages: [{
         role: 'user',
@@ -243,7 +282,7 @@ async function callAI(prompt, maxTokens) {
     })
   });
   const d = await r.json();
-  if (!r.ok) throw new Error(d.error && d.error.message || 'Anthropic error ' + r.status);
+  if (!r.ok) throw aiHttpError('Anthropic', 'anthropic', r.status, d.error && d.error.message);
   return d.content && d.content[0] && d.content[0].text || '';
 }
 /* === PLAN PARSING & TASK LINKING ============================================

@@ -175,11 +175,15 @@ async function callAI(prompt, maxTokens) {
      Everything else -- bad key, spent quota, 5xx -- passes straight through:
      no different model or smaller request fixes those. */
   const provider = getProvider();
-  let tokens = maxTokens;
+  /* Start from the size this provider has already accepted, not the ask. */
+  let tokens = aiTokens(provider, maxTokens);
   let switched = null;   /* the model we moved away from, once */
   for (let attempt = 0; ; attempt++) {
     try {
       const out = await callAIOnce(prompt, tokens);
+      /* Remember a size that had to be reduced, so the next call starts there
+         instead of repeating the 413. */
+      if (tokens < maxTokens) setTokenCap(provider, tokens);
       if (switched && typeof showToast === 'function')
         showToast('"' + switched + '" is not available on your account. Switched to "' + aiModel(provider) + '".');
       return out;
@@ -196,6 +200,11 @@ async function callAI(prompt, maxTokens) {
           throw new Error(e.message + (few ? ' Models this key can use: ' + few + '.' : ' This key has no usable chat models.'));
         }
         setModelOverride(provider, pick);
+        /* A different model has different limits -- a cap learned for the old one
+           says nothing about this one, and carrying it over would silently cramp
+           the reply forever. */
+        clearTokenCap(provider);
+        tokens = maxTokens;
         switched = was;
         continue;
       }

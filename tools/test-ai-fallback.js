@@ -95,7 +95,7 @@ function makeEnv(opts) {
   };
   const names = Object.keys(sandbox);
   const body = rd('src/ai.js') + '\n' + rd('src/ai_models.js') +
-    '\nreturn {callAI, aiModel, aiPickModel, aiListModels, aiIsModelError, getModelOverrides, AI_MODELS, AI_MODEL_REJECT};';
+    '\nreturn {callAI, aiModel, aiPickModel, aiListModels, aiIsModelError, getModelOverrides, getTokenCaps, aiTokens, AI_MODELS, AI_MODEL_REJECT};';
   const api = new Function(...names, body)(...names.map(n => sandbox[n]));
   mem.setItem('sy3:apikey', 'k-valid');
   return { api, calls, toasts, mem };
@@ -226,6 +226,55 @@ async function main() {
     ck('a cap nothing fits under gives up at the floor', /too large/.test(msg), msg);
     ck('after bounded shrinks, not a spin', calls.filter(c => !c.list).length <= 3, calls.filter(c => !c.list).length + ' calls');
     ck('and the message says what to do', /shorter document|switch provider/.test(msg));
+  }
+
+  console.log('\nThe size that worked is remembered, so the 413 happens once:');
+  {
+    /* Without this every single call repeated the whole dance -- a 413, a
+       wasted round trip, and a red console line that reads as a failure to
+       anyone who has not read the source. */
+    const env = makeEnv({
+      provider: 'groq', tooLargeAbove: 5000,
+      serves: ['llama-3.3-70b-versatile'], catalogue: ['llama-3.3-70b-versatile']
+    });
+    await env.api.callAI('one', 8000);
+    const firstRun = env.calls.filter(c => !c.list).length;
+    ck('the first call shrinks to fit', firstRun === 2, firstRun + ' calls');
+    ck('and the working size is remembered', env.api.getTokenCaps().groq === 4000,
+      JSON.stringify(env.api.getTokenCaps()));
+    const before = env.calls.length;
+    await env.api.callAI('two', 8000);
+    const secondRun = env.calls.slice(before).filter(c => !c.list).length;
+    ck('the second call goes straight through, no 413', secondRun === 1, secondRun + ' calls');
+  }
+  {
+    /* The cap is a ceiling, not a floor. Seed one first -- without a stored
+       cap this assertion passes whatever aiTokens does, which is how a mutant
+       that turned the ceiling into a floor survived. */
+    const env = makeEnv({ provider: 'groq', serves: ['llama-3.3-70b-versatile'], catalogue: [] });
+    env.mem.setItem('sy3:tokencaps', JSON.stringify({ groq: 4000 }));
+    ck('the cap applies when the caller asks for more',
+      env.api.aiTokens('groq', 8000) === 4000, String(env.api.aiTokens('groq', 8000)));
+    ck('but a caller wanting less than the cap still gets less',
+      env.api.aiTokens('groq', 500) === 500, String(env.api.aiTokens('groq', 500)));
+  }
+  {
+    /* A cap learned for one model says nothing about another. Seed a small cap
+       and force a model switch: if the cap survived the switch, the final
+       request would still be squeezed to 2000. */
+    const env = makeEnv({
+      provider: 'groq',
+      serves: ['openai/gpt-oss-120b'],
+      catalogue: ['openai/gpt-oss-120b']
+    });
+    env.mem.setItem('sy3:tokencaps', JSON.stringify({ groq: 2000 }));
+    await env.api.callAI('hello', 8000);
+    const chat = env.calls.filter(c => !c.list);
+    const lastAsk = JSON.parse(chat[chat.length - 1].body).max_tokens;
+    ck('switching model discards the old model\'s cap',
+      lastAsk === 8000, 'final request asked for ' + lastAsk);
+    ck('and nothing stale is left remembered',
+      !env.api.getTokenCaps().groq, JSON.stringify(env.api.getTokenCaps()));
   }
 
   console.log('\nChoosing between several the key can reach:');

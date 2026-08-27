@@ -34,6 +34,36 @@ function aiModel(provider) {
   return getModelOverrides()[provider] || AI_MODELS[provider] || '';
 }
 
+/* The same idea for request size.
+
+   A free tier caps tokens per minute and counts the prompt AND max_tokens --
+   the room reserved for the reply -- so a request that is fine on a paid key
+   is refused on a free one. callAI recovers by halving and retrying, which
+   works, but without remembering the answer EVERY call repeated the whole
+   dance: a 413, a wasted round trip, and a red line in the console that looks
+   like a failure to anyone who has not read this file.
+
+   So remember the size that worked, per provider, and start there next time.
+   It is a ceiling, never a floor: a caller asking for less still gets less. */
+const AI_CAP_KEY = 'sy3:tokencaps';
+
+function getTokenCaps() {
+  try { const v = JSON.parse(localStorage.getItem(AI_CAP_KEY) || '{}'); return v && typeof v === 'object' ? v : {}; }
+  catch (_) { return {}; }
+}
+function setTokenCap(provider, n) {
+  try { const c = getTokenCaps(); c[provider] = n; localStorage.setItem(AI_CAP_KEY, JSON.stringify(c)); } catch (_) {}
+}
+function clearTokenCap(provider) {
+  try { const c = getTokenCaps(); delete c[provider]; localStorage.setItem(AI_CAP_KEY, JSON.stringify(c)); } catch (_) {}
+}
+/* The reply room to ask for: what the caller wants, capped by what this
+   provider has already shown it will accept. */
+function aiTokens(provider, want) {
+  const cap = Number(getTokenCaps()[provider]) || 0;
+  return cap > 0 ? Math.min(want, cap) : want;
+}
+
 /* Models that answer chat but are no use for extracting a costing plan --
    speech, moderation, embeddings. Filtered out so the fallback never lands on
    one and produces a baffling result instead of a clear failure. */

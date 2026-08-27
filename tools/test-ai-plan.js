@@ -38,7 +38,7 @@ const uid = () => 'id' + (++_n);
 /* Load the real helpers. ai.js is browser code, but nothing it defines at the
    top level touches the DOM, so the pure functions can be lifted out and run
    here against the actual source -- not a copy that could drift. */
-const pick = ['AI_PLAN_SCHEMA', 'AI_PLAN_RULES', 'AI_MAX_TOKENS', 'aiParseJSON', 'aiLinkPlan', 'aiLinkNote'];
+const pick = ['AI_PLAN_SCHEMA', 'AI_PLAN_RULES', 'AI_EXTRACT_SCHEMA', 'AI_EXTRACT_RULES', 'AI_MAX_TOKENS', 'aiParseJSON', 'aiLinkPlan', 'aiLinkNote'];
 let M;
 try {
   const start = ai.indexOf('const AI_PLAN_SCHEMA');
@@ -132,8 +132,14 @@ ck('unusable text says so', /did not return usable JSON/.test(thrown(() => M.aiP
 
 console.log('\nBoth features ask for the same thing:');
 ck('the schema is defined once', (ai.match(/const AI_PLAN_SCHEMA/g) || []).length === 1);
-ck('and both prompts use it', (app.match(/AI_PLAN_SCHEMA, AI_PLAN_RULES/g) || []).length === 2,
+/* Generate sends the plan schema directly; Extract sends AI_EXTRACT_SCHEMA,
+   which is built from it. Either way there is one source, and both prompts
+   send the one set of plan rules -- that is the invariant, not the exact
+   spelling of the argument list. */
+ck('generate sends the plan schema itself', /AI_PLAN_SCHEMA, AI_PLAN_RULES/.test(app));
+ck('extract sends a schema derived from it', /AI_PLAN_SCHEMA\.replace/.test(ai) && /AI_EXTRACT_SCHEMA/.test(app),
   'two hand-maintained copies is how they drift');
+ck('and both send the same plan rules', (app.match(/AI_PLAN_RULES/g) || []).length === 2);
 ck('both parse through aiParseJSON', (app.match(/aiParseJSON\(/g) || []).length === 2);
 ck('both link through aiLinkPlan', (app.match(/aiLinkPlan\(/g) || []).length === 2);
 ck('neither still hand-rolls the fence strip', !app.includes('replace(/' + FENCE + 'json|' + FENCE + '/g'),
@@ -143,6 +149,42 @@ ck('the token cap has room for the whole schema', M.AI_MAX_TOKENS >= 8000,
 ck('and neither call site hardcodes its own', !/callAI\(prompt, \d/.test(app));
 ck('the schema asks for a task on every resource kind',
   ['manpower', 'tools', 'materials', 'ppe'].every(k => new RegExp('"' + k + '":\\[\\{[^\\]]*"task":1').test(M.AI_PLAN_SCHEMA)));
+
+/* Extracting from a document asks for the project details AND the plan. The
+   prompt briefly printed them as two separate top-level JSON objects under two
+   headings and asked for both. A model handed that generally returns one --
+   and it returned the info, so the client and material appeared on the form
+   while the scope of work and every resource came back empty. The CE looked
+   half-extracted with nothing to explain why. */
+console.log('\nDocument extraction asks for ONE object, not two:');
+ck('the extract schema parses as a single JSON object',
+  (() => { try { const o = JSON.parse(M.AI_EXTRACT_SCHEMA); return o && !Array.isArray(o) && typeof o === 'object'; } catch (_) { return false; } })(),
+  'two concatenated objects is not parseable, and not answerable either');
+{
+  const o = JSON.parse(M.AI_EXTRACT_SCHEMA);
+  ck('with the project details nested under info', o.info && typeof o.info.client === 'string');
+  for (const k of ['sow', 'manpower', 'tools', 'materials', 'ppe'])
+    ck('and ' + k + ' alongside it', Array.isArray(o[k]));
+  ck('and a place for document notes', typeof o.notes === 'string');
+  ck('resource rows still carry the task link',
+    o.manpower[0].task === 1 && o.tools[0].task === 1,
+    'this is what fills the SOW Breakdown');
+  ck('tools still carry days', o.tools[0].days === 1);
+}
+ck('it is built from the plan schema, not written out again',
+  /AI_PLAN_SCHEMA\.replace/.test(ai),
+  'a second copy is how the two drift apart');
+ck('the extract prompt uses it', /AI_EXTRACT_SCHEMA/.test(app));
+ck('and no longer prints a second schema under its own heading',
+  !/PLAN \(respond with these keys at the top level\)/.test(app));
+ck('the shared plan rules are still sent', /AI_PLAN_RULES/.test(app),
+  'sow, task links, days and overtime are all explained there');
+ck('extraction-only rules do not restate them',
+  !/sow: convert the scope of work into structured items/.test(app),
+  'two sets of rules for one field is how they start contradicting each other');
+ck('the model is told to fill rates from the masterlist',
+  /do not leave a rate at 0/.test(app),
+  'a plan of rows costed at zero is worse than no plan');
 
 console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nall AI plan assertions passed');
 process.exit(fails ? 1 : 0);

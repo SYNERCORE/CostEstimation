@@ -417,6 +417,34 @@ const AI_PLAN_RULES = [
   ' so omitting this bills a 20-day job for one day. Materials and PPE are not billed by day.'
 ].join('');
 
+/* Extracting from a document asks for the plan AND the project details.
+   It must be ONE object.
+
+   It briefly was not: the prompt printed the info object, then printed the
+   plan schema under a separate heading, and asked for both. A model handed
+   two top-level JSON objects generally returns one of them -- and it
+   returned the info, so the client and material appeared on the form while
+   the scope of work and every resource came back empty. The CE looked
+   half-extracted with nothing to say why.
+
+   Built from AI_PLAN_SCHEMA rather than written out again, so a field added
+   to the plan cannot go missing here. */
+const AI_EXTRACT_SCHEMA = '{"info":{"client":"","location":"","description":"","material":"","qty":"1","days":"","projType":"mechanical","attention":"","endUser":""},'
+  + AI_PLAN_SCHEMA.replace(/^\{/, '').replace(/\}$/, '')
+  + ',"notes":""}';
+
+/* The rules that belong to extraction alone. The shared plan rules cover
+   sow, task links, days and overtime; repeating them here is how the two
+   halves start contradicting each other. */
+const AI_EXTRACT_RULES = [
+  '\n- Return ONE JSON object with all of these keys at the top level.',
+  '\n- info.projType: "electrical" or "mechanical" only.',
+  '\n- info.description: a 1-2 sentence scope summary.',
+  '\n- notes: any disclaimers, assumptions or special conditions in the document.',
+  '\n- Use [] for a section the document does not mention, and "" for a field it',
+  ' does not give. Do not invent values.'
+].join('');
+
 /* Models wrap JSON in prose and fences however they like. Pull out the object
    rather than hoping the whole reply is clean: the old code stripped ``` fences
    and nothing else, so one sentence of preamble threw a SyntaxError and the

@@ -63,6 +63,17 @@ function makeEnv(opts) {
     if (m) asked = m[1];
     else { try { asked = JSON.parse(init.body).model; } catch (_) {} }
     if (opts.serves.indexOf(asked) !== -1) {
+      /* A free-tier cap: 413 when the reserved reply room is too big. Checked
+         AFTER the model, as Groq does -- the field trace was 404 then 413,
+         which means the model gate comes first. Getting this order wrong in
+         the stub hid a real bug: the 413-after-switch path was never
+         exercised, so a mutant that unlearned the model on it survived. */
+      if (opts.tooLargeAbove) {
+        let want = 0;
+        try { const b = JSON.parse(init.body); want = b.max_tokens || (b.generationConfig && b.generationConfig.maxOutputTokens) || 0; } catch (_) {}
+        if (want > opts.tooLargeAbove)
+          return { ok: false, status: 413, json: async () => ({ error: { message: 'Request too large: limit ' + opts.tooLargeAbove } }) };
+      }
       const text = JSON.stringify({ ok: true, model: asked });
       if (opts.provider === 'gemini') return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text }] } }] }) };
       if (opts.provider === 'anthropic') return { ok: true, status: 200, json: async () => ({ content: [{ text }] }) };
@@ -176,6 +187,45 @@ async function main() {
     try { await api.callAI('hello', 100); } catch (e) { msg = e.message; }
     ck('if the list cannot be fetched, the original failure is reported',
       /does not recognise the model/.test(msg), msg);
+  }
+
+  console.log('\n413: the free tier counts the reply room too:');
+  {
+    /* The sequence from the field: 404 on the shipped model, switch, then 413
+       because prompt + max_tokens blows the free-tier cap. The first deploy
+       treated that failed retry as 'forget the model' and re-ran the whole
+       dead end on every call. */
+    const { api, calls, toasts } = makeEnv({
+      provider: 'groq', tooLargeAbove: 5000,
+      serves: ['openai/gpt-oss-120b'],
+      catalogue: ['openai/gpt-oss-120b', 'llama-3.1-8b-instant']
+    });
+    const got = JSON.parse(await api.callAI('hello', 8000));
+    ck('404 then 413 still ends in success', got.ok === true && got.model === 'openai/gpt-oss-120b', JSON.stringify(got));
+    ck('the reply room was halved to fit', calls.filter(c => !c.list).length === 3, calls.filter(c => !c.list).length + ' chat calls');
+    ck('the switched model STAYS remembered', api.aiModel('groq') === 'openai/gpt-oss-120b',
+      'a 413 is about size; unlearning the model re-runs the dead end forever');
+    ck('the user still hears about the switch', /Switched to/.test(toasts.join(' ')));
+  }
+  {
+    const { api, calls } = makeEnv({
+      provider: 'groq', tooLargeAbove: 5000,
+      serves: ['llama-3.3-70b-versatile'], catalogue: ['llama-3.3-70b-versatile']
+    });
+    const got = JSON.parse(await api.callAI('hello', 8000));
+    ck('a plain 413 with a working model just shrinks and succeeds', got.ok === true);
+    ck('in one extra call', calls.filter(c => !c.list).length === 2);
+  }
+  {
+    const { api, calls } = makeEnv({
+      provider: 'groq', tooLargeAbove: 100,
+      serves: ['llama-3.3-70b-versatile'], catalogue: ['llama-3.3-70b-versatile']
+    });
+    let msg = '';
+    try { await api.callAI('hello', 8000); } catch (e) { msg = e.message; }
+    ck('a cap nothing fits under gives up at the floor', /too large/.test(msg), msg);
+    ck('after bounded shrinks, not a spin', calls.filter(c => !c.list).length <= 3, calls.filter(c => !c.list).length + ' calls');
+    ck('and the message says what to do', /shorter document|switch provider/.test(msg));
   }
 
   console.log('\nChoosing between several the key can reach:');

@@ -116,6 +116,11 @@ function aiHttpError(label, provider, status, detail) {
     return new Error('The ' + label + ' API key was rejected. Click the key button in the top bar and paste a current one.' + tail);
   if (status === 404)
     return _tag(new Error(label + ' does not recognise the model "' + model + '". It has most likely been retired, or your account does not have access to it.' + tail));
+  if (status === 413) {
+    const err = new Error('The request was too large for ' + label + "'s current limits -- on a free tier the cap counts the document AND the room reserved for the reply. Retrying smaller; if it keeps failing, use a shorter document or switch provider." + tail);
+    err._tooLarge = true;
+    return err;
+  }
   if (status === 429)
     return new Error(label + ' is rate limiting or the free quota is used up. Wait a minute, or switch provider.' + tail);
   if (status >= 500)
@@ -152,29 +157,60 @@ async function aiFetch(url, opts) {
    Only ever one retry, and only after the model has actually changed, so a
    provider that 404s everything cannot spin. */
 async function callAI(prompt, maxTokens) {
+  /* Two recoverable faults, each with its own remedy:
+
+     - a model the key cannot reach: ask the provider what it CAN reach, pick,
+       remember, retry. At most once -- a second miss means the account, not
+       the id, and guessing further is noise.
+
+     - 413 request-too-large: on a free tier the per-minute token cap counts
+       the prompt AND max_tokens, the room reserved for the answer. So the same
+       document that works on a paid key 413s on a free one. Halving the
+       reservation is the remedy, twice at most, floor 2000 -- below that the
+       reply would be cut off mid-JSON and unparseable anyway.
+
+     The first fallback deploy conflated the two: any failed retry "forgot" the
+     switched model, so a 404 -> switch -> 413 sequence unlearned a perfectly
+     good model and started over from the dead one, every single call.
+     Everything else -- bad key, spent quota, 5xx -- passes straight through:
+     no different model or smaller request fixes those. */
   const provider = getProvider();
-  try {
-    return await callAIOnce(prompt, maxTokens);
-  } catch (e) {
-    if (!e || !e._modelError) throw e;
-    const was = aiModel(provider);
-    let ids;
-    try { ids = await aiListModels(provider, getApiKey()); }
-    catch (_) { throw e; }   /* cannot ask -- report the original failure */
-    const pick = aiPickModel(provider, ids);
-    if (!pick || pick === was) {
-      const few = (ids || []).filter(id => !AI_MODEL_REJECT.test(id)).slice(0, 8).join(', ');
-      throw new Error(e.message + (few ? ' Models this key can use: ' + few + '.' : ' This key has no usable chat models.'));
-    }
-    setModelOverride(provider, pick);
+  let tokens = maxTokens;
+  let switched = null;   /* the model we moved away from, once */
+  for (let attempt = 0; ; attempt++) {
     try {
-      const out = await callAIOnce(prompt, maxTokens);
-      if (typeof showToast === 'function') showToast('"' + was + '" is not available on your account. Switched to "' + pick + '".');
+      const out = await callAIOnce(prompt, tokens);
+      if (switched && typeof showToast === 'function')
+        showToast('"' + switched + '" is not available on your account. Switched to "' + aiModel(provider) + '".');
       return out;
-    } catch (e2) {
-      /* The replacement failed too -- do not leave a bad choice remembered. */
-      clearModelOverride(provider);
-      throw e2;
+    } catch (e) {
+      if (!e || attempt >= 3) throw e;
+      if (e._modelError && switched === null) {
+        const was = aiModel(provider);
+        let ids;
+        try { ids = await aiListModels(provider, getApiKey()); }
+        catch (_) { throw e; }   /* cannot ask -- report the original failure */
+        const pick = aiPickModel(provider, ids);
+        if (!pick || pick === was) {
+          const few = (ids || []).filter(id => !AI_MODEL_REJECT.test(id)).slice(0, 8).join(', ');
+          throw new Error(e.message + (few ? ' Models this key can use: ' + few + '.' : ' This key has no usable chat models.'));
+        }
+        setModelOverride(provider, pick);
+        switched = was;
+        continue;
+      }
+      if (e._modelError && switched !== null) {
+        /* The replacement is dead too -- do not leave it remembered. */
+        clearModelOverride(provider);
+        throw e;
+      }
+      if (e._tooLarge && tokens > 2000) {
+        /* The switched model stays remembered: it answered about SIZE, which
+           means the model itself is reachable. */
+        tokens = Math.max(2000, Math.floor(tokens / 2));
+        continue;
+      }
+      throw e;
     }
   }
 }

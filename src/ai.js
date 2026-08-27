@@ -76,6 +76,31 @@ const getProvider = () => localStorage.getItem('sy3:provider') || 'gemini';
 const setProvider = p => localStorage.setItem('sy3:provider', p);
 const getAzureEndpoint = () => localStorage.getItem('sy3:azureEndpoint') || '';
 const setAzureEndpoint = v => localStorage.setItem('sy3:azureEndpoint', v);
+
+/* fetch() rejects with a bare TypeError("Failed to fetch") for three very
+   different problems: the device is offline, the page CSP refused to connect,
+   or the host would not do CORS. The browser writes the real reason to the
+   console and hands JavaScript nothing, so "AI failed: Failed to fetch" was
+   all the user ever saw -- and it reads like a bad API key, which is where
+   everyone looked first. The AI endpoints were in fact missing from
+   connect-src in index.html and every AI call had been dead on the deployed
+   site since the CSP landed. Name the likely cause instead of the symptom. */
+async function aiFetch(url, opts) {
+  try {
+    return await fetch(url, opts);
+  } catch (e) {
+    if (e && e.name === "TypeError") {
+      if (typeof navigator !== "undefined" && navigator.onLine === false)
+        throw new Error("No internet connection, so the AI could not be reached.");
+      let host = url;
+      try { host = new URL(url).host; } catch (_) {}
+      throw new Error("The browser blocked the request to " + host + " before it was sent. " +
+        "This is the page security policy (connect-src in index.html), not your API key. " +
+        "Check the browser console for a Content Security Policy message.");
+    }
+    throw e;
+  }
+}
 async function callAI(prompt, maxTokens) {
   maxTokens = maxTokens || 1000;
   const provider = getProvider(),
@@ -84,7 +109,7 @@ async function callAI(prompt, maxTokens) {
 
   /* -- Google Gemini -- */
   if (provider === 'gemini') {
-    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key, {
+    const r = await aiFetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -108,7 +133,7 @@ async function callAI(prompt, maxTokens) {
 
   /* -- Groq -- */
   if (provider === 'groq') {
-    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const r = await aiFetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -131,7 +156,7 @@ async function callAI(prompt, maxTokens) {
 
   /* -- Kimi (Moonshot) -- */
   if (provider === 'kimi') {
-    const r = await fetch('https://api.moonshot.cn/v1/chat/completions', {
+    const r = await aiFetch('https://api.moonshot.cn/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -154,7 +179,7 @@ async function callAI(prompt, maxTokens) {
 
   /* -- ChatGPT / OpenAI -- */
   if (provider === 'openai') {
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+    const r = await aiFetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -179,7 +204,7 @@ async function callAI(prompt, maxTokens) {
   if (provider === 'copilot') {
     const endpoint = getAzureEndpoint();
     if (!endpoint) throw new Error('Azure OpenAI endpoint not set. Enter it in the key modal.');
-    const r = await fetch(endpoint + '/chat/completions?api-version=2024-02-01', {
+    const r = await aiFetch(endpoint + '/chat/completions?api-version=2024-02-01', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -200,7 +225,7 @@ async function callAI(prompt, maxTokens) {
   }
 
   /* -- Anthropic -- */
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
+  const r = await aiFetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

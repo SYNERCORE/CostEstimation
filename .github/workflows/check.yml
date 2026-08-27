@@ -60,6 +60,8 @@ jobs:
         run: node tools/test-ce-roundtrip.js
       - name: Detailed Excel export mirrors the printed CE
         run: node tools/test-xlsx-export.js src/App.js
+      - name: Every host the app calls is allowed by the CSP
+        run: node tools/check-csp-connect.js
       - name: AI output still fits the app data model
         run: node tools/test-ai-plan.js src/ai.js
       - name: Saved-total recompute agrees with the editor

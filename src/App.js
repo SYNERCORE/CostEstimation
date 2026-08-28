@@ -6643,6 +6643,23 @@ tab === 'dashboard' && (() => {
   const totalThis = monthHist.reduce((s,h)=>s+N(h.grand||0),0);
   const avgVal = history.length ? history.reduce((s,h)=>s+N(h.grand||0),0)/history.length : 0;
   const statuses = history.map(h=>(monData[h.id]||{}).status||'Draft');
+  /* An "open" CE is one still needing work. Submitted, No Quote and Cancelled
+     are the three end states -- everything else, Draft included, is open.
+     Sorted by deadline so the next thing due is the first thing read. A CE
+     with no deadline set cannot be ranked, so it sorts to the bottom; as a
+     plain string compare an empty deadline would sort to the very top and
+     bury the genuinely urgent rows. */
+  const CLOSED_STATUSES = ['Submitted', 'No Quote', 'Cancelled'];
+  const openCEs = history.map(h => ({h, m: monData[h.id] || {}}))
+    .filter(x => CLOSED_STATUSES.indexOf(x.m.status || 'Draft') < 0)
+    .sort((a, b) => {
+      const da = a.m.deadline || '', db = b.m.deadline || '';
+      if (!da && !db) return 0;
+      if (!da) return 1;
+      if (!db) return -1;
+      return da < db ? -1 : da > db ? 1 : 0;
+    });
+  const openValue = openCEs.reduce((t, x) => t + N(x.h.grand || 0), 0);
   const statusCount = statuses.reduce((m,s)=>{m[s]=(m[s]||0)+1;return m;},{});
   const clients = {}; history.forEach(h=>{const c=h.info?.client||h.client||'Unknown';clients[c]=(clients[c]||{count:0,total:0});clients[c].count++;clients[c].total+=N(h.grand||0);});
   const top5 = Object.entries(clients).sort((a,b)=>b[1].total-a[1].total).slice(0,5);
@@ -6660,7 +6677,8 @@ tab === 'dashboard' && (() => {
       kpiCard('CEs This Month', monthHist.length, INFO),
       kpiCard('Value This Month', '₱'+ph(totalThis), OK),
       kpiCard('Avg CE Value', '₱'+ph(avgVal), ACC),
-      kpiCard('Total CEs', history.length, MT)),
+      kpiCard('Total CEs', history.length, MT),
+      kpiCard('Open CEs', openCEs.length, ERR)),
     /* Monthly trend */
     /*#__PURE__*/React.createElement("div",{style:{...CS,marginBottom:16}},
       /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,marginBottom:12,fontSize:12}}, "📈 Monthly Trend (Last 6 Months)"),
@@ -6672,6 +6690,33 @@ tab === 'dashboard' && (() => {
             /*#__PURE__*/React.createElement("div",{style:{width:'100%',background:ACC+(m.total>0?'cc':'22'),borderRadius:'3px 3px 0 0',height:Math.max(4,pct*60)+'px',transition:'height .3s'}}),
             /*#__PURE__*/React.createElement("div",{style:{fontSize:9,color:MT,whiteSpace:'nowrap'}},m.label));
         }))),
+    /* Open CEs, soonest deadline first */
+    /*#__PURE__*/React.createElement("div",{style:{...CS,marginBottom:16}},
+      /*#__PURE__*/React.createElement("div",{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:10,gap:10,flexWrap:'wrap'}},
+        /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:12}}, "⏳ Open CEs — by deadline"),
+        /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT}}, openCEs.length, " open · ",
+          /*#__PURE__*/React.createElement("span",{style:{...MONO,color:OK}}, "₱"+ph(openValue)))),
+      openCEs.length === 0
+        ? /*#__PURE__*/React.createElement("div",{style:{textAlign:'center',padding:'14px 0',color:MT,fontSize:12,border:'1px dashed '+BDR,borderRadius:6}}, "Nothing open — every CE is Submitted, No Quote or Cancelled.")
+        : /*#__PURE__*/React.createElement("div",null,
+            /*#__PURE__*/React.createElement("div",{style:{overflowX:'auto'}},
+              /*#__PURE__*/React.createElement("table",{style:{width:'100%',borderCollapse:'collapse',fontSize:11}},
+                /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",null,
+                  ['CE No.','Client','Status','Deadline','Days Left','Total'].map(hd=>/*#__PURE__*/React.createElement("th",{key:hd,style:THS},hd)))),
+                /*#__PURE__*/React.createElement("tbody",null, openCEs.slice(0,15).map(x=>{
+                  const st = x.m.status || 'Draft';
+                  const dl = x.m.deadline ? new Date(x.m.deadline+'T00:00:00') : null;
+                  const days = dl ? Math.round((dl - new Date())/(1000*60*60*24)) : null;
+                  const dCol = days === null ? MT : days < 0 ? ERR : days <= 7 ? '#F59E0B' : OK;
+                  return /*#__PURE__*/React.createElement("tr",{key:x.h.id},
+                    /*#__PURE__*/React.createElement("td",{style:{...TDS,color:INFO,fontWeight:600}}, x.h.info?.ceNum || x.h.ceNum || "—"),
+                    /*#__PURE__*/React.createElement("td",{style:TDS}, x.h.info?.client || x.h.client || 'Unknown'),
+                    /*#__PURE__*/React.createElement("td",{style:TDS}, /*#__PURE__*/React.createElement("span",{style:{background:getStatusColor(st)+'33',color:getStatusColor(st),borderRadius:4,padding:'1px 6px',fontWeight:700,whiteSpace:'nowrap'}}, st)),
+                    /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,whiteSpace:'nowrap'}}, dl ? dl.toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'}) : "—"),
+                    /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,color:dCol,fontWeight:700,whiteSpace:'nowrap'}}, days === null ? "—" : days < 0 ? Math.abs(days)+'d OD' : days+'d'),
+                    /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,textAlign:'right'}}, "₱"+ph(N(x.h.grand||0))));
+                }))),
+            openCEs.length > 15 && /*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:MT,marginTop:8,textAlign:'center'}}, "+", openCEs.length-15, " more — see the CE Monitoring tab")))),
     /* Bottom row: by company + by status + top clients */
     /*#__PURE__*/React.createElement("div",{style:{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,flexWrap:'wrap'}},
       /* By company */

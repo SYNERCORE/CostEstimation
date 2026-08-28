@@ -40,7 +40,10 @@ function App({
   const [info, setInfo] = useState({
     ...BLANK_INFO
   });
-  const [mp, setMp] = useState([mkMP()]);
+  /* No starter row. Every shift group already has its own empty state, so a
+     blank row bought nothing and cost the user a stray "Role name..." line
+     on every new CE -- one they had to either fill or delete. */
+  const [mp, setMp] = useState([]);
   const [tools, setTools] = useState([mkRes()]);
   const [mats, setMats] = useState([mkRes()]);
   const [ppe, setPpe] = useState([mkRes()]);
@@ -1265,7 +1268,7 @@ function App({
       ceNum: nextCeNum(history),
       date: new Date().toISOString().slice(0, 10)
     });
-    setMp([mkMP()]);
+    setMp([]);
     setTools([mkRes()]);
     setMats([mkRes()]);
     setPpe([mkRes()]);

@@ -160,7 +160,7 @@ check('pax takes the largest any task needs', /Math\.max\(\.\.\.g\.map\(r => N\(
   'summing the pax would invent people who were never mobilised');
 check('days add up across the tasks', /g\.reduce\(\(a, r\) => a \+ N\(r\.days\), 0\)/.test(conso),
   'the crew is on site for both durations');
-check('OT hrs/day and per diem carry the peak too', /otHours: Math\.max/.test(conso) && /perDiem: Math\.max/.test(conso),
+check('OT hrs/day and incentive carry the peak too', /otHours: Math\.max/.test(conso) && /perDiem: Math\.max/.test(conso),
   'they are per-day rates, so they follow the pax rule');
 check('it says the cost will rise', /COSTS MORE than the rows added up/.test(src),
   'a consolidation that silently raises the CE would be a nasty surprise');

@@ -1861,7 +1861,7 @@ function App({
       vehicles: ['category', 'desc', 'rate', 'uom']
     };
     const colL = {
-      manpower: ['Item Code', 'Category', 'Role / Position', 'Day Rate (P)', 'Per Diem (P/Day)', 'UOM'],
+      manpower: ['Item Code', 'Category', 'Role / Position', 'Day Rate (P)', 'Incentive (P/Day)', 'UOM'],
       tools: ['Item Code', 'Category', 'Description', 'Cost (P)', 'UOM'],
       materials: ['Item Code', 'Category', 'Description', 'Cost (P)', 'UOM'],
       ppe: ['Item Code', 'Category', 'Description', 'Cost (P)', 'UOM'],
@@ -1928,9 +1928,11 @@ function App({
             [fm.cost]: parseFloat(r[fm.cost] || r.rate || r.cost || 0) || 0,
             uom: String(r.uom || r.UOM || 'Day').trim()
           };
-          /* Manpower-specific: read perDiem column */
+          /* Manpower-specific: read the incentive column. It was labelled "Per Diem"
+             until the rename, so those headers are still accepted -- every
+             masterlist workbook already in circulation carries the old one. */
           if (tab === 'manpower') {
-            item.perDiem = parseFloat(r.perDiem || r.perdiem || r['Per Diem'] || r['per diem'] || r['PER DIEM'] || r['Per Diem (P/Day)'] || 0) || 0;
+            item.perDiem = parseFloat(r.incentive || r.Incentive || r['Incentive (P/Day)'] || r.perDiem || r.perdiem || r['Per Diem'] || r['per diem'] || r['PER DIEM'] || r['Per Diem (P/Day)'] || 0) || 0;
           }
           return item;
         }).filter(item => item[fm.name]);
@@ -7618,7 +7620,7 @@ tab === 'dashboard' && (() => {
        and paid whether or not every task needs all of them. The total goes UP,
        and that is the point; adding the rows up understates what the job costs.
 
-       OT hours per day and per diem are per-day RATES, so the peak is carried
+       OT hours per day and the incentive are per-day RATES, so the peak is carried
        across the whole duration for the same reason the pax is.
 
        The row keeps what each task originally asked for, so SOW Breakdown still
@@ -8121,7 +8123,7 @@ tab === 'dashboard' && (() => {
       textAlign: 'right',
       width: 90
     }
-  }, "Per Diem"), /*#__PURE__*/React.createElement("th", {
+  }, "Incentive"), /*#__PURE__*/React.createElement("th", {
     style: {
       ...THS,
       textAlign: 'right',

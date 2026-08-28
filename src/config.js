@@ -345,7 +345,7 @@ const DEFAULT_ML={
     {id:"v11",code:"SHIC-VH-011",category:"Truck",desc:"Tanker Truck",rate:7500,uom:"Day"},
 {id:"v12",code:"SHIC-VH-012",category:"Fuel",desc:"Diesel Fuel",rate:75,uom:"L"},
     {id:"v13",code:"SHIC-VH-013",category:"Allowance",desc:"Daily Allowance",rate:500,uom:"Day"},
-    {id:"v14",code:"SHIC-VH-014",category:"Allowance",desc:"Meals / Per Diem",rate:350,uom:"Day"},
+    {id:"v14",code:"SHIC-VH-014",category:"Allowance",desc:"Meals / Incentive",rate:350,uom:"Day"},
     {id:"v15",code:"SHIC-VH-015",category:"Travel",desc:"Plane Ticket (Domestic)",rate:4500,uom:"Pcs"},
     {id:"v16",code:"SHIC-VH-016",category:"Travel",desc:"Ferry / Boat Ticket",rate:1200,uom:"Pcs"},
     {id:"v17",code:"SHIC-VH-017",category:"Travel",desc:"Bus Ticket",rate:400,uom:"Pcs"},

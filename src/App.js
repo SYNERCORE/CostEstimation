@@ -4902,17 +4902,19 @@ function App({
        category tested as empty, and the whole Miscellaneous section vanished
        from the printed CE -- while its cost stayed inside the total, which is
        the worst of both: a document whose parts do not add up to its sum. */
+    const miscParent = (ceSections.find(x => x.printLabel === 'MISCELLANEOUS' && x.v > 0) || {}).letter || '';
     const miscItems = (MISC_DEF[ceType] || MISC_DEF.onsite).map(([k, l]) => ({
+      /* MISC_DEF labels carry their own hardcoded letters (D.1, E.3...) which
+         no longer match anything; the section's real letter is prefixed below. */
       label: String(l).replace(/^[A-Z]\.\d+\s*/, ''),
+      rows: (Array.isArray(misc[k]) ? misc[k] : []).filter(r => r && (r.desc || N(r.cost) > 0)),
       v: (Array.isArray(misc[k]) ? misc[k] : []).reduce((t, r) => t + N(r.qty) * N(r.cost), 0)
-    })).filter(x => x.v > 0);
+    })).filter(x => x.v > 0).map((x, j) => ({...x, letter: miscParent.replace('.', '') + '.' + (j + 1)}));
     const costRows = ceSections.filter(x => x.v > 0).map(x => ({
       letter: x.letter,
       label: x.printLabel,
       v: x.v,
-      sub: x.printLabel === 'MISCELLANEOUS'
-        ? miscItems.map((m, j) => ({...m, letter: x.letter.replace('.', '') + '.' + (j + 1)}))
-        : null
+      sub: x.printLabel === 'MISCELLANEOUS' ? miscItems : null
     }));
 
     const costTable = `<table style="margin-bottom:5px">
@@ -4989,6 +4991,20 @@ function App({
       ${ppeActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.uom||'Lot')}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(N(r.qty)*N(r.cost))}</td></tr>`).join('')}
       <tr class="tot"><td colspan="4" class="r b">TOTAL:</td><td class="r b">${fmt(ppeT)}</td></tr></table></div>` : '';
 
+    /* Miscellaneous &#8212; grouped by category, one row per entry.
+
+       Labour, tools, materials, PPE and the scope each print their own bill
+       page; Miscellaneous never did. Its cost reached the summary and the
+       total, but a delivery charge or a third-party fee had no line anywhere
+       in the document saying what the client was being charged for. */
+    const miscPage=miscItems.length?`<div class="page page-break">${docHdr('MISCELLANEOUS')}
+      <div class="sec">MISCELLANEOUS</div>
+      ${miscItems.map(cat=>`<div class="sub">${cat.letter}&nbsp;&nbsp;${esc(cat.label)}</div>
+      <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:35px">QTY</th><th class="c" style="width:35px">UOM</th><th class="r" style="width:80px">UNIT PRICE</th><th class="r" style="width:80px">TOTAL</th></tr>
+      ${cat.rows.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.uom||'Lot')}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(N(r.qty)*N(r.cost))}</td></tr>`).join('')}
+      <tr class="tot"><td colspan="5" class="r b">SUB TOTAL:</td><td class="r b">${fmt(cat.v)}</td></tr></table>`).join('')}
+      <div class="tot" style="text-align:right;padding:3px 4px;font-weight:bold">MISCELLANEOUS TOTAL: ${fmt(miscT)}</div></div>` : '';
+
     const sowPage=sowItems.length?`<div class="page page-break">${docHdr('SCOPE OF WORK')}<div style="font-size:8pt;line-height:1.6">${(()=>{let mc=0,sc=0;return sowItems.map(it=>{if(it.type==='main'){mc++;sc=0;return`<div style="margin-top:4px"><b>${mc}. ${esc(it.text)}</b></div>`;}else{sc++;return`<div style="margin-left:14px">${mc}.${sc} ${esc(it.text)}</div>`;}}).join('');})()}</div></div>`:'';
 
     const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>CE ${esc(info.ceNum||'')}<\/title><style>${pageStyle}<\/style><\/head><body>
@@ -5000,7 +5016,7 @@ function App({
         ${sigBlock}
       </div>
       ${mpActive.length?`<div class="page page-break">${docHdr('BILL OF LABOR')}<div class="sec">MANPOWER COST</div>${shiftRows}<div class="tot" style="text-align:right;padding:3px 4px;font-weight:bold">TOTAL MANPOWER COST: ${fmt(mpTot)}</div></div>`:''}
-      ${benPage}${toolsPage}${matsPage}${ppePage}${sowPage}
+      ${benPage}${toolsPage}${matsPage}${ppePage}${miscPage}${sowPage}
     <\/body><\/html>`;
     const w=window.open('','_blank');
     w.document.write(fullHtml);

@@ -30,6 +30,8 @@ jobs:
         run: node tools/check-sp-schema.js
       - name: A missing SharePoint column does not swallow a whole CE
         run: node tools/test-schema-gap.js
+      - name: Every filtered SharePoint column is indexed
+        run: node tools/check-sp-indexes.js
       - name: SharePoint permission failures are named, not swallowed
         run: node tools/test-sp-permissions.js
       - name: Local caches survive empty SharePoint responses

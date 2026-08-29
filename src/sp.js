@@ -129,6 +129,15 @@ function spDenied(e){/* Digit-bounded, not \b: a CE number like SHIC-CE-2026-040
    read as a permission error. */
   return /(^|[^0-9])(401|403)([^0-9]|$)|access is denied|unauthoriz/i.test(String((e&&e.message)||e||''));}
 function spErr(verb,list,status,body){
+  /* The list view threshold. A $filter on a NON-INDEXED column stops working
+     once a list passes 5,000 items, and SharePoint reports it as a 500 rather
+     than anything that sounds like a limit -- so it reads as an outage. With
+     ~900 CEs the line-item lists hold tens of thousands of rows, which is
+     exactly when this starts. The remedy is an index, not a retry. */
+  if(/list view threshold|exceeds the list view|throttl/i.test(String(body||'')))
+    return new Error('SP '+verb+' '+list+': this list has passed the SharePoint 5,000-item view threshold and '+
+      'shicCEId is not indexed, so filtered reads fail. An admin should open SP Setup and press '+
+      '"Repair lists & columns", which now adds the index. (SharePoint reported '+status+'.)');
   if(status===403||status===401)
     return new Error('SP '+verb+' '+list+': '+status+' access denied — this SharePoint account is not allowed to '+
       (verb==='get'?'read':'write to')+' the "'+list+'" list. Ask a site owner to give them Contribute on it '+
@@ -161,7 +170,12 @@ async function spGet(l,f='',sel=''){
   /* Follow odata.nextLink to page through lists larger than 5000 items */
   while(url){
     const r=await fetch(url,{credentials:'omit',headers:h});
-    if(!r.ok)throw spErr('get',l,r.status);
+    if(!r.ok){
+      /* The body is the only place SharePoint says WHY. Without it a threshold
+         error, a missing column and a genuine outage all read as a bare 500. */
+      let body='';try{body=await r.text();}catch(_){}
+      throw spErr('get',l,r.status,body);
+    }
     const json=await r.json();
     results=results.concat(json.value||[]);
     url=json['odata.nextLink']||null;

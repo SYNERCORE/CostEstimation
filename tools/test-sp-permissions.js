@@ -71,7 +71,7 @@ const m500 = err('get', 'SHICCE_CEs', 500, 'boom').message;
 ck('an ordinary failure is left alone', !/Contribute/.test(m500) && /500/.test(m500));
 
 console.log('\nEvery verb reports it:');
-for (const [verb, re] of [['get', /if\(!r\.ok\)throw spErr\('get'/], ['post', /throw spErr\('post'/],
+for (const [verb, re] of [['get', /throw spErr\('get'/], ['post', /throw spErr\('post'/],
                           ['patch', /throw spErr\('patch'/], ['delete', /throw spErr\('delete'/]])
   ck('sp' + verb + ' goes through spErr', re.test(sp), 'a bare status code is not actionable');
 

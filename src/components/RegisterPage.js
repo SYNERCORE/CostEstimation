@@ -356,6 +356,38 @@ async function spCreateList(name, token, digest){
 /* Returns {ok} or {ok:false, err} so setup can report a real total instead of
    scattering console warnings. A duplicate field is treated as success. */
 const SP_FIELD_TYPE={2:'SP.FieldText',3:'SP.FieldMultiLineText',9:'SP.FieldNumber'};
+/* Index a column so it can still be filtered once the list passes 5,000 items.
+
+   SharePoint's list view threshold makes a $filter on a NON-INDEXED column
+   fail above that size, and reports it as a 500 -- so it reads as an outage
+   rather than a limit. The CE line-item lists hold roughly thirty rows per CE,
+   so at ~170 CEs they are already over it and every "load this CE" read breaks.
+   Nothing in this app ever created an index, so every site reaches that wall.
+
+   The index has to be set with MERGE on the existing field, and only the
+   verbose form carries a type, so it goes through the same plain/verbose dance
+   as field creation. */
+async function spIndexField(listName, fieldName, fieldType, token, digest){
+  const su=getSiteURL();
+  const url=`${su}/_api/web/lists/getbytitle('${listName}')/fields/getbytitle('${fieldName}')`;
+  const attempt=async verbose=>{
+    const ct=verbose?'application/json;odata=verbose':'application/json;odata=nometadata';
+    const body=verbose?{__metadata:{type:SP_FIELD_TYPE[fieldType]||'SP.Field'},Indexed:true}:{Indexed:true};
+    const r=await fetch(url,{
+      method:'POST',credentials:'omit',
+      headers:{'Accept':ct,'Content-Type':ct,'X-RequestDigest':digest,'Authorization':'Bearer '+token,
+               'X-HTTP-Method':'MERGE','IF-MATCH':'*'},
+      body:JSON.stringify(body)
+    });
+    return {ok:r.ok,status:r.status,text:r.ok?'':await r.text()};
+  };
+  let res=await attempt(true);
+  if(!res.ok&&(res.status===400||res.status===415))res=await attempt(false);
+  if(res.ok)return{ok:true};
+  /* Already indexed reads as success -- re-running setup must stay harmless. */
+  if(/already indexed|duplicate/i.test(res.text||''))return{ok:true,existed:true};
+  return{ok:false,status:res.status,err:fieldName+' index: '+res.status+' '+spErrText(res.text||'')};
+}
 async function spAddField(listName, fieldName, fieldType, token, digest){
   const su=getSiteURL();
   /* fieldType: 2=text, 3=note, 9=number */
@@ -409,8 +441,19 @@ async function autoSetupSP(progressCb){
     [spList('ML_Imports')]: [[3,'shicData']]
   };
 
+  /* Every column the app ever puts in a $filter. These are the only ones the
+     view threshold can break, and each of these lists grows without bound. */
+  const INDEXED={
+    [spList('CEs')]:['Title'],
+    [spList('CE_MP')]:['shicCEId'],
+    [spList('CE_Resources')]:['shicCEId'],
+    [spList('CE_Documents')]:['shicCEId'],
+    [spList('Monitoring')]:['shicCEId'],
+    [spList('Drafts')]:['Title'],
+    [spList('ML_Imports')]:['Title']
+  };
   const names=Object.keys(lists);
-  let created=0,skipped=0,added=0;
+  let created=0,skipped=0,added=0,indexed=0;
   const errors=[];
   for(let i=0;i<names.length;i++){
     const name=names[i];
@@ -432,9 +475,21 @@ async function autoSetupSP(progressCb){
         /* Small delay to avoid SP throttling */
         await new Promise(r=>setTimeout(r,200));
       }
+      /* Indexed on every run, not just when the column is new: sites set up by
+         an earlier version have the column but no index, which is precisely
+         the state that breaks once they pass 5,000 rows. */
+      for(const fname of (INDEXED[name]||[])){
+        /* Title is built in, so it is not in the provisioning list and falls to
+           the default. It is text -- naming it a number would make the verbose
+           attempt fail and leave only the untyped fallback to do the work. */
+        const t=(fields.find(([,fn])=>fn===fname)||[])[0]||2;
+        const r=await spIndexField(name,fname,t,tok,digest);
+        if(r.ok){ if(!r.existed)indexed++; } else errors.push(name+' / '+r.err);
+        await new Promise(r=>setTimeout(r,200));
+      }
     }catch(e){errors.push(name+': '+e.message);}
   }
-  let msg='Done! '+created+' list(s) created, '+skipped+' already existed, '+added+' column(s) added.';
+  let msg='Done! '+created+' list(s) created, '+skipped+' already existed, '+added+' column(s) added, '+indexed+' column(s) indexed.';
   /* A 403 here is not a bug in the app -- the signed-in account cannot change
      the site's schema. Say so plainly instead of showing raw SharePoint JSON,
      because no amount of retrying will fix it. */

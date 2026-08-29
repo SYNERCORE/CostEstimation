@@ -116,6 +116,18 @@ ck('within a year it is the sequence, numerically',
 ck('a base CE leads its own revisions',
   order(['SY3-CE-2026-0091-R1', 'SY3-CE-2026-0091'], 'asc')[0] === 'SY3-CE-2026-0091',
   order(['SY3-CE-2026-0091-R1', 'SY3-CE-2026-0091'], 'asc').join(','));
+/* The numbering is one continuous sequence across companies, so the prefix
+   carries no ordering information at all -- SHIC and SY3 CEs interleave by
+   year and sequence like any others. Two numbers differing ONLY by prefix must
+   therefore tie: any non-zero result here would mean the prefix had crept back
+   in as a tiebreak. */
+ck('the prefix carries no weight whatsoever',
+  comparator('ceNum', 'desc', () => ({}))({info: {ceNum: 'SHIC-CE-2026-0500'}}, {info: {ceNum: 'SY3-CE-2026-0500'}}) === 0,
+  'same year and sequence must tie regardless of which company raised it');
+ck('and companies interleave rather than grouping',
+  order(['SY3-CE-2026-0880', 'SHIC-CE-2026-0912', 'SY3-CE-2026-0091', 'SHIC-CE-2026-1094'], 'desc').join(',')
+    === 'SHIC-CE-2026-1094,SHIC-CE-2026-0912,SY3-CE-2026-0880,SY3-CE-2026-0091',
+  order(['SY3-CE-2026-0880', 'SHIC-CE-2026-0912', 'SY3-CE-2026-0091', 'SHIC-CE-2026-1094'], 'desc').join(','));
 ck('unparseable numbers keep to the end rather than interleaving',
   order(['zzz draft', 'SY3-CE-2026-0001'], 'desc')[1] === 'zzz draft',
   order(['zzz draft', 'SY3-CE-2026-0001'], 'desc').join(','));

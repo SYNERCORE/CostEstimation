@@ -104,7 +104,9 @@ function ceResDays(r) {
 function ceMpRowCost(r) {
   if (!r || !r.role) return 0;
   const mult = (typeof SHIFTS !== 'undefined' && SHIFTS[r.shift] && SHIFTS[r.shift].mult) || 1;
-  const pax = N(r.pax), days = N(r.days), rate = N(r.rate) * mult;
+  /* Benefits use the basic rate, the wage uses the shift-adjusted one.
+     Kept in step with calcBen in src/App.js by tools/test-recompute.js. */
+  const pax = N(r.pax), days = N(r.days), rate = N(r.rate);
   const reg = pax * days * N(r.rate) * mult;
   const ot = pax * days * (N(r.otHours || 0) / 8) * N(r.rate) * 1.25 * mult;
   const thirteenth = rate / 12 * days * pax;

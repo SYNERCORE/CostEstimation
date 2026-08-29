@@ -525,11 +525,19 @@ function App({
     const ot = N(r.pax) * N(r.days) * (N(r.otHours || 0) / 8) * N(r.rate) * 1.25 * mult;
     return s + reg + ot;
   }, 0), [mp]);
+  /* Benefits are computed on the BASIC day rate, never the shift-adjusted
+     one. 13th-month pay, SSS, HDMF/PHIC and SIL/ECC are statutory and scale
+     with the days worked, not with what the shift pays. A night, Sunday or
+     holiday premium raises the wage for those days; it does not raise the
+     contributions. Applying the multiplier here inflated every one of them by
+     25-100% on any CE carrying a non-straight shift.
+
+     The premium still applies to the wage itself -- mpSub above multiplies by
+     it. Only the benefits base drops it. */
   const calcBen = r => {
-    const mult = SHIFTS[r.shift]?.mult || 1;
     const pax = N(r.pax),
       days = N(r.days),
-      rate = N(r.rate) * mult;
+      rate = N(r.rate);
     const thirteenth = rate / 12 * days * pax;
     const sss = rate * 0.25 * 0.75 * days * pax / 26;
     const hdmf = rate * 0.16 * days * pax / 26 * 2;
@@ -555,8 +563,9 @@ function App({
      manpower total. The figures were right and the page saying where they came
      from was missing.
 
-     Monthly rate is the shift-adjusted day rate over a 26-day month, the same
-     way the tab derives it. */
+     Monthly rate is the basic day rate over a 26-day month, the same way the
+     tab derives it -- and, like the benefits themselves, free of the shift
+     premium. */
   const benefitRows = useMemo(() => {
     /* Merged by role across every shift, the way the Manpower tab merges them.
        A role worked on both a day and a night shift is one line here, not two
@@ -575,7 +584,7 @@ function App({
       });
       g.pax += pax;
       g.days = Math.max(g.days, N(r.days) || 1);
-      g.monthlyRate += N(r.rate) * (SHIFTS[r.shift]?.mult || 1) * 26 * pax;
+      g.monthlyRate += N(r.rate) * 26 * pax;
       ['thirteenth', 'sss', 'hdmf', 'sil', 'perdiem', 'total'].forEach(k => { g[k] += b[k]; });
     });
     return Object.values(grouped).filter(x => x.total > 0);
@@ -8440,7 +8449,9 @@ tab === 'dashboard' && (() => {
     mp.forEach(r => {
       const key = r.role.trim().toUpperCase();
       const mult = SHIFTS[r.shift]?.mult || 1;
-      const rate = N(r.rate) * mult;
+      /* Basic rate: this row feeds the benefits columns only, and benefits do
+         not carry the shift premium. See calcBen. */
+      const rate = N(r.rate);
       const pax = N(r.pax);
       const days = N(r.days);
       const mlItem = masterlist.manpower.find(m => m.role.toUpperCase() === key);

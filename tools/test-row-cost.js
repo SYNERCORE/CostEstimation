@@ -205,5 +205,32 @@ check('the row cost cell uses the task slice', /ph\(rowCostForTask\(t\.key, r, t
 check('the section subtotal does too', /rows\.reduce\(\(a, r\) => a \+ rowCostForTask\(t\.key, r, taskId\), 0\)/.test(src));
 check('and a shared row says so', /shared crew across/.test(src));
 
+/*
+ * Statutory benefits ride on the BASIC wage.
+ *
+ * calcBen used to compute 13th-month pay, SSS, HDMF/PHIC and SIL/ECC from
+ * `N(r.rate) * mult` -- the shift-adjusted rate. A night shift (x1.25) or a
+ * holiday (x2) therefore inflated every contribution by the same premium, and
+ * the inflated figure went into mpTot and out on the CE. Contributions scale
+ * with the days worked, not with what those days pay.
+ *
+ * The premium still applies to the wage: mpSub and ceMpRowCost's `reg`/`ot`
+ * keep their multiplier. Only the benefits base drops it.
+ */
+console.log('\nbenefits ride on the basic rate, not the shift premium:');
+const ben = grab(/const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen');
+check('the benefits base is the plain day rate', /rate = N\(r\.rate\);/.test(ben),
+  'a night differential does not raise anyone’s SSS contribution');
+check('and carries no shift multiplier at all', !/mult/.test(ben),
+  'the premium belongs on the wage, which mpSub applies separately');
+check('the wage still carries it', /N\(r\.pax\) \* N\(r\.days\) \* N\(r\.rate\) \* mult/.test(src),
+  'dropping it there would underpay the shift itself');
+
+const helpers = require('fs').readFileSync('src/helpers.js', 'utf8');
+const rowCost = (helpers.match(/function ceMpRowCost\(r\) \{[\s\S]*?\n\}/) || [''])[0];
+check('the recompute path agrees with the editor', /rate = N\(r\.rate\);/.test(rowCost),
+  'a CE reopened later would total differently from the one that was saved');
+check('and still pays the premium on the wage', /\* mult;/.test(rowCost) && /1\.25 \* mult;/.test(rowCost));
+
 console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nall cost/grouping assertions passed');
 process.exit(fails ? 1 : 0);

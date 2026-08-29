@@ -59,20 +59,31 @@ ck('and only tools get a DAYS column', /withDays \? \['DAYS'\] : \[\]/.test(exp)
   'a consumable is not billed by the day');
 ck('the summary reuses the same rows the app shows', /summaryRows\.forEach/.test(exp),
   'a second copy of the section list would drift from the screen');
-ck('selling price only when there is a margin', /margin !== 0\) a\.row/.test(exp));
+ck('selling price only when there is a margin', /margin !== 0\) a\.total/.test(exp));
 ck('highlighted costs are carried over', /hlRows\.forEach/.test(exp));
 ck('the unit price divides by the CE quantity', /UNIT PRICE \(qty '/.test(exp));
 
 console.log('\nNumbers are numbers, so the recipient can total a column:');
-ck('a peso format is applied', /const PESO = '#,##0\.00'/.test(exp));
-ck('money cells are typed numeric', /ws\[ref\]\.t = 'n'; ws\[ref\]\.z = PESO;/.test(exp));
-ck('and rounded to centavos rather than carrying float noise', /Math\.round\(N\(v\) \* 100\) \/ 100/.test(exp));
+ck('money cells carry a number format', /s: c\.n \? \(bodyStyle \? 'tdn' : 'valn'\)/.test(exp),
+  'a peso figure stored as text cannot be summed');
+ck('and are rounded to centavos rather than carrying float noise', /Math\.round\(N\(v\) \* 100\) \/ 100/.test(exp));
 
-console.log('\nLayout the community build can actually write:');
-ck('column widths', /ws\['!cols'\]/.test(exp));
-ck('merged section titles', /ws\['!merges'\] = merges/.test(exp));
-ck('the styling limit is stated, not pretended away', /ignores\s+cell styling on write/.test(src),
-  'promising bold headers the library cannot produce would be worse than saying so');
+/*
+ * The workbook used to come out as unformatted text -- no borders, no shaded
+ * headers, nothing to tell a total from the rows above it -- because the
+ * vendored SheetJS build reads cell styles but will not write them. The
+ * formatting is the whole point of an export people work in, so both exports
+ * now go through src/xlsx-styled.js instead.
+ */
+console.log('\nFormatted, because an unformatted dump is what sales could not use:');
+ck('written through the styled writer', /SHICXlsx\.download/.test(exp),
+  'XLSX.writeFile cannot write cell styles');
+ck('and nothing in the export still goes through SheetJS', !/XLSX\.(utils|writeFile)/.test(exp));
+ck('column widths', /cols: Array\.from/.test(exp));
+ck('section titles are full-width bars', /s: 'secbar'/.test(exp));
+ck('table headers are shaded', /s: 'th'/.test(exp));
+ck('totals are set apart from the rows they total', /s: 'tot'/.test(exp) && /s: 'totlbl'/.test(exp));
+ck('body rows are bordered so the table reads as a table', /s: typeof c === 'number' \? 'tdc' : 'td'/.test(exp));
 
 console.log('\nIt describes the same document as the print:');
 ck('the company header is resolved the same way', /_cos\.find\(c => String\(c\.id\) === String\(info\.companyId\)\)/.test(exp),
@@ -106,8 +117,21 @@ ck('no boilerplate notes', !/Additional scope not in original SOW is excluded|Le
 ck('notes come from the CE', /notes\.map\(n => String\(n\.text \|\| ''\)\)/.test(exp1));
 ck('breakdown notes ride along, labelled by scope', /'Scope ' \+ \(sowLabels\[x\.id\] \|\| ''\)/.test(exp1),
   'the same line Export Detailed and the print produce');
-ck('an empty NOTE heading is not printed', /lines\.length \? \[\[\], \['NOTE:'\]/.test(exp1),
+ck('an empty NOTE heading is not printed', /if \(noteLines\.length\) \{/.test(exp1),
   'a heading over nothing reads like something went missing');
+
+/*
+ * This is the export that went to the sales team as a flat dump of arrays --
+ * five sheets of bare values, every resource flattened into one "Resources"
+ * tab. It now mirrors the master SY3 CE workbook they already work in.
+ */
+console.log('\nand the top-bar export is formatted too:');
+ck('it uses the styled writer as well', /SHICXlsx\.download/.test(exp1),
+  'two Excel buttons, one of them unformatted, is the bug that started this');
+ck('it mirrors the master workbook tabs', ["'CE SUMMARY'", "'SCOPE'", "'BOL'", "'BOTE'", "'BOCM'", "'PPE'", "'MISC.'"].every(n => exp1.includes(n)),
+  'the sales team already knows those tab names');
+ck('the Miscellaneous itemisation is shared with the print', /miscCosted/.test(exp1),
+  'a second copy drifted from the print once already');
 
 console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nall XLSX export assertions passed');
 process.exit(fails ? 1 : 0);

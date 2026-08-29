@@ -1013,8 +1013,32 @@ function App({
   };
 
   /* \u2500\u2500 Save draft \u2014 local + SharePoint shared \u2500\u2500 */
+  /* One id for this user's draft of a given CE. Shared with the save path so
+     it can retire exactly the row saveDraft wrote. */
+  const draftIdFor = num => 'draft_' + (num || 'untitled').replace(/[^a-zA-Z0-9_-]/g, '_') + '_' + currentUser.username;
+  /* A draft is work in progress. Once the CE is in history it is no longer in
+     progress, so the draft has to go -- otherwise the same CE is listed twice,
+     once under Drafts and once in Monitoring, with nothing to say which one is
+     current. clearDraft() only empties the local one-slot copy; the shared
+     SharePoint row outlived every save.
+
+     Cleanup never blocks the save: the CE is already in history by the time
+     this runs, and a stale draft is a smaller problem than a save that reports
+     failure after succeeding. */
+  const retireDrafts = async (...nums) => {
+    /* Tell the 3-minute auto-save that this state is already accounted for.
+       Without it the timer sees a signature it has not written yet, saves a
+       fresh draft of the CE that was just saved, and the row comes straight
+       back a few minutes later. */
+    if (_live.current) _lastAutoSig.current = _live.current.sig;
+    const ids = [...new Set(nums.filter(Boolean).map(draftIdFor))];
+    for (const id of ids) {
+      try { await dbDeleteDraft(id); } catch (e) { console.warn('draft cleanup:', e.message); }
+    }
+    setSharedDrafts(prev => prev.filter(d => ids.indexOf(d.draftId) < 0));
+  };
   const saveDraft = async () => {
-    const draftId = 'draft_' + (info.ceNum || 'untitled').replace(/[^a-zA-Z0-9_-]/g, '_') + '_' + currentUser.username;
+    const draftId = draftIdFor(info.ceNum);
     const d = {
       draftId,
       ceType,
@@ -1163,6 +1187,9 @@ function App({
       auditLog('save_ce', ceNum, currentUser?.username);
       _checkAutoBackup();
       clearDraft();
+      /* Both spellings: saveDraft keyed the row off info.ceNum as typed, while
+         this save normalises it to upper case. */
+      await retireDrafts(ceNum, info.ceNum);
       await loadHist();
       showToast(_overwrote
         ? 'Saved — REPLACED existing CE ' + ceNum + ' (previously saved ' + _overwrote + ').'
@@ -1203,6 +1230,9 @@ function App({
         ...p,
         ceNum: revCeNum
       }));
+      clearDraft();
+      /* The draft was written under the old number; the revision supersedes it. */
+      await retireDrafts(ceNum, info.ceNum);
       await loadHist();
       loadMonData();
       showToast('Revision saved as ' + revCeNum + '.');

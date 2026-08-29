@@ -2184,12 +2184,25 @@ function App({
   };
 
   /* ---- Masterlist editor ---- */
+  /* MlEditor's own state, held by App rather than by MlEditor.
+
+     MlEditor is declared inside App, so every App render produced a NEW
+     function identity and React unmounted and remounted the whole subtree.
+     That reset this state to its defaults -- which is why editing a rate on
+     the Tools tab jumped back to Manpower -- and destroyed the focused input,
+     which is why typing stopped after one character: setMasterlist re-rendered
+     App, App remounted the editor, and the field the cursor was in no longer
+     existed.
+
+     With no hooks left inside it, MlEditor is called as a plain function
+     below, so its output is part of App's own tree and nothing remounts. */
+  const [mlTab, setMlTab] = useState('manpower');
+  const [mlQ, setMlQ] = useState('');
+  const [mlPage, setMlPage] = useState(0);
+  const [mlQuickAdd, setMlQuickAdd] = useState('');
+  const [escPct, setEscPct] = useState('');
+  const mlQuickAddRef = React.useRef(null);
   const MlEditor = () => {
-    const [mlTab, setMlTab] = useState('manpower');
-    const [mlQ, setMlQ] = useState('');
-    const [mlPage, setMlPage] = useState(0);
-    const [mlQuickAdd, setMlQuickAdd] = useState('');
-    const mlQuickAddRef = React.useRef(null);
     const colK = {
       manpower: ['category', 'role', 'rate', 'perDiem', 'uom'],
       tools: ['category', 'desc', 'cost', 'uom'],
@@ -2415,7 +2428,6 @@ function App({
       ...masterlist,
       [mlTab]: (masterlist[mlTab] || []).filter(r => r.id !== id)
     });
-    const [escPct, setEscPct] = useState('');
     const applyEscalation = () => {
       const pct = parseFloat(escPct);
       if (isNaN(pct) || pct === 0) { showToast('Enter a non-zero %', true); return; }
@@ -4120,6 +4132,27 @@ function App({
   })()
   );
   /* ---- Scope Library Editor (Scope Library tab) ---- */
+  /* ScopeLibraryEditor's state, and ResEditor's, held by App.
+
+     Both were declared inside a component that App re-creates on every render,
+     so React remounted them constantly: the SharePoint wizard closed itself,
+     and ResEditor's "focus the row I just added" never got the chance to fire
+     because the row it was pointing at had already been thrown away. Same
+     defect as the Masterlist tab, same fix -- see check-remounting-editors.js.
+
+     newRowId is deliberately shared across every ResEditor on screen: only one
+     row can have just been added, so only one can want the focus. */
+  const [showSpWiz, setShowSpWiz] = useState(false);
+  const [spWizLog, setSpWizLog] = useState('');
+  const [spWizBusy, setSpWizBusy] = useState(false);
+  const [newRowId, setNewRowId] = useState(null);
+  const newRowNameRef = useRef(null);
+  useEffect(() => {
+    if (newRowId && newRowNameRef.current) {
+      newRowNameRef.current.focus();
+      setNewRowId(null);
+    }
+  }, [newRowId]);
   const ScopeLibraryEditor = () => {
     /* These live on App, not here. ScopeLibraryEditor is a closure created
        fresh on every App render, so React sees a NEW component type each time
@@ -4132,9 +4165,7 @@ function App({
     const [editSvc, setEditSvc] = [_editSvc, _setEditSvc];
     const [editDraft, setEditDraft] = [_editDraft, _setEditDraft];
     const [resTab, setResTab] = [_resTab, _setResTab];
-    const [showSpWiz, setShowSpWiz] = useState(false);
-    const [spWizLog, setSpWizLog] = useState('');
-    const [spWizBusy, setSpWizBusy] = useState(false);
+
     const spConnected = !!(USE_SP || getSiteURL());
     const spPublish = async () => {
       setSpWizBusy(true);
@@ -4324,14 +4355,6 @@ function App({
       };
       const mlItems = mlMap[type] || [];
       const catOpts = type === 'mp' ? ['Electrical', 'Mechanical', 'Civil', 'General'] : type === 'ppe' ? ['General', 'Welding', 'Electrical', 'Mechanical'] : ['Electrical', 'Mechanical', 'Civil', 'General'];
-      const [newRowId, setNewRowId] = useState(null);
-      const newRowNameRef = useRef(null);
-      useEffect(() => {
-        if (newRowId && newRowNameRef.current) {
-          newRowNameRef.current.focus();
-          setNewRowId(null);
-        }
-      }, [newRowId]);
       /* Updater form, not a new array built from props: two edits landing in one
          React batch both read the same rendered snapshot, so the second would
          quietly undo the first. Callers that only accept an array still work --
@@ -4583,7 +4606,7 @@ function App({
       return /*#__PURE__*/React.createElement("div", { style: { marginLeft: 22, marginTop: 4, marginBottom: 8 } },
         used.map(([t, label]) => /*#__PURE__*/React.createElement("div", { key: t, style: { marginBottom: 8 } },
           /*#__PURE__*/React.createElement("div", { style: { ...LBL, marginBottom: 3 } }, label),
-          /*#__PURE__*/React.createElement(ResEditor, {
+          ResEditor({
             rows: stepRowsOf(t, stepId),
             setRows: rows => setStepRows(t, stepId, rows),
             type: t,
@@ -5006,10 +5029,22 @@ function App({
   };
 
   /* ---- Picker modal ---- */
+  /* Picker's state, held by App.
+
+     It was declared inside Picker, AFTER an early `if (!picker) return null`
+     -- hooks behind a condition, which only ever worked because the component
+     was remounted on every App render anyway. Now that the identity is stable,
+     the search box and the multi-select survive a re-render instead of being
+     wiped whenever anything else on the page changed.
+
+     Cleared when the picker opens, which is what the remount used to do. */
+  const [pickerQ, setPickerQ] = useState('');
+  const [pickerSel, setPickerSel] = useState({});
+  useEffect(() => { setPickerQ(''); setPickerSel({}); }, [picker]);
   const Picker = () => {
     if (!picker) return null;
-    const [q, setQ] = useState('');
-    const [sel, setSel] = useState({}); /* {id: item} for multi-select */
+    const q = pickerQ, setQ = setPickerQ;
+    const sel = pickerSel, setSel = setPickerSel; /* {id: item} for multi-select */
     const items = (masterlist[picker.type] || []).filter(r => !q || (r.role || r.desc || '').toLowerCase().includes(q.toLowerCase()) || r.category.toLowerCase().includes(q.toLowerCase()));
     const selCount = Object.keys(sel).length;
     const toggleItem = item => {
@@ -6003,7 +6038,7 @@ function App({
   }, undoToast.msg, /*#__PURE__*/React.createElement("button", {
     onClick: undoToast.onUndo,
     style: { ...btn('warn', true), fontSize: 12, padding: '3px 10px' }
-  }, "Undo")), /*#__PURE__*/React.createElement(Picker, null), showApiKey && /*#__PURE__*/React.createElement("div", {
+  }, "Undo")), Picker(), showApiKey && /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'fixed',
       inset: 0,
@@ -7010,8 +7045,8 @@ tab === 'sowbreak' && (() => {
     )
   );
 })(),
-tab === 'scopelib' && /*#__PURE__*/React.createElement(ScopeLibraryEditor, null),
-tab === 'masterlist' && /*#__PURE__*/React.createElement(MlEditor, null),
+tab === 'scopelib' && ScopeLibraryEditor(),
+tab === 'masterlist' && MlEditor(),
 tab === 'history' && /*#__PURE__*/React.createElement(HistPanel, null),
 
 /* ── Status Panel Modal ──────────────────────────────────────────────────────

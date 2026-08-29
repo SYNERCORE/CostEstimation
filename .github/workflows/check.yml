@@ -46,6 +46,8 @@ jobs:
         run: node tools/test-ml-template.js
       - name: Every masterlist edit is persisted, not just held in state
         run: node tools/test-masterlist-persist.js
+      - name: No editor remounts itself on every render
+        run: node tools/check-remounting-editors.js
       - name: SharePoint permission failures are named, not swallowed
         run: node tools/test-sp-permissions.js
       - name: Local caches survive empty SharePoint responses

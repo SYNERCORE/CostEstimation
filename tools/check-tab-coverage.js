@@ -35,7 +35,11 @@ for (const id of tabs) {
   /* Guard against the exact failure above: the branch exists but the thing it
      renders was cut off, leaving it to fall through to an unrelated condition. */
   const after = m[1].replace(/\/\*[\s\S]*?\*\//g, '').trim();
-  if (!after || !/^(\(|React\.createElement|isAdmin)/.test(after)) empty.push(id + '  ->  ' + JSON.stringify(after.slice(0, 50)));
+  /* `Name()` counts too. An editor that holds state must be CALLED rather than
+     rendered as a component, or App re-creating it every render remounts it --
+     see check-remounting-editors.js. Both spellings render a tab. */
+  if (!after || !/^(\(|React\.createElement|isAdmin|[A-Z][A-Za-z0-9_]*\()/.test(after))
+    empty.push(id + '  ->  ' + JSON.stringify(after.slice(0, 50)));
 }
 
 if (missing.length || empty.length) {

@@ -1485,6 +1485,13 @@ function App({
     const nextAps = p && (p.approvers || []).length
       ? JSON.parse(JSON.stringify(p.approvers))
       : JSON.parse(JSON.stringify(CE_FALLBACK_APPROVERS));
+    /* Whoever is signed in prepared it. The preset cannot name them -- it is
+       shared by everyone -- so the name is left blank there and filled in
+       here. A preset that DOES name someone is left alone. */
+    const _me = (currentUser.name || currentUser.username || '').trim();
+    if (_me) nextAps.forEach(a => {
+      if (/prepared/i.test(a.role || '') && !String(a.name || '').trim()) a.name = _me;
+    });
     if (!p && !force) return false;
     setNotes(nextNotes);
     setApprovers(nextAps);

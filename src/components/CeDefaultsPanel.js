@@ -78,6 +78,19 @@ function CeDefaultsPanel() {
         React.createElement('label', {style: LBL}, 'Discipline'),
         sel(p.discipline || CE_DEFAULT_ANY, e => edit(i, {discipline: e.target.value}),
           [[CE_DEFAULT_ANY, 'Any discipline'], ...CE_DISCIPLINES.map(d => [d, d])])),
+      /* Rosters differ between pairings by a name or two, so the fast way to
+         add the next one is to copy this one and change what differs. A fresh
+         id, or React keys collide and edits land on the wrong card. */
+      React.createElement('button', {
+        style: {...btn('def', true), fontSize: 10, padding: '4px 10px'},
+        title: 'Copy this preset, then change the type or discipline',
+        onClick: () => {
+          const copy = JSON.parse(JSON.stringify(p));
+          copy.id = 'd' + Date.now() + Math.random().toString(36).slice(2, 6);
+          setPresets(x => [...x.slice(0, i + 1), copy, ...x.slice(i + 1)]);
+          setDirty(true);
+        }
+      }, 'Duplicate'),
       React.createElement('button', {
         style: {...btn('danger', true), fontSize: 10, padding: '4px 10px'},
         onClick: () => { setPresets(x => x.filter((_, j) => j !== i)); setDirty(true); }

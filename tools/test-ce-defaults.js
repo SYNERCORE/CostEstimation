@@ -71,6 +71,31 @@ ck('and the manual button confirms before discarding edits',
 ck('it says so when no preset matches, rather than blanking the CE',
   /No preset matches this CE type and discipline/.test(app));
 
+/* Setting up the next pairing means copying a roster and changing a name or
+   two. Retyping seven signatories per preset is how a roster ends up wrong. */
+console.log('\nsetting up the next preset:');
+ck('a preset can be duplicated', /\}, 'Duplicate'\)/.test(panel));
+ck('the copy is independent, not a shared reference',
+  /JSON\.parse\(JSON\.stringify\(p\)\)/.test(panel),
+  'editing the copy would otherwise edit the original too');
+ck('and gets its own id', /copy\.id = 'd' \+ Date\.now\(\)/.test(panel),
+  'a duplicate React key sends edits to the wrong card');
+ck('it lands next to the one it came from', /x\.slice\(0, i \+ 1\), copy/.test(panel));
+
+/* The preset is shared with everyone, so it cannot name the preparer -- that
+   is whoever is signed in. Leaving it blank meant CEs went out with an unnamed
+   "Prepared By" unless the estimator remembered to type it. */
+console.log('\nprepared by:');
+ck('the signed-in user fills in Prepared By',
+  /if \(\/prepared\/i\.test\(a\.role \|\| ''\) && !String\(a\.name \|\| ''\)\.trim\(\)\) a\.name = _me;/.test(app));
+ck('from their full name, falling back to the username',
+  /currentUser\.name \|\| currentUser\.username/.test(app));
+ck('a preset that already names someone is left alone',
+  /!String\(a\.name \|\| ''\)\.trim\(\)/.test(app));
+ck('and the fill happens before the untouched-signature is taken',
+  app.indexOf('a.name = _me') < app.indexOf('_defaultsSig.current = JSON.stringify'),
+  'otherwise a new CE looks edited the moment it opens, and the preset stops re-applying');
+
 console.log('\nstorage:');
 ck('presets go to SharePoint so everyone shares them', /async function dbSaveCeDefaults/.test(db));
 ck('on the Companies list, which every site already has', /spList\('Companies'\),"Title eq '"\+CE_DEFAULTS_KEY/.test(db),

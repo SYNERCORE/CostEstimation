@@ -463,6 +463,36 @@ async function _ceLoadLocal(id){
   return null;
 }
 let _spFailReason='';
+/* Which CEs have a header but no line items behind it.
+
+   dbSaveHistory POSTs the header before the rows, so anything failing in
+   between leaves a CE with a stored total and nothing under it: it reads
+   normally in Monitoring and opens empty. A whole import can land this way
+   without saying so.
+
+   Checked one CE at a time this would be two requests each -- around 1,800 for
+   a site this size. Instead read the two line-item lists once, unfiltered, and
+   keep only which CE ids appear. That is a handful of requests for the whole
+   site, and it works above the view threshold, which a filtered check would
+   not. */
+async function dbFindHeaderOnlyCEs(progressCb){
+  if(!(USE_SP||getSiteURL()))throw new Error('This needs a SharePoint connection.');
+  const seen=new Set();
+  const lists=[spList('CE_MP'),spList('CE_Resources')];
+  for(let i=0;i<lists.length;i++){
+    progressCb&&progressCb({msg:'Reading '+lists[i]+'...',progress:i/(lists.length+1)});
+    const rows=await spGet(lists[i],null,'Id,shicCEId');
+    for(const r of rows)seen.add(String(r.shicCEId));
+  }
+  progressCb&&progressCb({msg:'Reading CE headers...',progress:lists.length/(lists.length+1)});
+  const heads=await spGet(spList('CEs'),null,'Id,Title,shicTotal,shicSavedBy,shicSavedAt');
+  /* A CE with a total of zero is not evidence of anything -- a tracking stub
+     imported from the monitoring spreadsheet has no rows by design. */
+  return heads
+    .filter(h=>Number(h.shicTotal||0)>0&&!seen.has(String(h.Id)))
+    .map(h=>({id:h.Id,ceNum:h.Title||('#'+h.Id),total:Number(h.shicTotal||0),savedBy:h.shicSavedBy||'',savedAt:h.shicSavedAt||''}))
+    .sort((a,b)=>b.total-a.total);
+}
 async function dbSaveHistory(e){_spFailReason='';if(USE_SP||getSiteURL()){try{const existing=await spGet(spList('CEs'),`Title eq '${(e.info.ceNum||'').replace(/'/g,"''")}'`,'Id');const hdr={Title:e.info.ceNum,shicType:e.ceType,shicClient:e.info.client||'',shicDesc:e.info.description||'',shicTotal:Math.round((e.grand||0)*100)/100,shicSavedBy:e.savedBy||'',shicSavedAt:new Date().toISOString(),shicScope:e.scope||'',shicNotes:JSON.stringify(e.notes||[]),shicApprovers:JSON.stringify(e.approvers||[]),shicMob:JSON.stringify(e.mobVehicles||[]),shicDemob:JSON.stringify(e.demobVehicles||[]),shicMisc:JSON.stringify({...(e.misc||{}), _addlCosts:(e.addlCosts||[]), _margin:(e.margin||0)}),shicSOW:JSON.stringify(e.sowItems||[]),/* The whole info object. Only client and description had columns, so date, location, discipline, department, status, material, QUANTITY, DAYS, attention, end user and the issuing company never reached SharePoint at all -- they lived in the saving browser's cache and nowhere else. Anyone else opening the CE got BLANK_INFO defaults: today's date, qty 1, status DRAFT, discipline Electrical. Saving from there wrote those defaults back as if they were real. One JSON column carries the lot, and new fields ride along without another migration. */shicInfo:JSON.stringify(e.info||{})};let ceId;if(existing.length){ceId=existing[0].Id;await spWithRetry(()=>spPatch(spList('CEs'),ceId,hdr));}else{const r=await spWithRetry(()=>spPost(spList('CEs'),hdr));ceId=r.Id;/* Race-condition guard: if two users POSTed simultaneously, keep the lowest Id and delete the duplicate */const dupes=await spGet(spList('CEs'),`Title eq '${(e.info.ceNum||'').replace(/'/g,"''")}'`,'Id,shicSavedBy');if(dupes.length>1){dupes.sort((a,b)=>a.Id-b.Id);const winner=dupes[0];if(winner.Id!==ceId){/* We lost the race — our row is the duplicate. Delete it, preserve our data locally, and surface a clear error to the user so they can save under a different CE number. The winner row is left completely untouched. */await spDelete(spList('CEs'),ceId).catch(()=>{});const _savedAt=new Date().toISOString();try{const h=LS.get('history')||[];LS.set('history',[{...e,id:Date.now(),savedAt:_savedAt,_raceConflict:true},...h.filter(x=>(x.info?.ceNum||x.ceNum)!==e.info.ceNum)]);LS.set('ce_cache:'+e.info.ceNum,{...e,id:Date.now(),savedAt:_savedAt});}catch(_){}/* 'local': we LOST the race and deleted our own SharePoint row, so this browser holds the only copy of the user's work. Nothing may ever delete a 'local' record. */try{await cePut({...e,ceNum:e.info.ceNum,savedAt:_savedAt,savedBy:e.savedBy||'',_syncState:'local',_raceConflict:true});}catch(_){}throw new Error(`CE number "${e.info.ceNum}" was saved by "${winner.shicSavedBy||'another user'}" at the same time. Your data has been kept in this browser — load the local draft and save again with a different CE number.`);}else{for(const dup of dupes.slice(1))await spDelete(spList('CEs'),dup.Id).catch(()=>{});}}}const[om,or]=await Promise.all([_spGetByCE(spList('CE_MP'),ceId,'Id'),_spGetByCE(spList('CE_Resources'),ceId,'Id')]);/* Insert new rows FIRST — if any insert fails the old rows are still intact */const mpPayloads=(e.mp||[]).filter(r=>r.role).map(r=>({shicCEId:ceId,shicRole:r.role,shicRate:r.rate||0,shicShift:r.shift||'regular_day',shicDays:r.days||1,shicPax:r.pax||1,shicOTHours:r.otHours||0,shicPerDiem:r.perDiem||0,shicTaskId:r.taskId||'',shicShares:_shDump(r.shares)}));const resPayloads=[...(e.tools||[]).filter(r=>r.desc).map(r=>({shicCEId:ceId,shicTab:'tools',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicDays:r.days||1,shicTaskId:r.taskId||'',shicShares:_shDump(r.shares)})),...(e.mats||[]).filter(r=>r.desc).map(r=>({shicCEId:ceId,shicTab:'mats',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicTaskId:r.taskId||'',shicShares:_shDump(r.shares)})),...(e.ppe||[]).filter(r=>r.desc).map(r=>({shicCEId:ceId,shicTab:'ppe',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicTaskId:r.taskId||'',shicShares:_shDump(r.shares)}))];const insFns=[...mpPayloads.map(p=>()=>spWithRetry(()=>spPost(spList('CE_MP'),p))),...resPayloads.map(p=>()=>spWithRetry(()=>spPost(spList('CE_Resources'),p)))];let spErr=null;for(let i=0;i<insFns.length;i+=5){try{await Promise.all(insFns.slice(i,i+5).map(fn=>fn()));}catch(batchErr){spErr=batchErr;console.error('dbSaveHistory batch insert failed:',batchErr.message);break;}}if(spErr)throw spErr;/* Only delete OLD rows after new ones safely written */const dels=[...om.map(x=>()=>spDelete(spList('CE_MP'),x.Id)),...or.map(x=>()=>spDelete(spList('CE_Resources'),x.Id))];for(let i=0;i<dels.length;i+=5)await Promise.all(dels.slice(i,i+5).map(fn=>fn())).catch(()=>{});_spInvalidateBigList();try{LS.set('ce_cache:'+e.info.ceNum,{...e,id:ceId,savedAt:hdr.shicSavedAt});}catch(_){}/* Write through to IndexedDB alongside the localStorage cache. 'synced' -- SharePoint accepted it, so the migration may safely treat the two copies as agreeing. */try{await cePut({...e,ceNum:e.info.ceNum,id:ceId,savedAt:hdr.shicSavedAt,savedBy:e.savedBy||'',_syncState:'synced'});}catch(_){}return{sp:true,id:ceId};}catch(e2){const msg=e2.message||String(e2);_spFailReason=msg;console.warn('dbSaveHistory SP error:',msg);/* A 400 InvalidClientQueryException on an insert almost always means the
    site is missing a column this version writes -- exactly what happened when
    shicPax/shicOTHours/shicPerDiem shipped without being added to the

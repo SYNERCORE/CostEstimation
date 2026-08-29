@@ -36,6 +36,8 @@ jobs:
         run: node tools/test-threshold-fallback.js
       - name: A browser-only save is not reported as an import
         run: node tools/test-save-reporting.js
+      - name: CEs whose line items never saved can be found
+        run: node tools/test-header-only-sweep.js
       - name: SharePoint permission failures are named, not swallowed
         run: node tools/test-sp-permissions.js
       - name: Local caches survive empty SharePoint responses

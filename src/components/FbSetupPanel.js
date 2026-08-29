@@ -63,6 +63,25 @@
     setProgress(null);setBusy(false);
   };
   const[access,setAccess]=React.useState(null);
+  const[orphans,setOrphans]=React.useState(null);
+  /* dbSaveHistory writes the CE header before its line items, so a failure in
+     between leaves a CE that reads normally in Monitoring and opens empty.
+     There is no way to spot one without opening it, and a whole import can
+     land this way -- so list them all at once. */
+  const handleFindOrphans=async()=>{
+    setBusy(true);setOrphans(null);addLog('Looking for CEs whose line items never reached SharePoint...');
+    try{
+      const rows=await dbFindHeaderOnlyCEs(p=>setProgress({msg:p.msg,progress:p.progress}));
+      setOrphans(rows);
+      /* The panel shows the first 200; the console carries the lot, so a long
+         list can still be copied out and worked through. */
+      if(rows.length)console.warn('CEs with a header but no line items ('+rows.length+'):',rows.map(o=>o.ceNum).join(', '));
+      addLog(rows.length
+        ? '⚠ '+rows.length+' CE(s) have a total but no line items. Re-import or re-save each one.'
+        : 'Every CE with a total has its line items. Nothing to repair.');
+    }catch(e){addLog('Check failed: '+e.message.slice(0,140));}
+    setProgress(null);setBusy(false);
+  };
   /* "It works for me" proves nothing: every SharePoint call runs on the
      signed-in user's own token, so permission is per person, per list. Have
      the person who cannot sync press this and read the row that says DENIED. */
@@ -105,7 +124,22 @@
          short of disconnecting and reconnecting. autoSetupSP only ever adds
          what is missing, so running it again is safe at any time. */
       status==='connected'&&React.createElement('button',{style:btn('info'),disabled:busy,title:'Adds any list or column this version needs and the site does not have. Existing data is never touched.',onClick:handleRepair},busy?'Working...':'Repair lists & columns'),
-      React.createElement('button',{style:btn('def'),disabled:busy,title:'Tries a read and a write on every list AS THE SIGNED-IN ACCOUNT. Run it from the machine of whoever cannot sync.',onClick:handleCheckAccess},busy?'Working...':'Check my access')
+      React.createElement('button',{style:btn('def'),disabled:busy,title:'Tries a read and a write on every list AS THE SIGNED-IN ACCOUNT. Run it from the machine of whoever cannot sync.',onClick:handleCheckAccess},busy?'Working...':'Check my access'),
+      status==='connected'&&React.createElement('button',{style:btn('def'),disabled:busy,title:'Lists every CE that has a stored total but no line items behind it — the state a save leaves when it fails after writing the header. Read-only.',onClick:handleFindOrphans},busy?'Working...':'Find CEs missing line items')
+    ),
+    orphans&&React.createElement('div',{style:{marginTop:10,padding:'10px 12px',background:SURF,borderRadius:6}},
+      React.createElement('div',{style:{fontWeight:700,fontSize:12,marginBottom:6,color:orphans.length?ERR:OK}},
+        orphans.length?orphans.length+' CE(s) with a total but no line items':'Every CE with a total has its line items'),
+      orphans.length>0&&React.createElement('div',{style:{fontSize:10,color:MT,marginBottom:8,lineHeight:1.6}},
+        'The header reached SharePoint and the rows did not. Monitoring shows the total; opening the CE shows nothing. Re-import the source file, or open the local copy if this browser has one and press Save.'),
+      orphans.length>0&&React.createElement('div',{style:{maxHeight:220,overflowY:'auto'}},
+        orphans.slice(0,200).map(o=>React.createElement('div',{key:o.id,style:{display:'flex',gap:8,fontSize:10,padding:'3px 0',borderBottom:'1px solid '+BDR+'44'}},
+          React.createElement('span',{style:{fontFamily:"'JetBrains Mono',monospace",minWidth:150}},o.ceNum),
+          React.createElement('span',{style:{minWidth:100,textAlign:'right',color:ERR}},'P'+o.total.toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2})),
+          React.createElement('span',{style:{color:MT}},o.savedBy||''),
+          React.createElement('span',{style:{color:MT,marginLeft:'auto'}},o.savedAt?new Date(o.savedAt).toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'}):'')
+        ))),
+      orphans.length>200&&React.createElement('div',{style:{fontSize:10,color:MT,marginTop:6}},'+ '+(orphans.length-200)+' more (see the console for the full list).')
     ),
     access&&React.createElement('div',{style:{marginTop:10,padding:'10px 12px',background:SURF,borderRadius:6}},
       React.createElement('div',{style:{fontSize:11,color:TX,fontWeight:700,marginBottom:6}},'What this account can do'),

@@ -85,6 +85,26 @@ ck('table headers are shaded', /s: 'th'/.test(exp));
 ck('totals are set apart from the rows they total', /s: 'tot'/.test(exp) && /s: 'totlbl'/.test(exp));
 ck('body rows are bordered so the table reads as a table', /s: typeof c === 'number' \? 'tdc' : 'td'/.test(exp));
 
+/*
+ * Benefits are computed from the manpower row by calcBen and are never stored
+ * on it. Every consumer used to filter on r.benefits / r.monthlyRate -- fields
+ * no row has ever carried -- so the whole "Benefits & Others" table silently
+ * disappeared from the printed CE and from both workbooks, while its cost
+ * stayed inside the manpower total. The figures were right; the page saying
+ * where they came from was gone.
+ */
+console.log('\nBenefits come from the computed rows, not from fields no row has:');
+ck('nothing reads r.benefits', !/r\.benefits\s*(?:\|\||&&|\.|\)|;)/.test(src),
+  'a manpower row has no benefits field, so the table it gates is never drawn');
+ck('nothing filters on a stored monthly rate', !/N\(r\.monthlyRate\)/.test(src));
+ck('one shared benefitRows for the print and both exports',
+  (src.match(/benefitRows/g) || []).length >= 4,
+  'three copies of this table drifted apart once already');
+ck('Export Detailed uses it', /benefitRows\.forEach/.test(exp));
+ck('the top-bar export uses it too', /benefitRows\.forEach/.test(src.slice(src.indexOf('const handleExport = ()'))));
+ck('the incentive is part of the benefits total', /perdiem: b\.perdiem, total: b\.total/.test(src),
+  'the total must agree with mpTot, which calcBen already includes it in');
+
 console.log('\nIt describes the same document as the print:');
 ck('the company header is resolved the same way', /_cos\.find\(c => String\(c\.id\) === String\(info\.companyId\)\)/.test(exp),
   'a different fallback would put a different company on the two documents');

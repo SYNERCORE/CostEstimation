@@ -447,12 +447,65 @@ async function _spGetByCE(list, ceId, sel){
     return _spBigListCache[list].get(String(ceId)) || [];
   }
 }
+/* One CE, assembled from its header row and its line-item rows.
+   Shared by dbLoadCE and the offline prefetch: a second copy of this would
+   drift, and the two would then disagree about what a CE contains. */
+/* Every CE, into the offline archive.
+
+   The list in Monitoring is cached, but the CEs behind it are not: only ones
+   saved from this browser were ever stored, so the CE you had not opened yet
+   was exactly the one unavailable offline.
+
+   Fetched one at a time this would be two requests per CE -- around 1,800 on a
+   site this size. Instead read the three lists once each, paged, and group the
+   rows by CE id: a handful of requests for the whole archive. Every read is
+   unfiltered, so it also works above the view threshold.
+
+   Incremental: a CE already stored with the same savedAt is left alone, so a
+   second run costs the three reads and no writes. */
+async function dbCacheAllCEs(progressCb){
+  if(!(USE_SP||getSiteURL()))throw new Error('This needs a SharePoint connection.');
+  const step=(msg,p)=>{try{progressCb&&progressCb({msg:msg,progress:p});}catch(_){}};
+  step('Reading CE headers...',0.05);
+  const heads=await _spGetTolerant(spList('CEs'),null,'Id,Title,shicType,shicClient,shicDesc,shicTotal,shicSavedBy,shicSavedAt,shicScope,shicNotes,shicApprovers,shicMob,shicDemob,shicMisc,shicSOW,shicInfo');
+  step('Reading manpower rows...',0.3);
+  const mpRows=await _spGetTolerant(spList('CE_MP'),null,'Id,shicCEId,shicRole,shicRate,shicShift,shicDays,shicQty,shicPax,shicOTHours,shicPerDiem,shicTaskId,shicShares');
+  step('Reading resource rows...',0.55);
+  const resRows=await _spGetTolerant(spList('CE_Resources'),null,'Id,shicCEId,shicTab,shicDesc,shicQty,shicUOM,shicCost,shicDays,shicTaskId,shicShares');
+  const byCE=(rows)=>{const m=new Map();for(const r of rows){const k=String(r.shicCEId);if(!m.has(k))m.set(k,[]);m.get(k).push(r);}return m;};
+  const mpBy=byCE(mpRows),resBy=byCE(resRows);
+  step('Checking what is already stored...',0.75);
+  const have=new Map();
+  try{for(const r of await ceAll()) have.set(String(r.ceNum||'').toUpperCase(),r.savedAt||'');}catch(_){}
+  const out=[];let skipped=0;
+  for(const h of heads){
+    const num=String(h.Title||'').toUpperCase();
+    if(num&&have.has(num)&&have.get(num)===(h.shicSavedAt||'')){skipped++;continue;}
+    const ce=_assembleCE(h,mpBy.get(String(h.Id))||[],resBy.get(String(h.Id))||[]);
+    out.push({...ce,ceNum:ce.info.ceNum,savedAt:ce.savedAt||'',savedBy:ce.savedBy||'',_syncState:'synced'});
+  }
+  step('Storing '+out.length+' CE(s) offline...',0.9);
+  let stored=0;
+  /* In batches: one transaction holding 900 full CEs is a long write, and a
+     failure part-way through would lose the lot. */
+  for(let i=0;i<out.length;i+=100){
+    stored+=await ceBulkPut(out.slice(i,i+100));
+    step('Storing '+stored+'/'+out.length+'...',0.9+0.1*(stored/Math.max(1,out.length)));
+  }
+  return{total:heads.length,stored:stored,skipped:skipped,
+         rows:mpRows.length+resRows.length};
+}
+function _assembleCE(h,mR,rR){return {id:h.Id,ceType:h.shicType||'onsite',grand:h.shicTotal||0,savedBy:h.shicSavedBy||'',savedAt:h.shicSavedAt||'',info:(()=>{let base={};try{if(h.shicInfo)base=JSON.parse(h.shicInfo)||{};}catch(_){}/* The dedicated columns win for the three fields that also exist as columns: Title is what duplicate detection and every filter match on, so the JSON must never be able to disagree with it. A CE saved before shicInfo existed has no JSON and falls back to exactly what it had. */return{...base,ceNum:h.Title,client:h.shicClient||base.client||'',description:h.shicDesc||base.description||''};})(),scope:h.shicScope||'',mp:mR.map(r=>({id:'sp'+r.Id,role:r.shicRole||'',rate:r.shicRate||0,shift:r.shicShift||'regular_day',days:r.shicDays||1,/* pax, not qty: the editor and every cost formula read `pax`, so a row loaded as `qty` costed 0. shicQty is the fallback for rows written before shicPax existed. */pax:r.shicPax||r.shicQty||1,otHours:r.shicOTHours||0,perDiem:r.shicPerDiem||0,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),tools:rR.filter(r=>r.shicTab==='tools').map(r=>({id:'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,days:r.shicDays||1,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),mats:rR.filter(r=>r.shicTab==='mats').map(r=>({id:'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),ppe:rR.filter(r=>r.shicTab==='ppe').map(r=>({id:'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),misc:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};const{_addlCosts,_margin,...rest}=m;return rest;})(),addlCosts:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._addlCosts||[];})(),margin:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._margin||0;})(),sowItems:(()=>{try{return h.shicSOW?JSON.parse(h.shicSOW):[];}catch(_){return [];}})(),notes:h.shicNotes?JSON.parse(h.shicNotes):[],approvers:h.shicApprovers?JSON.parse(h.shicApprovers):[],mobVehicles:h.shicMob?JSON.parse(h.shicMob):[],demobVehicles:h.shicDemob?JSON.parse(h.shicDemob):[]};}
 async function dbLoadCE(id){
   /* Offline (or SharePoint unreachable) this returned null and the CE simply
      would not open. The IndexedDB archive holds the full record -- line items
      and all -- so serve it instead. SharePoint stays authoritative when online. */
   if(!(USE_SP||getSiteURL()))return await _ceLoadLocal(id);
-  try{const[hR,mR,rR]=await Promise.all([_spGetTolerant(spList('CEs'),`Id eq ${id}`,'Id,Title,shicType,shicClient,shicDesc,shicTotal,shicSavedBy,shicSavedAt,shicScope,shicNotes,shicApprovers,shicMob,shicDemob,shicMisc,shicSOW,shicInfo'),_spGetByCE(spList('CE_MP'),id,'Id,shicRole,shicRate,shicShift,shicDays,shicQty,shicPax,shicOTHours,shicPerDiem,shicTaskId,shicShares'),_spGetByCE(spList('CE_Resources'),id,'Id,shicTab,shicDesc,shicQty,shicUOM,shicCost,shicDays,shicTaskId,shicShares')]);if(!hR.length)return null;const h=hR[0];return{id:h.Id,ceType:h.shicType||'onsite',grand:h.shicTotal||0,savedBy:h.shicSavedBy||'',savedAt:h.shicSavedAt||'',info:(()=>{let base={};try{if(h.shicInfo)base=JSON.parse(h.shicInfo)||{};}catch(_){}/* The dedicated columns win for the three fields that also exist as columns: Title is what duplicate detection and every filter match on, so the JSON must never be able to disagree with it. A CE saved before shicInfo existed has no JSON and falls back to exactly what it had. */return{...base,ceNum:h.Title,client:h.shicClient||base.client||'',description:h.shicDesc||base.description||''};})(),scope:h.shicScope||'',mp:mR.map(r=>({id:'sp'+r.Id,role:r.shicRole||'',rate:r.shicRate||0,shift:r.shicShift||'regular_day',days:r.shicDays||1,/* pax, not qty: the editor and every cost formula read `pax`, so a row loaded as `qty` costed 0. shicQty is the fallback for rows written before shicPax existed. */pax:r.shicPax||r.shicQty||1,otHours:r.shicOTHours||0,perDiem:r.shicPerDiem||0,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),tools:rR.filter(r=>r.shicTab==='tools').map(r=>({id:'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,days:r.shicDays||1,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),mats:rR.filter(r=>r.shicTab==='mats').map(r=>({id:'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),ppe:rR.filter(r=>r.shicTab==='ppe').map(r=>({id:'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),misc:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};const{_addlCosts,_margin,...rest}=m;return rest;})(),addlCosts:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._addlCosts||[];})(),margin:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._margin||0;})(),sowItems:(()=>{try{return h.shicSOW?JSON.parse(h.shicSOW):[];}catch(_){return [];}})(),notes:h.shicNotes?JSON.parse(h.shicNotes):[],approvers:h.shicApprovers?JSON.parse(h.shicApprovers):[],mobVehicles:h.shicMob?JSON.parse(h.shicMob):[],demobVehicles:h.shicDemob?JSON.parse(h.shicDemob):[]};}catch(e){console.warn('dbLoadCE:',e.message);return await _ceLoadLocal(id);}}
+  try{const[hR,mR,rR]=await Promise.all([_spGetTolerant(spList('CEs'),`Id eq ${id}`,'Id,Title,shicType,shicClient,shicDesc,shicTotal,shicSavedBy,shicSavedAt,shicScope,shicNotes,shicApprovers,shicMob,shicDemob,shicMisc,shicSOW,shicInfo'),_spGetByCE(spList('CE_MP'),id,'Id,shicRole,shicRate,shicShift,shicDays,shicQty,shicPax,shicOTHours,shicPerDiem,shicTaskId,shicShares'),_spGetByCE(spList('CE_Resources'),id,'Id,shicTab,shicDesc,shicQty,shicUOM,shicCost,shicDays,shicTaskId,shicShares')]);if(!hR.length)return null;const h=hR[0];const _ce=_assembleCE(h,mR,rR);
+/* Keep what was just fetched. Without this, opening a colleague's CE online
+   left nothing behind, and the same CE would not open offline an hour later. */
+try{await cePut({..._ce,ceNum:_ce.info.ceNum,savedAt:_ce.savedAt||new Date().toISOString(),savedBy:_ce.savedBy||'',_syncState:'synced'});}catch(_){}
+return _ce;}catch(e){console.warn('dbLoadCE:',e.message);return await _ceLoadLocal(id);}}
 /* Full CE from the offline archive, by SharePoint item Id. */
 async function _ceLoadLocal(id){
   try{

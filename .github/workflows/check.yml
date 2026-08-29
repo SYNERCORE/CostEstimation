@@ -48,6 +48,8 @@ jobs:
         run: node tools/test-masterlist-persist.js
       - name: No editor remounts itself on every render
         run: node tools/check-remounting-editors.js
+      - name: Every CE can be downloaded for offline use
+        run: node tools/test-offline-prefetch.js
       - name: SharePoint permission failures are named, not swallowed
         run: node tools/test-sp-permissions.js
       - name: Local caches survive empty SharePoint responses

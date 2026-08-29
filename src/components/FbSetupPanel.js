@@ -64,6 +64,19 @@
   };
   const[access,setAccess]=React.useState(null);
   const[orphans,setOrphans]=React.useState(null);
+  const[offline,setOffline]=React.useState(null);
+  /* The Monitoring list is cached, the CEs behind it were not: only ones saved
+     from this browser were stored, so the CE nobody here had opened yet was
+     exactly the one missing when the connection went. */
+  const handleCacheAll=async()=>{
+    setBusy(true);setOffline(null);addLog('Downloading every CE for offline use...');
+    try{
+      const r=await dbCacheAllCEs(p=>setProgress({msg:p.msg,progress:p.progress}));
+      setOffline(r);
+      addLog('Offline copy ready: '+r.stored+' CE(s) stored'+(r.skipped?', '+r.skipped+' already current':'')+' — '+r.total+' in total.');
+    }catch(e){addLog('Offline download failed: '+e.message.slice(0,140));}
+    setProgress(null);setBusy(false);
+  };
   /* dbSaveHistory writes the CE header before its line items, so a failure in
      between leaves a CE that reads normally in Monitoring and opens empty.
      There is no way to spot one without opening it, and a whole import can
@@ -125,7 +138,17 @@
          what is missing, so running it again is safe at any time. */
       status==='connected'&&React.createElement('button',{style:btn('info'),disabled:busy,title:'Adds any list or column this version needs and the site does not have. Existing data is never touched.',onClick:handleRepair},busy?'Working...':'Repair lists & columns'),
       React.createElement('button',{style:btn('def'),disabled:busy,title:'Tries a read and a write on every list AS THE SIGNED-IN ACCOUNT. Run it from the machine of whoever cannot sync.',onClick:handleCheckAccess},busy?'Working...':'Check my access'),
-      status==='connected'&&React.createElement('button',{style:btn('def'),disabled:busy,title:'Lists every CE that has a stored total but no line items behind it — the state a save leaves when it fails after writing the header. Read-only.',onClick:handleFindOrphans},busy?'Working...':'Find CEs missing line items')
+      status==='connected'&&React.createElement('button',{style:btn('def'),disabled:busy,title:'Lists every CE that has a stored total but no line items behind it — the state a save leaves when it fails after writing the header. Read-only.',onClick:handleFindOrphans},busy?'Working...':'Find CEs missing line items'),
+      status==='connected'&&React.createElement('button',{style:btn('info'),disabled:busy,title:'Stores every CE in this browser so any of them can be opened, printed and exported with no connection. Reads the three lists once each rather than two requests per CE. Safe to re-run: only CEs that have changed are written.',onClick:handleCacheAll},busy?'Working...':'⬇ Download all CEs for offline')
+    ),
+    offline&&React.createElement('div',{style:{marginTop:10,padding:'10px 12px',background:SURF,borderRadius:6}},
+      React.createElement('div',{style:{fontWeight:700,fontSize:12,marginBottom:6,color:OK}},'Offline copy ready'),
+      React.createElement('div',{style:{fontSize:11,color:MT,lineHeight:1.7}},
+        offline.stored+' CE(s) stored in this browser',
+        offline.skipped?', '+offline.skipped+' already up to date':'',
+        '. ',offline.total+' CE(s) on the site, '+offline.rows.toLocaleString()+' line-item rows read.',
+        React.createElement('br',null),
+        'Any of them now opens, prints and exports with no connection. Re-run after other people save, to pick up their changes.')
     ),
     orphans&&React.createElement('div',{style:{marginTop:10,padding:'10px 12px',background:SURF,borderRadius:6}},
       React.createElement('div',{style:{fontWeight:700,fontSize:12,marginBottom:6,color:orphans.length?ERR:OK}},

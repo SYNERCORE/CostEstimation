@@ -102,7 +102,9 @@ ck('one shared benefitRows for the print and both exports',
   'three copies of this table drifted apart once already');
 ck('Export Detailed uses it', /benefitRows\.forEach/.test(exp));
 ck('the top-bar export uses it too', /benefitRows\.forEach/.test(src.slice(src.indexOf('const handleExport = ()'))));
-ck('the incentive is part of the benefits total', /perdiem: b\.perdiem, total: b\.total/.test(src),
+ck('one line per role, not one per shift', /String\(r\.role\)\.trim\(\)\.toUpperCase\(\)/.test(src),
+  'the same name twice reads as two hires; the Manpower tab merges them');
+ck('the incentive is part of the benefits total', /'thirteenth', 'sss', 'hdmf', 'sil', 'perdiem', 'total'/.test(src),
   'the total must agree with mpTot, which calcBen already includes it in');
 
 console.log('\nIt describes the same document as the print:');

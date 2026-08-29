@@ -557,18 +557,29 @@ function App({
 
      Monthly rate is the shift-adjusted day rate over a 26-day month, the same
      way the tab derives it. */
-  const benefitRows = useMemo(() => mp
-    .filter(r => r.role && (N(r.rate) > 0 || N(r.pax) > 0))
-    .map(r => {
+  const benefitRows = useMemo(() => {
+    /* Merged by role across every shift, the way the Manpower tab merges them.
+       A role worked on both a day and a night shift is one line here, not two
+       lines with the same name -- which reads as two different hires.
+
+       Merging is presentation only: each shift entry is still costed on its
+       own by calcBen, with that shift's multiplier, and then added in. The
+       merged row totals exactly what the separate rows did. */
+    const grouped = {};
+    mp.filter(r => r.role && (N(r.rate) > 0 || N(r.pax) > 0)).forEach(r => {
+      const key = String(r.role).trim().toUpperCase();
       const b = calcBen(r), pax = N(r.pax) || 1;
-      return {
-        role: r.role, pax: pax, days: N(r.days) || 1,
-        monthlyRate: N(r.rate) * (SHIFTS[r.shift]?.mult || 1) * 26 * pax,
-        thirteenth: b.thirteenth, sss: b.sss, hdmf: b.hdmf, sil: b.sil,
-        perdiem: b.perdiem, total: b.total
-      };
-    })
-    .filter(x => x.total > 0), [mp]);
+      const g = grouped[key] || (grouped[key] = {
+        role: r.role, pax: 0, days: 0, monthlyRate: 0,
+        thirteenth: 0, sss: 0, hdmf: 0, sil: 0, perdiem: 0, total: 0
+      });
+      g.pax += pax;
+      g.days = Math.max(g.days, N(r.days) || 1);
+      g.monthlyRate += N(r.rate) * (SHIFTS[r.shift]?.mult || 1) * 26 * pax;
+      ['thirteenth', 'sss', 'hdmf', 'sil', 'perdiem', 'total'].forEach(k => { g[k] += b[k]; });
+    });
+    return Object.values(grouped).filter(x => x.total > 0);
+  }, [mp]);
   const benefitsT = benefitRows.reduce((t, r) => t + r.total, 0);
   /* Tools & Equipment can be charged per day (crane, welding machine, ...).
      `days` is optional and defaults to 1, so any row that never sets it costs

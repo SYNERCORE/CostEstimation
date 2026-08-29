@@ -42,6 +42,8 @@ jobs:
         run: node tools/test-header-only-sweep.js
       - name: Default notes and signatories never overwrite typed work
         run: node tools/test-ce-defaults.js
+      - name: The masterlist template round-trips through import
+        run: node tools/test-ml-template.js
       - name: SharePoint permission failures are named, not swallowed
         run: node tools/test-sp-permissions.js
       - name: Local caches survive empty SharePoint responses

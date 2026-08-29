@@ -2200,8 +2200,14 @@ function App({
         ppe: ['code', 'category', 'desc', 'cost', 'uom'],
         vehicles: ['code', 'category', 'desc', 'rate', 'uom']
       };
-      const headers = colMap[tab] || colMap.manpower;
-      const rows = (masterlist[tab] || []).map(r => headers.map(h => r[h] !== undefined ? r[h] : ''));
+      const keys = colMap[tab] || colMap.manpower;
+      /* Write the labels the app shows, not the field keys behind them. This
+         wrote `perDiem` long after the column was renamed to Incentive
+         everywhere else, because the header row came from this map rather than
+         from colL a few lines up. importMLExcel reads both spellings, so a
+         template downloaded from an older build still imports. */
+      const headers = (colL[tab] || colL.manpower);
+      const rows = (masterlist[tab] || []).map(r => keys.map(h => r[h] !== undefined ? r[h] : ''));
       const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Template');
@@ -2244,20 +2250,46 @@ function App({
           }
         };
         const fm = fieldMap[tab] || fieldMap.tools;
-        const newItems = rows.map((r, i) => {
+        /* A header may be the friendly label the template writes ("Role /
+           Position", "Day Rate (P)") or the raw field key older templates used.
+           Strip the units in brackets and everything that is not a letter, and
+           both land on the same word. */
+        const norm = h => String(h).toLowerCase().replace(/\(.*?\)/g, '').replace(/[^a-z]/g, '');
+        const HEADER_KEY = {
+          itemcode: 'code', code: 'code',
+          category: 'category',
+          roleposition: 'role', role: 'role',
+          description: 'desc', desc: 'desc',
+          dayrate: 'rate', rate: 'rate',
+          cost: 'cost',
+          incentive: 'perDiem', perdiem: 'perDiem',
+          uom: 'uom'
+        };
+        const rekey = r => {
+          const o = {};
+          Object.keys(r).forEach(h => {
+            const k = HEADER_KEY[norm(h)];
+            /* First column wins: a sheet carrying both "Rate" and "Day Rate (P)"
+               must not have the later one silently overwrite the earlier. */
+            if (k && o[k] === undefined) o[k] = r[h];
+          });
+          return o;
+        };
+        const newItems = rows.map((r0, i) => {
+          const rk = rekey(r0), r = r0;
           const item = {
             id: uid(),
-            code: String(r.code || r.Code || '').trim() || 'SHIC-' + tab.toUpperCase().slice(0, 2) + '-' + (900 + i).toString().padStart(3, '0'),
-            category: String(r.category || r.Category || 'General').trim(),
-            [fm.name]: String(r[fm.name] || r.role || r.desc || r.description || '').trim(),
-            [fm.cost]: parseFloat(r[fm.cost] || r.rate || r.cost || 0) || 0,
-            uom: String(r.uom || r.UOM || 'Day').trim()
+            code: String(rk.code || r.code || r.Code || '').trim() || 'SHIC-' + tab.toUpperCase().slice(0, 2) + '-' + (900 + i).toString().padStart(3, '0'),
+            category: String(rk.category || r.category || r.Category || 'General').trim(),
+            [fm.name]: String(rk[fm.name] || r[fm.name] || r.role || r.desc || r.description || '').trim(),
+            [fm.cost]: parseFloat(rk[fm.cost] !== undefined && rk[fm.cost] !== '' ? rk[fm.cost] : (r[fm.cost] || r.rate || r.cost || 0)) || 0,
+            uom: String(rk.uom || r.uom || r.UOM || 'Day').trim()
           };
           /* Manpower-specific: read the incentive column. It was labelled "Per Diem"
              until the rename, so those headers are still accepted -- every
              masterlist workbook already in circulation carries the old one. */
           if (tab === 'manpower') {
-            item.perDiem = parseFloat(r.incentive || r.Incentive || r['Incentive (P/Day)'] || r.perDiem || r.perdiem || r['Per Diem'] || r['per diem'] || r['PER DIEM'] || r['Per Diem (P/Day)'] || 0) || 0;
+            item.perDiem = parseFloat(rk.perDiem || r.incentive || r.Incentive || r.perDiem || r.perdiem || 0) || 0;
           }
           return item;
         }).filter(item => item[fm.name]);

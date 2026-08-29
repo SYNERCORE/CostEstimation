@@ -587,7 +587,14 @@ function App({
       g.monthlyRate += N(r.rate) * 26 * pax;
       ['thirteenth', 'sss', 'hdmf', 'sil', 'perdiem', 'total'].forEach(k => { g[k] += b[k]; });
     });
-    return Object.values(grouped).filter(x => x.total > 0);
+    /* Monthly rate is a rate: what ONE person earns in a 26-day month. It is
+       weighted by pax while merging only so that roles hired at different
+       rates average correctly, then divided back out. Leaving the pax in made
+       a P650/day helper read as P33,800 a month at 2 pax, which is a cost, not
+       a rate, and nothing else on the row is a cost. */
+    return Object.values(grouped)
+      .map(g => ({...g, monthlyRate: g.pax ? g.monthlyRate / g.pax : 0}))
+      .filter(x => x.total > 0);
   }, [mp]);
   const benefitsT = benefitRows.reduce((t, r) => t + r.total, 0);
   /* Tools & Equipment can be charged per day (crane, welding machine, ...).

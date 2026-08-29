@@ -232,5 +232,12 @@ check('the recompute path agrees with the editor', /rate = N\(r\.rate\);/.test(r
   'a CE reopened later would total differently from the one that was saved');
 check('and still pays the premium on the wage', /\* mult;/.test(rowCost) && /1\.25 \* mult;/.test(rowCost));
 
+/* MONTHLY RATE is what ONE person earns in a 26-day month. It was being left
+   multiplied by pax, so a P650/day helper at 2 pax read as P33,800 -- a cost,
+   sitting in a column of rates. The pax weighting exists only so that a role
+   hired at two different rates averages correctly while merging. */
+check('the monthly rate is per person, not per crew', /monthlyRate: g\.pax \? g\.monthlyRate \/ g\.pax : 0/.test(src),
+  'P650/day is P16,900 a month whether one person works it or five');
+
 console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nall cost/grouping assertions passed');
 process.exit(fails ? 1 : 0);

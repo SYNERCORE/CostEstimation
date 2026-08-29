@@ -564,6 +564,11 @@ function App({
   const mobT = cfg.mobDemob ? mobSubT + demobSubT : 0;
   const grand = mobT + mpTot + toolsT + matsT + ppeT + miscT;
   const unitP = grand / (N(info.qty) || 1);
+  /* At qty 1 the unit price is just the total again, printed under it with a
+     different name. On a supply CE covering several different items it reads
+     as the price of one of them, which is the one thing it is not. Show it
+     only when a quantity was actually given. */
+  const showUnitP = (N(info.qty) || 1) > 1;
   /* ── Highlighted costs ──────────────────────────────────────────────────
      Callouts of money that is ALREADY counted in the sections above (e.g. a
      client wants "DELIVERY TO PAGBILAO" or "THIRD PARTY COST" shown on its
@@ -1311,7 +1316,7 @@ function App({
   const handleExport = () => {
     const wb = XLSX.utils.book_new();
     const cl = ceType === 'onsite' ? 'Onsite' : ceType === 'shopworks' ? 'Shopwork' : 'Supply';
-    const s1 = [['COST ESTIMATE SUMMARY', '', '', '', '', '', '', '', '', '', '', 'Document No.:', cfg.docNo], ['', '', '', '', '', '', '', '', '', '', '', 'Revision No.:', '0'], ['PROJECT TYPE:', '', '', '', info.projType === 'electrical' ? 'TRUE' : 'FALSE', 'Electrical ' + cl, '', info.projType === 'mechanical' ? 'TRUE' : 'FALSE', 'Mechanical ' + cl], ['PROJECT DESCRIPTION:', info.description, '', '', '', '', '', '', '', '', 'DATE:', info.date], ['CE NUMBER:', info.ceNum], ['CLIENT:', info.client, '', '', '', '', '', '', '', '', '', '', '', 'CE:', info.ceNum], ['LOCATION:', info.location, '', '', '', '', '', 'MATERIAL:', info.material], ['ATTENTION:', info.attention, '', '', '', '', '', 'QTY:', info.qty, '', '', 'STATUS:', info.status], ['END USER:', info.endUser, '', '', '', '', '', 'DAYS:', info.days], [], ['ITEM', 'DESCRIPTION', '', '', '', '', '', '', '', '', 'TOTAL COST'], ...(cfg.mobDemob ? [['', 'MOBILIZATION', '', '', '', '', '', '', '', '', N(mobSubT)], ['', 'DEMOBILIZATION', '', '', '', '', '', '', '', '', N(demobSubT)]] : []), ...ceSections.filter(x => x.v > 0).map(x => [x.letter, x.printLabel, '', '', '', '', '', '', '', '', x.v]), [], ['TOTAL AMOUNT:', '', '', '', '', '', '', '', '', '', grand], [], ['UNIT PRICE:', '', '', '', '', '', '', '', '', '', unitP], ...(margin !== 0 ? [['MARGIN:', '', '', '', '', '', '', '', '', '', (margin > 0 ? '+' : '') + margin + '%'], ['SELLING PRICE:', '', '', '', '', '', '', '', '', '', grand * (1 + margin / 100)]] : []), ...(hlRows.length ? [[], ['HIGHLIGHTED COSTS (already included above):'], ...hlRows.map(r => ['', hlLabel(r).toUpperCase(), '', '', '', '', '', '', '', '', hlAmt(r)])] : []), /* The notes and signatories this CE actually carries. Both used to be
+    const s1 = [['COST ESTIMATE SUMMARY', '', '', '', '', '', '', '', '', '', '', 'Document No.:', cfg.docNo], ['', '', '', '', '', '', '', '', '', '', '', 'Revision No.:', '0'], ['PROJECT TYPE:', '', '', '', info.projType === 'electrical' ? 'TRUE' : 'FALSE', 'Electrical ' + cl, '', info.projType === 'mechanical' ? 'TRUE' : 'FALSE', 'Mechanical ' + cl], ['PROJECT DESCRIPTION:', info.description, '', '', '', '', '', '', '', '', 'DATE:', info.date], ['CE NUMBER:', info.ceNum], ['CLIENT:', info.client, '', '', '', '', '', '', '', '', '', '', '', 'CE:', info.ceNum], ['LOCATION:', info.location, '', '', '', '', '', 'MATERIAL:', info.material], ['ATTENTION:', info.attention, '', '', '', '', '', 'QTY:', info.qty, '', '', 'STATUS:', info.status], ['END USER:', info.endUser, '', '', '', '', '', 'DAYS:', info.days], [], ['ITEM', 'DESCRIPTION', '', '', '', '', '', '', '', '', 'TOTAL COST'], ...(cfg.mobDemob ? [['', 'MOBILIZATION', '', '', '', '', '', '', '', '', N(mobSubT)], ['', 'DEMOBILIZATION', '', '', '', '', '', '', '', '', N(demobSubT)]] : []), ...ceSections.filter(x => x.v > 0).map(x => [x.letter, x.printLabel, '', '', '', '', '', '', '', '', x.v]), [], ['TOTAL AMOUNT:', '', '', '', '', '', '', '', '', '', grand], ...(showUnitP ? [[], ['UNIT PRICE:', '', '', '', '', '', '', '', '', '', unitP]] : []), ...(margin !== 0 ? [['MARGIN:', '', '', '', '', '', '', '', '', '', (margin > 0 ? '+' : '') + margin + '%'], ['SELLING PRICE:', '', '', '', '', '', '', '', '', '', grand * (1 + margin / 100)]] : []), ...(hlRows.length ? [[], ['HIGHLIGHTED COSTS (already included above):'], ...hlRows.map(r => ['', hlLabel(r).toUpperCase(), '', '', '', '', '', '', '', '', hlAmt(r)])] : []), /* The notes and signatories this CE actually carries. Both used to be
    hardcoded: three boilerplate sentences, and a fixed roster of five names and
    titles written into this function rather than read from `approvers`.
    Whoever ran it got that roster regardless of who prepared
@@ -1346,7 +1351,7 @@ function App({
     }), ['', '', '', '', '', 'Subtotal:', mpSub], ['Benefits 20%:', '', '', '', '', '', ben], ['', '', '', '', '', 'TOTAL:', mpTot]];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s3), 'Manpower Cost');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['MISCELLANEOUS'], [], ...(MISC_DEF[ceType] || MISC_DEF.onsite).map(([k, l]) => [l, (Array.isArray(misc[k]) ? misc[k] : []).reduce((t, r) => t + N(r.qty) * N(r.cost), 0)]), [], ['TOTAL:', miscT]]), 'MISC.');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['SUMMARY'], ['Grand Total:', grand], ['Unit Price (qty=' + info.qty + '):', unitP]]), 'Summary');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['SUMMARY'], ['Grand Total:', grand], ...(showUnitP ? [['Unit Price (qty=' + info.qty + '):', unitP]] : [])]), 'Summary');
     XLSX.writeFile(wb, info.ceNum + '_' + ceType + '.xlsx');
     showToast('Excel exported - 5 sheets!');
   };
@@ -4919,7 +4924,7 @@ function App({
       </tr>${r.sub?r.sub.map(s=>`<tr><td class="c" style="font-size:7pt">${s.letter}</td><td style="padding-left:16px;font-size:7pt">${esc(s.label)}</td><td class="r" style="font-size:7pt">${fmt(s.v)}</td></tr>`).join(''):''}
       `).join('')}
       <tr class="tot"><td colspan="2" class="b r" style="font-size:9pt">TOTAL AMOUNT:</td><td class="r b" style="font-size:9pt">${fmt(grand)}</td></tr>
-      <tr class="tot"><td colspan="2" class="b r">UNIT PRICE (qty ${N(info.qty)||1}):</td><td class="r b">${fmt(unitP)}</td></tr>
+      ${showUnitP ? `<tr class="tot"><td colspan="2" class="b r">UNIT PRICE (qty ${N(info.qty)||1}):</td><td class="r b">${fmt(unitP)}</td></tr>` : ''}
       ${margin !== 0 ? `<tr class="tot" style="background:#e8f5e9"><td colspan="2" class="b r">SELLING PRICE (${margin > 0 ? '+' : ''}${margin}% margin):</td><td class="r b">${fmt(grand*(1+margin/100))}</td></tr>` : ''}
       ${hlRows.length ? hlRows.map(r=>`<tr class="tot"><td colspan="2" class="b r">${esc(hlLabel(r).toUpperCase())}:</td><td class="r b">${fmt(hlAmt(r))}</td></tr>`).join('') : ''}
     </table>`;
@@ -5126,7 +5131,7 @@ function App({
       });
       a.blank();
       a.row('', 'TOTAL AMOUNT:', a.money(grand));
-      a.row('', 'UNIT PRICE (qty ' + (N(info.qty) || 1) + '):', a.money(unitP));
+      if (showUnitP) a.row('', 'UNIT PRICE (qty ' + (N(info.qty) || 1) + '):', a.money(unitP));
       if (margin !== 0) a.row('', 'SELLING PRICE (' + (margin > 0 ? '+' : '') + margin + '% margin):', a.money(grand * (1 + margin / 100)));
       hlRows.forEach(r => a.row('', String(hlLabel(r)).toUpperCase() + ':', a.money(hlAmt(r))));
       /* Notes, including the breakdown notes, exactly as the CE prints them. */
@@ -5903,7 +5908,7 @@ function App({
     /* Count only rows the user actually filled in. mkMP() defaults pax to 1, so
        `r.role||r.pax` counted the blank starter row and every new CE showed a
        phantom "1" on the Manpower tab. */
-    const tabCounts = {manpower: mp.filter(r=>r.role).length, tools: tools.filter(r=>r.desc).length, materials: mats.filter(r=>r.desc).length, ppe: ppe.filter(r=>r.desc).length, sowbreak: sowUnassignedCount};
+    const tabCounts = {manpower: mp.filter(r=>r.role).length, tools: tools.filter(r=>r.desc).length, materials: mats.filter(r=>r.desc).length, ppe: ppe.filter(r=>r.desc).length, /* Miscellaneous is the one tab that keeps its rows in per-category lists, which is why it was the one tab with no badge -- there is no flat array to count. */ misc: Object.values(misc || {}).reduce((n, arr) => n + (Array.isArray(arr) ? arr.filter(r => r && r.desc).length : 0), 0), sowbreak: sowUnassignedCount};
     const cnt = tabCounts[t.id];
     return /*#__PURE__*/React.createElement("button", {
       key: t.id,
@@ -9253,7 +9258,7 @@ tab === 'dashboard' && (() => {
       color: MT,
       paddingTop: 12
     }
-  }, "100%")), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+  }, "100%")), showUnitP && /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
     style: {
       ...TDS,
       color: MT

@@ -508,5 +508,5 @@ async function autoSetupSP(progressCb){
   }
   if(errors.length)console.warn('SharePoint setup problems:',errors);
   progressCb&&progressCb({step:'done',msg,progress:1,denied});
-  return{created,skipped,added,errors,denied};
+  return{created,skipped,added,indexed,errors,denied};
 }

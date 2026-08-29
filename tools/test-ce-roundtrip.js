@@ -132,7 +132,7 @@ for (const [list, payload, what] of ROWS) {
 }
 /* dbSaveHistory also queries these lists for 'Id' alone, to delete the previous
    revision's rows. Only the selects that actually load a row need the column. */
-for (const sel of (db.match(/(?:_spGetTolerant|spGet)\(spList\('CE_(?:MP|Resources)'\),`shicCEId eq \$\{id\}`,'[^']*'/g) || [])
+for (const sel of (db.match(/(?:_spGetByCE|_spGetTolerant|spGet)\(spList\('CE_(?:MP|Resources)'\),(?:`shicCEId eq \$\{id\}`|id),'[^']*'/g) || [])
                   .filter(s => !/,'Id'$/.test(s)))
   ck('shares are selected back out of ' + (sel.includes('CE_MP') ? 'CE_MP' : 'CE_Resources'), /shicShares/.test(sel),
     'writing a column without selecting it changes nothing');

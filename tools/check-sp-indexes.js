@@ -43,6 +43,12 @@ console.log('\nevery filtered column is covered:');
 const filtered = new Set();
 for (const m of db.matchAll(/spList\('([A-Za-z_]+)'\)\s*,\s*`([A-Za-z]+) eq /g))
   filtered.add(m[1] + '.' + m[2]);
+/* _spGetByCE hides the filter behind a `list` parameter, so the pattern above
+   cannot see it. It filters on shicCEId by definition -- that is the whole
+   point of the helper -- so every list passed to it needs that index, and
+   these are the two lists this check exists for. */
+for (const m of db.matchAll(/_spGetByCE\(\s*spList\('([A-Za-z_]+)'\)/g))
+  filtered.add(m[1] + '.shicCEId');
 for (const f of [...filtered].sort()) {
   const [list, col] = f.split('.');
   ck(f, col === 'Id' || (indexed[list] && indexed[list].has(col)),

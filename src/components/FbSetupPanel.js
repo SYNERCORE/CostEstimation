@@ -44,9 +44,17 @@
     setBusy(true);setProgress(null);
     try{
       const result=await autoSetupSP(p=>{setProgress(p);if(p.step!=='done')addLog(p.msg);});
-      addLog(result.added
-        ? 'Repair done: '+result.added+' column(s) added'+(result.created?', '+result.created+' list(s) created':'')+'. Re-save any CE that failed.'
-        : 'Repair done: nothing was missing.');
+      /* Indexes are the reason to press this on a site whose columns are all
+         present, so "nothing was missing" must not be the answer when they
+         were applied -- it reads as "I did nothing" and sent the last round of
+         debugging down the wrong path. */
+      const bits=[];
+      if(result.created)bits.push(result.created+' list(s) created');
+      if(result.added)bits.push(result.added+' column(s) added');
+      if(result.indexed)bits.push(result.indexed+' column(s) indexed');
+      addLog(bits.length
+        ? 'Repair done: '+bits.join(', ')+'.'+(result.added?' Re-save any CE that failed.':'')
+        : 'Repair done: nothing was missing and every filtered column was already indexed.');
       if(result.errors&&result.errors.length){
         addLog('⚠ '+result.errors.length+' problem(s) — see below:');
         result.errors.slice(0,6).forEach(e=>addLog('   '+e));

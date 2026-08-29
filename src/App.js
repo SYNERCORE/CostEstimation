@@ -191,7 +191,11 @@ function App({
   };
   const updateMon = (ceId, field, val) => setMonData(prev => {
     const extra = {};
-    if (field === 'status' && ['Approved','Issued','For Review','On Hold','Cancelled'].includes(val)) {
+    /* Stamp who moved a CE and when, on the statuses that represent a decision
+       rather than routine progress. The old list named 'Issued' and
+       'For Review' -- neither is a status this app has ever offered -- while
+       missing 'Submitted' and 'No Quote', the two that most need a trail. */
+    if (field === 'status' && ['For Approval','Approved','Submitted','No Quote','On Hold','Cancelled'].includes(val)) {
       extra.statusChangedAt = new Date().toISOString();
       extra.statusChangedBy = currentUser?.name || currentUser?.username || '';
     }
@@ -920,6 +924,30 @@ function App({
     }
     setAiLoad(false);
   };
+  /* The CE number is the only link between the editor and its monitoring row;
+     nothing tracks "the CE currently open" by id. */
+  const openCeId = useMemo(() => {
+    const n = String(info.ceNum || '').trim().toUpperCase();
+    if (!n) return null;
+    const h = history.find(x => String(x.info?.ceNum || x.ceNum || '').trim().toUpperCase() === n);
+    return h ? h.id : null;
+  }, [history, info.ceNum]);
+  const openMonStatus = openCeId != null ? ((monData[openCeId] || {}).status || '') : '';
+  /* The document state, as printed on the CE.
+
+     Once a CE is tracked in Monitoring, that pipeline status is the source of
+     truth and this is read from it, so the two can never say different things
+     about the same estimate. Before then -- a CE being written, not yet saved
+     -- it is info.status, which seeds Monitoring on save. */
+  const docStatus = (openMonStatus && MON_TO_DOC[openMonStatus]) || info.status || 'DRAFT';
+  const setDocStatus = v => {
+    setInfo(p => ({...p, status: v}));
+    const mapped = DOC_TO_MON[v];
+    /* Write through only when the pipeline would actually change meaning.
+       Ongoing already reads as REVISED, so re-selecting REVISED must not shove
+       the pipeline back to Ongoing from, say, For site insp. */
+    if (openCeId != null && mapped && MON_TO_DOC[openMonStatus] !== v) updateMon(openCeId, 'status', mapped);
+  };
   const mkEntry = (revSuffix = '') => {
     const revNum = revSuffix ? info.ceNum.trim() + '-' + revSuffix : info.ceNum.trim();
     return {
@@ -1189,6 +1217,15 @@ function App({
       await spWithRetry(() => dbSaveHistory(mkEntry()));
       auditLog('save_ce', ceNum, currentUser?.username);
       _checkAutoBackup();
+      /* Seed the pipeline status from the document state, so a CE saved as
+         FOR REVIEW arrives in Monitoring already triaged instead of sitting in
+         the untriaged bucket saying something different. Only when Monitoring
+         has nothing yet -- it never overwrites a status someone has set. */
+      try {
+        const saved = await dbFindCEByNum(ceNum);
+        const mapped = DOC_TO_MON[info.status];
+        if (saved && saved.id != null && mapped && !(monData[saved.id] || {}).status) updateMon(saved.id, 'status', mapped);
+      } catch (_e) { console.warn('status seed skipped:', _e.message); }
       clearDraft();
       /* Both spellings: saveDraft keyed the row off info.ceNum as typed, while
          this save normalises it to upper case. */
@@ -1439,7 +1476,7 @@ function App({
      ['MATERIAL:', info.material],
      ['QUANTITY:', info.qty],
      ['NO. OF DAYS:', info.days],
-     ['STATUS:', info.status]].forEach(([k, v]) => {
+     ['STATUS:', docStatus]].forEach(([k, v]) => {
       if (v === '' || v === null || v === undefined) return;
       sum.push([S(k, 'label'), S(String(v), 'val', 5)]);
     });
@@ -2536,6 +2573,8 @@ function App({
     })())));
   };
   const STATUS_COLOR_MAP = {
+    'Draft': '#8B5CF6',
+    'No Quote': '#94A3B8',
     'Pending': '#6B7280',
     'Ongoing': '#F59E0B',
     'For site insp.': '#8B5CF6',
@@ -5443,7 +5482,7 @@ function App({
       a.row('CLIENT NAME:', info.client || '', '', 'CLIENT LOCATION:', info.location || '');
       a.row('ATTENTION:', info.attention || 'SALES DEPARTMENT', '', 'QUANTITY:', (info.qty || 1) + ' LOT');
       a.row('END USER:', info.endUser || 'C/O SALES', '', 'NO. OF DAYS:', (info.days || '') + ' DAYS');
-      a.row('DISCIPLINE:', info.projType || '', '', 'STATUS:', info.status || '');
+      a.row('DISCIPLINE:', info.projType || '', '', 'STATUS:', docStatus);
       a.blank();
       a.head('ITEM', 'DESCRIPTION', 'TOTAL COST');
       summaryRows.forEach(([l, v]) => {
@@ -7232,12 +7271,12 @@ tab === 'dashboard' && (() => {
     style: LBL
   }, "Status"), /*#__PURE__*/React.createElement("select", {
     style: INP,
-    value: info.status,
-    onChange: e => setInfo(p => ({
-      ...p,
-      status: e.target.value
-    }))
-  }, ['FOR REVIEW', 'APPROVED', 'REJECTED', 'REVISED', 'DRAFT'].map(s => /*#__PURE__*/React.createElement("option", {
+    value: docStatus,
+    title: openMonStatus
+      ? 'Kept in step with the Monitoring status (' + openMonStatus + ')'
+      : 'Seeds the Monitoring status when this CE is saved',
+    onChange: e => setDocStatus(e.target.value)
+  }, CE_DOC_STATUSES.map(s => /*#__PURE__*/React.createElement("option", {
     key: s
   }, s))))), /*#__PURE__*/React.createElement("div", {
     style: {

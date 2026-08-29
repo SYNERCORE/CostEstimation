@@ -359,4 +359,43 @@ const DEFAULT_ML={
   ]
 };
 
-const DEFAULT_STATUS_OPTIONS = ['Pending', 'Ongoing', 'For site insp.', 'For Approval', 'Waiting in...', 'Approved', 'Cancelled', 'On Hold', 'Submitted'];
+/* 'Draft' and 'No Quote' were referenced by the app's own logic -- the Open CE
+   rule, the dashboard donut and the xlsx import all name them -- but were
+   missing from this list, so nobody could actually select them. */
+const DEFAULT_STATUS_OPTIONS = ['Draft', 'Pending', 'Ongoing', 'For site insp.', 'For Approval', 'Waiting in...', 'Approved', 'Cancelled', 'On Hold', 'No Quote', 'Submitted'];
+
+/* Two Status fields describe the same CE:
+
+     Project Info  -> the DOCUMENT state printed on the estimate
+                      (DRAFT / FOR REVIEW / APPROVED / REJECTED / REVISED)
+     Monitoring    -> the PIPELINE state the sales team tracks
+                      (Pending, Ongoing, Submitted, ...)
+
+   They used to be entirely independent -- not one shared value between them,
+   so the same CE could read APPROVED on the printed page and Cancelled in
+   Monitoring. These tables keep them in step.
+
+   The pipeline is the richer of the two, so several pipeline states map to one
+   document state. 'On Hold' and any custom status have no document equivalent
+   and deliberately map to nothing: they leave the document state alone rather
+   than forcing it to a value that would misrepresent the estimate. */
+const CE_DOC_STATUSES = ['DRAFT', 'FOR REVIEW', 'APPROVED', 'REJECTED', 'REVISED'];
+const DOC_TO_MON = {
+  'DRAFT': 'Draft',
+  'FOR REVIEW': 'For Approval',
+  'APPROVED': 'Approved',
+  'REJECTED': 'Cancelled',
+  'REVISED': 'Ongoing'
+};
+const MON_TO_DOC = {
+  'Draft': 'DRAFT',
+  'Pending': 'DRAFT',
+  'Ongoing': 'REVISED',
+  'For site insp.': 'FOR REVIEW',
+  'For Approval': 'FOR REVIEW',
+  'Waiting in...': 'FOR REVIEW',
+  'Approved': 'APPROVED',
+  'Submitted': 'APPROVED',
+  'Cancelled': 'REJECTED',
+  'No Quote': 'REJECTED'
+};

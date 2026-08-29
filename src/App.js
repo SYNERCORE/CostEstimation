@@ -1311,7 +1311,7 @@ function App({
   const handleExport = () => {
     const wb = XLSX.utils.book_new();
     const cl = ceType === 'onsite' ? 'Onsite' : ceType === 'shopworks' ? 'Shopwork' : 'Supply';
-    const s1 = [['COST ESTIMATE SUMMARY', '', '', '', '', '', '', '', '', '', '', 'Document No.:', cfg.docNo], ['', '', '', '', '', '', '', '', '', '', '', 'Revision No.:', '0'], ['PROJECT TYPE:', '', '', '', info.projType === 'electrical' ? 'TRUE' : 'FALSE', 'Electrical ' + cl, '', info.projType === 'mechanical' ? 'TRUE' : 'FALSE', 'Mechanical ' + cl], ['PROJECT DESCRIPTION:', info.description, '', '', '', '', '', '', '', '', 'DATE:', info.date], ['CE NUMBER:', info.ceNum], ['CLIENT:', info.client, '', '', '', '', '', '', '', '', '', '', '', 'CE:', info.ceNum], ['LOCATION:', info.location, '', '', '', '', '', 'MATERIAL:', info.material], ['ATTENTION:', info.attention, '', '', '', '', '', 'QTY:', info.qty, '', '', 'STATUS:', info.status], ['END USER:', info.endUser, '', '', '', '', '', 'DAYS:', info.days], [], ['ITEM', 'DESCRIPTION', '', '', '', '', '', '', '', '', 'TOTAL COST'], ...(cfg.mobDemob ? [['', 'MOBILIZATION', '', '', '', '', '', '', '', '', N(mobSubT)], ['', 'DEMOBILIZATION', '', '', '', '', '', '', '', '', N(demobSubT)]] : []), ['A.', 'MANPOWER COST', '', '', '', '', '', '', '', '', mpTot], [ceType === 'supply' ? 'B.' : 'D.', 'TOOLS AND EQUIPMENT', '', '', '', '', '', '', '', '', toolsT], [ceType === 'supply' ? 'B.' : 'E.', 'MATERIALS AND CONSUMABLES', '', '', '', '', '', '', '', '', matsT], [ceType === 'supply' ? 'C.' : 'F.', 'PERSONAL PROTECTIVE EQUIPMENT', '', '', '', '', '', '', '', '', ppeT], [ceType === 'supply' ? 'D.' : ceType === 'onsite' ? 'G.' : 'E.', 'MISCELLANEOUS', '', '', '', '', '', '', '', '', miscT], [], ['TOTAL AMOUNT:', '', '', '', '', '', '', '', '', '', grand], [], ['UNIT PRICE:', '', '', '', '', '', '', '', '', '', unitP], ...(margin !== 0 ? [['MARGIN:', '', '', '', '', '', '', '', '', '', (margin > 0 ? '+' : '') + margin + '%'], ['SELLING PRICE:', '', '', '', '', '', '', '', '', '', grand * (1 + margin / 100)]] : []), ...(hlRows.length ? [[], ['HIGHLIGHTED COSTS (already included above):'], ...hlRows.map(r => ['', hlLabel(r).toUpperCase(), '', '', '', '', '', '', '', '', hlAmt(r)])] : []), /* The notes and signatories this CE actually carries. Both used to be
+    const s1 = [['COST ESTIMATE SUMMARY', '', '', '', '', '', '', '', '', '', '', 'Document No.:', cfg.docNo], ['', '', '', '', '', '', '', '', '', '', '', 'Revision No.:', '0'], ['PROJECT TYPE:', '', '', '', info.projType === 'electrical' ? 'TRUE' : 'FALSE', 'Electrical ' + cl, '', info.projType === 'mechanical' ? 'TRUE' : 'FALSE', 'Mechanical ' + cl], ['PROJECT DESCRIPTION:', info.description, '', '', '', '', '', '', '', '', 'DATE:', info.date], ['CE NUMBER:', info.ceNum], ['CLIENT:', info.client, '', '', '', '', '', '', '', '', '', '', '', 'CE:', info.ceNum], ['LOCATION:', info.location, '', '', '', '', '', 'MATERIAL:', info.material], ['ATTENTION:', info.attention, '', '', '', '', '', 'QTY:', info.qty, '', '', 'STATUS:', info.status], ['END USER:', info.endUser, '', '', '', '', '', 'DAYS:', info.days], [], ['ITEM', 'DESCRIPTION', '', '', '', '', '', '', '', '', 'TOTAL COST'], ...(cfg.mobDemob ? [['', 'MOBILIZATION', '', '', '', '', '', '', '', '', N(mobSubT)], ['', 'DEMOBILIZATION', '', '', '', '', '', '', '', '', N(demobSubT)]] : []), ...ceSections.filter(x => x.v > 0).map(x => [x.letter, x.printLabel, '', '', '', '', '', '', '', '', x.v]), [], ['TOTAL AMOUNT:', '', '', '', '', '', '', '', '', '', grand], [], ['UNIT PRICE:', '', '', '', '', '', '', '', '', '', unitP], ...(margin !== 0 ? [['MARGIN:', '', '', '', '', '', '', '', '', '', (margin > 0 ? '+' : '') + margin + '%'], ['SELLING PRICE:', '', '', '', '', '', '', '', '', '', grand * (1 + margin / 100)]] : []), ...(hlRows.length ? [[], ['HIGHLIGHTED COSTS (already included above):'], ...hlRows.map(r => ['', hlLabel(r).toUpperCase(), '', '', '', '', '', '', '', '', hlAmt(r)])] : []), /* The notes and signatories this CE actually carries. Both used to be
    hardcoded: three boilerplate sentences, and a fixed roster of five names and
    titles written into this function rather than read from `approvers`.
    Whoever ran it got that roster regardless of who prepared
@@ -1345,7 +1345,7 @@ function App({
       return [r.role, N(r.pax), N(r.days), sh?.label, sh?.mult, N(r.rate), N(r.pax) * N(r.days) * N(r.rate) * (sh?.mult || 1)];
     }), ['', '', '', '', '', 'Subtotal:', mpSub], ['Benefits 20%:', '', '', '', '', '', ben], ['', '', '', '', '', 'TOTAL:', mpTot]];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s3), 'Manpower Cost');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['MISCELLANEOUS'], [], ...(MISC_DEF[ceType] || MISC_DEF.onsite).map(([k, l]) => [l, N(misc[k])]), [], ['TOTAL:', miscT]]), 'MISC.');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['MISCELLANEOUS'], [], ...(MISC_DEF[ceType] || MISC_DEF.onsite).map(([k, l]) => [l, (Array.isArray(misc[k]) ? misc[k] : []).reduce((t, r) => t + N(r.qty) * N(r.cost), 0)]), [], ['TOTAL:', miscT]]), 'MISC.');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['SUMMARY'], ['Grand Total:', grand], ['Unit Price (qty=' + info.qty + '):', unitP]]), 'Summary');
     XLSX.writeFile(wb, info.ceNum + '_' + ceType + '.xlsx');
     showToast('Excel exported - 5 sheets!');
@@ -4804,7 +4804,32 @@ function App({
   };
 
   /* ResTab — defined in src/components/ResTab.js */
-  const summaryRows = [...(cfg.mobDemob ? [['Mobilization Expenses', mobSubT], ['Demobilization Expenses', demobSubT]] : []), ['A.  Manpower Cost', mpTot], [(ceType === 'supply' ? 'B.' : 'D.') + '  Tools & Equipment', toolsT], [(ceType === 'supply' ? 'B.' : 'E.') + '  Materials & Consumables', matsT], [(ceType === 'supply' ? 'C.' : 'F.') + '  PPE', ppeT], [(ceType === 'supply' ? 'D.' : ceType === 'onsite' ? 'G.' : 'E.') + '  Miscellaneous', miscT]];
+  /* One letter scheme for every place a CE is rendered: the Summary tab, the
+     printed CE, the detailed workbook and the share text.
+
+     Letters used to be hardcoded per ceType, which got them wrong two ways at
+     once. A supply CE handed B to Tools AND to Materials, and a section that
+     came to zero kept its letter and left a hole behind it -- a materials-only
+     supply CE printed "A. MANPOWER COST P0.00" and then jumped straight to
+     "C.". A section with no cost is not part of the estimate: it gets no
+     letter, and it does not print. Letters follow the sections that remain,
+     so they always run A, B, C with nothing missing. */
+  const ceSections = useMemo(() => {
+    const defs = [
+      ['Manpower Cost', 'MANPOWER COST', mpTot],
+      ['Tools & Equipment', 'TOOLS AND EQUIPMENTS', toolsT],
+      ['Materials & Consumables', 'MATERIALS AND CONSUMABLES', matsT],
+      ['PPE', 'PERSONAL PROTECTIVE EQUIPMENT', ppeT],
+      ['Miscellaneous', 'MISCELLANEOUS', miscT],
+      ...(cfg.mobDemob ? [['Mobilization / Demobilization', 'MOBILIZATION/DEMOBILIZATION', mobT]] : [])
+    ];
+    let i = 0;
+    return defs.map(([label, printLabel, v]) => ({
+      label, printLabel, v,
+      letter: N(v) > 0 ? String.fromCharCode(65 + i++) + '.' : ''
+    }));
+  }, [mpTot, toolsT, matsT, ppeT, miscT, mobT, cfg.mobDemob]);
+  const summaryRows = [...(cfg.mobDemob ? [['Mobilization Expenses', mobSubT], ['Demobilization Expenses', demobSubT]] : []), ...ceSections.filter(x => x.printLabel !== 'MOBILIZATION/DEMOBILIZATION').map(x => [(x.letter ? x.letter + '  ' : '') + x.label, x.v])];
   const handleGenerateCE = () => {
     const fmt = (n, d = 2) => 'P' + N(n).toLocaleString('en-PH', {
       minimumFractionDigits: d,
@@ -4865,35 +4890,33 @@ function App({
       <tr><td class="b">END USER:</td><td>${esc(info.endUser||'C/O SALES')}</td><td class="b">NO. OF DAYS:</td><td>${esc(info.days||'')} DAYS</td></tr>
     </table>`;
 
-    /* Cost summary &#8212; skip zero rows */
-    const miscItems = [
-      {l:'G.1 Accommodation',v:N(misc.accommodation)},{l:'G.2 Transportation',v:N(misc.transport)},
-      {l:'G.3 Requirements',v:N(misc.requirements)},{l:'G.4 Admin Cost',v:N(misc.adminCost)},
-      {l:'G.5 Third Party',v:N(misc.thirdParty)},{l:'G.6 Insurances',v:N(misc.insurance)}
-    ];
-    const miscActive = miscItems.filter(x=>x.v>0);
-    const miscLetter = ceType==='supply'?'D.':ceType==='onsite'?'G.':'E.';
-    const mpLetter   = 'A.';
-    const toolLetter = ceType==='supply'?'B.':ceType==='onsite'?'B.':'B.';
-    const matLetter  = ceType==='supply'?'C.':'C.';
-    const ppeLetter  = ceType==='supply'?'C.':'D.';
-    const mobLetter  = ceType==='supply'?'E.':'F.';
-    const costRows = [
-      {l:mpLetter+'  MANPOWER COST',               v:mpTot,   always:true},
-      {l:toolLetter+' TOOLS AND EQUIPMENTS',        v:toolsT,  always:false},
-      {l:matLetter+' MATERIALS AND CONSUMABLES',    v:matsT,   always:false},
-      {l:ppeLetter+' PERSONAL PROTECTIVE EQUIPMENT',v:ppeT,    always:false},
-      ...(miscActive.length ? [{l:miscLetter+' MISCELLANEOUS', v:miscT, always:false, sub:miscActive}] : []),
-      {l:mobLetter+' MOBILIZATION/DEMOBILIZATION',  v:mobT,    always:false},
-    ].filter(r=>r.always||r.v>0||r.sub);
+    /* Cost summary -- only the sections this CE actually uses.
+
+       The sub-rows read `misc.transport` as a number. Miscellaneous holds a
+       LIST OF ROWS per category, so every one of those came out NaN, every
+       category tested as empty, and the whole Miscellaneous section vanished
+       from the printed CE -- while its cost stayed inside the total, which is
+       the worst of both: a document whose parts do not add up to its sum. */
+    const miscItems = (MISC_DEF[ceType] || MISC_DEF.onsite).map(([k, l]) => ({
+      label: String(l).replace(/^[A-Z]\.\d+\s*/, ''),
+      v: (Array.isArray(misc[k]) ? misc[k] : []).reduce((t, r) => t + N(r.qty) * N(r.cost), 0)
+    })).filter(x => x.v > 0);
+    const costRows = ceSections.filter(x => x.v > 0).map(x => ({
+      letter: x.letter,
+      label: x.printLabel,
+      v: x.v,
+      sub: x.printLabel === 'MISCELLANEOUS'
+        ? miscItems.map((m, j) => ({...m, letter: x.letter.replace('.', '') + '.' + (j + 1)}))
+        : null
+    }));
 
     const costTable = `<table style="margin-bottom:5px">
       <tr style="background:#333;color:#fff"><th class="c" style="width:40px">ITEM</th><th>DESCRIPTION</th><th class="r" style="width:110px">TOTAL COST</th></tr>
-      ${costRows.map(r=>`<tr${r.sub?'':''}>
-        <td class="c b">${r.l.split(' ')[0]}</td>
-        <td class="b">${r.l.split(' ').slice(1).join(' ')}</td>
+      ${costRows.map(r=>`<tr>
+        <td class="c b">${r.letter}</td>
+        <td class="b">${r.label}</td>
         <td class="r">${fmt(r.v)}</td>
-      </tr>${r.sub?r.sub.map(s=>`<tr><td class="c" style="font-size:7pt">${s.l.split(' ')[0]}</td><td style="padding-left:16px;font-size:7pt">${s.l.split(' ').slice(1).join(' ')}</td><td class="r" style="font-size:7pt">${fmt(s.v)}</td></tr>`).join(''):''}
+      </tr>${r.sub?r.sub.map(s=>`<tr><td class="c" style="font-size:7pt">${s.letter}</td><td style="padding-left:16px;font-size:7pt">${esc(s.label)}</td><td class="r" style="font-size:7pt">${fmt(s.v)}</td></tr>`).join(''):''}
       `).join('')}
       <tr class="tot"><td colspan="2" class="b r" style="font-size:9pt">TOTAL AMOUNT:</td><td class="r b" style="font-size:9pt">${fmt(grand)}</td></tr>
       <tr class="tot"><td colspan="2" class="b r">UNIT PRICE (qty ${N(info.qty)||1}):</td><td class="r b">${fmt(unitP)}</td></tr>

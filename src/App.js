@@ -2822,29 +2822,48 @@ function App({
       const q = monSearch.toLowerCase();
       return (e.info?.ceNum || '').toLowerCase().includes(q) || (e.info?.client || '').toLowerCase().includes(q) || (e.info?.description || '').toLowerCase().includes(q) || (m.customer || '').toLowerCase().includes(q) || (m.receivedBy || '').toLowerCase().includes(q) || (m.remarks || '').toLowerCase().includes(q);
     });
-    return [...filtered].sort((a, b) => {
-      const ma = monOf(a),
-        mb = monOf(b);
-      let va, vb;
-      if (monSortCol === 'ceNum') {
-        va = a.info?.ceNum || '';
-        vb = b.info?.ceNum || '';
-      } else if (monSortCol === 'grand') {
-        va = a.grand || 0;
-        vb = b.grand || 0;
-      } else if (monSortCol === 'deadline') {
-        va = ma.deadline || '';
-        vb = mb.deadline || '';
-      } else if (monSortCol === 'status') {
-        va = ma.status || '';
-        vb = mb.status || '';
-      } else {
-        va = a.savedAt || '';
-        vb = b.savedAt || '';
+    /* What each column actually SHOWS, so sorting agrees with the eye.
+
+       Only ceNum, grand, deadline and status were handled; the other ten
+       clickable headers fell through to a savedAt sort, so clicking Customer,
+       Job Title, Estimator, Discipline, Days Left, Date Submitted, Received By
+       or Remarks reordered the table by something invisible -- which reads as
+       sorting being broken, because it is.
+
+       These expressions mirror the cells below; a column sorted by a different
+       value than it displays is the same bug wearing a hat. */
+    const sortVal = (e, m) => {
+      switch (monSortCol) {
+        case 'ceeName':      return m.ceeName || m.preparedBy || e.savedBy || '';
+        case 'companyDesig': return m.companyDesig || 'SHIC';
+        case 'ceNum':        return e.info?.ceNum || e.ceNum || '';
+        case 'designation':  return m.designation || m.discipline || e.info?.discipline || e.info?.projType || '';
+        case 'customer':     return m.customer || e.info?.client || '';
+        case 'jobTitle':     return m.jobTitle || e.info?.description || '';
+        case 'grand':        return N(e.grand);
+        case 'deadline':     return m.deadline || '';
+        /* Days Left is derived from the deadline, so it sorts by the deadline
+           -- and reads the same, since fewer days left is an earlier date. */
+        case 'deadlineDays': return m.deadline || '';
+        case 'dateSubmitted':return m.dateSubmitted || '';
+        case 'status':       return m.status || '';
+        case 'receivedBy':   return m.receivedBy || '';
+        case 'remarks':      return m.remarks || '';
+        default:             return e.savedAt || '';   /* Date Recv. */
       }
-      if (va < vb) return monSortDir === 'asc' ? -1 : 1;
-      if (va > vb) return monSortDir === 'asc' ? 1 : -1;
-      return 0;
+    };
+    return [...filtered].sort((a, b) => {
+      const va = sortVal(a, monOf(a)), vb = sortVal(b, monOf(b));
+      const dir = monSortDir === 'asc' ? 1 : -1;
+      /* Blanks last, whichever way the column is pointing. A column of dashes
+         at the top is never the answer anyone wanted from a sort. */
+      const ea = va === '' || va === null || va === undefined, eb = vb === '' || vb === null || vb === undefined;
+      if (ea !== eb) return ea ? 1 : -1;
+      if (ea && eb) return 0;
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
+      /* Numeric-aware and case-insensitive: SY3-CE-2026-9 must come before
+         SY3-CE-2026-10, and "aestillore" must sit with "Aestillore". */
+      return String(va).localeCompare(String(vb), 'en', {numeric: true, sensitivity: 'base'}) * dir;
     });
   }, [monRows, monData, monSearch, monStatusFilter, monTypeFilter, monSortCol, monSortDir]);
   const toggleSort = col => {

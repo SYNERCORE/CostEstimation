@@ -22,6 +22,25 @@ function safeHttpUrl(u) {
     return (parsed.protocol === 'http:' || parsed.protocol === 'https:') ? parsed.href : '';
   } catch (_e) { return ''; }
 }
+/* A CE number as something sortable: [year, sequence, ...revision].
+
+   The sequence restarts every year -- SY3-CE-2025-0674, then SY3-CE-2026-0001
+   -- so on its own it is meaningless, and a plain string sort puts the company
+   prefix first, filing every SHIC CE ahead of every SY3 one regardless of when
+   either was raised.
+
+   Handles the shapes actually in use: SY3-CE-2025-0674, SHIC-CE-2026-0912CR01,
+   SY3-CE-2026-0091A-R1, SY3-CE-2025-0555-R2-R3. The first four-digit run is the
+   year, the number after it is the sequence, and anything numeric that follows
+   is revision depth -- so a base CE sorts ahead of its own revisions. */
+function ceNumKey(num) {
+  const s = String(num || '');
+  const m = s.match(/(\d{4})\D+(\d+)/);
+  if (!m) return null;
+  const rest = s.slice(m.index + m[0].length);
+  return [Number(m[1]), Number(m[2]), ...(rest.match(/\d+/g) || []).map(Number)];
+}
+
 function mlShape(ml) {
   if (!ml || typeof ml !== 'object' || Array.isArray(ml)) return null;
   /* 'materials' and 'vehicles', not 'mats'. The wrong name meant a stored
@@ -2726,7 +2745,13 @@ function App({
   const [compareModal, setCompareModal] = useState(null); // {a, b} loaded CE data // 'all' | 'onsite' | 'shopworks' | 'supply'
   const [showStatusFilter, setShowStatusFilter] = useState(false);
   const [monSpIds, setMonSpIds] = useState(new Set());
-  const [monSortCol, setMonSortCol] = useState('savedAt');
+  /* Newest CE first, by CE NUMBER rather than by savedAt.
+
+     savedAt is when the row was written here, so a batch of historical CEs
+     imported this week all claimed to be the newest thing on the site and sat
+     on top of work actually raised this year. The number carries the year and
+     the sequence, which is what "newest" means to anyone reading the list. */
+  const [monSortCol, setMonSortCol] = useState('ceNum');
   const [monSortDir, setMonSortDir] = useState('desc');
   const [showStatusMgr, setShowStatusMgr] = useState(false);
   const [monPage, setMonPage] = useState(0);
@@ -2861,6 +2886,24 @@ function App({
       if (ea !== eb) return ea ? 1 : -1;
       if (ea && eb) return 0;
       if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
+      /* CE numbers compare on year, then sequence, then revision -- never as
+         plain text, which would sort 2025 after 2026 whenever the prefix
+         differed, and -10 before -9. */
+      if (monSortCol === 'ceNum') {
+        const ka = ceNumKey(va), kb = ceNumKey(vb);
+        if (ka && kb) {
+          for (let i = 0; i < Math.max(ka.length, kb.length); i++) {
+            /* Fewer parts first: a revision is OF the base, so the base leads. */
+            if (ka[i] === undefined) return -dir;
+            if (kb[i] === undefined) return dir;
+            if (ka[i] !== kb[i]) return (ka[i] - kb[i]) * dir;
+          }
+          return 0;
+        }
+        /* One of them is not a CE number at all -- keep those together at the
+           end rather than interleaving them by accident. */
+        if (!!ka !== !!kb) return ka ? -1 : 1;
+      }
       /* Numeric-aware and case-insensitive: SY3-CE-2026-9 must come before
          SY3-CE-2026-10, and "aestillore" must sit with "Aestillore". */
       return String(va).localeCompare(String(vb), 'en', {numeric: true, sensitivity: 'base'}) * dir;

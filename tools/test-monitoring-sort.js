@@ -57,12 +57,17 @@ const mon = new Map([
   [rows[2], {customer: '', status: ''}]
 ]);
 const cmpSrc = src.match(/return \[\.\.\.filtered\]\.sort\(\(a, b\) => \{[\s\S]*?\n    \}\);/)[0];
-const run = (col, dir) => {
+const ceNumKey = new Function('return ' + src.match(/function ceNumKey\(num\) \{[\s\S]*?\n\}/)[0])();
+
+/* Build the real comparator with everything it closes over. */
+const comparator = (col, dir, monOf) => {
   const sortVal = new Function('monSortCol', 'N', 'return ' + sortValSrc[0].replace(/^const sortVal = /, '').replace(/;$/, ''))(col, N);
   const body = cmpSrc.replace(/^return \[\.\.\.filtered\]\.sort\(/, '').replace(/\);$/, '');
-  const cmp = new Function('sortVal', 'monOf', 'monSortDir', 'return ' + body)(sortVal, e => mon.get(e) || {}, dir);
-  return [...rows].sort(cmp).map(r => r.info.ceNum.replace('SY3-CE-2026-', ''));
+  return new Function('sortVal', 'monOf', 'monSortDir', 'monSortCol', 'ceNumKey', 'return ' + body)(sortVal, monOf, dir, col, ceNumKey);
 };
+const run = (col, dir) =>
+  [...rows].sort(comparator(col, dir, e => mon.get(e) || {}))
+    .map(r => r.info.ceNum.replace('SY3-CE-2026-', ''));
 /* Guard the harness itself: if the values never reached the comparator the
    list would come back in input order for every column, and every assertion
    below would be meaningless. */
@@ -84,6 +89,43 @@ console.log('\nblanks sort last, both ways:');
 ck('ascending', run('customer', 'asc')[2] === '2', run('customer', 'asc').join(','));
 ck('descending', run('customer', 'desc')[2] === '2', run('customer', 'desc').join(','));
 ck('same for status', run('status', 'desc')[2] === '2', run('status', 'desc').join(','));
+
+/* CE numbers restart every year, and the company prefix sits IN FRONT of the
+   year -- so a plain text sort files every SHIC CE ahead of every SY3 one
+   whatever year either was raised in, and the sequence alone means nothing. */
+console.log('\nCE numbers sort on year, then sequence:');
+const keyOf = n => JSON.stringify(ceNumKey(n));
+ck('the year is read out of the number', keyOf('SY3-CE-2025-0674') === '[2025,674]', keyOf('SY3-CE-2025-0674'));
+ck('a letter inside the sequence does not break it', keyOf('SHIC-CE-2026-0912CR01') === '[2026,912,1]', keyOf('SHIC-CE-2026-0912CR01'));
+ck('revisions become extra depth', keyOf('SY3-CE-2025-0555-R2-R3') === '[2025,555,2,3]', keyOf('SY3-CE-2025-0555-R2-R3'));
+ck('something that is not a CE number gives no key', ceNumKey('draft copy') === null);
+
+const order = (nums, dir) =>
+  nums.map(n => ({info: {ceNum: n}, grand: 0, savedAt: ''}))
+    .sort(comparator('ceNum', dir, () => ({}))).map(r => r.info.ceNum);
+
+ck('a 2026 CE outranks a 2025 one from another company',
+  order(['SY3-CE-2025-0674', 'SHIC-CE-2026-1094'], 'desc')[0] === 'SHIC-CE-2026-1094',
+  order(['SY3-CE-2025-0674', 'SHIC-CE-2026-1094'], 'desc').join(' , '));
+ck('the prefix no longer groups the list ahead of the year',
+  order(['SHIC-CE-2025-0001', 'SY3-CE-2026-0001'], 'desc')[0] === 'SY3-CE-2026-0001',
+  order(['SHIC-CE-2025-0001', 'SY3-CE-2026-0001'], 'desc').join(' , '));
+ck('within a year it is the sequence, numerically',
+  order(['SY3-CE-2026-0010', 'SY3-CE-2026-0009'], 'asc').join(',') === 'SY3-CE-2026-0009,SY3-CE-2026-0010',
+  order(['SY3-CE-2026-0010', 'SY3-CE-2026-0009'], 'asc').join(','));
+ck('a base CE leads its own revisions',
+  order(['SY3-CE-2026-0091-R1', 'SY3-CE-2026-0091'], 'asc')[0] === 'SY3-CE-2026-0091',
+  order(['SY3-CE-2026-0091-R1', 'SY3-CE-2026-0091'], 'asc').join(','));
+ck('unparseable numbers keep to the end rather than interleaving',
+  order(['zzz draft', 'SY3-CE-2026-0001'], 'desc')[1] === 'zzz draft',
+  order(['zzz draft', 'SY3-CE-2026-0001'], 'desc').join(','));
+
+console.log('\nand the list opens newest first:');
+ck('default column is the CE number, not savedAt',
+  /const \[monSortCol, setMonSortCol\] = useState\('ceNum'\)/.test(src),
+  'savedAt is when the row was written HERE, so importing old CEs made them claim to be the newest work on the site');
+ck('default direction is descending',
+  /const \[monSortDir, setMonSortDir\] = useState\('desc'\)/.test(src));
 
 console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nmonitoring sort OK');
 process.exit(fails ? 1 : 0);

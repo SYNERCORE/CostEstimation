@@ -38,6 +38,8 @@ jobs:
         run: node tools/test-save-reporting.js
       - name: CEs whose line items never saved can be found
         run: node tools/test-header-only-sweep.js
+      - name: Default notes and signatories never overwrite typed work
+        run: node tools/test-ce-defaults.js
       - name: SharePoint permission failures are named, not swallowed
         run: node tools/test-sp-permissions.js
       - name: Local caches survive empty SharePoint responses

@@ -617,6 +617,39 @@ async function dbGetCompanies(){
   }
   try{const s=localStorage.getItem('shic:companies');return s?JSON.parse(s):null;}catch{return null;}
 }
+/* Default notes and signatories, per CE type and discipline.
+
+   Stored as another row in the Companies list rather than a list of its own:
+   that list already exists on every site, so this needs no provisioning and
+   no "Repair lists & columns" run before it works. The Title column is the
+   key -- 'config' is the company roster, 'ce_defaults' is this. */
+const CE_DEFAULTS_KEY = 'ce_defaults';
+async function dbSaveCeDefaults(list){
+  /* Mirror locally first, so the presets survive a SharePoint failure the way
+     everything else does. */
+  try{localStorage.setItem('shic:ce_defaults',JSON.stringify(list));}catch{}
+  if(USE_SP||getSiteURL()){
+    try{
+      const r=await spGet(spList('Companies'),"Title eq '"+CE_DEFAULTS_KEY+"'",'Id');
+      if(r.length)await spPatch(spList('Companies'),r[0].Id,{shicData:JSON.stringify(list)});
+      else await spPost(spList('Companies'),{Title:CE_DEFAULTS_KEY,shicData:JSON.stringify(list)});
+      return true;
+    }catch(e){console.warn('dbSaveCeDefaults:',e.message);}
+  }
+  return false;
+}
+async function dbGetCeDefaults(){
+  if(USE_SP||getSiteURL()){
+    try{
+      const r=await spGet(spList('Companies'),"Title eq '"+CE_DEFAULTS_KEY+"'",'Id,shicData');
+      if(r.length&&r[0].shicData){
+        const v=JSON.parse(r[0].shicData);
+        if(Array.isArray(v)){try{localStorage.setItem('shic:ce_defaults',JSON.stringify(v));}catch{}return v;}
+      }
+    }catch(e){console.warn('dbGetCeDefaults:',e.message);}
+  }
+  try{const s=localStorage.getItem('shic:ce_defaults');return s?JSON.parse(s):[];}catch{return [];}
+}
 async function dbSaveML(data){/* Mirror locally FIRST, on both branches. The SharePoint branch used to
    `return` before ever reaching the LS.set below, so saving the masterlist
    while online left the offline cache stale forever. */

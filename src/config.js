@@ -399,3 +399,51 @@ const MON_TO_DOC = {
   'Cancelled': 'REJECTED',
   'No Quote': 'REJECTED'
 };
+/* ── Default notes and signatories, per CE type and discipline ───────────────
+   The signatory roster and the notes used to be hardcoded in two places in
+   App.js -- the initial state and handleNew -- so every CE started with the
+   same five names regardless of who was estimating or what kind of job it was,
+   and anything else had to be retyped every time.
+
+   A preset is {id, ceType, discipline, notes:[...], approvers:[{role,name,title}]}.
+   Either key may be ANY, which is how one roster covers everything and a
+   specific pairing overrides it. */
+const CE_DEFAULT_ANY = 'ANY';
+const CE_DISCIPLINES = ['Electrical', 'Mechanical', 'Civil', 'General'];
+
+/* Most specific wins. A preset for Onsite+Mechanical beats one for Onsite+ANY,
+   which beats ANY+Mechanical, which beats the catch-all -- so a site can set
+   one roster and override only the pairings that differ. */
+function ceDefaultFor(presets, ceType, discipline) {
+  const list = Array.isArray(presets) ? presets : [];
+  const t = String(ceType || '').toLowerCase();
+  const d = String(discipline || '').toLowerCase();
+  const eq = (v, x) => String(v || CE_DEFAULT_ANY).toLowerCase() === x;
+  const any = v => String(v || CE_DEFAULT_ANY).toUpperCase() === CE_DEFAULT_ANY;
+  const rank = p => {
+    const tOk = eq(p.ceType, t), tAny = any(p.ceType);
+    const dOk = eq(p.discipline, d), dAny = any(p.discipline);
+    if (!(tOk || tAny) || !(dOk || dAny)) return -1;   /* does not apply */
+    return (tOk ? 2 : 0) + (dOk ? 1 : 0);              /* 3 = exact, 0 = catch-all */
+  };
+  let best = null, bestRank = -1;
+  for (const p of list) {
+    const r = rank(p);
+    /* > not >=: the first preset entered wins a tie, so reordering the list in
+       the admin panel does not silently change which one applies. */
+    if (r > bestRank) { best = p; bestRank = r; }
+  }
+  return best;
+}
+
+/* The roster used when no preset matches. It was written into App.js twice --
+   the initial state and handleNew -- so the two could drift, and neither could
+   be changed without a deploy. Presets configured in the Users tab replace it;
+   this only covers a site that has not set any up yet. */
+const CE_FALLBACK_APPROVERS = [
+  {role: 'Prepared By', name: '', title: 'Cost Estimator'},
+  {role: 'Checked By', name: 'Kenneth Mendoza', title: 'Cost Supervisor'},
+  {role: 'Noted By', name: 'Mr. Jhuniel Ubana', title: 'TSG Head'},
+  {role: 'Noted By', name: 'Mr. Fernando Bautista', title: 'Operations Director'},
+  {role: 'Approved By', name: 'Mr. Warren Maralit', title: 'Director of Sales and Technical'}
+];

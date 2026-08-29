@@ -54,6 +54,15 @@ function App({
   const [demobVehicles, setDemobVehicles] = useState([]);
   const [scope, setScope] = useState('');
   const [notes, setNotes] = useState([]); /* [{id,seq,text}] */
+  /* Presets configured in the Users tab: notes and signatories per CE type and
+     discipline. Shared through SharePoint, so setting one sets it for
+     everybody. */
+  const [ceDefaults, setCeDefaults] = useState([]);
+  /* What the last applied preset put on screen. Changing the CE type or the
+     discipline re-applies only while the notes and signatories still match
+     this -- otherwise switching Onsite to Supply would throw away signatures
+     and notes the estimator had just typed. */
+  const _defaultsSig = useRef(JSON.stringify({n: [], a: CE_FALLBACK_APPROVERS}));
   const mkNote = () => ({
     id: uid(),
     seq: notes.length + 1,
@@ -67,27 +76,7 @@ function App({
   const [addMode, setAddMode] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null); /* true=add to existing CE, false=replace */
   const DRAFT_KEY = 'shic_draft';
-  const [approvers, setApprovers] = useState([{
-    role: 'Prepared By',
-    name: '',
-    title: 'Cost Estimator'
-  }, {
-    role: 'Checked By',
-    name: 'Kenneth Mendoza',
-    title: 'Cost Supervisor'
-  }, {
-    role: 'Noted By',
-    name: 'Mr. Jhuniel Ubana',
-    title: 'TSG Head'
-  }, {
-    role: 'Noted By',
-    name: 'Mr. Fernando Bautista',
-    title: 'Operations Director'
-  }, {
-    role: 'Approved By',
-    name: 'Mr. Warren Maralit',
-    title: 'Director of Sales and Technical'
-  }]);
+  const [approvers, setApprovers] = useState(JSON.parse(JSON.stringify(CE_FALLBACK_APPROVERS)));
   ;
   const [aiLoad, setAiLoad] = useState(false);
   const [margin, setMargin] = useState(0);
@@ -390,6 +379,7 @@ function App({
       /* Drafts are rows in Monitoring now, so they have to be loaded with the
          history rather than only when the Saved Drafts panel is opened. */
       loadSharedDrafts();
+      dbGetCeDefaults().then(d => setCeDefaults(Array.isArray(d) ? d : [])).catch(e => console.warn('CE defaults:', e.message));
       /* Move the CE archive out of localStorage. Deliberately AFTER loadHist so
          reconciliation can reuse a warm SharePoint result, and fire-and-forget
          so it can never delay the UI. It defers itself when offline. */
@@ -1043,6 +1033,7 @@ function App({
     })));
     setSowItems(_sow);
     if (d.approvers) setApprovers(d.approvers);
+    _defaultsSig.current = ''; /* a resumed draft owns its notes and signatories */
     setMobVehicles((d.mobVehicles || []).map(r => ({
       ...r,
       id: uid()
@@ -1378,6 +1369,9 @@ function App({
     });
     setSowItems(_sow);
     if (d.approvers) setApprovers(JSON.parse(JSON.stringify(d.approvers)));
+    /* This content came from the CE, not from a preset, so the effect above
+       must not treat it as replaceable. */
+    _defaultsSig.current = '';
     setNotes(JSON.parse(JSON.stringify(d.notes || [])).map((n, i) => ({
       ...n,
       id: uid(),
@@ -1424,6 +1418,37 @@ function App({
     handleLoad({...d, info: {...(d.info || {}), ceNum: newCeNum, date: new Date().toISOString().slice(0,10)}});
     showToast('Revision ' + newCeNum + ' loaded — review & save when ready.');
   };
+  /* Put the matching preset's notes and signatories on the CE.
+
+     Returns false when nothing matches, so callers can leave what is there
+     alone rather than blanking it. */
+  const applyCeDefaults = (type, discipline, force) => {
+    const p = ceDefaultFor(ceDefaults, type, discipline);
+    const nextNotes = p ? (p.notes || []).map((t, i) => ({id: uid(), seq: i + 1, text: String(t)})) : [];
+    const nextAps = p && (p.approvers || []).length
+      ? JSON.parse(JSON.stringify(p.approvers))
+      : JSON.parse(JSON.stringify(CE_FALLBACK_APPROVERS));
+    if (!p && !force) return false;
+    setNotes(nextNotes);
+    setApprovers(nextAps);
+    _defaultsSig.current = JSON.stringify({n: nextNotes.map(n => n.text), a: nextAps});
+    return !!p;
+  };
+  /* Safe to re-apply only while nothing has been edited since the last one. */
+  const _defaultsUntouched = () =>
+    _defaultsSig.current === JSON.stringify({n: notes.map(n => String(n.text || '')), a: approvers});
+
+  /* Re-apply when the CE type or the discipline changes, and once the presets
+     arrive from SharePoint.
+
+     Only while the notes and signatories are still exactly what the last
+     preset put there. Otherwise switching Onsite to Supply would throw away
+     notes and names the estimator had just typed, which is a worse failure
+     than not applying a default. */
+  useEffect(() => {
+    if (!ceDefaults.length) return;
+    if (_defaultsUntouched()) applyCeDefaults(ceType, info.projType, true);
+  }, [ceType, info.projType, ceDefaults]);
   const handleNew = () => {
     setCeType('onsite');
     setInfo({
@@ -1443,27 +1468,7 @@ function App({
     setMobVehicles([]);
     setDemobVehicles([]);
     setScope('');
-    setApprovers([{
-      role: 'Prepared By',
-      name: '',
-      title: 'Cost Estimator'
-    }, {
-      role: 'Checked By',
-      name: 'Kenneth Mendoza',
-      title: 'Cost Supervisor'
-    }, {
-      role: 'Noted By',
-      name: 'Mr. Jhuniel Ubana',
-      title: 'TSG Head'
-    }, {
-      role: 'Noted By',
-      name: 'Mr. Fernando Bautista',
-      title: 'Operations Director'
-    }, {
-      role: 'Approved By',
-      name: 'Mr. Warren Maralit',
-      title: 'Director of Sales and Technical'
-    }]);
+    applyCeDefaults(ceType, BLANK_INFO.projType, true);
     setAddlCosts([]);
     setMargin(0);
     setDocFile(null);
@@ -9886,7 +9891,21 @@ tab === 'dashboard' && (() => {
       textTransform: 'uppercase',
       letterSpacing: '0.07em'
     }
-  }, "Signatories"), /*#__PURE__*/React.createElement("div", {
+  }, "Signatories", ceDefaults.length > 0 && /*#__PURE__*/React.createElement("button", {
+    /* The notes and signatories stop following the CE type once anyone edits
+       them -- deliberately, so typed names are never thrown away. This puts
+       them back when that is what you actually wanted. */
+    style: {...btn('def', true), fontSize: 9, padding: '2px 8px', marginLeft: 8, textTransform: 'none', letterSpacing: 0},
+    title: 'Replace the notes and signatories with the preset for ' +
+      (ceType === 'onsite' ? 'Onsite' : ceType === 'shopworks' ? 'ShopWorks' : 'Supply') + ' + ' + (info.projType || 'this discipline') +
+      '. Set these up in the Users tab.',
+    onClick: () => {
+      if (!_defaultsUntouched() && !confirm('Replace the current notes and signatories with the preset for this CE type and discipline?\n\nAnything typed here will be lost.')) return;
+      showToast(applyCeDefaults(ceType, info.projType, true)
+        ? 'Applied the defaults for ' + (info.projType || 'this discipline') + '.'
+        : 'No preset matches this CE type and discipline — set one up in the Users tab.', false);
+    }
+  }, "Apply defaults")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: `repeat(${Math.min(approvers.length, 4)},1fr)`,

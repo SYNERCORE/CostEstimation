@@ -86,7 +86,7 @@ for (const [varName, list] of payloadToList) {
 
 /* ---- what the app reads --------------------------------------------------- */
 const reads = [];
-for (const m of src.matchAll(/spGet\(\s*spList\('([A-Za-z_]+)'\)\s*,[^,]*,\s*'([^']*)'/g))
+for (const m of src.matchAll(/(?:_spGetTolerant|spGet)\(\s*spList\('([A-Za-z_]+)'\)\s*,[^,]*,\s*'([^']*)'/g))
   for (const f of m[2].split(',').map(s => s.trim()).filter(s => /^shic/.test(s)))
     reads.push({ list: m[1], field: f });
 

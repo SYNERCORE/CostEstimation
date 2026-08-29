@@ -89,7 +89,7 @@ ck('malformed JSON is ignored, not fatal',
 
 console.log('\nThe write side:');
 ck('the whole info object is written', /shicInfo:JSON\.stringify\(e\.info\|\|\{\}\)/.test(db));
-ck('and read back', /shicInfo/.test((db.match(/spGet\(spList\('CEs'\),`Id eq \$\{id\}`,'[^']*'/) || [''])[0]),
+ck('and read back', /shicInfo/.test((db.match(/(?:_spGetTolerant|spGet)\(spList\('CEs'\),`Id eq \$\{id\}`,'[^']*'/) || [''])[0]),
   'writing it without selecting it would change nothing');
 ck('the column is provisioned', /\[3,'shicInfo'\]/.test(reg),
   'an unprovisioned column 400s the whole save');
@@ -132,7 +132,7 @@ for (const [list, payload, what] of ROWS) {
 }
 /* dbSaveHistory also queries these lists for 'Id' alone, to delete the previous
    revision's rows. Only the selects that actually load a row need the column. */
-for (const sel of (db.match(/spGet\(spList\('CE_(?:MP|Resources)'\),`shicCEId eq \$\{id\}`,'[^']*'/g) || [])
+for (const sel of (db.match(/(?:_spGetTolerant|spGet)\(spList\('CE_(?:MP|Resources)'\),`shicCEId eq \$\{id\}`,'[^']*'/g) || [])
                   .filter(s => !/,'Id'$/.test(s)))
   ck('shares are selected back out of ' + (sel.includes('CE_MP') ? 'CE_MP' : 'CE_Resources'), /shicShares/.test(sel),
     'writing a column without selecting it changes nothing');

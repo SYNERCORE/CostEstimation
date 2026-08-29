@@ -376,12 +376,40 @@ async function dbGetHistory(username,isAdmin){if(USE_SP||getSiteURL()){try{const
    every other task the crew served showed no manpower at all. */
 const _shDump=v=>Array.isArray(v)&&v.length?JSON.stringify(v):'';
 const _shParse=s=>{try{const v=s?JSON.parse(s):null;return Array.isArray(v)?v:[];}catch(_){return [];}};
+/* SharePoint answers a $select naming a column the site has not got with a 500,
+   not a 400 -- and that 500 took the whole CE down with it. dbLoadCE fell
+   through to the local archive, which holds nothing for a CE saved on another
+   machine, so the estimate opened blank at a grand total of P0.00 with only a
+   console warning to say why. Saving from there would have written that blank
+   back over the real CE, deleting every line item.
+
+   Every column added after the first release is optional for READING: a CE
+   written before it existed has nothing in it anyway. So drop them and ask
+   again. The CE opens, minus whatever those columns carried, and the user is
+   told once what to run to get them back. */
+const _SP_OPTIONAL_COLS = ['shicShares','shicTaskId','shicPax','shicOTHours','shicPerDiem','shicInfo'];
+let _spSchemaGapWarned = false;
+async function _spGetTolerant(list, filter, sel){
+  try{ return await spGet(list, filter, sel); }
+  catch(err){
+    const kept = String(sel).split(',').filter(c => _SP_OPTIONAL_COLS.indexOf(c) < 0).join(',');
+    /* Nothing optional in this query, so the failure is real -- do not mask it. */
+    if(kept === sel) throw err;
+    const rows = await spGet(list, filter, kept);
+    console.warn('SP get ' + list + ': retried without ' + _SP_OPTIONAL_COLS.filter(c => sel.indexOf(c) >= 0).join(', ') + ' — the site is missing those columns.');
+    if(!_spSchemaGapWarned){
+      _spSchemaGapWarned = true;
+      setTimeout(()=>(window._shicToast||console.warn)('This SharePoint site is missing columns this version uses, so parts of older CEs cannot be read. An admin should open SP Setup and press "Repair lists & columns".', true), 300);
+    }
+    return rows;
+  }
+}
 async function dbLoadCE(id){
   /* Offline (or SharePoint unreachable) this returned null and the CE simply
      would not open. The IndexedDB archive holds the full record -- line items
      and all -- so serve it instead. SharePoint stays authoritative when online. */
   if(!(USE_SP||getSiteURL()))return await _ceLoadLocal(id);
-  try{const[hR,mR,rR]=await Promise.all([spGet(spList('CEs'),`Id eq ${id}`,'Id,Title,shicType,shicClient,shicDesc,shicTotal,shicSavedBy,shicSavedAt,shicScope,shicNotes,shicApprovers,shicMob,shicDemob,shicMisc,shicSOW,shicInfo'),spGet(spList('CE_MP'),`shicCEId eq ${id}`,'Id,shicRole,shicRate,shicShift,shicDays,shicQty,shicPax,shicOTHours,shicPerDiem,shicTaskId,shicShares'),spGet(spList('CE_Resources'),`shicCEId eq ${id}`,'Id,shicTab,shicDesc,shicQty,shicUOM,shicCost,shicDays,shicTaskId,shicShares')]);if(!hR.length)return null;const h=hR[0];return{id:h.Id,ceType:h.shicType||'onsite',grand:h.shicTotal||0,savedBy:h.shicSavedBy||'',savedAt:h.shicSavedAt||'',info:(()=>{let base={};try{if(h.shicInfo)base=JSON.parse(h.shicInfo)||{};}catch(_){}/* The dedicated columns win for the three fields that also exist as columns: Title is what duplicate detection and every filter match on, so the JSON must never be able to disagree with it. A CE saved before shicInfo existed has no JSON and falls back to exactly what it had. */return{...base,ceNum:h.Title,client:h.shicClient||base.client||'',description:h.shicDesc||base.description||''};})(),scope:h.shicScope||'',mp:mR.map(r=>({id:'sp'+r.Id,role:r.shicRole||'',rate:r.shicRate||0,shift:r.shicShift||'regular_day',days:r.shicDays||1,/* pax, not qty: the editor and every cost formula read `pax`, so a row loaded as `qty` costed 0. shicQty is the fallback for rows written before shicPax existed. */pax:r.shicPax||r.shicQty||1,otHours:r.shicOTHours||0,perDiem:r.shicPerDiem||0,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),tools:rR.filter(r=>r.shicTab==='tools').map(r=>({id:'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,days:r.shicDays||1,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),mats:rR.filter(r=>r.shicTab==='mats').map(r=>({id:'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),ppe:rR.filter(r=>r.shicTab==='ppe').map(r=>({id:'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),misc:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};const{_addlCosts,_margin,...rest}=m;return rest;})(),addlCosts:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._addlCosts||[];})(),margin:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._margin||0;})(),sowItems:(()=>{try{return h.shicSOW?JSON.parse(h.shicSOW):[];}catch(_){return [];}})(),notes:h.shicNotes?JSON.parse(h.shicNotes):[],approvers:h.shicApprovers?JSON.parse(h.shicApprovers):[],mobVehicles:h.shicMob?JSON.parse(h.shicMob):[],demobVehicles:h.shicDemob?JSON.parse(h.shicDemob):[]};}catch(e){console.warn('dbLoadCE:',e.message);return await _ceLoadLocal(id);}}
+  try{const[hR,mR,rR]=await Promise.all([_spGetTolerant(spList('CEs'),`Id eq ${id}`,'Id,Title,shicType,shicClient,shicDesc,shicTotal,shicSavedBy,shicSavedAt,shicScope,shicNotes,shicApprovers,shicMob,shicDemob,shicMisc,shicSOW,shicInfo'),_spGetTolerant(spList('CE_MP'),`shicCEId eq ${id}`,'Id,shicRole,shicRate,shicShift,shicDays,shicQty,shicPax,shicOTHours,shicPerDiem,shicTaskId,shicShares'),_spGetTolerant(spList('CE_Resources'),`shicCEId eq ${id}`,'Id,shicTab,shicDesc,shicQty,shicUOM,shicCost,shicDays,shicTaskId,shicShares')]);if(!hR.length)return null;const h=hR[0];return{id:h.Id,ceType:h.shicType||'onsite',grand:h.shicTotal||0,savedBy:h.shicSavedBy||'',savedAt:h.shicSavedAt||'',info:(()=>{let base={};try{if(h.shicInfo)base=JSON.parse(h.shicInfo)||{};}catch(_){}/* The dedicated columns win for the three fields that also exist as columns: Title is what duplicate detection and every filter match on, so the JSON must never be able to disagree with it. A CE saved before shicInfo existed has no JSON and falls back to exactly what it had. */return{...base,ceNum:h.Title,client:h.shicClient||base.client||'',description:h.shicDesc||base.description||''};})(),scope:h.shicScope||'',mp:mR.map(r=>({id:'sp'+r.Id,role:r.shicRole||'',rate:r.shicRate||0,shift:r.shicShift||'regular_day',days:r.shicDays||1,/* pax, not qty: the editor and every cost formula read `pax`, so a row loaded as `qty` costed 0. shicQty is the fallback for rows written before shicPax existed. */pax:r.shicPax||r.shicQty||1,otHours:r.shicOTHours||0,perDiem:r.shicPerDiem||0,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),tools:rR.filter(r=>r.shicTab==='tools').map(r=>({id:'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,days:r.shicDays||1,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),mats:rR.filter(r=>r.shicTab==='mats').map(r=>({id:'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),ppe:rR.filter(r=>r.shicTab==='ppe').map(r=>({id:'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),misc:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};const{_addlCosts,_margin,...rest}=m;return rest;})(),addlCosts:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._addlCosts||[];})(),margin:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._margin||0;})(),sowItems:(()=>{try{return h.shicSOW?JSON.parse(h.shicSOW):[];}catch(_){return [];}})(),notes:h.shicNotes?JSON.parse(h.shicNotes):[],approvers:h.shicApprovers?JSON.parse(h.shicApprovers):[],mobVehicles:h.shicMob?JSON.parse(h.shicMob):[],demobVehicles:h.shicDemob?JSON.parse(h.shicDemob):[]};}catch(e){console.warn('dbLoadCE:',e.message);return await _ceLoadLocal(id);}}
 /* Full CE from the offline archive, by SharePoint item Id. */
 async function _ceLoadLocal(id){
   try{

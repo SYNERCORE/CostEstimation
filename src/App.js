@@ -1315,6 +1315,16 @@ function App({
       if (d.tools === undefined) {
         try { const cached = LS.get('ce_cache:' + (d.info?.ceNum || d.ceNum)); if (cached) d = cached; } catch(_) {}
       }
+      /* Every source failed: SharePoint would not answer and this browser has
+         never held the CE. Opening it anyway produced an empty estimate under
+         the real CE number, showing a grand total of P0.00 -- and saving from
+         there would have written that emptiness back, deleting every line item
+         the CE had. Refuse, and say what to do about it. */
+      if (d.tools === undefined) {
+        showToast('Could not read ' + (d.info?.ceNum || d.ceNum || 'this CE') +
+          ' — SharePoint did not answer and this browser has no copy. Nothing was loaded. Check the connection, or ask an admin to run SP Setup → "Repair lists & columns".', true);
+        return;
+      }
     } else {
       // We have full data from SP — compare with local cache and use whichever is newer
       try {

@@ -1332,6 +1332,19 @@ function App({
         if (cached && cached.savedAt && d.savedAt && cached.savedAt > d.savedAt) d = cached;
       } catch(_) {}
     }
+    /* A CE whose header says it cost money but has no line items behind it.
+
+       dbSaveHistory POSTs the header before the line items, so anything that
+       fails in between leaves exactly this in SharePoint. It used to open as a
+       blank estimate reporting P0.00 with a cheerful "Loaded" toast, which
+       reads as "this CE is empty" rather than "this CE did not come back". */
+    const _rowCount = (d.mp || []).length + (d.tools || []).length + (d.mats || []).length + (d.ppe || []).length;
+    if (!_rowCount && N(d.grand) > 0) {
+      showToast('⚠ ' + (d.info?.ceNum || d.ceNum || 'This CE') + ' has a stored total of ' +
+        'P' + N(d.grand).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' but no line items in SharePoint — the header was written and the rows were not. ' +
+        'Nothing was loaded. Re-import or re-save this CE to restore it.', true);
+      return;
+    }
     setCeType(d.ceType);
     setInfo({
       ...BLANK_INFO,
@@ -3010,7 +3023,15 @@ function App({
           const confirmed = window.confirm(`CE ${effCeNum} already exists in history. Overwrite it?`);
           if (!confirmed) { errors.push(file.name + ': skipped (duplicate)'); setCeImportProgress({done, total:list.length, errors}); continue; }
         }
-        await dbSaveHistory(entry);
+        const res = await dbSaveHistory(entry);
+        /* A CE that only reached this browser is not imported. Saying it was
+           is how a run of these ended up in SharePoint as headers with a total
+           and no line items under them, reported as a clean success. */
+        if (res && res.sp === false) {
+          errors.push(effCeNum + ': SharePoint refused it — ' + String(res.reason || 'unknown').slice(0, 120));
+          setCeImportProgress({done, total: list.length, errors});
+          continue;
+        }
         done++;
         showToast(`Imported ${effCeNum} — ${mpRows.length} manpower, ${tools.length} tools, ${mats.length} materials, ${ppe.length} PPE.`);
       } catch(ex) { console.error('[CE Import] Error:', ex); errors.push(file.name + ': ' + ex.message); }
@@ -3164,9 +3185,14 @@ function App({
       const BATCH = 5;
       setImportProgress({done:0, total});
       let imported = 0;
+      const importFails = [];
       for (let i = 0; i < toInsert.length; i += BATCH) {
         const chunk = toInsert.slice(i, i + BATCH);
-        await Promise.all(chunk.map(e => spWithRetry(() => dbSaveHistory(e)).catch(()=>{})));
+        const results = await Promise.all(chunk.map(e =>
+          spWithRetry(() => dbSaveHistory(e)).catch(err => ({sp: false, reason: err.message}))));
+        /* .catch(()=>{}) meant a batch where every CE failed counted as a
+           batch where every CE succeeded. */
+        results.forEach((r, j) => { if (r && r.sp === false) importFails.push((chunk[j].info?.ceNum || '?') + ': ' + String(r.reason || 'unknown').slice(0, 80)); });
         imported += chunk.length;
         setImportProgress({done: imported, total});
         if (i + BATCH < toInsert.length) await new Promise(res => setTimeout(res, 300));
@@ -3184,8 +3210,14 @@ function App({
       await dbSaveMonAll(merged, fresh).catch(()=>{});
       setHistory(fresh);
       setImportProgress(null);
-      auditLog('xlsx_import', `${imported} CEs added, ${updated} updated`, currentUser?.username);
-      showToast(`Import complete: ${imported} CEs added, ${updated} monitoring records updated.`);
+      const ok = imported - importFails.length;
+      auditLog('xlsx_import', `${ok} CEs added, ${updated} updated${importFails.length ? ', ' + importFails.length + ' FAILED' : ''}`, currentUser?.username);
+      if (importFails.length) {
+        console.warn('CEs SharePoint would not take:', importFails);
+        showToast(`Import finished with problems: ${ok} of ${imported} CEs reached SharePoint, ${updated} monitoring records updated. ${importFails.length} failed — ${importFails[0]}`, true);
+      } else {
+        showToast(`Import complete: ${ok} CEs added, ${updated} monitoring records updated.`);
+      }
     } catch(e) {
       setImportProgress(null);
       showToast('Import failed: ' + e.message, true);

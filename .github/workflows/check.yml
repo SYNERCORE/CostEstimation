@@ -34,6 +34,8 @@ jobs:
         run: node tools/check-sp-indexes.js
       - name: A CE still opens when its list is past the view threshold
         run: node tools/test-threshold-fallback.js
+      - name: A browser-only save is not reported as an import
+        run: node tools/test-save-reporting.js
       - name: SharePoint permission failures are named, not swallowed
         run: node tools/test-sp-permissions.js
       - name: Local caches survive empty SharePoint responses

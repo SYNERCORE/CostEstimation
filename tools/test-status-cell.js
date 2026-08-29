@@ -39,6 +39,9 @@ ck2('the current one is not offered again', /disabled: st === _m\.status/.test(s
 ck2('and the row shows the status as a chip, not a dropdown',
   !/key: e\.id \+ 'status'/.test(src),
   'a select per row is ~900 form controls and still shows no history');
+ck2('the panel can correct when the status changed', /updateMon\(statusPanel, 'statusChangedAt'/.test(src),
+  'the row date field went away with the inline dropdown, and nothing replaced it');
+ck2('it is disabled until there is a status to date', /disabled: !_m\.status/.test(src));
 ck2('the panel shows the trail', /HISTORY/.test(src) && /_shown\.map\(\(h, i\)/.test(src));
 ck2('with what it moved from, when, and who', /"from " \+ h\.from/.test(src) && /h\.by \|\| /.test(src));
 ck2('a CE tracked before the log existed still shows its last change',

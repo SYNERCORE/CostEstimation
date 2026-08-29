@@ -57,5 +57,23 @@ ck('the log is capped so a busy CE cannot grow without bound', state[7].statusLo
 ck('and the cap drops the oldest, keeping the recent ones',
    state[7].statusLog[59].status==='Ongoing79');
 ck('it is persisted with the rest of the monitoring record', saved && Array.isArray(saved.statusLog));
+
+/* Correcting the date on a CE entered long after the fact must correct the
+   trail too, or the history still shows the day it was recorded here rather
+   than the day it happened -- which is the whole point of correcting it. */
+state = {}; upd(7, 'status', 'Pending'); upd(7, 'status', 'Approved');
+const realDay = '2025-03-14T12:00:00.000Z';
+upd(7, 'statusChangedAt', realDay);
+ck('correcting the stamp corrects the latest history entry',
+  state[7].statusLog[1].at === realDay, state[7].statusLog[1].at);
+ck('and leaves the earlier entries alone', state[7].statusLog[0].at !== realDay,
+  'only the current status is being corrected');
+ck('the stamp itself is set', state[7].statusChangedAt === realDay);
+ck('who changed it is untouched', state[7].statusChangedBy === 'Jhuniel Ubana',
+  'who clicked is observed; only the date is corrected');
+state = {}; upd(9, 'statusChangedAt', realDay);
+ck('a CE with no trail yet still takes the correction',
+  state[9].statusChangedAt === realDay && !state[9].statusLog);
+
 console.log(bad?'\n'+bad+' FAILURE(S)':'\nstatus log OK');
 process.exit(bad?1:0);

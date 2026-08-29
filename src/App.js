@@ -222,6 +222,16 @@ function App({
         by: extra.statusChangedBy
       }].slice(-60);
     }
+    /* Correcting when a status changed has to correct the trail too, or the
+       history would still show the day it was recorded here rather than the day
+       it happened -- which is the whole point of correcting it on a CE entered
+       long after the fact. */
+    if (field === 'statusChangedAt') {
+      const log0 = (prev[ceId] || {}).statusLog;
+      if (Array.isArray(log0) && log0.length) {
+        extra.statusLog = log0.map((h, i) => i === log0.length - 1 ? {...h, at: val} : h);
+      }
+    }
     const n = {
       ...prev,
       [ceId]: {
@@ -7078,6 +7088,28 @@ statusPanel && (() => {
 
     /*#__PURE__*/React.createElement("div", {style:{fontSize:10,color:MT,letterSpacing:.5,marginBottom:6}}, "CURRENT"),
     /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',background:getStatusColor(_m.status||'')+'22',color:getStatusColor(_m.status||''),fontWeight:700,fontSize:12,padding:'3px 12px',borderRadius:12,marginBottom:16}}, _m.status || "—"),
+
+    /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',gap:8,marginBottom:18,flexWrap:'wrap'}},
+      /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT}}, "changed on"),
+      /*#__PURE__*/React.createElement("input", {
+        /* Written automatically when a status is picked, which is right for a
+           CE moving through the pipeline and wrong for one entered years after
+           the fact: it recorded today. Correctable here, and the trail above is
+           corrected with it. The name is not editable -- who clicked is
+           genuinely observed; only the date is being put right. */
+        type: "date",
+        key: statusPanel + 'changedAt',
+        disabled: !_m.status,
+        title: _m.status ? 'The date this status actually took effect' : 'Set a status first',
+        style: {...INP, fontSize: 11, padding: '3px 8px', width: 150, opacity: _m.status ? 1 : .4},
+        defaultValue: monDateInput(_m.statusChangedAt),
+        onChange: ev => {
+          if (!_m.status) return;
+          updateMon(statusPanel, 'statusChangedAt', ev.target.value ? new Date(ev.target.value + 'T12:00:00').toISOString() : '');
+          showToast('Status date set to ' + (ev.target.value || 'blank') + '.');
+        }
+      }),
+      _m.statusChangedBy && /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT}}, "by " + _m.statusChangedBy)),
 
     /*#__PURE__*/React.createElement("div", {style:{fontSize:10,color:MT,letterSpacing:.5,marginBottom:8}}, "CHANGE TO"),
     /*#__PURE__*/React.createElement("div", {style:{display:'flex',flexWrap:'wrap',gap:6,marginBottom:20}},

@@ -24,7 +24,11 @@ function safeHttpUrl(u) {
 }
 function mlShape(ml) {
   if (!ml || typeof ml !== 'object' || Array.isArray(ml)) return null;
-  const secs = ['manpower', 'tools', 'mats', 'ppe'];
+  /* 'materials' and 'vehicles', not 'mats'. The wrong name meant a stored
+     masterlist never had its materials backfilled -- it got a junk `mats: []`
+     instead -- and a list holding ONLY materials or vehicles was rejected as
+     empty, falling back to the built-in defaults and hiding the real one. */
+  const secs = ['manpower', 'tools', 'materials', 'ppe', 'vehicles'];
   if (!secs.some(k => Array.isArray(ml[k]) && ml[k].length)) return null;
   const out = { ...ml };
   secs.forEach(k => { if (!Array.isArray(out[k])) out[k] = (typeof DEFAULT_ML !== 'undefined' && Array.isArray(DEFAULT_ML[k])) ? DEFAULT_ML[k] : []; });
@@ -2305,25 +2309,28 @@ function App({
           showToast('No valid rows found. Check column headers.', true);
           return;
         }
-        setMasterlist(p => {
-          const existing = p[tab] || [];
-          const existingNames = new Set(existing.map(x => (x[fm.name] || '').toUpperCase().trim()));
-          const toAdd = newItems.filter(x => !existingNames.has((x[fm.name] || '').toUpperCase().trim()));
-          const toUpdate = newItems.filter(x => existingNames.has((x[fm.name] || '').toUpperCase().trim()));
-          const merged = existing.map(x => {
-            const match = toUpdate.find(u => (u[fm.name] || '').toUpperCase().trim() === (x[fm.name] || '').toUpperCase().trim());
-            return match ? {
-              ...x,
-              ...match,
-              id: x.id
-            } : x;
-          });
-          showToast(toAdd.length + ' added, ' + toUpdate.length + ' updated in ' + tab + '.');
-          return {
-            ...p,
-            [tab]: [...merged, ...toAdd]
-          };
+        /* saveML, not setMasterlist.
+
+           This used to update React state and nothing else: the uploaded rows
+           lived in memory until the tab was closed, while every other action on
+           this screen -- add, delete, clear, bulk adjust -- went through saveML
+           and persisted. Clear List followed by Upload Excel therefore wrote an
+           EMPTY list to SharePoint and kept the upload nowhere, so the list
+           came back empty. saveML mirrors locally, writes to SharePoint, and
+           now reports if SharePoint refuses. */
+        const existing = masterlist[tab] || [];
+        const key = x => (x[fm.name] || '').toUpperCase().trim();
+        const existingNames = new Set(existing.map(key));
+        const toAdd = newItems.filter(x => !existingNames.has(key(x)));
+        const toUpdate = newItems.filter(x => existingNames.has(key(x)));
+        const merged = existing.map(x => {
+          const match = toUpdate.find(u => key(u) === key(x));
+          return match ? {...x, ...match, id: x.id} : x;
         });
+        await saveML({...masterlist, [tab]: [...merged, ...toAdd]});
+        /* Out of the state updater: React may invoke that twice, and a toast
+           fired from inside it reports the import happening twice. */
+        showToast(toAdd.length + ' added, ' + toUpdate.length + ' updated in ' + tab + '.');
       } catch (err) {
         showToast('Import failed: ' + err.message, true);
       }

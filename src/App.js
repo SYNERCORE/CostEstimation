@@ -199,11 +199,17 @@ function App({
   };
   const updateMon = (ceId, field, val) => setMonData(prev => {
     const extra = {};
-    /* Stamp who moved a CE and when, on the statuses that represent a decision
-       rather than routine progress. The old list named 'Issued' and
-       'For Review' -- neither is a status this app has ever offered -- while
-       missing 'Submitted' and 'No Quote', the two that most need a trail. */
-    if (field === 'status' && ['For Approval','Approved','Submitted','No Quote','On Hold','Cancelled'].includes(val)) {
+    /* Stamp who moved a CE and when, on EVERY status change.
+
+       This used to fire only for a hand-picked list, which named 'Issued' and
+       'For Review' -- neither a status this app has ever offered -- and missed
+       'Submitted' and 'No Quote', the two that most need a trail. A CE moved
+       to Ongoing or For site insp. recorded nothing at all, so the history of
+       how it got where it is had holes in it.
+
+       Clearing the status back to blank is not a change worth attributing, so
+       it is left unstamped. */
+    if (field === 'status' && val) {
       extra.statusChangedAt = new Date().toISOString();
       extra.statusChangedBy = currentUser?.name || currentUser?.username || '';
     }
@@ -3726,7 +3732,14 @@ function App({
         ...TDS,
         padding: '4px 6px'
       }
-    }, editingRow === e.id ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("select", {
+    }, /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("select", {
+      /* Status is the one field that changes constantly -- it is what
+         Monitoring is for -- so it is editable in place rather than behind
+         Edit. Everything else in the row stays gated, because the rest is
+         reference data that should not move by a stray click.
+
+         Styled as the chip it replaces, so the table still reads as a list of
+         statuses rather than a wall of dropdowns. */
       style: {
         ...INP,
         border: 'none',
@@ -3736,17 +3749,27 @@ function App({
         fontSize: 10,
         padding: '2px 6px',
         borderRadius: 12,
-        width: '100%'
+        width: '100%',
+        cursor: 'pointer',
+        appearance: 'none',
+        textAlign: 'center'
       },
       key: e.id + 'status',
-      defaultValue: m.status || '',
-      onChange: ev => { updateMon(e.id, 'status', ev.target.value); }
+      /* A draft row has no monitoring record and no numeric id, so writing one
+         here would post a row keyed to "draft:..." and fail. Its status is
+         Draft by definition until the CE is saved. */
+      disabled: !!e._draft,
+      title: e._draft
+        ? 'A draft is always Draft \u2014 save the CE to start tracking it'
+        : 'Change status \u2014 the date is recorded automatically' + (m.statusChangedBy ? '. Last changed by ' + m.statusChangedBy : ''),
+      value: m.status || '',
+      onChange: ev => { if (!e._draft) updateMon(e.id, 'status', ev.target.value); }
     }, /*#__PURE__*/React.createElement("option", {
       value: ""
     }, "\u2014"), allStatuses.map(s => /*#__PURE__*/React.createElement("option", {
       key: s,
       value: s
-    }, s))), /*#__PURE__*/React.createElement("input", {
+    }, s))), editingRow === e.id ? /*#__PURE__*/React.createElement("input", {
       /* The stamp is written automatically when a status is picked, which is
          right for a CE moving through the pipeline and wrong for a historical
          one entered years after the fact -- it recorded today, against whoever
@@ -3761,9 +3784,7 @@ function App({
       style: {...INP, border: 'none', background: 'transparent', padding: '1px 2px', fontSize: 9, width: '100%', color: MT, marginTop: 2},
       defaultValue: monDateInput(m.statusChangedAt),
       onChange: ev => updateMon(e.id, 'statusChangedAt', ev.target.value ? new Date(ev.target.value + 'T12:00:00').toISOString() : '')
-    })) : /*#__PURE__*/React.createElement("div", null,
-      /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',background:statusColor+'22',color:statusColor,fontWeight:700,fontSize:10,padding:'2px 8px',borderRadius:12,whiteSpace:'nowrap'}}, m.status||'\u2014'),
-      m.statusChangedAt && /*#__PURE__*/React.createElement("div", {style:{fontSize:9,color:MT,marginTop:2,lineHeight:1.3},title:'Changed by '+(m.statusChangedBy||'unknown')}, new Date(m.statusChangedAt).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}), m.statusChangedBy?' \u00b7 '+m.statusChangedBy.split(' ')[0]:'')
+    }) : (m.statusChangedAt ? /*#__PURE__*/React.createElement("div", {style:{fontSize:9,color:MT,marginTop:2,lineHeight:1.3,textAlign:'center'},title:'Changed by '+(m.statusChangedBy||'unknown')+' \u2014 open Edit to correct the date'}, new Date(m.statusChangedAt).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}), m.statusChangedBy?' \u00b7 '+m.statusChangedBy.split(' ')[0]:'') : null)
     )), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,

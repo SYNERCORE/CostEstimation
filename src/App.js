@@ -5030,8 +5030,8 @@ function App({
         ${notesList}
         ${sigBlock}
       </div>
-      ${billsPage}
       ${sowPage}
+      ${billsPage}
     <\/body><\/html>`;
     const w=window.open('','_blank');
     w.document.write(fullHtml);

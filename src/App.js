@@ -4855,6 +4855,7 @@ function App({
       .nb td,.nb th{border:none} .bdr td,.bdr th{border:1px solid #999}
       .page{padding:0;margin-bottom:4mm}
       .page-break{page-break-before:always;padding-top:0}
+      .blk{page-break-inside:avoid;margin-bottom:5px}
       h2{font-size:10pt;text-align:center;margin:2px 0;font-weight:bold}
       .sec{background:#222;color:#fff;font-weight:bold;text-align:center;padding:3px;font-size:8pt}
       .sub{background:#eee;font-weight:bold;font-size:7.5pt;padding:2px 4px}
@@ -4960,7 +4961,7 @@ function App({
 
     /* Benefits &#8212; only active rows */
     const benRows=mpActive.filter(r=>N(r.monthlyRate)>0||(r.benefits&&Object.values(r.benefits).some(v=>N(v)>0)));
-    const benPage=benRows.length?`<div class="page page-break">${docHdr('BILL OF LABOR')}
+    const benPage=benRows.length?`<div class="blk">
       <div class="sec">C.7 &nbsp;BENEFITS AND OTHERS</div>
       <table><tr style="background:#eee"><th class="c">ITEM</th><th>MANPOWER LOADING</th><th class="c">QTY</th><th class="c">UOM</th><th class="c">TOTAL DAYS</th><th class="r">MONTHLY RATE</th><th class="r">13TH PAY</th><th class="r">SSS</th><th class="r">HDMF&amp;PHIC</th><th class="r">SIL&amp;ECC</th><th class="r">TOTAL</th></tr>
       ${benRows.map((r,i)=>{const b=r.benefits||{};const tot=N(b.thirteenth)+N(b.sss)+N(b.hdmf)+N(b.sil);return`<tr><td class="c">${i+1}</td><td>${esc(r.role||'')}</td><td class="c">${esc(r.pax||1)}</td><td class="c">pax</td><td class="c">${esc(r.days||1)}</td><td class="r">${fmt(r.monthlyRate||0)}</td><td class="r">${fmt(b.thirteenth||0)}</td><td class="r">${fmt(b.sss||0)}</td><td class="r">${fmt(b.hdmf||0)}</td><td class="r">${fmt(b.sil||0)}</td><td class="r b">${fmt(tot)}</td></tr>`;}).join('')}
@@ -4969,7 +4970,7 @@ function App({
 
     /* Tools &#8212; skip zero rows */
     const toolsActive=tools.filter(r=>r.desc&&(N(r.cost)>0||r.desc.trim()));
-    const toolsPage=toolsActive.length?`<div class="page page-break">${docHdr('BILL OF TOOLS AND EQUIPMENT')}
+    const toolsPage=toolsActive.length?`<div class="blk">
       <div class="sec">BILL OF TOOLS AND EQUIPMENT</div>
       <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:28px">QTY</th><th class="c" style="width:35px">UOM</th><th class="c" style="width:35px">DAYS</th><th class="r" style="width:80px">UNIT PRICE</th><th class="r" style="width:80px">TOTAL</th></tr>
       ${toolsActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.uom||'Lot')}</td><td class="c">${resDays(r)}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(N(r.qty)*N(r.cost)*resDays(r))}</td></tr>`).join('')}
@@ -4977,7 +4978,7 @@ function App({
 
     /* Materials &#8212; skip zero rows */
     const matsActive=mats.filter(r=>r.desc&&(N(r.cost)>0||r.desc.trim()));
-    const matsPage=matsActive.length?`<div class="page page-break">${docHdr('BILL OF MATERIALS AND CONSUMABLES')}
+    const matsPage=matsActive.length?`<div class="blk">
       <div class="sec">BILL OF MATERIALS AND CONSUMABLES</div>
       <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:35px">QTY</th><th class="c" style="width:35px">UOM</th><th class="r" style="width:80px">UNIT PRICE</th><th class="r" style="width:80px">TOTAL</th></tr>
       ${matsActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.uom||'Lot')}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(N(r.qty)*N(r.cost))}</td></tr>`).join('')}
@@ -4985,7 +4986,7 @@ function App({
 
     /* PPE &#8212; skip zero rows */
     const ppeActive=ppe.filter(r=>r.desc&&(N(r.cost)>0||r.desc.trim()));
-    const ppePage=ppeActive.length?`<div class="page page-break">${docHdr('PERSONAL PROTECTIVE EQUIPMENTS')}
+    const ppePage=ppeActive.length?`<div class="blk">
       <div class="sec">PERSONAL PROTECTIVE EQUIPMENTS</div>
       <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:35px">QTY</th><th class="c" style="width:35px">UOM</th><th class="r" style="width:80px">UNIT PRICE</th><th class="r" style="width:80px">TOTAL</th></tr>
       ${ppeActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.uom||'Lot')}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(N(r.qty)*N(r.cost))}</td></tr>`).join('')}
@@ -4997,13 +4998,27 @@ function App({
        page; Miscellaneous never did. Its cost reached the summary and the
        total, but a delivery charge or a third-party fee had no line anywhere
        in the document saying what the client was being charged for. */
-    const miscPage=miscItems.length?`<div class="page page-break">${docHdr('MISCELLANEOUS')}
+    const miscPage=miscItems.length?`<div class="blk">
       <div class="sec">MISCELLANEOUS</div>
       ${miscItems.map(cat=>`<div class="sub">${cat.letter}&nbsp;&nbsp;${esc(cat.label)}</div>
       <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:35px">QTY</th><th class="c" style="width:35px">UOM</th><th class="r" style="width:80px">UNIT PRICE</th><th class="r" style="width:80px">TOTAL</th></tr>
       ${cat.rows.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.uom||'Lot')}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(N(r.qty)*N(r.cost))}</td></tr>`).join('')}
       <tr class="tot"><td colspan="5" class="r b">SUB TOTAL:</td><td class="r b">${fmt(cat.v)}</td></tr></table>`).join('')}
       <div class="tot" style="text-align:right;padding:3px 4px;font-weight:bold">MISCELLANEOUS TOTAL: ${fmt(miscT)}</div></div>` : '';
+
+    /* The summary and the scope of work each get a sheet of their own; the
+       bills share whatever space is left.
+
+       Every bill used to be its own `page-break` page, so a CE with three
+       plywood lines and one delivery charge spent a whole sheet per section
+       and printed mostly white space. They are `blk` blocks now: they flow one
+       after another and break only when the paper actually runs out, with
+       page-break-inside:avoid so a short bill is not split across that break.
+       The document header prints once for the run rather than per section --
+       each bill still carries its own black title bar. */
+    const mpPage=mpActive.length?`<div class="blk"><div class="sec">MANPOWER COST</div>${shiftRows}<div class="tot" style="text-align:right;padding:3px 4px;font-weight:bold">TOTAL MANPOWER COST: ${fmt(mpTot)}</div></div>`:'';
+    const bills=[mpPage,benPage,toolsPage,matsPage,ppePage,miscPage].filter(Boolean).join('');
+    const billsPage=bills?`<div class="page page-break">${docHdr('BILL OF QUANTITIES')}${bills}</div>`:'';
 
     const sowPage=sowItems.length?`<div class="page page-break">${docHdr('SCOPE OF WORK')}<div style="font-size:8pt;line-height:1.6">${(()=>{let mc=0,sc=0;return sowItems.map(it=>{if(it.type==='main'){mc++;sc=0;return`<div style="margin-top:4px"><b>${mc}. ${esc(it.text)}</b></div>`;}else{sc++;return`<div style="margin-left:14px">${mc}.${sc} ${esc(it.text)}</div>`;}}).join('');})()}</div></div>`:'';
 
@@ -5015,8 +5030,8 @@ function App({
         ${notesList}
         ${sigBlock}
       </div>
-      ${mpActive.length?`<div class="page page-break">${docHdr('BILL OF LABOR')}<div class="sec">MANPOWER COST</div>${shiftRows}<div class="tot" style="text-align:right;padding:3px 4px;font-weight:bold">TOTAL MANPOWER COST: ${fmt(mpTot)}</div></div>`:''}
-      ${benPage}${toolsPage}${matsPage}${ppePage}${miscPage}${sowPage}
+      ${billsPage}
+      ${sowPage}
     <\/body><\/html>`;
     const w=window.open('','_blank');
     w.document.write(fullHtml);

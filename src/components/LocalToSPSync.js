@@ -90,11 +90,22 @@ function LocalToSPSync() {
           continue;
         }
         try {
-          await dbSaveHistory({
+          const res = await dbSaveHistory({
             ...full,
             savedBy: full.savedBy || 'admin',
             savedAt: full.savedAt || new Date().toISOString()
           });
+          /* This is the button that repairs CEs whose rows never reached
+             SharePoint, so it above all must not report a browser-only save as
+             a sync. dbSaveHistory swallows the SharePoint failure by design and
+             returns normally; without this the repair tool would tick every CE
+             green while changing nothing. */
+          if (res && res.sp === false) {
+            ceFail++;
+            addLog(`  ✗ ${ceNum}: SharePoint refused it — ${String(res.reason || 'unknown').slice(0,90)}`);
+            if (i < hist.length - 1) await new Promise(r => setTimeout(r, 300));
+            continue;
+          }
           ceOk++;
           addLog(`  ✓ ${ceNum} (${i+1}/${hist.length})`);
         } catch (err) {

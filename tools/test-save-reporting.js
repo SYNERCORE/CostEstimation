@@ -46,6 +46,19 @@ ck('and the summary line reports them', /Import finished with problems/.test(app
 ck('as does the audit entry', /' FAILED' : ''/.test(app),
   'the audit log is where this would be reconstructed months later');
 
+/* This is the button that repairs CEs whose rows never reached SharePoint --
+   the failed save wrote the full CE to that browser, so pushing from the
+   machine that did the import is the recovery. It must not tick every CE green
+   while changing nothing. */
+console.log('\nthe local push acts on it:');
+const push = fs.readFileSync('src/components/LocalToSPSync.js', 'utf8');
+ck('a refused CE is counted as a failure, not a sync',
+  /if \(res && res\.sp === false\)[\s\S]{0,300}continue;/.test(push));
+ck('and says which CE and why', /SharePoint refused it/.test(push));
+ck('it still refuses to push a summary with no line items',
+  /no line items stored locally/.test(push),
+  'pushing one would overwrite the SharePoint rows with nothing');
+
 console.log('\nand a header-only CE refuses to open:');
 ck('a CE with a total but no rows is caught', /if \(!_rowCount && N\(d\.grand\) > 0\)/.test(app));
 ck('every row type counts toward that', /\(d\.mp \|\| \[\]\)\.length \+ \(d\.tools \|\| \[\]\)\.length \+ \(d\.mats \|\| \[\]\)\.length \+ \(d\.ppe \|\| \[\]\)\.length/.test(app));

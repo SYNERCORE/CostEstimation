@@ -46,6 +46,19 @@ ck('and the summary line reports them', /Import finished with problems/.test(app
 ck('as does the audit entry', /' FAILED' : ''/.test(app),
   'the audit log is where this would be reconstructed months later');
 
+/* The masterlist had the same silence: dbSaveML caught the SharePoint failure
+   and returned as if it had worked, so the sidebar showed a synced tick while
+   every rate change sat in one browser. */
+console.log('\nthe masterlist save says where it landed:');
+ck('dbSaveML reports success', /return\{sp:true\}/.test(db));
+ck('and reports refusal with the reason', /return\{sp:false,reason:e\.message\}/.test(db));
+ck('an unconfigured site is not called a sync', /SharePoint is not configured/.test(db));
+ck('saveML surfaces it instead of ticking synced',
+  /setSyncStatus\(\{masterlist:'error', dirty:true\}\)/.test(app));
+ck('so does the debounced cell edit',
+  /setSyncStatus\(\{ masterlist: 'error', dirty: true \}\)/.test(app),
+  'typing a new rate is the commonest masterlist change there is');
+
 /* This is the button that repairs CEs whose rows never reached SharePoint --
    the failed save wrote the full CE to that browser, so pushing from the
    machine that did the import is the recovery. It must not tick every CE green
@@ -55,6 +68,7 @@ const push = fs.readFileSync('src/components/LocalToSPSync.js', 'utf8');
 ck('a refused CE is counted as a failure, not a sync',
   /if \(res && res\.sp === false\)[\s\S]{0,300}continue;/.test(push));
 ck('and says which CE and why', /SharePoint refused it/.test(push));
+ck('and the masterlist push does the same', /Masterlist: SharePoint refused it/.test(push));
 ck('it still refuses to push a summary with no line items',
   /no line items stored locally/.test(push),
   'pushing one would overwrite the SharePoint rows with nothing');

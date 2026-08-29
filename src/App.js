@@ -528,9 +528,17 @@ function App({
     try{window.shicMasterlist=ml;}catch(_e){}
     setSyncStatus({masterlist:'saving', dirty:true});
     try {
-      await dbSaveML(ml);
+      const res = await dbSaveML(ml);
       auditLog('masterlist_save', Object.keys(ml||{}).map(k=>k+':'+((ml[k]||[]).length)).join(' '), currentUser?.username);
-      setSyncStatus({masterlist:'synced', lastSyncAt: new Date().toISOString(), sp:'connected', dirty:false});
+      /* dbSaveML does not throw when SharePoint refuses -- the change is kept
+         in this browser instead. Reporting that as "synced" is how a masterlist
+         edit reaches nobody else while the sidebar shows a tick. */
+      if (res && res.sp === false) {
+        setSyncStatus({masterlist:'error', dirty:true});
+        showToast('Masterlist saved in this browser only — SharePoint refused it: ' + String(res.reason||'unknown').slice(0,100), true);
+      } else {
+        setSyncStatus({masterlist:'synced', lastSyncAt: new Date().toISOString(), sp:'connected', dirty:false});
+      }
     } catch (e) {
       setSyncStatus({masterlist:'error'});
       showToast('Masterlist save failed: ' + e.message, true);
@@ -2337,8 +2345,13 @@ function App({
       mlSaveTimer.current = setTimeout(async () => {
         setSyncStatus({ masterlist: 'saving', dirty: true });
         try {
-          await dbSaveML(next);
-          setSyncStatus({ masterlist: 'synced', lastSyncAt: new Date().toISOString(), sp: 'connected', dirty: false });
+          const res = await dbSaveML(next);
+          if (res && res.sp === false) {
+            setSyncStatus({ masterlist: 'error', dirty: true });
+            showToast('Masterlist saved in this browser only — SharePoint refused it: ' + String(res.reason||'unknown').slice(0,100), true);
+          } else {
+            setSyncStatus({ masterlist: 'synced', lastSyncAt: new Date().toISOString(), sp: 'connected', dirty: false });
+          }
         } catch (e) {
           setSyncStatus({ masterlist: 'error' });
           showToast('Masterlist save failed: ' + e.message, true);

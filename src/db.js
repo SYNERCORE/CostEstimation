@@ -654,7 +654,13 @@ async function dbSaveML(data){/* Mirror locally FIRST, on both branches. The Sha
    `return` before ever reaching the LS.set below, so saving the masterlist
    while online left the offline cache stale forever. */
 LS.set('masterlist',data);LS.set('masterlist_savedAt',new Date().toISOString());
-if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Masterlist'),"Title eq 'config'",'Id,Modified');if(r.length){/* Conflict guard: if SP was updated more recently than our local copy, warn before overwriting */const spModified=new Date(r[0].Modified||0).getTime();const localSavedAt=new Date(LS.get('masterlist_savedAt')||0).getTime();if(spModified>localSavedAt+5000)console.warn('dbSaveML: SP masterlist was modified by another user at',r[0].Modified,'— overwriting with local version');await spPatch(spList('Masterlist'),r[0].Id,{shicData:JSON.stringify(data)});}else await spPost(spList('Masterlist'),{Title:'config',shicData:JSON.stringify(data)});return;}catch(e){console.warn('dbSaveML:',e.message);}}}
+if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Masterlist'),"Title eq 'config'",'Id,Modified');if(r.length){/* Conflict guard: if SP was updated more recently than our local copy, warn before overwriting */const spModified=new Date(r[0].Modified||0).getTime();const localSavedAt=new Date(LS.get('masterlist_savedAt')||0).getTime();if(spModified>localSavedAt+5000)console.warn('dbSaveML: SP masterlist was modified by another user at',r[0].Modified,'— overwriting with local version');await spPatch(spList('Masterlist'),r[0].Id,{shicData:JSON.stringify(data)});}else await spPost(spList('Masterlist'),{Title:'config',shicData:JSON.stringify(data)});return{sp:true};}catch(e){
+/* Reported, not swallowed. This caught the SharePoint failure and returned as
+   if it had worked, so saveML marked the masterlist "synced" and the sidebar
+   showed a tick while every rate change sat in one browser. The same silence
+   put 48 CEs into SharePoint as headers with no line items. */
+console.warn('dbSaveML:',e.message);return{sp:false,reason:e.message};}}
+return{sp:false,reason:'SharePoint is not configured'};}
 async function dbSaveSowLib(lib){
   if(USE_SP||getSiteURL()){
     try{

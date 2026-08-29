@@ -60,7 +60,13 @@ function LocalToSPSync() {
     try {
       addLog('Syncing masterlist…');
       const ml = LS.get('masterlist');
-      if (ml) { await dbSaveML(ml); addLog('✅ Masterlist synced'); totalOk++; }
+      if (ml) {
+        const r = await dbSaveML(ml);
+        /* Same rule as the CEs below: a masterlist that only reached this
+           browser has not been synced, whatever the tick says. */
+        if (r && r.sp === false) { addLog('✗ Masterlist: SharePoint refused it — ' + String(r.reason || 'unknown').slice(0, 90)); totalFail++; }
+        else { addLog('✅ Masterlist synced'); totalOk++; }
+      }
       else addLog('— Masterlist: nothing local to sync');
     } catch (e) { addLog('❌ Masterlist error: ' + e.message); totalFail++; }
 

@@ -201,6 +201,22 @@ function App({
     if (field === 'status' && val) {
       extra.statusChangedAt = new Date().toISOString();
       extra.statusChangedBy = currentUser?.name || currentUser?.username || '';
+      /* The whole trail, not just the latest change. statusChangedAt only ever
+         held the most recent one, so "who moved this to Submitted, and when did
+         it leave For Approval" had no answer -- the previous stamp was
+         overwritten the moment the next change landed.
+
+         Capped: a CE that gets toggled daily for a year should not grow an
+         unbounded column in a list already at its size limits. The oldest
+         entries go first, and the newest 60 are the ones anyone asks about. */
+      const before = prev[ceId] || {};
+      const log = Array.isArray(before.statusLog) ? before.statusLog : [];
+      extra.statusLog = [...log, {
+        status: val,
+        from: before.status || '',
+        at: extra.statusChangedAt,
+        by: extra.statusChangedBy
+      }].slice(-60);
     }
     const n = {
       ...prev,
@@ -2643,6 +2659,9 @@ function App({
   const MON_PAGE_SIZE = 20;
   const [editingRow, setEditingRow] = React.useState(null);
   const [attachPanel, setAttachPanel] = React.useState(null); // ceId or null
+  /* The row whose status panel is open: pick a new status, and read the trail
+     of who moved it and when. */
+  const [statusPanel, setStatusPanel] = React.useState(null); // ceId or null
   const [attachList, setAttachList] = React.useState([]);
   const [attachBusy, setAttachBusy] = React.useState(false);
   const monTopScrollRef = React.useRef(null);
@@ -3779,59 +3798,9 @@ function App({
         ...TDS,
         padding: '4px 6px'
       }
-    }, /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("select", {
-      /* Status is the one field that changes constantly -- it is what
-         Monitoring is for -- so it is editable in place rather than behind
-         Edit. Everything else in the row stays gated, because the rest is
-         reference data that should not move by a stray click.
-
-         Styled as the chip it replaces, so the table still reads as a list of
-         statuses rather than a wall of dropdowns. */
-      style: {
-        ...INP,
-        border: 'none',
-        background: statusColor + '22',
-        color: statusColor,
-        fontWeight: 700,
-        fontSize: 10,
-        padding: '2px 6px',
-        borderRadius: 12,
-        width: '100%',
-        cursor: 'pointer',
-        appearance: 'none',
-        textAlign: 'center'
-      },
-      key: e.id + 'status',
-      /* A draft row has no monitoring record and no numeric id, so writing one
-         here would post a row keyed to "draft:..." and fail. Its status is
-         Draft by definition until the CE is saved. */
-      disabled: !!e._draft,
-      title: e._draft
-        ? 'A draft is always Draft \u2014 save the CE to start tracking it'
-        : 'Change status \u2014 the date is recorded automatically' + (m.statusChangedBy ? '. Last changed by ' + m.statusChangedBy : ''),
-      value: m.status || '',
-      onChange: ev => { if (!e._draft) updateMon(e.id, 'status', ev.target.value); }
-    }, /*#__PURE__*/React.createElement("option", {
-      value: ""
-    }, "\u2014"), allStatuses.map(s => /*#__PURE__*/React.createElement("option", {
-      key: s,
-      value: s
-    }, s))), editingRow === e.id ? /*#__PURE__*/React.createElement("input", {
-      /* The stamp is written automatically when a status is picked, which is
-         right for a CE moving through the pipeline and wrong for a historical
-         one entered years after the fact -- it recorded today, against whoever
-         typed it. The date is correctable here; the name is not, because that
-         part is genuinely observed.
-
-         Pick the status first: changing it re-stamps, which would discard a
-         date corrected beforehand. */
-      type: "date",
-      key: e.id + 'statusChangedAt',
-      title: "When the status actually changed. Set this on historical CEs \u2014 it defaults to the day it was recorded here.",
-      style: {...INP, border: 'none', background: 'transparent', padding: '1px 2px', fontSize: 9, width: '100%', color: MT, marginTop: 2},
-      defaultValue: monDateInput(m.statusChangedAt),
-      onChange: ev => updateMon(e.id, 'statusChangedAt', ev.target.value ? new Date(ev.target.value + 'T12:00:00').toISOString() : '')
-    }) : (m.statusChangedAt ? /*#__PURE__*/React.createElement("div", {style:{fontSize:9,color:MT,marginTop:2,lineHeight:1.3,textAlign:'center'},title:'Changed by '+(m.statusChangedBy||'unknown')+' \u2014 open Edit to correct the date'}, new Date(m.statusChangedAt).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}), m.statusChangedBy?' \u00b7 '+m.statusChangedBy.split(' ')[0]:'') : null)
+    }, /*#__PURE__*/React.createElement("div", null,
+      /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',background:statusColor+'22',color:statusColor,fontWeight:700,fontSize:10,padding:'2px 8px',borderRadius:12,whiteSpace:'nowrap'}}, m.status||'—'),
+      m.statusChangedAt && /*#__PURE__*/React.createElement("div", {style:{fontSize:9,color:MT,marginTop:2,lineHeight:1.3},title:'Changed by '+(m.statusChangedBy||'unknown')}, new Date(m.statusChangedAt).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}), m.statusChangedBy?' · '+m.statusChangedBy.split(' ')[0]:'')
     )), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
@@ -3890,9 +3859,14 @@ function App({
         gap: 3
       }
     }, /*#__PURE__*/React.createElement("button", {
-      /* Deadline, received-by and the rest hang off a monitoring record keyed
-         to a saved CE. A draft has no such record and no SharePoint id to
-         attach a file to, so both are held back until it is saved. */
+      /* Status changes constantly and everything else in the row does not, so
+         it gets its own action rather than sharing Edit with the reference
+         fields. It opens a panel: pick the new status, and read the trail. */
+      disabled: !!e._draft,
+      style: {...btn(statusPanel === e.id ? 'acc' : 'def', true), fontSize: 10, padding: '2px 8px', opacity: e._draft ? .4 : 1, cursor: e._draft ? 'not-allowed' : 'pointer'},
+      title: e._draft ? 'A draft is always Draft — save the CE to start tracking it' : 'Update status and view its history',
+      onClick: () => { if (!e._draft) setStatusPanel(statusPanel === e.id ? null : e.id); }
+    }, '⚑ Status'), /*#__PURE__*/React.createElement("button", {
       disabled: !!e._draft,
       style: {...btn(editingRow === e.id ? 'ok' : 'def', true), fontSize: 10, padding: '2px 8px', opacity: e._draft ? .4 : 1, cursor: e._draft ? 'not-allowed' : 'pointer'},
       title: e._draft ? 'Save the CE first — a draft has no monitoring record to hold a deadline' : 'Edit monitoring fields',
@@ -6987,6 +6961,72 @@ tab === 'sowbreak' && (() => {
 tab === 'scopelib' && /*#__PURE__*/React.createElement(ScopeLibraryEditor, null),
 tab === 'masterlist' && /*#__PURE__*/React.createElement(MlEditor, null),
 tab === 'history' && /*#__PURE__*/React.createElement(HistPanel, null),
+
+/* ── Status Panel Modal ──────────────────────────────────────────────────────
+   Pick the new status, and read the trail of who moved it and when.
+
+   The status used to be a dropdown sitting in the table row, which put a form
+   control on every one of 900 rows and still had nowhere to show the history:
+   statusChangedAt only ever held the most recent change, so the previous one
+   was overwritten the moment the next landed. */
+statusPanel && (() => {
+  const _e = sortedHistory.find(x => x.id === statusPanel);
+  const _m = _e ? monOf(_e) : {};
+  const _log = Array.isArray(_m.statusLog) ? _m.statusLog : [];
+  /* A CE tracked before statusLog existed still has its latest stamp, so show
+     that rather than claiming nothing ever happened. */
+  const _shown = _log.length ? [..._log].reverse()
+    : (_m.statusChangedAt ? [{status: _m.status, at: _m.statusChangedAt, by: _m.statusChangedBy, _legacy: true}] : []);
+  return /*#__PURE__*/React.createElement("div", {
+    style:{position:'fixed',inset:0,background:'#000b',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center'},
+    onClick:()=>setStatusPanel(null)
+  }, /*#__PURE__*/React.createElement("div", {
+    style:{background:CARD,border:`1px solid ${BDR}`,borderRadius:10,padding:24,minWidth:440,maxWidth:560,maxHeight:'82vh',overflowY:'auto'},
+    onClick:ev=>ev.stopPropagation()
+  },
+    /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}},
+      /*#__PURE__*/React.createElement("b", {style:{fontSize:14}}, "⚑ Status"),
+      /*#__PURE__*/React.createElement("button", {style:btn('def',true), onClick:()=>setStatusPanel(null)}, "✕ Close")),
+    /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,marginBottom:16,...MONO}}, (_e?.info?.ceNum || _e?.ceNum || '')),
+
+    /*#__PURE__*/React.createElement("div", {style:{fontSize:10,color:MT,letterSpacing:.5,marginBottom:6}}, "CURRENT"),
+    /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',background:getStatusColor(_m.status||'')+'22',color:getStatusColor(_m.status||''),fontWeight:700,fontSize:12,padding:'3px 12px',borderRadius:12,marginBottom:16}}, _m.status || "—"),
+
+    /*#__PURE__*/React.createElement("div", {style:{fontSize:10,color:MT,letterSpacing:.5,marginBottom:8}}, "CHANGE TO"),
+    /*#__PURE__*/React.createElement("div", {style:{display:'flex',flexWrap:'wrap',gap:6,marginBottom:20}},
+      allStatuses.map(st => /*#__PURE__*/React.createElement("button", {
+        key: st,
+        disabled: st === _m.status,
+        style:{...btn('def',true), fontSize:11, padding:'4px 12px', borderRadius:12,
+               background: st === _m.status ? getStatusColor(st)+'33' : 'transparent',
+               borderColor: getStatusColor(st)+'66', color: getStatusColor(st),
+               opacity: st === _m.status ? .5 : 1,
+               cursor: st === _m.status ? 'default' : 'pointer'},
+        title: st === _m.status ? 'Already ' + st : 'Set to ' + st,
+        onClick: () => {
+          if (st === _m.status) return;
+          updateMon(statusPanel, 'status', st);
+          showToast('Status set to ' + st + '.');
+        }
+      }, st))),
+
+    /*#__PURE__*/React.createElement("div", {style:{fontSize:10,color:MT,letterSpacing:.5,marginBottom:8}}, "HISTORY"),
+    _shown.length === 0
+      ? /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,padding:'12px 0',border:'1px dashed '+BDR,borderRadius:6,textAlign:'center'}}, "No status changes recorded yet.")
+      : /*#__PURE__*/React.createElement("div", null, _shown.map((h, i) => /*#__PURE__*/React.createElement("div", {
+          key: i,
+          style:{display:'flex',alignItems:'baseline',gap:8,padding:'6px 0',borderBottom:'1px solid '+BDR+'44'}
+        },
+          /*#__PURE__*/React.createElement("span", {style:{background:getStatusColor(h.status||'')+'22',color:getStatusColor(h.status||''),fontWeight:700,fontSize:10,padding:'2px 8px',borderRadius:10,whiteSpace:'nowrap'}}, h.status || "—"),
+          h.from && /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT}}, "from " + h.from),
+          /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT,marginLeft:'auto',whiteSpace:'nowrap'}},
+            h.at ? new Date(h.at).toLocaleString('en-PH',{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : ''),
+          /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:TX,minWidth:90,textAlign:'right'}}, h.by || "—")
+        ))),
+    _shown.length && _shown[0]._legacy ? /*#__PURE__*/React.createElement("div", {style:{fontSize:10,color:MT,marginTop:8,lineHeight:1.5}},
+      "Only the most recent change was kept before this version. Everything from here on is logged in full.") : null
+  ));
+})(),
 
 /* ── Attachment Panel Modal ── */
 attachPanel && /*#__PURE__*/React.createElement("div", {

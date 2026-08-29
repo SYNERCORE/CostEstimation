@@ -26,14 +26,24 @@ const cell = src.match(/\}, \/\*#__PURE__\*\/React\.createElement\(React\.Fragme
 let bad=0;
 const ck=(n,c,x)=>{ if(c) console.log('  PASS  '+n); else { console.log('  FAIL  '+n+(x?'  -> '+x:'')); bad++; } };
 
-console.log('the status cell:');
-ck('is not gated behind Edit mode', !!cell && !/^\}, editingRow === e\.id \?/.test(cell[0]));
-ck('is a controlled value, so it reflects changes made elsewhere', /value: m\.status \|\| ''/.test(cell[0]),
-  'defaultValue would go stale when monData reloads');
-ck('is disabled on a draft row', /disabled: !!e\._draft/.test(cell[0]),
+/* The inline dropdown put a form control on every one of ~900 rows and still
+   had nowhere to show the history. It is an action button now, opening a panel
+   that both sets the status and shows the trail. */
+console.log('status is its own action, not a control in every row:');
+const ck2 = ck;
+ck2('the Status action opens a panel', /setStatusPanel\(statusPanel === e\.id \? null : e\.id\)/.test(src));
+ck2('it is held back on a draft row', /if \(!e\._draft\) setStatusPanel/.test(src),
   'a draft has no numeric id, so dbSaveMonEntry would post shicCEId NaN');
-ck('and guards the handler too, not just the attribute', /if \(!e\._draft\) updateMon\(e\.id, 'status'/.test(cell[0]));
-ck('the correction date stays behind Edit', /editingRow === e\.id \? \/\*#__PURE__\*\/React\.createElement\("input", \{/.test(cell[0]));
+ck2('the panel offers every status', /allStatuses\.map\(st =>/.test(src));
+ck2('the current one is not offered again', /disabled: st === _m\.status/.test(src));
+ck2('and the row shows the status as a chip, not a dropdown',
+  !/key: e\.id \+ 'status'/.test(src),
+  'a select per row is ~900 form controls and still shows no history');
+ck2('the panel shows the trail', /HISTORY/.test(src) && /_shown\.map\(\(h, i\)/.test(src));
+ck2('with what it moved from, when, and who', /"from " \+ h\.from/.test(src) && /h\.by \|\| /.test(src));
+ck2('a CE tracked before the log existed still shows its last change',
+  /_legacy: true/.test(src),
+  'claiming nothing ever happened would be worse than showing one entry');
 
 const upd = src.match(/const updateMon = \(ceId, field, val\) => setMonData\(prev => \{[\s\S]*?return n;/)[0];
 console.log('\nthe stamp:');

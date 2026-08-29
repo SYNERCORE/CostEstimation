@@ -24,8 +24,10 @@ jobs:
         run: node tools/check-print-escaping.js
       - name: The two Status fields map onto each other
         run: node tools/check-status-sync.js
-      - name: Status is editable in place, and every change is stamped
+      - name: Status has its own action, with a full change history
         run: node tools/test-status-cell.js
+      - name: Every status change is logged with who and when
+        run: node tools/test-status-log.js
       - name: Every SharePoint column written is one the app creates
         run: node tools/check-sp-schema.js
       - name: A missing SharePoint column does not swallow a whole CE

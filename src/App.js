@@ -189,6 +189,14 @@ function App({
       setSyncStatus({monitoring:'error'});
     }
   };
+  /* A stored stamp is a full ISO timestamp; a date input wants YYYY-MM-DD in
+     LOCAL time. Slicing the ISO string instead would shift the date back a day
+     for anything stamped before 08:00 in Manila. */
+  const monDateInput = v => {
+    if (!v) return '';
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? '' : new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  };
   const updateMon = (ceId, field, val) => setMonData(prev => {
     const extra = {};
     /* Stamp who moved a CE and when, on the statuses that represent a decision
@@ -3718,7 +3726,7 @@ function App({
         ...TDS,
         padding: '4px 6px'
       }
-    }, editingRow === e.id ? /*#__PURE__*/React.createElement("select", {
+    }, editingRow === e.id ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("select", {
       style: {
         ...INP,
         border: 'none',
@@ -3738,7 +3746,22 @@ function App({
     }, "\u2014"), allStatuses.map(s => /*#__PURE__*/React.createElement("option", {
       key: s,
       value: s
-    }, s))) : /*#__PURE__*/React.createElement("div", null,
+    }, s))), /*#__PURE__*/React.createElement("input", {
+      /* The stamp is written automatically when a status is picked, which is
+         right for a CE moving through the pipeline and wrong for a historical
+         one entered years after the fact -- it recorded today, against whoever
+         typed it. The date is correctable here; the name is not, because that
+         part is genuinely observed.
+
+         Pick the status first: changing it re-stamps, which would discard a
+         date corrected beforehand. */
+      type: "date",
+      key: e.id + 'statusChangedAt',
+      title: "When the status actually changed. Set this on historical CEs \u2014 it defaults to the day it was recorded here.",
+      style: {...INP, border: 'none', background: 'transparent', padding: '1px 2px', fontSize: 9, width: '100%', color: MT, marginTop: 2},
+      defaultValue: monDateInput(m.statusChangedAt),
+      onChange: ev => updateMon(e.id, 'statusChangedAt', ev.target.value ? new Date(ev.target.value + 'T12:00:00').toISOString() : '')
+    })) : /*#__PURE__*/React.createElement("div", null,
       /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',background:statusColor+'22',color:statusColor,fontWeight:700,fontSize:10,padding:'2px 8px',borderRadius:12,whiteSpace:'nowrap'}}, m.status||'\u2014'),
       m.statusChangedAt && /*#__PURE__*/React.createElement("div", {style:{fontSize:9,color:MT,marginTop:2,lineHeight:1.3},title:'Changed by '+(m.statusChangedBy||'unknown')}, new Date(m.statusChangedAt).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}), m.statusChangedBy?' \u00b7 '+m.statusChangedBy.split(' ')[0]:'')
     )), /*#__PURE__*/React.createElement("td", {

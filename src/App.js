@@ -369,6 +369,9 @@ function App({
       try { const n = LS.pruneCeCache(60); if (n) console.info('Pruned ' + n + ' cached CE(s) from local storage.'); } catch (_e) {}
       loadHist();
       loadMonData();
+      /* Drafts are rows in Monitoring now, so they have to be loaded with the
+         history rather than only when the Saved Drafts panel is opened. */
+      loadSharedDrafts();
       /* Move the CE archive out of localStorage. Deliberately AFTER loadHist so
          reconciliation can reuse a warm SharePoint result, and fire-and-forget
          so it can never delay the UI. It defers itself when offline. */
@@ -1088,7 +1091,7 @@ function App({
       const list = await dbGetDrafts();
       setSharedDrafts(list);
       setSyncStatus({drafts:'synced', lastSyncAt: new Date().toISOString(), sp:'connected'});
-      if (list.length === 0) showToast('No shared drafts found.');
+      if (list.length === 0) showToast('Nothing in progress — every CE has been saved.');
     } catch (e) {
       setSharedDrafts([]);
       setSyncStatus({drafts:'error'});
@@ -2608,9 +2611,34 @@ function App({
     } catch(e) { showToast('Delete failed: ' + e.message, true); }
     setAttachBusy(false);
   };
+  /* Monitoring tracks open CEs, and a draft is an open CE -- the only
+     difference is that it can still be edited. So drafts are listed alongside
+     saved CEs, carrying the status Draft, and they search, sort, filter and
+     count like any other row.
+
+     A draft whose number is already in history is dropped: that work has been
+     saved, and the row would be a duplicate of the real CE. Saving now retires
+     its draft, so this only catches drafts left behind by someone else's save
+     or by an older build. */
+  const monRows = useMemo(() => {
+    const saved = new Set(history.map(h => String(h.info?.ceNum || h.ceNum || '').trim().toUpperCase()).filter(Boolean));
+    const draftRows = (sharedDrafts || [])
+      .filter(d => !saved.has(String(d.info?.ceNum || '').trim().toUpperCase()))
+      .map(d => ({
+        ...d,
+        id: 'draft:' + d.draftId,
+        _draft: d,
+        ceType: d.ceType || 'onsite',
+        grand: computeCEGrand(d)
+      }));
+    return [...history, ...draftRows];
+  }, [history, sharedDrafts]);
+  /* A draft has no monitoring record -- there is no CE to attach a deadline or
+     a received-by to yet -- so it reports the one field it does know. */
+  const monOf = e => monData[e.id] || (e && e._draft ? {status: 'Draft'} : {});
   const sortedHistory = useMemo(() => {
-    const filtered = history.filter(e => {
-      const m = monData[e.id] || {};
+    const filtered = monRows.filter(e => {
+      const m = monOf(e);
       if (monStatusFilter.size > 0) {
         const s = m.status || '';
         if (!monStatusFilter.has(s)) return false;
@@ -2621,8 +2649,8 @@ function App({
       return (e.info?.ceNum || '').toLowerCase().includes(q) || (e.info?.client || '').toLowerCase().includes(q) || (e.info?.description || '').toLowerCase().includes(q) || (m.customer || '').toLowerCase().includes(q) || (m.receivedBy || '').toLowerCase().includes(q) || (m.remarks || '').toLowerCase().includes(q);
     });
     return [...filtered].sort((a, b) => {
-      const ma = monData[a.id] || {},
-        mb = monData[b.id] || {};
+      const ma = monOf(a),
+        mb = monOf(b);
       let va, vb;
       if (monSortCol === 'ceNum') {
         va = a.info?.ceNum || '';
@@ -2644,7 +2672,7 @@ function App({
       if (va > vb) return monSortDir === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [history, monData, monSearch, monStatusFilter, monTypeFilter, monSortCol, monSortDir]);
+  }, [monRows, monData, monSearch, monStatusFilter, monTypeFilter, monSortCol, monSortDir]);
   const toggleSort = col => {
     if (monSortCol === col) setMonSortDir(d => d === 'asc' ? 'desc' : 'asc');else {
       setMonSortCol(col);
@@ -3427,7 +3455,7 @@ function App({
        semi-transparent on alternate rows, and cells would scroll visibly
        underneath it. */
     const stickyBg = rowIdx % 2 === 0 ? CARD : SURF;
-    const m = monData[e.id] || {};
+    const m = monOf(e);
     const ceNum = e.info?.ceNum || e.ceNum || '';
     const jobTitle = e.info?.description || '';
     const dateRecv = e.savedAt ? new Date(e.savedAt).toLocaleDateString('en-PH', {
@@ -3511,7 +3539,12 @@ function App({
         fontSize: 10,
         whiteSpace: 'nowrap'
       }
-    }, ceNum), /*#__PURE__*/React.createElement("td", {
+    }, ceNum, e._draft && /*#__PURE__*/React.createElement("span", {
+      /* A saved CE whose status is Draft and an unsaved draft both read
+         "Draft" in the status column. This badge says which is which. */
+      title: 'Unsaved draft by ' + (e.savedByName || e.savedBy || 'someone') + ' — Load to pick it up',
+      style: {marginLeft: 5, fontSize: 8, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 8, background: '#8B5CF622', color: '#A78BFA', border: '1px solid #8B5CF644'}
+    }, 'UNSAVED')), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
         padding: '4px 6px'
@@ -3727,19 +3760,25 @@ function App({
         gap: 3
       }
     }, /*#__PURE__*/React.createElement("button", {
-      style: {...btn(editingRow === e.id ? 'ok' : 'def', true), fontSize: 10, padding: '2px 8px'},
-      onClick: () => setEditingRow(editingRow === e.id ? null : e.id)
+      /* Deadline, received-by and the rest hang off a monitoring record keyed
+         to a saved CE. A draft has no such record and no SharePoint id to
+         attach a file to, so both are held back until it is saved. */
+      disabled: !!e._draft,
+      style: {...btn(editingRow === e.id ? 'ok' : 'def', true), fontSize: 10, padding: '2px 8px', opacity: e._draft ? .4 : 1, cursor: e._draft ? 'not-allowed' : 'pointer'},
+      title: e._draft ? 'Save the CE first — a draft has no monitoring record to hold a deadline' : 'Edit monitoring fields',
+      onClick: () => { if (!e._draft) setEditingRow(editingRow === e.id ? null : e.id); }
     }, editingRow === e.id ? '✓ Done' : '✎ Edit'), /*#__PURE__*/React.createElement("button", {
-      style: {...btn(attachPanel === e.id ? 'acc' : 'def', true), fontSize: 10, padding: '2px 8px'},
-      title: "Attachments (Drawings, TOR, etc.)",
-      onClick: () => { if (attachPanel === e.id) { setAttachPanel(null); } else { openAttachPanel(e.id); } }
+      disabled: !!e._draft,
+      style: {...btn(attachPanel === e.id ? 'acc' : 'def', true), fontSize: 10, padding: '2px 8px', opacity: e._draft ? .4 : 1, cursor: e._draft ? 'not-allowed' : 'pointer'},
+      title: e._draft ? 'Save the CE first — attachments need a saved record' : "Attachments (Drawings, TOR, etc.)",
+      onClick: () => { if (e._draft) return; if (attachPanel === e.id) { setAttachPanel(null); } else { openAttachPanel(e.id); } }
     }, '📎', monSpIds.has(String(e.id)) && attachList.length > 0 && attachPanel === e.id ? ` ${attachList.length}` : ''), (e.data || e.info) && /*#__PURE__*/React.createElement("button", {
       style: {
         ...btn('acc', true),
         fontSize: 10,
         padding: '2px 8px'
       },
-      onClick: () => handleLoad(e.data || e)
+      onClick: () => e._draft ? resumeDraft(e._draft) : handleLoad(e.data || e)
     }, "Load"), (isAdmin || e.savedBy === currentUser.username) && /*#__PURE__*/React.createElement("button", {
       style: {
         ...btn('danger', true),
@@ -3752,6 +3791,9 @@ function App({
           return;
         }
         setConfirmDel(null);
+        /* A draft row has no history entry behind it; deleting one has to go
+           to the drafts list or the row comes back on the next refresh. */
+        if (e._draft) { await deleteDraft(e._draft.draftId); return; }
         const ceNum = e.info?.ceNum || e.ceNum || String(e.id);
         const snapshot = [...history];
         setHistory(prev => prev.filter(h => h.id !== e.id));
@@ -5670,13 +5712,13 @@ function App({
       fontSize: 14,
       color: '#A78BFA'
     }
-  }, "\uD83D\uDCCB Shared Drafts"), /*#__PURE__*/React.createElement("span", {
+  }, "\uD83D\uDCCB Resume Work"),/*#__PURE__*/React.createElement("span", {
     style: {
       color: MT,
       fontSize: 11,
       flex: 1
     }
-  }, 'Shared via SharePoint'), /*#__PURE__*/React.createElement("button", {
+  }, 'Unsaved work in progress, shared via SharePoint'), /*#__PURE__*/React.createElement("button", {
     onClick: () => loadSharedDrafts(),
     style: btn('def', true),
     title: "Refresh"
@@ -5702,7 +5744,7 @@ function App({
       textAlign: 'center',
       color: MT
     }
-  }, "No shared drafts found."), sharedDrafts.map(d => {
+  }, "Nothing in progress — every CE has been saved."), sharedDrafts.map(d => {
     const age = Math.round((Date.now() - new Date(d.savedAt).getTime()) / 60000);
     const ageStr = age < 60 ? age + 'm ago' : age < 1440 ? Math.round(age / 60) + 'h ago' : Math.round(age / 1440) + 'd ago';
     const isOwn = d.savedBy === currentUser.username;
@@ -6943,7 +6985,7 @@ tab === 'dashboard' && (() => {
   const monthHist = history.filter(h => { const d=new Date(h.savedAt||h.createdAt||0); return d.getMonth()===thisMonth&&d.getFullYear()===thisYear; });
   const totalThis = monthHist.reduce((s,h)=>s+N(h.grand||0),0);
   const avgVal = history.length ? history.reduce((s,h)=>s+N(h.grand||0),0)/history.length : 0;
-  const statuses = history.map(h=>(monData[h.id]||{}).status||'Draft');
+  const statuses = monRows.map(h=>monOf(h).status||'Draft');
   /* An "open" CE is one still needing work. Submitted, No Quote and Cancelled
      are the three end states -- everything else, Draft included, is open.
      Sorted by deadline so the next thing due is the first thing read. A CE
@@ -6951,7 +6993,7 @@ tab === 'dashboard' && (() => {
      plain string compare an empty deadline would sort to the very top and
      bury the genuinely urgent rows. */
   const CLOSED_STATUSES = ['Submitted', 'No Quote', 'Cancelled'];
-  const openCEs = history.map(h => ({h, m: monData[h.id] || {}}))
+  const openCEs = monRows.map(h => ({h, m: monOf(h)}))
     .filter(x => CLOSED_STATUSES.indexOf(x.m.status || 'Draft') < 0)
     .sort((a, b) => {
       const da = a.m.deadline || '', db = b.m.deadline || '';
@@ -9403,8 +9445,8 @@ tab === 'dashboard' && (() => {
       loadSharedDrafts();
       setDraftsOpen(true);
     },
-    title: "View all shared drafts"
-  }, "\uD83D\uDCCB Drafts", sharedDrafts.length > 0 && /*#__PURE__*/React.createElement("span", {
+    title: "Unsaved work in progress, shared with the team \u2014 pick one up where it was left. Not the same as a saved CE whose status is Draft."
+  }, "\uD83D\uDCCB Resume Work", sharedDrafts.length > 0 && /*#__PURE__*/React.createElement("span", {
     style: {
       position: 'absolute',
       top: -4,

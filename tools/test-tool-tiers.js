@@ -162,5 +162,36 @@ ck('Sync Rates carries them onto the CE',
   'without them a Tier 1 or Tier 3 row has nothing to derive from');
 ck('so does the tab-level Sync Rates', /\['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear'\]\.forEach/.test(restab));
 
+/* The client's copy has to say what it is charging for. A DAYS column says
+   nothing on a row charged per project, and reads as a mistake on an hourly
+   row showing 1 day against an hourly price. */
+console.log('\nthe documents name the basis of the charge:');
+const basisSrc = app.match(/const toolBasis = r => \{[\s\S]*?\n  \};/);
+ck('there is one description of it, shared by all three', !!basisSrc);
+if (basisSrc) {
+  const basis = new Function('N', 'resDays',
+    'return ' + basisSrc[0].replace(/^const toolBasis = /, '').replace(/;$/, '')
+  )(N, r => (r.days === undefined || r.days === '' || r.days === null) ? 1 : (N(r.days) || 0));
+  ck('Tier 1 says per project', basis({tier: 1, days: 60}) === 'per project');
+  ck('Tier 2 says how many days', basis({tier: 2, days: 5}) === '5 days');
+  ck('and does not say "1 days"', basis({tier: 2, days: 1}) === '1 day');
+  ck('Tier 3 says how many hours', basis({tier: 3, hours: 24}) === '24 hrs');
+  ck('a row with no tier reads as days, as it always did', basis({days: 3}) === '3 days');
+}
+
+ck('the printed CE shows it', /<th class="c" style="width:52px">BASIS<\/th>/.test(app));
+ck('Export CE shows it', /'ITEM', 'DESCRIPTION', 'QTY', 'UOM', 'BASIS', 'UNIT PRICE', 'TOTAL'/.test(app));
+ck('Export Detailed shows it', /\.\.\.\(withDays \? \['BASIS'\] : \[\]\)/.test(app));
+ck('and no document still prints DAYS for a tool',
+  !/'ITEM', 'DESCRIPTION', 'QTY', 'UOM', 'DAYS'/.test(app) && !/>DAYS<\/th><th class="r" style="width:80px">UNIT PRICE/.test(app));
+
+console.log('\nand every printed total is the tiered one:');
+ck('the printed CE', /fmt\(toolRowCost\(r\)\)/.test(app));
+ck('Export CE', /S\(toolRowCost\(r\), 'tdnb'\)/.test(app));
+ck('Export Detailed', /a\.money\(withDays \? toolRowCost\(r\) : N\(r\.qty\) \* N\(r\.cost\)\)/.test(app));
+ck('none of them recompute qty x days x cost by hand',
+  !/N\(r\.qty\) \* N\(r\.cost\) \* resDays\(r\)/.test(app),
+  'a document doing its own arithmetic is a document that can disagree with the CE');
+
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\ntool tiers OK');
 process.exit(bad ? 1 : 0);

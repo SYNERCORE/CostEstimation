@@ -831,6 +831,16 @@ function App({
     + miscFlat().filter(r => rowServesTask(r, id)).length;
   /* Cost of a single row, using the same formulas that drive the section totals
      so a per-task subtotal can never disagree with the Grand Total. */
+  /* How a tool is charged, in words, for the client's copy. The printed CE and
+     both exports carried a DAYS column, which says nothing on a row charged per
+     project or by the hour -- and read as a mistake on a Tier 3 row showing 1
+     day against an hourly price. One column, naming the basis of the charge. */
+  const toolBasis = r => {
+    const t = N(r.tier) || 2;
+    if (t === 1) return 'per project';
+    if (t === 3) return (N(r.hours) || 0) + ' hrs';
+    return resDays(r) + (resDays(r) === 1 ? ' day' : ' days');
+  };
   const rowCost = (kind, r) => {
     /* Tools carry a tier. The source figures ride on the row itself, copied
        from the masterlist when it was added, so a later masterlist change
@@ -1829,10 +1839,10 @@ function App({
     const toolsActive = tools.filter(r => r.desc && String(r.desc).trim());
     if (toolsActive.length) {
       const s = head('BILL OF TOOLS AND EQUIPMENT');
-      s.push(['ITEM', 'DESCRIPTION', 'QTY', 'UOM', 'DAYS', 'UNIT PRICE', 'TOTAL'].map(h => S(h, 'th')));
+      s.push(['ITEM', 'DESCRIPTION', 'QTY', 'UOM', 'BASIS', 'UNIT PRICE', 'TOTAL'].map(h => S(h, 'th')));
       toolsActive.forEach((r, i) => s.push([
-        S(i + 1, 'tdc'), S(r.desc || '', 'td'), S(N(r.qty) || 1, 'tdc'), S(r.uom || 'Lot', 'tdc'), S(resDays(r), 'tdc'),
-        S(N(r.cost), 'tdn'), S(N(r.qty) * N(r.cost) * resDays(r), 'tdnb')]));
+        S(i + 1, 'tdc'), S(r.desc || '', 'td'), S(N(r.qty) || 1, 'tdc'), S(r.uom || 'Lot', 'tdc'), S(toolBasis(r), 'tdc'),
+        S(N(r.cost), 'tdn'), S(toolRowCost(r), 'tdnb')]));
       s.push([S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('TOTAL:', 'totlbl'), S(N(toolsT), 'tot')]);
       sheets.push({name: 'BOTE', cols: COLS, rows: s});
     }
@@ -5769,8 +5779,8 @@ function App({
     const toolsActive=tools.filter(r=>r.desc&&(N(r.cost)>0||r.desc.trim()));
     const toolsPage=toolsActive.length?`<div class="blk">
       <div class="sec">BILL OF TOOLS AND EQUIPMENT</div>
-      <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:28px">QTY</th><th class="c" style="width:35px">UOM</th><th class="c" style="width:35px">DAYS</th><th class="r" style="width:80px">UNIT PRICE</th><th class="r" style="width:80px">TOTAL</th></tr>
-      ${toolsActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.uom||'Lot')}</td><td class="c">${resDays(r)}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(N(r.qty)*N(r.cost)*resDays(r))}</td></tr>`).join('')}
+      <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:28px">QTY</th><th class="c" style="width:35px">UOM</th><th class="c" style="width:52px">BASIS</th><th class="r" style="width:80px">UNIT PRICE</th><th class="r" style="width:80px">TOTAL</th></tr>
+      ${toolsActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.uom||'Lot')}</td><td class="c">${esc(toolBasis(r))}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(toolRowCost(r))}</td></tr>`).join('')}
       <tr class="tot"><td colspan="6" class="r b">TOTAL:</td><td class="r b">${fmt(toolsT)}</td></tr></table></div>` : '';
 
     /* Materials &#8212; skip zero rows */
@@ -6039,11 +6049,12 @@ function App({
       if (!rows.length) return;
       sheet(name, a => {
         docHead(a, heading, withDays ? 7 : 6);
-        a.head('ITEM', 'DESCRIPTION', 'QTY', 'UOM', ...(withDays ? ['DAYS'] : []), 'UNIT PRICE', 'TOTAL');
+        /* withDays is only ever true for tools, which is the one bill whose
+           rows can be charged per project or by the hour. */
+        a.head('ITEM', 'DESCRIPTION', 'QTY', 'UOM', ...(withDays ? ['BASIS'] : []), 'UNIT PRICE', 'TOTAL');
         rows.forEach((r, i) => {
-          const d = withDays ? resDays(r) : 1;
-          a.row(i + 1, r.desc || '', N(r.qty), r.uom || 'Lot', ...(withDays ? [d] : []),
-            a.money(r.cost), a.money(N(r.qty) * d * N(r.cost)));
+          a.row(i + 1, r.desc || '', N(r.qty), r.uom || 'Lot', ...(withDays ? [toolBasis(r)] : []),
+            a.money(r.cost), a.money(withDays ? toolRowCost(r) : N(r.qty) * N(r.cost)));
         });
         a.blank();
         a.total('', 'TOTAL:', '', '', ...(withDays ? [''] : []), '', a.money(total));

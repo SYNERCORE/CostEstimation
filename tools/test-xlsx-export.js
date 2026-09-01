@@ -54,9 +54,14 @@ ck('RATE OT carries the shift multiplier', /N\(r\.rate\) \/ 8 \* 1\.25 \* mult/.
 ck('the regular subtotal does too', /N\(r\.pax\) \* N\(r\.days\) \* N\(r\.rate\) \* mult/.test(exp));
 ck('overtime is per day, as everywhere else', /\(N\(r\.otHours\) \/ 8\)/.test(exp),
   'this is the seventh place that formula appears and it must match the other six');
-ck('tools are charged qty x days x cost', /N\(r\.qty\) \* d \* N\(r\.cost\)/.test(exp));
-ck('and only tools get a DAYS column', /withDays \? \['DAYS'\] : \[\]/.test(exp),
-  'a consumable is not billed by the day');
+/* Tools carry a tier now, so the sheet cannot work its own total out: a row
+   may be charged per project, per day or per hour. It asks toolRowCost, the
+   same function the CE totals with, and prints the basis of the charge instead
+   of a DAYS column that says nothing on two of the three tiers. */
+ck('tools are costed by the one tier function, not by hand',
+  /a\.money\(withDays \? toolRowCost\(r\) : N\(r\.qty\) \* N\(r\.cost\)\)/.test(exp));
+ck('and only tools get a BASIS column', /withDays \? \['BASIS'\] : \[\]/.test(exp),
+  'a consumable is not billed by the day, the hour or the project');
 ck('the summary reuses the same rows the app shows', /summaryRows\.forEach/.test(exp),
   'a second copy of the section list would drift from the screen');
 ck('selling price only when there is a margin', /margin !== 0\) a\.total/.test(exp));

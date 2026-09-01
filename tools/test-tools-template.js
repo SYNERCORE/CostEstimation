@@ -105,5 +105,27 @@ ck('and the die grinder comes in at its workbook rate',
   derived && Math.abs(derived.tier2 - 52.60) < 0.01,
   derived ? derived.tier2.toFixed(2) : 'no rates');
 
+/* The four figures had column headings and no cells, so anything entered in
+   the calculator was stored and then appeared nowhere -- which reads as the
+   calculator having failed, and sends people to enter it again. */
+console.log('\nthe masterlist SHOWS the figures it stores:');
+ck('there is a cell for each of the four',
+  /\[\'unitPrice\', \'serviceLife\', \'projectsPerYear\', \'maintPerYear\'\]\.map\(k =>/.test(app));
+ck('they are editable, not just displayed',
+  /onChange: e => updML\(r\.id, k, e\.target\.value === \'\'/.test(app));
+ck('an empty cell stays empty rather than becoming 0',
+  /value: r\[k\] === undefined/.test(app) && /\? \'\' : r\[k\]/.test(app),
+  'a zero reads as a real figure; blank means there is no basis to derive a tier from');
+ck('and only on the tools tab', /mlTab === \'tools\'\n?[\s]*\\? \[\'unitPrice\'/.test(app)
+  || app.indexOf("(mlTab === 'tools'") > 0);
+
+/* Headings and cells must stay the same length, or every column after the
+   first extra one sits under the wrong heading -- which is what put the delete
+   button under "Unit Price". */
+const toolsHdr = app.match(/tools: \[\'Item Code\'[^\]]*\]/)[0];
+ck('the tools heading row declares nine columns',
+  (toolsHdr.match(/\'/g) || []).length / 2 === 9,
+  toolsHdr);
+
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\ntools template OK');
 process.exit(bad ? 1 : 0);

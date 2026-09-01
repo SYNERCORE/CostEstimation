@@ -2986,7 +2986,40 @@ function App({
         },
         value: r.uom || 'Day',
         onChange: e => updML(r.id, 'uom', e.target.value)
-      }, uomOptionEls(r.uom || 'Day'))), /*#__PURE__*/React.createElement("td", {
+      }, uomOptionEls(r.uom || 'Day'))),
+      /* The four figures a tier price is derived from. They had column headings
+         and no cells, so a value entered in the calculator was stored and then
+         appeared nowhere -- which reads as the calculator having failed.
+         Editable here as well, because typing one number is quicker than
+         opening a dialog to change it. */
+      ...(mlTab === 'tools'
+        ? ['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear'].map(k =>
+            /*#__PURE__*/React.createElement("td", {
+              key: k,
+              style: TDS
+            }, /*#__PURE__*/React.createElement("input", {
+              style: {
+                ...INP,
+                ...MONO,
+                width: k === 'serviceLife' ? 74 : 96,
+                fontSize: 10
+              },
+              type: "number",
+              min: 0,
+              /* Empty, not 0: nothing entered means there is no basis to derive
+                 a tier from, and a zero would read as a real figure. */
+              value: r[k] === undefined || r[k] === null || r[k] === '' ? '' : r[k],
+              placeholder: "—",
+              title: {
+                unitPrice: 'What the tool cost to buy',
+                serviceLife: 'Over how many years it is written off',
+                projectsPerYear: 'Projects it is used on in a year — Tier 1 only',
+                maintPerYear: 'Yearly maintenance, often 20% of unit price'
+              }[k],
+              onChange: e => updML(r.id, k, e.target.value === '' ? '' : (parseFloat(e.target.value) || 0))
+            })))
+        : []),
+      /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, mlTab === 'tools' && /*#__PURE__*/React.createElement("button", {
         onClick: () => setMlCalc({

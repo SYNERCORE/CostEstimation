@@ -50,6 +50,8 @@ jobs:
         run: node tools/check-remounting-editors.js
       - name: Every CE can be downloaded for offline use
         run: node tools/test-offline-prefetch.js
+      - name: Tool tier pricing reproduces the masterlist workbook
+        run: node tools/test-tool-tiers.js
       - name: Printing a previous CE does not disturb the open one
         run: node tools/test-print-without-loading.js
       - name: A saved CE keeps its quoted cost until Sync Rates is pressed

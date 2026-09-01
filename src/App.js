@@ -2366,11 +2366,96 @@ function App({
      With no hooks left inside it, MlEditor is called as a plain function
      below, so its output is part of App's own tree and nothing remounts. */
   const [mlTab, setMlTab] = useState('manpower');
+  /* The tier calculator. Held here rather than inside MlEditor: state declared
+     in a component that is itself declared in another component is thrown away
+     on every render, which is what ate keystrokes in this very editor before. */
+  const [mlCalc, setMlCalc] = useState(null);
   const [mlQ, setMlQ] = useState('');
   const [mlPage, setMlPage] = useState(0);
   const [mlQuickAdd, setMlQuickAdd] = useState('');
   const [escPct, setEscPct] = useState('');
   const mlQuickAddRef = React.useRef(null);
+  /* Work the tier prices out from what a tool actually costs to own.
+
+     Typing a day rate straight in means the number behind it lives in someone
+     else's spreadsheet. Enter the four figures the rate comes from and every
+     tier follows -- and, because they are stored on the entry, Tier 1 and
+     Tier 3 can be derived from it later without asking again.
+
+     Applying writes the four figures AND the Tier 2 daily rate into Cost,
+     which is the field the CE has always priced from, so nothing downstream
+     has to know this happened. */
+  const MlCalcModal = () => {
+    if (!mlCalc) return null;
+    const set = (k, v) => setMlCalc(c => ({...c, [k]: v}));
+    const rates = toolTierRates(mlCalc);
+    const money = v => (v === null || v === undefined) ? '—' :
+      '₱' + Number(v).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    const field = (k, label, hint) => React.createElement('div', {style: {flex: 1, minWidth: 130}},
+      React.createElement('label', {style: LBL}, label),
+      React.createElement('input', {
+        style: {...INP, fontSize: 12}, type: 'number', min: 0,
+        value: mlCalc[k], placeholder: '0',
+        onChange: e => set(k, e.target.value)
+      }),
+      hint && React.createElement('div', {style: {color: MT, fontSize: 9, marginTop: 2}}, hint));
+    const tier = (label, v, note) => React.createElement('div', {
+      style: {flex: 1, minWidth: 130, padding: '8px 10px', border: '1px solid ' + BDR, borderRadius: 6, background: SURF}
+    },
+      React.createElement('div', {style: {fontSize: 9, color: MT, letterSpacing: .4}}, label.toUpperCase()),
+      React.createElement('div', {style: {fontSize: 15, fontWeight: 700, marginTop: 2}}, money(v)),
+      React.createElement('div', {style: {fontSize: 9, color: MT, marginTop: 2}}, note));
+
+    return React.createElement('div', {
+      style: {position: 'fixed', inset: 0, background: '#000A', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', zIndex: 200, padding: 16},
+      onClick: e => { if (e.target === e.currentTarget) setMlCalc(null); }
+    },
+      React.createElement('div', {style: {...CS, maxWidth: 760, width: '100%', maxHeight: '90vh', overflowY: 'auto'}},
+        React.createElement('div', {style: {fontWeight: 700, fontSize: 13, marginBottom: 2}}, 'Tier Pricing Calculator'),
+        React.createElement('div', {style: {color: MT, fontSize: 11, marginBottom: 12}}, mlCalc.desc || 'this tool'),
+
+        React.createElement('div', {style: {display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12}},
+          field('unitPrice', 'Unit Price', 'what it cost to buy'),
+          field('serviceLife', 'Service Life (years)', 'over how long it is written off'),
+          field('maintPerYear', 'Maintenance per Year', 'often 20% of unit price'),
+          field('projectsPerYear', 'Projects per Year', 'Tier 1 only')),
+
+        rates ? React.createElement('div', null,
+          React.createElement('div', {style: {color: MT, fontSize: 11, marginBottom: 8}},
+            'Annual cost to own: ', React.createElement('b', null, money(rates.annual)),
+            '  =  unit price / service life + maintenance per year'),
+          React.createElement('div', {style: {display: 'flex', gap: 8, flexWrap: 'wrap'}},
+            tier('Tier 1 - per project', rates.tier1, 'flat, whatever the duration'),
+            tier('Tier 2 - per day', rates.tier2, 'x days on the CE - the default'),
+            tier('Tier 3 - per hour', rates.tier3, 'x hours on the CE')),
+          React.createElement('div', {style: {color: MT, fontSize: 10, marginTop: 8, lineHeight: 1.6}},
+            'Per day and per hour are CALENDAR time: a tool held on site is unavailable to another project overnight, ',
+            'so it is charged for the hours it is held, not the hours it runs.')
+        ) : React.createElement('div', {style: {color: MT, fontSize: 11, padding: '14px 0'}},
+          'Enter a unit price and service life, or a yearly maintenance figure, and the tiers appear here.'),
+
+        React.createElement('div', {style: {display: 'flex', gap: 8, marginTop: 14, alignItems: 'center'}},
+          React.createElement('button', {
+            style: btn('acc'),
+            disabled: !rates,
+            onClick: () => {
+              const next = {...masterlist, tools: (masterlist.tools || []).map(r => r.id === mlCalc.id ? {
+                ...r,
+                unitPrice: N(mlCalc.unitPrice), serviceLife: N(mlCalc.serviceLife),
+                projectsPerYear: N(mlCalc.projectsPerYear), maintPerYear: N(mlCalc.maintPerYear),
+                cost: Math.round(rates.tier2 * 100) / 100
+              } : r)};
+              saveML(next);
+              setMlCalc(null);
+              showToast('Cost set to ' + money(rates.tier2) + ' per day. The figures behind it are saved with the item.');
+            }
+          }, 'Apply to this item'),
+          React.createElement('button', {style: btn('def'), onClick: () => setMlCalc(null)}, 'Cancel'),
+          rates && React.createElement('span', {style: {color: MT, fontSize: 10}},
+            'Cost becomes the Tier 2 daily rate - what the CE has always priced from.'))
+      ));
+  };
   const MlEditor = () => {
     const colK = {
       manpower: ['category', 'role', 'rate', 'perDiem', 'uom'],
@@ -2830,7 +2915,25 @@ function App({
         onChange: e => updML(r.id, 'uom', e.target.value)
       }, uomOptionEls(r.uom || 'Day'))), /*#__PURE__*/React.createElement("td", {
         style: TDS
-      }, /*#__PURE__*/React.createElement("button", {
+      }, mlTab === 'tools' && /*#__PURE__*/React.createElement("button", {
+        onClick: () => setMlCalc({
+          id: r.id,
+          desc: r.desc || '',
+          unitPrice: r.unitPrice || '',
+          serviceLife: r.serviceLife || '',
+          projectsPerYear: r.projectsPerYear || '',
+          maintPerYear: r.maintPerYear || ''
+        }),
+        title: "Work the tier prices out from unit price, service life and maintenance",
+        style: {
+          background: 'none',
+          border: 'none',
+          color: INFO,
+          cursor: 'pointer',
+          fontSize: 13,
+          padding: '1px 5px'
+        }
+      }, "\uD83D\uDCB2"), /*#__PURE__*/React.createElement("button", {
         onClick: () => delML(r.id),
         style: {
           background: 'none',
@@ -7265,7 +7368,7 @@ tab === 'sowbreak' && (() => {
   );
 })(),
 tab === 'scopelib' && ScopeLibraryEditor(),
-tab === 'masterlist' && MlEditor(),
+tab === 'masterlist' && MlEditor(), tab === 'masterlist' && MlCalcModal(),
 tab === 'history' && /*#__PURE__*/React.createElement(HistPanel, null),
 
 /* ── Status Panel Modal ──────────────────────────────────────────────────────

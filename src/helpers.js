@@ -154,3 +154,74 @@ async function verifyPassword(pw, stored) {
   // Legacy SHA-256 fallback
   return await sha256(pw) === stored;
 }
+
+/* -- Tool & equipment tier pricing ------------------------------------------
+   Three ways to charge a tool, all derived from one annual figure, so they can
+   never disagree with each other:
+
+     annualCost = UnitPrice / ServiceLife + MaintenancePerYear
+
+     Tier 1  flat per project   annualCost / ProjectsPerYear   duration ignored
+     Tier 2  daily x days       annualCost / 365               <- the default
+     Tier 3  hourly x hours     annualCost / 8760
+
+   Tier 2 is what the app has always done: a tool row costs qty x days x cost,
+   so the masterlist `cost` column has always held the Tier 2 daily rate. That
+   is why nothing needs migrating -- every masterlist entry and every saved CE
+   is already priced on Tier 2, and the other two tiers are additions.
+
+   365 and 8760 are CALENDAR time, deliberately: a tool on site is unavailable
+   to any other project overnight, so it is charged for the hours it is held,
+   not the hours it is running.
+
+   Returns null when the source figures are not there to derive from -- an
+   entry carrying only a hand-typed cost is not an error, it is the ordinary
+   case for a rented tool with no depreciation basis. */
+const TIER_HOURS_PER_YEAR = 365 * 24;
+function toolAnnualCost(src) {
+  if (!src) return null;
+  const price = N(src.unitPrice), life = N(src.serviceLife), maint = N(src.maintPerYear);
+  if (price <= 0 && maint <= 0) return null;
+  /* A life of zero would divide by zero and hand back Infinity, which reads on
+     screen as a real price. No life stated means nothing is being written off. */
+  const depreciation = (price > 0 && life > 0) ? price / life : 0;
+  if (depreciation <= 0 && maint <= 0) return null;
+  return depreciation + maint;
+}
+/* Every tier for one masterlist entry, for display beside the inputs that
+   produced them. */
+function toolTierRates(src) {
+  const annual = toolAnnualCost(src);
+  if (annual === null) return null;
+  const perYear = N(src.projectsPerYear);
+  return {
+    annual,
+    /* Tier 1 needs to know how many projects share the year. Without it there
+       is no per-project share to take, so it is absent rather than guessed. */
+    tier1: perYear > 0 ? annual / perYear : null,
+    tier2: annual / 365,
+    tier3: annual / TIER_HOURS_PER_YEAR
+  };
+}
+/* What one CE row costs. `cost` is the Tier 2 daily rate, the same field the
+   app has always used, so a row that names no tier costs exactly what it did
+   before. A tier the entry cannot derive falls back to that stored rate rather
+   than to zero: charging nothing for a tool is never the safer wrong answer. */
+function toolRowCost(row, src) {
+  if (!row) return 0;
+  const qty = N(row.qty), daily = N(row.cost);
+  const tier = N(row.tier) || 2;
+  const r = toolTierRates(src || row);
+  if (tier === 1) {
+    if (r && r.tier1 !== null) return qty * r.tier1;
+    return qty * daily * ceResDays(row);
+  }
+  if (tier === 3) {
+    /* Hours, not days. A four-hour job is the reason this tier exists, so an
+       hours field left empty must not silently become a full day. */
+    const hours = N(row.hours);
+    if (r) return qty * r.tier3 * hours;
+    return qty * (daily / 24) * hours;
+  }
+  return qty * daily * ceResDays(row);
+}

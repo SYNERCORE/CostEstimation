@@ -75,11 +75,28 @@ const sources = [];
 for (const f of files) {
   const p = path.join(ROOT, f);
   if (!fs.existsSync(p)) { console.error('missing script referenced by index.html: ' + f); process.exit(1); }
-  const code = stripped(fs.readFileSync(p, 'utf8'));
+  const raw = fs.readFileSync(p, 'utf8');
+  const code = stripped(raw);
   sources.push({ file: f, code });
   let d;
   const declRe = /(?:function\s+([A-Za-z_$][\w$]*)|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=)/g;
   while ((d = declRe.exec(code))) defined.add(d[1] || d[2]);
+  /* Declarations are collected from the RAW file as well as the stripped one.
+
+     `stripped` is a scanner, not a parser: one construct it reads wrongly --
+     a division it takes for a regex literal, say -- and it swallows everything
+     to the next slash, taking real declarations with it. That is what happened
+     to handleExportXLSX, which is declared in plain sight and was reported as
+     never defined the moment something finally called it with parentheses.
+
+     A declaration seen in the raw text is a declaration. The cost is that one
+     written inside a comment would also count, which risks missing a genuine
+     fault; a false failure on working code is the worse of the two, because it
+     is the one that stops a build and sends someone hunting for a bug that is
+     not there. Calls are still read from the stripped source, so a call inside
+     a comment or a string is still ignored. */
+  declRe.lastIndex = 0;
+  while ((d = declRe.exec(raw))) defined.add(d[1] || d[2]);
 }
 
 const problems = [];

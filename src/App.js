@@ -358,6 +358,11 @@ function App({
   const fileRef = useRef(null);
   const _lastAutoSig = useRef(null); /* skips no-op auto-saves */
   const _lastDraftId = useRef(null); /* the draft row this session wrote, whatever it was numbered */
+  /* A CE asked for by URL, to be printed or exported the moment it is on
+     screen. Printing another CE used to mean loading it over the one being
+     worked on; this opens its own tab instead, so nothing in the tab you are
+     working in moves. */
+  const [autoPrint, setAutoPrint] = useState(null);
   /* Scoped to this account: the window now outlives the tab, so a colleague
      signing in on the same browser must not inherit the bypass. */
   const [bulkOn, setBulkOn] = useState(() => bulkMode.on(currentUser?.username));
@@ -485,6 +490,24 @@ function App({
           if (Object.keys(fix).length) setSyncStatus(fix);
         }
       };
+      /* ?print=<CE id>&as=ce|detailed -- open one CE, print or export it, and
+         leave every other tab alone. */
+      try {
+        const _q = new URLSearchParams(window.location.search);
+        const _pid = Number(_q.get('print'));
+        if (_pid) {
+          const _as = _q.get('as') === 'detailed' ? 'detailed' : 'ce';
+          window.history.replaceState({}, '', window.location.pathname);
+          setTimeout(async () => {
+            try {
+              const full = await dbLoadCE(_pid);
+              if (!full) { showToast('Could not open that CE — it is not in SharePoint or this browser.', true); return; }
+              await handleLoad(full);
+              setAutoPrint({as: _as, ceNum: (full.info || {}).ceNum || ''});
+            } catch (ex) { showToast('Could not open that CE: ' + ex.message, true); }
+          }, 600);
+        }
+      } catch (e) { console.warn('print URL parse failed:', e.message); }
       /* Feature 7: load shared draft from URL ?draft= param */
       try {
         const urlDraft = new URLSearchParams(window.location.search).get('draft');
@@ -1313,6 +1336,34 @@ function App({
     setPpe(prev => reprice(prev, mlRes.ppe));
     showToast('Re-priced ' + changes.length + ' row' + (changes.length === 1 ? '' : 's') + ' from the masterlist. Nothing is saved until you press Save.');
   };
+  /* Print or export a CE without disturbing the one being worked on.
+
+     The document is built from what is on screen -- section totals, benefits,
+     highlighted costs and the signatory block are all derived from the CE the
+     editor is holding -- so producing another CE's paperwork means that CE has
+     to be on screen somewhere. It opens in its own tab, which is the part that
+     matters: the CE you have open here does not move, and there is nothing to
+     restore afterwards. */
+  const openForPrint = (id, as) => {
+    const w = window.open(window.location.pathname + '?print=' + id + '&as=' + as, '_blank');
+    if (!w) { showToast('Allow pop-ups for this site to print a CE from here.', true); return; }
+    let _what = 'the printable CE';
+    if (as === 'detailed') _what = 'Export Detailed';
+    showToast('Opening ' + _what + ' in a new tab...');
+  };
+  /* Runs only once the loaded CE has been committed to state -- the export
+     functions read what is on screen, so firing any earlier would have printed
+     the CE that was open before. */
+  useEffect(() => {
+    if (!autoPrint) return;
+    if ((info.ceNum || '') !== autoPrint.ceNum) return;
+    const as = autoPrint.as;
+    setAutoPrint(null);
+    setTimeout(() => {
+      try { if (as === 'detailed') handleExportXLSX(); else handleGenerateCE(); }
+      catch (ex) { showToast('Could not produce the document: ' + ex.message, true); }
+    }, 250);
+  }, [autoPrint, info.ceNum, mp, tools, mats, ppe]);
   const handleSave = async () => {
     let _overwrote = null; /* set when bulk mode lets a save replace an existing CE */
     const ceNum = (info.ceNum || '').trim().toUpperCase();
@@ -4153,7 +4204,7 @@ function App({
           }
         });
       }
-    }, confirmDel === e.id ? 'Sure?' : 'Del'), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{...btn('ok',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleClone(e.data||e),title:"Clone with new CE number"},"Clone"), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{...btn('info',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleRevise(e.data||e),title:"Revision copy (-R1, -R2...)"},"Revise"),
+    }, confirmDel === e.id ? 'Sure?' : 'Del'), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:()=>openForPrint(e.id,'ce'),title:"Generate the printable CE in its own tab — this one is left as it is"},"\uD83D\uDDA8 CE"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:()=>openForPrint(e.id,'detailed'),title:"Export Detailed in its own tab — this one is left as it is"},"\u2B07 xlsx"), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{...btn('ok',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleClone(e.data||e),title:"Clone with new CE number"},"Clone"), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{...btn('info',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleRevise(e.data||e),title:"Revision copy (-R1, -R2...)"},"Revise"),
     /* Feature 3: Compare button for revisions */
     (()=>{const cn=(e.info?.ceNum||e.ceNum||'');const isRev=/-R\d+$/i.test(cn);if(!isRev)return null;return/*#__PURE__*/React.createElement("button",{style:{...btn('def',true),fontSize:10,padding:'2px 8px'},title:"Compare with base CE",onClick:()=>{const base=cn.replace(/-R\d+$/i,'').toUpperCase();const baseEntry=history.find(h=>(h.info?.ceNum||h.ceNum||'').toUpperCase()===base);setDiffModal({base:baseEntry||null,rev:e.data||e});}},"⚖ Diff");})()
     )));

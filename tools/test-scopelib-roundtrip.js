@@ -53,7 +53,8 @@ const svc = {
     {name: 'LASER ALIGNMENT KIT', qty: 1, step: 3}
   ],
   mats: [{name: 'ANTI-SEIZE COMPOUND', qty: 1, step: 3}],
-  ppe: [{name: 'SAFETY HARNESS', qty: 4, step: 0}]
+  ppe: [{name: 'SAFETY HARNESS', qty: 4, step: 0}],
+  misc: [{name: 'CRANE MOBILISATION', qty: 1, step: 0}]
 };
 
 const rows = EXP([svc], SUBSTEP_RE);
@@ -83,6 +84,12 @@ ck('tools too, quantities included',
   JSON.stringify(back.tools) === JSON.stringify(svc.tools), JSON.stringify(back.tools));
 ck('materials too', JSON.stringify(back.mats) === JSON.stringify(svc.mats));
 ck('PPE too', JSON.stringify(back.ppe) === JSON.stringify(svc.ppe));
+/* Miscellaneous had no column at all, so every accommodation, permit and admin
+   line a service carried was dropped by its own export -- and silently, since
+   nothing said the column was missing. */
+ck('and Miscellaneous, which had no column at all',
+  JSON.stringify(back.misc) === JSON.stringify(svc.misc), JSON.stringify(back.misc));
+ck('the export writes a Misc column', rows[0].Misc === 'CRANE MOBILISATION', rows[0].Misc);
 
 console.log('\nwhat the old format did is still readable:');
 const legacy = [

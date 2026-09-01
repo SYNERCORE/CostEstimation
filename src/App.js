@@ -5300,7 +5300,11 @@ function App({
             MP: resCell(svc.mp, i),
             Tools: resCell(svc.tools, i),
             Materials: resCell(svc.mats, i),
-            PPE: resCell(svc.ppe, i)
+            PPE: resCell(svc.ppe, i),
+            /* Miscellaneous had no column at all, so every accommodation,
+               permit and admin line a service carried was dropped by its own
+               export -- silently, since nothing said the column was missing. */
+            Misc: resCell(svc.misc, i)
           }));
         });
         const ws = XLSX.utils.json_to_sheet(rows);
@@ -5370,7 +5374,8 @@ function App({
                 mp: [],
                 tools: [],
                 mats: [],
-                ppe: []
+                ppe: [],
+                misc: []
               };
               stepOf[id] = 0;
             }
@@ -5382,7 +5387,7 @@ function App({
               map[id].scope.push(String(r.ScopeText));
               stepOf[id] = step + 1;
             }
-            [['MP', 'mp'], ['Tools', 'tools'], ['Materials', 'mats'], ['PPE', 'ppe']].forEach(pair => {
+            [['MP', 'mp'], ['Tools', 'tools'], ['Materials', 'mats'], ['PPE', 'ppe'], ['Misc', 'misc']].forEach(pair => {
               if (r[pair[0]]) map[id][pair[1]] = map[id][pair[1]].concat(parseRes(r[pair[0]], step));
             });
           });

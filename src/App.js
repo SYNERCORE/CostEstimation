@@ -3199,18 +3199,25 @@ function App({
         const fallbackCeNum = file.name.replace(/\.xlsx?$/i,'').slice(0,30);
         // Derive CE type from project type field (Electrical=onsite, Mechanical=shopworks default)
         const importedCeType = projType==='Electrical' ? 'onsite' : 'shopworks';
-        // Compute provisional grand total from parsed rows
-        const mpGrand = mpRows.reduce((s,r)=>s+N(r.pax)*N(r.days)*N(r.rate)*(SHIFTS[r.shift]?.mult||1),0);
-        const provisionalGrand = mpGrand + tools.reduce((s,r)=>s+N(r.qty)*resDays(r)*N(r.cost),0) + [...mats,...ppe].reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
-        console.log('[CE Import] Parsed:', {ceNum, description, client, ceType:importedCeType, mp:mpRows.length, tools:tools.length, mats:mats.length, ppe:ppe.length, grand:provisionalGrand});
+        /* The stored total must be what these rows actually cost, computed by
+           the same function the editor uses.
+
+           It used to be worked out here by hand as wage only -- pax x days x
+           rate x shift -- with no benefits, no OT and no miscellaneous. So an
+           imported CE was filed under a total LOWER than its own line items,
+           Monitoring showed that figure, and opening the CE recomputed the
+           real one. The number appeared to change on load; nothing had
+           changed, the two were never the same number. */
         const entry = {
           ceType:importedCeType,
           info:{ceNum:ceNum||fallbackCeNum, date:dateStr, client, location, attention:attention||'SALES DEPARTMENT', endUser:endUser||'C/O SALES', projType, description, dept:'', status:'Submitted', material, qty, days, companyId:null},
           mp:mpRows, tools, mats, ppe, misc,
           notes:[], sowItems:[], approvers:[], mobVehicles:[], demobVehicles:[],
-          grand:Math.round(provisionalGrand), unitP:0, savedBy:currentUser?.username||'import',
+          grand:0, unitP:0, savedBy:currentUser?.username||'import',
           savedAt:new Date(dateStr).toISOString(), _imported:true
         };
+        entry.grand = computeCEGrand(entry);
+        console.log('[CE Import] Parsed:', {ceNum, description, client, ceType:importedCeType, mp:mpRows.length, tools:tools.length, mats:mats.length, ppe:ppe.length, grand:entry.grand});
         const effCeNum = ceNum || fallbackCeNum;
         const dupIdx = history.findIndex(h => (h.info?.ceNum || h.ceNum) === effCeNum);
         if (dupIdx >= 0) {

@@ -38,7 +38,11 @@ async function dbDeleteDraft(draftId){
   if(USE_SP||getSiteURL()){
     try{
       const r=await spGet(spList('Drafts'),`Title eq '${(draftId||'').replace(/'/g,"''")}'`,'Id');
-      if(r.length)await spDelete(spList('Drafts'),r[0].Id);
+      /* EVERY match, not just the first. A retried POST (the write succeeded but
+         the response never arrived) leaves two rows under one Title, and
+         deleting one of them left the draft on screen after the CE was saved --
+         looking exactly like the save had not worked. */
+      for(const x of r)await spDelete(spList('Drafts'),x.Id).catch(()=>{});
     }catch(e){console.warn('dbDeleteDraft:',e.message);}
   }
   try{localStorage.removeItem('shic_draft_'+draftId);}catch{}

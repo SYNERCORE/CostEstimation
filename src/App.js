@@ -357,6 +357,7 @@ function App({
   const [copyMenu, setCopyMenu] = useState(null); /* {fromShift, anchorEl} */
   const fileRef = useRef(null);
   const _lastAutoSig = useRef(null); /* skips no-op auto-saves */
+  const _lastDraftId = useRef(null); /* the draft row this session wrote, whatever it was numbered */
   /* Scoped to this account: the window now outlives the tab, so a colleague
      signing in on the same browser must not inherit the bypass. */
   const [bulkOn, setBulkOn] = useState(() => bulkMode.on(currentUser?.username));
@@ -1124,14 +1125,32 @@ function App({
        fresh draft of the CE that was just saved, and the row comes straight
        back a few minutes later. */
     if (_live.current) _lastAutoSig.current = _live.current.sig;
-    const ids = [...new Set(nums.filter(Boolean).map(draftIdFor))];
+    const ids = new Set(nums.filter(Boolean).map(draftIdFor));
+    /* The draft this session actually wrote. Retiring by CE number alone missed
+       it whenever the number changed after the draft was saved -- which is the
+       normal shape of a bulk upload: open the extracted CE, autosave fires under
+       whatever number is in the field, then the real number is typed in and
+       saved. The orphan under the old number stayed in Resume Work forever. */
+    if (_lastDraftId.current) ids.add(_lastDraftId.current);
+    /* And anything already on the Resume Work list for the same CE, mine only.
+       An id is built from the number as typed, so a stray space or a lower-case
+       letter produced a second id for one CE and only one of them was retired. */
+    const key = n => String(n || '').trim().toUpperCase();
+    const mine = new Set(nums.filter(Boolean).map(key));
+    (sharedDrafts || []).forEach(d => {
+      if (d.savedBy === currentUser.username && mine.has(key(d.info && d.info.ceNum))) ids.add(d.draftId);
+    });
     for (const id of ids) {
       try { await dbDeleteDraft(id); } catch (e) { console.warn('draft cleanup:', e.message); }
     }
-    setSharedDrafts(prev => prev.filter(d => ids.indexOf(d.draftId) < 0));
+    _lastDraftId.current = null;
+    setSharedDrafts(prev => prev.filter(d => !ids.has(d.draftId)));
   };
   const saveDraft = async () => {
     const draftId = draftIdFor(info.ceNum);
+    /* Remembered so the save can retire this exact row even if the CE number
+       has changed since. */
+    _lastDraftId.current = draftId;
     const d = {
       draftId,
       ceType,
@@ -1276,7 +1295,7 @@ function App({
       auditLog('bulk_overwrite', ceNum + ' (was saved ' + _overwrote + ')', currentUser?.username);
     }
     try {
-      await spWithRetry(() => dbSaveHistory(mkEntry()));
+      const _res = await spWithRetry(() => dbSaveHistory(mkEntry()));
       auditLog('save_ce', ceNum, currentUser?.username);
       _checkAutoBackup();
       /* Seed the pipeline status from the document state, so a CE saved as
@@ -1293,7 +1312,15 @@ function App({
          this save normalises it to upper case. */
       await retireDrafts(ceNum, info.ceNum);
       await loadHist();
-      showToast(_overwrote
+      /* dbSaveHistory swallows a SharePoint failure on purpose -- the work is
+         kept in this browser rather than lost. Reporting that as "Saved!" is
+         how a CE ends up visible to nobody else and unopenable from Monitoring
+         on any other machine. Say which of the two happened. */
+      if (_res && _res.sp === false) {
+        showToast('Saved to THIS BROWSER only — SharePoint did not accept it'
+          + (_res.reason ? ' (' + String(_res.reason).slice(0, 70) + ')' : '')
+          + '. Nobody else can open ' + ceNum + ' until you run "Push All Local Data to SharePoint".', true);
+      } else showToast(_overwrote
         ? 'Saved — REPLACED existing CE ' + ceNum + ' (previously saved ' + _overwrote + ').'
         : 'Saved! CE ' + ceNum + ' added to history.');
     } catch (e) {

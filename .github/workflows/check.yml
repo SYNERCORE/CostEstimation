@@ -50,6 +50,8 @@ jobs:
         run: node tools/check-remounting-editors.js
       - name: Every CE can be downloaded for offline use
         run: node tools/test-offline-prefetch.js
+      - name: Saving a CE clears its draft and reports where it went
+        run: node tools/test-draft-retire.js
       - name: Every sortable column sorts by what it shows
         run: node tools/test-monitoring-sort.js
       - name: SharePoint permission failures are named, not swallowed

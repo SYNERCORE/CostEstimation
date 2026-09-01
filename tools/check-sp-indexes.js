@@ -68,8 +68,12 @@ console.log('\nand the error tells you which failure this is:');
 ck('the threshold is named, with the remedy',
   /list view threshold/.test(sp) && /Repair lists & columns/.test(sp));
 ck('spGet passes the response body so it can be recognised',
-  /throw spErr\('get', ?l, ?r\.status, ?body\)/.test(sp),
+  /throw spErr\('get', ?l, ?r\.status, ?body[,)]/.test(sp),
   'without the body a threshold error, a missing column and a real outage all read as a bare 500');
+/* Retry-After rides alongside the body: a 429 has to be told apart from the
+   threshold error, and the wait it asks for is the only useful thing to say. */
+ck('and the Retry-After header with it',
+  /r\.headers&&r\.headers\.get\('Retry-After'\)/.test(sp));
 
 console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nSharePoint index coverage OK');
 process.exit(fails ? 1 : 0);

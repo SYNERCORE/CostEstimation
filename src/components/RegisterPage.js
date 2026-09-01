@@ -297,17 +297,43 @@ function spErrText(t){
   }catch(_){}
   return String(t||'').slice(0,200);
 }
+/* SharePoint throttles a burst of schema writes with 429, and provisioning is
+   nothing but a burst of schema writes. Every request came back 429, the repair
+   reported seventeen problems and changed nothing -- and because a 429 body
+   contains the word "throttl", it was reported as a 5,000-item index fault,
+   which is a different problem with a different remedy.
+
+   A 429 is not a failure, it is "later". Wait as long as SharePoint asks (it
+   sends Retry-After), then carry on where we left off. Retrying sooner extends
+   the throttle rather than clearing it. */
+async function _spThrottleWait(r, tries) {
+  const hdr = r && r.headers && r.headers.get ? r.headers.get('Retry-After') : null;
+  const wait = Math.min(Math.max(Number(hdr) || 15, 5), 60);
+  await new Promise(res => setTimeout(res, wait * 1000));
+  return tries + 1;
+}
+/* Runs fetchFn until it is not throttled, up to 4 waits. Returns the Response. */
+async function _spFetchPatient(fetchFn, onWait) {
+  let tries = 0, r = await fetchFn();
+  while (r && (r.status === 429 || r.status === 503) && tries < 4) {
+    const hdr = r.headers && r.headers.get ? r.headers.get('Retry-After') : null;
+    onWait && onWait(Math.min(Math.max(Number(hdr) || 15, 5), 60));
+    tries = await _spThrottleWait(r, tries);
+    r = await fetchFn();
+  }
+  return r;
+}
 async function spRestPost(url, payload, spType, token, digest, verboseExtra, preferVerbose){
   const attempt = async verbose => {
     /* verboseExtra holds properties that only exist on the concrete type, so
        they can only be sent once __metadata names that type. */
     const body = verbose ? {...payload, ...(verboseExtra||{}), __metadata:{type:spType}} : payload;
     const ct = verbose ? 'application/json;odata=verbose' : 'application/json;odata=nometadata';
-    const r = await fetch(url,{
+    const r = await _spFetchPatient(() => fetch(url,{
       method:'POST',credentials:'omit',
       headers:{'Accept':ct,'Content-Type':ct,'X-RequestDigest':digest,'Authorization':'Bearer '+token},
       body:JSON.stringify(body)
-    });
+    }), secs => console.info('SharePoint is throttling — waiting ' + secs + 's before retrying.'));
     return {ok:r.ok, status:r.status, text:r.ok ? '' : await r.text()};
   };
   /* Default order is plain-then-verbose. Callers that must land type-specific
@@ -325,8 +351,11 @@ async function spRestPost(url, payload, spType, token, digest, verboseExtra, pre
 async function spGetFieldNames(listName, token){
   const su=getSiteURL();
   try{
-    const r=await fetch(`${su}/_api/web/lists/getbytitle('${listName}')/fields?$select=InternalName,Title&$top=500`,
-      {credentials:'omit',headers:{'Accept':'application/json;odata=nometadata','Authorization':'Bearer '+token}});
+    const r=await _spFetchPatient(() => fetch(`${su}/_api/web/lists/getbytitle('${listName}')/fields?$select=InternalName,Title&$top=500`,
+      {credentials:'omit',headers:{'Accept':'application/json;odata=nometadata','Authorization':'Bearer '+token}}));
+    /* null means "could not read the columns", and the caller then tries to add
+       every one of them. Throttled, that turned one read into a burst of
+       redundant writes -- the opposite of what a throttled site needs. */
     if(!r.ok)return null;
     const j=await r.json();
     const set=new Set();
@@ -341,14 +370,18 @@ async function spCreateList(name, token, digest){
   const su=getSiteURL();
   /* Check if list exists */
   try{
-    const r=await fetch(`${su}/_api/web/lists/getbytitle('${name}')`,
-      {credentials:'omit',headers:{'Accept':'application/json;odata=nometadata','Authorization':'Bearer '+token}});
+    const r=await _spFetchPatient(() => fetch(`${su}/_api/web/lists/getbytitle('${name}')`,
+      {credentials:'omit',headers:{'Accept':'application/json;odata=nometadata','Authorization':'Bearer '+token}}));
     if(r.ok)return false; /* already exists */
   }catch(e){}
   /* Create list */
   const res=await spRestPost(`${su}/_api/web/lists`,
     {BaseTemplate:100,Title:name,Description:'SHIC Cost Estimator - auto-created'},
     'SP.List',token,digest);
+  /* Throttled out of the existence check above, we get here on a list that is
+     already present. SharePoint says so plainly; treating it as a failure is
+     what filled the report with problems that were not problems. */
+  if(!res.ok&&/already exists/i.test(String(res.text||'')))return false;
   if(!res.ok)throw new Error('Create list '+name+': '+res.status+' '+spErrText(res.text));
   return true; /* created */
 }

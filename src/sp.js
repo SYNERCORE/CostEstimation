@@ -128,7 +128,28 @@ async function spDigest(){const su=getSiteURL();const tok=await getSPToken();con
 function spDenied(e){/* Digit-bounded, not \b: a CE number like SHIC-CE-2026-0403 must not
    read as a permission error. */
   return /(^|[^0-9])(401|403)([^0-9]|$)|access is denied|unauthoriz/i.test(String((e&&e.message)||e||''));}
-function spErr(verb,list,status,body){
+function spErr(verb,list,status,body,retryAfter){
+  /* Throttling FIRST. SharePoint's 429 body contains the word "throttl", which
+     the view-threshold branch below matched -- so every throttled request was
+     reported as a 5,000-item index problem, which is a different fault with a
+     different remedy, and the advice was to press the very button that was
+     being throttled. */
+  if(status===429||status===503){
+    const e=new Error('SP '+verb+' '+list+': SharePoint is throttling this site ('+status+'). '+
+      'Too many requests went out at once. It clears on its own — wait '+
+      (retryAfter?('about '+retryAfter+' seconds'):'a minute or two')+' and try again.');
+    e.status=status;e.retryAfter=Number(retryAfter)||0;e.throttled=true;
+    return e;
+  }
+  /* A list or column that is already there is not a failure. Provisioning is
+     run repeatedly on purpose -- it is how a site catches up with a new
+     version -- so "already exists" is the ordinary result for everything that
+     was set up last time. */
+  if(/already exists/i.test(String(body||''))){
+    const e=new Error('SP '+verb+' '+list+': already exists');
+    e.status=status;e.alreadyExists=true;
+    return e;
+  }
   /* The list view threshold. A $filter on a NON-INDEXED column stops working
      once a list passes 5,000 items, and SharePoint reports it as a 500 rather
      than anything that sounds like a limit -- so it reads as an outage. With
@@ -174,7 +195,7 @@ async function spGet(l,f='',sel=''){
       /* The body is the only place SharePoint says WHY. Without it a threshold
          error, a missing column and a genuine outage all read as a bare 500. */
       let body='';try{body=await r.text();}catch(_){}
-      throw spErr('get',l,r.status,body);
+      throw spErr('get',l,r.status,body,r.headers&&r.headers.get('Retry-After'));
     }
     const json=await r.json();
     results=results.concat(json.value||[]);
@@ -182,9 +203,9 @@ async function spGet(l,f='',sel=''){
   }
   return results;
 }
-async function spPost(l,data){const su=getSiteURL();if(!su)throw new Error('SP not configured');const{digest,token}=await spDigest();if(!token)throw new Error('SP: No auth token. Please sign in via Connect & Test first.');const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'Authorization':'Bearer '+token};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items`,{method:'POST',credentials:'omit',headers:h,body:JSON.stringify(data)});if(!r.ok){const t=await r.text();throw spErr('post',l,r.status,t);}return r.json();}
-async function spPatch(l,id,data){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*','X-HTTP-Method':'MERGE',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'PATCH',credentials:'omit',headers:h,body:JSON.stringify(data)});if(!r.ok)throw spErr('patch',l,r.status);}
-async function spDelete(l,id){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'DELETE',credentials:'omit',headers:h});if(!r.ok)throw spErr('delete',l,r.status);}
+async function spPost(l,data){const su=getSiteURL();if(!su)throw new Error('SP not configured');const{digest,token}=await spDigest();if(!token)throw new Error('SP: No auth token. Please sign in via Connect & Test first.');const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'Authorization':'Bearer '+token};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items`,{method:'POST',credentials:'omit',headers:h,body:JSON.stringify(data)});if(!r.ok){const t=await r.text();throw spErr('post',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}return r.json();}
+async function spPatch(l,id,data){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*','X-HTTP-Method':'MERGE',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'PATCH',credentials:'omit',headers:h,body:JSON.stringify(data)});if(!r.ok){let t='';try{t=await r.text();}catch(_){}throw spErr('patch',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}}
+async function spDelete(l,id){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'DELETE',credentials:'omit',headers:h});if(!r.ok){let t='';try{t=await r.text();}catch(_){}throw spErr('delete',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}}
 
 async function spGetAttachments(listName, itemId){
   const su=getSiteURL(); if(!su) return [];

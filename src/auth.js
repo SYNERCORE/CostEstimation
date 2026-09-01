@@ -24,9 +24,25 @@ function clearLoginRate(un) { try { localStorage.removeItem(_lrKey(un)); } catch
 /* ── SP write retry (3 attempts, exponential backoff) ───────────── */
 async function spWithRetry(fn, attempts = 3) {
   let last;
+  /* Throttling gets its own, longer patience. A 429 means SharePoint has asked
+     us to stop for a while -- typically far longer than the 1s and 2s this
+     backoff allowed -- and retrying inside that window makes the throttle
+     worse rather than better. Provisioning a site issues dozens of writes and
+     hit exactly this: every one 429'd, three times each, and the repair
+     finished having done nothing. */
+  let throttleWaits = 0;
   for (let i = 0; i < attempts; i++) {
     try { return await fn(); } catch (e) {
       last = e;
+      if (e && e.throttled && throttleWaits < 3) {
+        throttleWaits++;
+        /* Honour Retry-After when SharePoint sends one. Capped, because a
+           several-minute header would leave the app looking hung. */
+        const wait = Math.min(Math.max(Number(e.retryAfter) || 15, 5), 60);
+        await new Promise(r => setTimeout(r, wait * 1000));
+        i--; /* a throttle wait is not a failed attempt */
+        continue;
+      }
       /* Offline, the retry cannot succeed and each round costs the caller a 1s
          then a 2s wait. Saving a CE issues dozens of these in batches of five,
          so the user sat through half a minute of backoff before being told the

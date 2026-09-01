@@ -52,6 +52,8 @@ jobs:
         run: node tools/test-offline-prefetch.js
       - name: A throttled SharePoint is waited out, not hammered
         run: node tools/test-throttling.js
+      - name: The tools template carries the tier figures
+        run: node tools/test-tools-template.js
       - name: Tool tier pricing reproduces the masterlist workbook
         run: node tools/test-tool-tiers.js
       - name: Printing a previous CE does not disturb the open one

@@ -2494,7 +2494,12 @@ function App({
     };
     const colL = {
       manpower: ['Item Code', 'Category', 'Role / Position', 'Day Rate (P)', 'Incentive (P/Day)', 'UOM'],
-      tools: ['Item Code', 'Category', 'Description', 'Cost (P)', 'UOM'],
+      /* The four figures a tier price is derived from ride with the rate. The
+         workbook the rates are maintained in has them; without them here, they
+         could be typed into the calculator one item at a time and no other
+         way. Cost stays where it is so an older template still imports. */
+      tools: ['Item Code', 'Category', 'Description', 'Cost (P)', 'UOM',
+        'Unit Price', 'Service Life (Years)', 'Projects per Year', 'Maintenance per Year'],
       materials: ['Item Code', 'Category', 'Description', 'Cost (P)', 'UOM'],
       ppe: ['Item Code', 'Category', 'Description', 'Cost (P)', 'UOM'],
       vehicles: ['Item Code', 'Category', 'Description', 'Rate (P)', 'UOM']
@@ -2502,7 +2507,8 @@ function App({
     const downloadMLTemplate = tab => {
       const colMap = {
         manpower: ['code', 'category', 'role', 'rate', 'perDiem', 'uom'],
-        tools: ['code', 'category', 'desc', 'cost', 'uom'],
+        tools: ['code', 'category', 'desc', 'cost', 'uom',
+          'unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear'],
         materials: ['code', 'category', 'desc', 'cost', 'uom'],
         ppe: ['code', 'category', 'desc', 'cost', 'uom'],
         vehicles: ['code', 'category', 'desc', 'rate', 'uom']
@@ -2567,10 +2573,23 @@ function App({
           category: 'category',
           roleposition: 'role', role: 'role',
           description: 'desc', desc: 'desc',
+          /* The maintained tools workbook heads its name column ITEM, not
+             Description, and every row was being dropped for want of a name.
+             "Item Code" normalises to itemcode, so this cannot swallow it. */
+          item: 'desc', itemdescription: 'desc',
           dayrate: 'rate', rate: 'rate',
           cost: 'cost',
           incentive: 'perDiem', perdiem: 'perDiem',
-          uom: 'uom'
+          uom: 'uom',
+          /* Tier source columns, under the names the maintained workbook uses
+             as well as the template's own. norm() has already stripped spaces,
+             punctuation and case, so one entry covers "Unit Price", "UNIT
+             PRICE" and "unit_price". */
+          unitprice: 'unitPrice',
+          servicelifespan: 'serviceLife', servicelife: 'serviceLife',
+          estprojectperyear: 'projectsPerYear', projectsperyear: 'projectsPerYear',
+          projectperyear: 'projectsPerYear', noofprojectsperyear: 'projectsPerYear',
+          maintenanceperyear: 'maintPerYear', maintperyear: 'maintPerYear'
         };
         const rekey = r => {
           const o = {};
@@ -2597,6 +2616,27 @@ function App({
              masterlist workbook already in circulation carries the old one. */
           if (tab === 'manpower') {
             item.perDiem = parseFloat(rk.perDiem || r.incentive || r.Incentive || r.perDiem || r.perdiem || 0) || 0;
+          }
+          /* Only what the sheet actually carried. Writing a 0 for a column the
+             workbook does not have would turn "no basis to derive from" into a
+             tool that costs nothing to own, and the tiers would read as real
+             prices of zero. */
+          if (tab === 'tools') {
+            ['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear'].forEach(k => {
+              if (rk[k] !== undefined && rk[k] !== '') {
+                const v = parseFloat(rk[k]);
+                if (isFinite(v)) item[k] = v;
+              }
+            });
+            /* The maintained workbook has no Cost column -- it holds the four
+               figures and the tier columns worked out from them. Without this
+               every imported tool arrives priced at zero. Derive the Tier 2
+               daily rate, which is the field the CE prices from. A sheet that
+               DOES give a cost keeps it: a typed rate is an override and wins. */
+            if (!N(item.cost)) {
+              const _r = toolTierRates(item);
+              if (_r) item.cost = Math.round(_r.tier2 * 100) / 100;
+            }
           }
           return item;
         }).filter(item => item[fm.name]);

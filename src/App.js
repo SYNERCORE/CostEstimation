@@ -2672,7 +2672,7 @@ function App({
     };
     const catOpts = {
       manpower: ['Electrical', 'Mechanical', 'Civil', 'General'],
-      tools: ['Electrical', 'Mechanical', 'General'],
+      tools: TOOL_CATEGORIES,
       materials: ['Electrical', 'Mechanical', 'Civil', 'General'],
       ppe: ['General', 'Welding', 'Electrical', 'Mechanical'],
       vehicles: ['Transport', 'Fuel', 'Allowance', 'Meals', 'Travel', 'Accommodation', 'Personnel', 'Equipment Rental', 'Permit / Fee', 'Miscellaneous']
@@ -2935,7 +2935,12 @@ function App({
         },
         value: r.category || '',
         onChange: e => updML(r.id, 'category', e.target.value)
-      }, catOpts[mlTab].map(c => /*#__PURE__*/React.createElement("option", {
+        /* The row's own category first when the list no longer offers it.
+           Without this an item filed under a retired category shows an empty
+           dropdown, which reads as "no category" when the item has one -- and
+           the next edit to any other field would look like it cleared it. */
+      }, [...(r.category && catOpts[mlTab].indexOf(r.category) < 0 ? [r.category] : []), ...catOpts[mlTab]]
+        .map(c => /*#__PURE__*/React.createElement("option", {
         key: c
       }, c)))), /*#__PURE__*/React.createElement("td", {
         style: TDS
@@ -4744,7 +4749,7 @@ function App({
         ppe: masterlist.ppe
       };
       const mlItems = mlMap[type] || [];
-      const catOpts = type === 'mp' ? ['Electrical', 'Mechanical', 'Civil', 'General'] : type === 'ppe' ? ['General', 'Welding', 'Electrical', 'Mechanical'] : ['Electrical', 'Mechanical', 'Civil', 'General'];
+      const catOpts = type === 'mp' ? ['Electrical', 'Mechanical', 'Civil', 'General'] : type === 'ppe' ? ['General', 'Welding', 'Electrical', 'Mechanical'] : type === 'tools' ? TOOL_CATEGORIES : ['Electrical', 'Mechanical', 'Civil', 'General'];
       /* Updater form, not a new array built from props: two edits landing in one
          React batch both read the same rendered snapshot, so the second would
          quietly undo the first. Callers that only accept an array still work --
@@ -4840,9 +4845,14 @@ function App({
           ...INP,
           width: 110
         },
-        value: r.cat || 'General',
+        value: r.cat || catOpts[0],
         onChange: e => upd(r.id, 'cat', e.target.value)
-      }, catOpts.map(c => /*#__PURE__*/React.createElement("option", {
+        /* Same as the masterlist: a row carrying a category this list no longer
+           offers keeps it rather than showing an empty dropdown. Tools moved off
+           Electrical / Mechanical / General, so every older row is in exactly
+           that position. */
+      }, [...(r.cat && catOpts.indexOf(r.cat) < 0 ? [r.cat] : []), ...catOpts]
+        .map(c => /*#__PURE__*/React.createElement("option", {
         key: c
       }, c)))), /*#__PURE__*/React.createElement("td", {
         style: TDS

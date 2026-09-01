@@ -52,6 +52,8 @@ jobs:
         run: node tools/test-offline-prefetch.js
       - name: A throttled SharePoint is waited out, not hammered
         run: node tools/test-throttling.js
+      - name: The Scope Library survives its own export
+        run: node tools/test-scopelib-roundtrip.js
       - name: Tools are filed by what they do
         run: node tools/test-tool-categories.js
       - name: The tools template carries the tier figures

@@ -33,6 +33,10 @@ function safeHttpUrl(u) {
    SY3-CE-2026-0091A-R1, SY3-CE-2025-0555-R2-R3. The first four-digit run is the
    year, the number after it is the sequence, and anything numeric that follows
    is revision depth -- so a base CE sorts ahead of its own revisions. */
+/* A scope line lettered a. / b. / c. is a sub-step of the numbered step above
+   it. One definition, so the exporter and the editor cannot disagree on what
+   counts as a sub-step. */
+const SUBSTEP_RE = /^\s*[a-z][.)]/i;
 function ceNumKey(num) {
   const s = String(num || '');
   const m = s.match(/(\d{4})\D+(\d+)/);
@@ -5265,45 +5269,39 @@ function App({
       style: btn('def', true),
       onClick: () => {
         /* Export Scope Library to Excel */
+        /* One row per scope step, and each resource written on the row of the
+           step that needs it.
+
+           Two faults this replaces. Every resource went on the FIRST row, so
+           the step a resource belongs to -- the thing the library exists to
+           record -- was destroyed by its own export. And a resource stored as
+           {name, qty, step} went through join(), which is why the file came
+           out full of "[object Object]" where the resources should have been. */
+        const resName = it => (typeof it === 'string' ? it : (it && it.name) || '').trim();
+        const resQty = it => (typeof it === 'string' ? 1 : Number(it && it.qty) || 1);
+        const resStep = it => (typeof it === 'string' ? 0 : (Number.isFinite(it && it.step) ? it.step : 0));
+        const resCell = (list, step) => (list || [])
+          .filter(it => resName(it) && resStep(it) === step)
+          .map(it => resName(it) + (resQty(it) > 1 ? ' x' + resQty(it) : ''))
+          .join(' | ');
         const rows = sowLib.flatMap(svc => {
           const base = {
             ID: svc.id,
             Category: svc.cat,
             Title: svc.title
           };
-          /* scope rows */
-          const scopeArr = svc.scope || [];
-          let mc = 0,
-            sc = 0;
-          const scopeRows = scopeArr.map(t => {
-            const isMain = !t.match(/^[a-z]\./i) || mc === 0;
-            if (isMain) {
-              mc++;
-              sc = 0;
-            } else sc++;
-            return {
-              ...base,
-              ScopeType: isMain ? 'main' : 'sub',
-              ScopeText: t,
-              MP: '',
-              Tools: '',
-              Materials: '',
-              PPE: ''
-            };
-          });
-          if (!scopeRows.length) scopeRows.push({
+          const scopeArr = (svc.scope || []).length ? svc.scope : [''];
+          return scopeArr.map((t, i) => ({
             ...base,
-            ScopeType: '',
-            ScopeText: ''
-          });
-          /* first row gets resource lists */
-          if (scopeRows[0]) {
-            scopeRows[0].MP = (svc.mp || []).join(' | ');
-            scopeRows[0].Tools = (svc.tools || []).join(' | ');
-            scopeRows[0].Materials = (svc.mats || []).join(' | ');
-            scopeRows[0].PPE = (svc.ppe || []).join(' | ');
-          }
-          return scopeRows;
+            /* A step lettered a. / b. / c. belongs under the numbered step
+               above it; anything else is a step in its own right. */
+            ScopeType: SUBSTEP_RE.test(String(t)) ? 'sub' : 'main',
+            ScopeText: t,
+            MP: resCell(svc.mp, i),
+            Tools: resCell(svc.tools, i),
+            Materials: resCell(svc.mats, i),
+            PPE: resCell(svc.ppe, i)
+          }));
         });
         const ws = XLSX.utils.json_to_sheet(rows);
         const wb = XLSX.utils.book_new();
@@ -5338,8 +5336,29 @@ function App({
           const rows = XLSX.utils.sheet_to_json(ws, {
             defval: ''
           });
-          /* Group rows by ID */
+          /* Group rows by ID, keeping every resource against the step it was
+             written on.
+
+             The whole resource list used to be overwritten from whichever row
+             carried one, as plain strings. So a library where each resource
+             sits on its own step came back with all of them attached to the
+             service as a whole, and every one landed in "Unassigned" -- a round
+             trip through Excel quietly undid the filing the library exists for. */
           const map = {};
+          const stepOf = {};
+          /* "CHAIN BLOCK 5T x2" -> {name: 'CHAIN BLOCK 5T', qty: 2}. The suffix
+             is read only when it is a trailing quantity, so a tool genuinely
+             named "... X2" keeps its name. */
+          const parseRes = (txt, step) => (txt + '').split('|').map(x => x.trim()).filter(Boolean)
+            .map(x => {
+              /* A SPACE before the x is required. Without it "BORING BAR MX2"
+                 reads as "BORING BAR M" x2 -- a tool renamed by its own
+                 quantity parser. */
+              const m = x.match(/^(.*?)\s+[x×]\s*(\d+)$/i);
+              const name = (m ? m[1] : x).trim();
+              return { name: name, qty: m ? Number(m[2]) : 1, step: step };
+            })
+            .filter(x => x.name);
           rows.forEach(r => {
             const id = Number(r.ID) || r.ID;
             if (!map[id]) {
@@ -5353,12 +5372,19 @@ function App({
                 mats: [],
                 ppe: []
               };
+              stepOf[id] = 0;
             }
-            if (r.ScopeText) map[id].scope.push(r.ScopeText);
-            if (r.MP) map[id].mp = [...new Set((r.MP + '').split('|').map(x => x.trim()).filter(Boolean))];
-            if (r.Tools) map[id].tools = [...new Set((r.Tools + '').split('|').map(x => x.trim()).filter(Boolean))];
-            if (r.Materials) map[id].mats = [...new Set((r.Materials + '').split('|').map(x => x.trim()).filter(Boolean))];
-            if (r.PPE) map[id].ppe = [...new Set((r.PPE + '').split('|').map(x => x.trim()).filter(Boolean))];
+            /* The step index is the row's position within its own service,
+               which is exactly how applyServices reads svc.scope. Resources on
+               a row are filed against the step that row carries. */
+            const step = stepOf[id];
+            if (r.ScopeText !== undefined && r.ScopeText !== null && String(r.ScopeText).trim() !== '') {
+              map[id].scope.push(String(r.ScopeText));
+              stepOf[id] = step + 1;
+            }
+            [['MP', 'mp'], ['Tools', 'tools'], ['Materials', 'mats'], ['PPE', 'ppe']].forEach(pair => {
+              if (r[pair[0]]) map[id][pair[1]] = map[id][pair[1]].concat(parseRes(r[pair[0]], step));
+            });
           });
           const parsed = Object.values(map).filter(s => s.title);
           if (!parsed.length) {

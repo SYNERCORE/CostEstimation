@@ -17,7 +17,16 @@ const groupSrc   = grab(/const sowTaskGroup = item => \{[\s\S]*?\n  \};/, 'sowTa
 const N = v => parseFloat(v) || 0;
 const SHIFTS = { regular_day: { mult: 1 }, night: { mult: 1.25 }, sunday: { mult: 1.3 } };
 
-const make = body => new Function('N', 'SHIFTS', 'sowItems', body);
+/* rowCost prices a tool through toolRowCost, which lives in helpers.js. The
+   harness has to supply it, or it is testing an expression the app stopped
+   using. ceResDays comes along because toolRowCost calls it. */
+const helpersSrc = require('fs').readFileSync('src/helpers.js', 'utf8');
+const NLC = String.fromCharCode(10);
+const TIERS =
+  helpersSrc.match(/function ceResDays\(r\) \{[\s\S]*?\n\}/)[0] + NLC +
+  helpersSrc.match(/const TIER_HOURS_PER_YEAR[\s\S]*?\nfunction toolRowCost\(row, src\) \{[\s\S]*?\n\}/)[0];
+
+const make = body => new Function('N', 'SHIFTS', 'sowItems', TIERS + NLC + body);
 
 const api = make(`
   ${resDaysSrc}

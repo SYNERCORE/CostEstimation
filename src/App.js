@@ -693,7 +693,7 @@ function App({
      `days` is optional and defaults to 1, so any row that never sets it costs
      exactly qty x cost and existing CEs keep their totals. */
   const resDays = r => (r.days === undefined || r.days === null || r.days === '') ? 1 : (N(r.days) || 0);
-  const toolsT = useMemo(() => tools.reduce((s, r) => s + N(r.qty) * resDays(r) * N(r.cost), 0), [tools]);
+  const toolsT = useMemo(() => tools.reduce((s, r) => s + toolRowCost(r), 0), [tools]);
   const matsT = useMemo(() => mats.reduce((s, r) => s + N(r.qty) * N(r.cost), 0), [mats]);
   const ppeT = useMemo(() => ppe.reduce((s, r) => s + N(r.qty) * N(r.cost), 0), [ppe]);
   const miscT = useMemo(() => (MISC_DEF[ceType] || MISC_DEF['onsite']).reduce((s, [k]) => {
@@ -805,7 +805,12 @@ function App({
   const isPeopleOrPlant = key => key === 'mp' || key === 'tools';
   /* What a row originally contributed, for splitting a shared cost back out. */
   const _weight = (key, r) => isPeopleOrPlant(key)
-    ? Math.max(0, N(r.pax !== undefined ? r.pax : r.qty)) * Math.max(0, N(r.days === undefined || r.days === '' ? 1 : r.days))
+    /* A Tier 3 tool is measured in hours and a Tier 1 tool in nothing at all,
+       so neither can be weighted by days without splitting a shared row in the
+       wrong proportion. */
+    ? Math.max(0, N(r.pax !== undefined ? r.pax : r.qty)) * Math.max(0, N(r.tier) === 3 ? N(r.hours)
+        : N(r.tier) === 1 ? 1
+        : (r.days === undefined || r.days === '' ? 1 : r.days))
     : Math.max(0, N(r.qty));
   const rowShares = r => Array.isArray(r && r.shares) && r.shares.length ? r.shares : null;
   const rowServesTask = (r, id) => r.taskId === id || (rowShares(r) || []).some(sh => sh.taskId === id);
@@ -827,7 +832,10 @@ function App({
   /* Cost of a single row, using the same formulas that drive the section totals
      so a per-task subtotal can never disagree with the Grand Total. */
   const rowCost = (kind, r) => {
-    if (kind === 'tools') return N(r.qty) * resDays(r) * N(r.cost);
+    /* Tools carry a tier. The source figures ride on the row itself, copied
+       from the masterlist when it was added, so a later masterlist change
+       cannot silently re-price a CE that has already been quoted. */
+    if (kind === 'tools') return toolRowCost(r);
     if (kind !== 'mp') return N(r.qty) * N(r.cost);
     if (!r.role) return 0; /* blank row: no role, no cost (calcBen SIL adds pax*30) */
     const mult = SHIFTS[r.shift]?.mult || 1;
@@ -1331,7 +1339,17 @@ function App({
       const f = map.get(norm(r.desc));
       return f ? {...r, cost: f.cost} : r;
     });
-    setTools(prev => reprice(prev, mlRes.tools));
+    /* Tools also take the tier source figures, or a Tier 1 or Tier 3 row has
+       nothing to derive from and falls back to the daily rate. */
+    setTools(prev => prev.map(r => {
+      const f = mlRes.tools.get(norm(r.desc));
+      if (!f) return r;
+      const n = {...r, cost: f.cost};
+      ['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear'].forEach(k => {
+        if (f[k] !== undefined) n[k] = f[k];
+      });
+      return n;
+    }));
     setMats(prev => reprice(prev, mlRes.mats));
     setPpe(prev => reprice(prev, mlRes.ppe));
     showToast('Re-priced ' + changes.length + ' row' + (changes.length === 1 ? '' : 's') + ' from the masterlist. Nothing is saved until you press Save.');
@@ -9303,6 +9321,10 @@ tab === 'dashboard' && (() => {
     label: "Tools & Equipment (BOTE)",
     mlType: "tools",
     showDays: true,
+    /* Lives on info, so it rides to SharePoint inside shicInfo with no column
+       of its own and comes back with the CE. */
+    defaultTier: N(info.toolTier) || 2,
+    setDefaultTier: v => setInfo(p => ({...p, toolTier: v})),
     masterlist, showToast, setPicker
   }), tab === 'materials' && /*#__PURE__*/React.createElement(ResTab, {
     rows: mats,

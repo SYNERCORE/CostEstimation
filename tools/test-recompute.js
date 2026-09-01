@@ -18,8 +18,12 @@ const SHIFTS = { regular_day: { mult: 1 }, night: { mult: 1.25 }, sunday: { mult
 const CE_CFG = { onsite: { mobDemob: true }, shopworks: { mobDemob: false }, supply: { mobDemob: false } };
 
 /* --- the helper under test --- */
+/* Tool tiers live in helpers.js too, and both the editor's rowCost and
+   computeCEGrand now go through toolRowCost -- so both harnesses below have to
+   be given it, or they are testing something the app does not run. */
+const TIERS = grab(helpersSrc, /const TIER_HOURS_PER_YEAR[\s\S]*?\nfunction toolRowCost\(row, src\) \{[\s\S]*?\n\}/, 'tool tiers');
 const helper = new Function('N', 'SHIFTS', 'CE_CFG',
-  grab(helpersSrc, /function ceResDays\(r\) \{[\s\S]*?\n\}/, 'ceResDays') + '\n' +
+  grab(helpersSrc, /function ceResDays\(r\) \{[\s\S]*?\n\}/, 'ceResDays') + '\n' + TIERS + '\n' +
   grab(helpersSrc, /function ceMpRowCost\(r\) \{[\s\S]*?\n\}/, 'ceMpRowCost') + '\n' +
   grab(helpersSrc, /function computeCEGrand\(ce\) \{[\s\S]*?\n\}/, 'computeCEGrand') + '\n' +
   'return { computeCEGrand, ceResDays, ceMpRowCost };'
@@ -27,6 +31,7 @@ const helper = new Function('N', 'SHIFTS', 'CE_CFG',
 
 /* --- the editor's own per-row cost, for cross-checking --- */
 const editor = new Function('N', 'SHIFTS',
+  grab(helpersSrc, /function ceResDays\(r\) \{[\s\S]*?\n\}/, 'ceResDays') + '\n' + TIERS + '\n' +
   grab(appSrc, /const resDays = r => [^\n]*;/, 'resDays') + '\n' +
   grab(appSrc, /const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen') + '\n' +
   grab(appSrc, /const rowCost = \(kind, r\) => \{[\s\S]*?\n  \};/, 'rowCost') + '\n' +

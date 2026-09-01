@@ -121,7 +121,9 @@ function computeCEGrand(ce) {
   const cfg = (typeof CE_CFG !== 'undefined' && CE_CFG[ce.ceType]) || {};
   const arr = v => Array.isArray(v) ? v : [];
   const mpT = arr(ce.mp).reduce((s, r) => s + ceMpRowCost(r), 0);
-  const toolsT = arr(ce.tools).reduce((s, r) => s + N(r.qty) * ceResDays(r) * N(r.cost), 0);
+  /* Through toolRowCost, so a tiered CE recomputes to what the editor shows.
+     A row naming no tier is Tier 2, which is exactly the old expression. */
+  const toolsT = arr(ce.tools).reduce((s, r) => s + toolRowCost(r), 0);
   const matsT = arr(ce.mats).reduce((s, r) => s + N(r.qty) * N(r.cost), 0);
   const ppeT = arr(ce.ppe).reduce((s, r) => s + N(r.qty) * N(r.cost), 0);
   const miscT = Object.keys(ce.misc || {}).reduce((s, k) => {

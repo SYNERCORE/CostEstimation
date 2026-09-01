@@ -9,12 +9,18 @@ const ResTab = ({
   masterlist,
   showToast,
   setPicker,
-  showDays /* Tools only: equipment can be charged per day (qty x days x cost) */
+  showDays, /* Tools only: equipment can be charged per day (qty x days x cost) */
+  defaultTier, /* Tools only: what a new row starts on */
+  setDefaultTier
 }) => {
   /* Days is optional per row and defaults to 1, so a row that never sets it
      costs exactly qty x cost -- existing CEs are unaffected. */
   const rowDays = r => (r.days === undefined || r.days === '' || r.days === null) ? 1 : (N(r.days) || 0);
-  const rowTot = r => N(r.qty) * (showDays ? rowDays(r) : 1) * N(r.cost);
+  /* Tools carry a tier; everything else is qty x cost. toolRowCost is the same
+     function the grand total, the recompute and both exports use, so the row
+     total on screen cannot disagree with the CE it adds up to. */
+  const rowTot = r => showDays ? toolRowCost(r) : N(r.qty) * N(r.cost);
+  const tierOf = r => N(r.tier) || 2;
   const [_rtNewId, _rtSetNewId] = useState(null);
   const _rtDescRef = useRef(null);
   useEffect(() => {
@@ -62,11 +68,27 @@ const ResTab = ({
       const f = mlItems.find(m => m.desc && r.desc && m.desc.toUpperCase() === r.desc.toUpperCase());
       if (!f) return r;
       updated++;
-      return {...r, cost: f.cost !== undefined ? f.cost : (f.rate !== undefined ? f.rate : r.cost)};
+      /* The tier source figures come across with the rate. Without them a
+         Tier 1 or Tier 3 row has nothing to derive from and quietly falls back
+         to the daily rate. */
+      const _src = {};
+      ['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear'].forEach(k => {
+        if (f[k] !== undefined) _src[k] = f[k];
+      });
+      return {...r, ..._src, cost: f.cost !== undefined ? f.cost : (f.rate !== undefined ? f.rate : r.cost)};
     }));
     showToast(updated ? `Updated ${updated} rate(s) from masterlist.` : 'No matching items found in masterlist.', !updated);
   }
-}, "↺ Sync Rates"), /*#__PURE__*/React.createElement("button", {
+}, "↺ Sync Rates"), showDays && /*#__PURE__*/React.createElement("span", {
+  style: {display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, color: MT}
+}, "New rows:", /*#__PURE__*/React.createElement("select", {
+  style: {...INP, width: 168, fontSize: 10, padding: '2px 4px'},
+  value: N(defaultTier) || 2,
+  title: "How a tool added from here is charged. Rows already on the CE keep the tier they have.",
+  onChange: e => setDefaultTier && setDefaultTier(N(e.target.value))
+}, [[1, 'Tier 1 - per project'], [2, 'Tier 2 - per day'], [3, 'Tier 3 - per hour used']]
+  .map(([v, l]) => /*#__PURE__*/React.createElement("option", {key: v, value: v}, l)))),
+/*#__PURE__*/React.createElement("button", {
   style: btn('info', true),
   title: showDays
     ? "Combine repeated items into what you actually mobilise: the largest quantity any task needs, for the total number of days"
@@ -111,7 +133,7 @@ const ResTab = ({
   }
 }, "⇊ Combine"), /*#__PURE__*/React.createElement("button", {
   style: btn('def', true),
-  onClick: () => { const nid = uid(); _rtSetNewId(nid); set(p => [...p, {...mkRes(), id: nid}]); }
+  onClick: () => { const nid = uid(); _rtSetNewId(nid); set(p => [...p, {...mkRes(), id: nid, ...(showDays ? {tier: N(defaultTier) || 2} : {})}]); }
 }, "+ Add"), /*#__PURE__*/React.createElement("label", {
   style: {...btn('def', true), cursor: 'pointer'},
   title: "Import from Excel — columns: Description, Qty, UOM, Unit Cost"
@@ -150,7 +172,7 @@ const ResTab = ({
     borderCollapse: 'collapse',
     fontSize: 12
   }
-}, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Description', 'Qty', ...(showDays ? ['Days'] : []), 'UOM', 'Unit Cost (P)', 'Row Total', ''].map(h => /*#__PURE__*/React.createElement("th", {
+}, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Description', 'Qty', ...(showDays ? ['Tier', 'Days', 'Hrs'] : []), 'UOM', 'Unit Cost (P)', 'Row Total', ''].map(h => /*#__PURE__*/React.createElement("th", {
   key: h,
   style: THS
 }, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map(r => {
@@ -199,19 +221,63 @@ const ResTab = ({
     } : x))
   })), showDays && /*#__PURE__*/React.createElement("td", {
     style: TDS
+  }, /*#__PURE__*/React.createElement("select", {
+    style: {
+      ...INP,
+      width: 64
+    },
+    value: tierOf(r),
+    title: "1: flat per project, whatever the duration.  2: per day (the default).  3: per hour actually used.",
+    onChange: e => set(p => p.map(x => x.id === r.id ? {
+      ...x,
+      tier: N(e.target.value)
+    } : x))
+  }, [[1, 'T1'], [2, 'T2'], [3, 'T3']].map(([v, l]) => /*#__PURE__*/React.createElement("option", {
+    key: v,
+    value: v
+  }, l)))), showDays && /*#__PURE__*/React.createElement("td", {
+    style: TDS
   }, /*#__PURE__*/React.createElement("input", {
     style: {
       ...INP,
       fontFamily: "'JetBrains Mono',monospace",
-      width: 60
+      width: 60,
+      opacity: tierOf(r) === 2 ? 1 : .35
     },
     type: "number",
     min: 0,
+    /* Only Tier 2 is charged by the day. Tier 1 ignores duration and Tier 3
+       counts hours, so leaving the field live would invite an edit that
+       changes nothing and reads as a bug. */
+    disabled: tierOf(r) !== 2,
     value: r.days === undefined || r.days === null ? 1 : r.days,
-    title: "Number of days this item is charged for. Leave at 1 for a one-off charge.",
+    title: tierOf(r) === 2
+      ? "Number of days this item is charged for. Leave at 1 for a one-off charge."
+      : "Days apply to Tier 2 only.",
     onChange: e => set(p => p.map(x => x.id === r.id ? {
       ...x,
       days: e.target.value
+    } : x))
+  })), showDays && /*#__PURE__*/React.createElement("td", {
+    style: TDS
+  }, /*#__PURE__*/React.createElement("input", {
+    style: {
+      ...INP,
+      fontFamily: "'JetBrains Mono',monospace",
+      width: 60,
+      opacity: tierOf(r) === 3 ? 1 : .35
+    },
+    type: "number",
+    min: 0,
+    disabled: tierOf(r) !== 3,
+    value: r.hours === undefined || r.hours === null ? '' : r.hours,
+    placeholder: "0",
+    title: tierOf(r) === 3
+      ? "Hours the tool is actually used. This is the tier for a short job on expensive equipment."
+      : "Hours apply to Tier 3 only.",
+    onChange: e => set(p => p.map(x => x.id === r.id ? {
+      ...x,
+      hours: e.target.value
     } : x))
   })), /*#__PURE__*/React.createElement("td", {
     style: TDS

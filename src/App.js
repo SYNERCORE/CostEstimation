@@ -1258,6 +1258,61 @@ function App({
       localStorage.removeItem(DRAFT_KEY);
     } catch {}
   };
+  /* Re-price the CE on screen from today's masterlist.
+
+     A saved CE is a record of what was quoted, so nothing re-prices it on its
+     own: every rate and cost is stored on the row it belongs to and comes back
+     exactly as it was saved. Prices move only when someone asks for it here,
+     on a CE they are about to quote.
+
+     Nothing is written to history. This changes what is on screen; saving is
+     still a separate, deliberate act -- and if the number already belongs to a
+     saved CE, saving would overwrite that record, so say so first. */
+  const syncRatesFromML = () => {
+    const norm = v => String(v || '').trim().toUpperCase();
+    const mlMp = new Map((masterlist.manpower || []).filter(m => m.role).map(m => [norm(m.role), m]));
+    const byDesc = list => new Map((list || []).filter(x => x.desc).map(x => [norm(x.desc), x]));
+    const mlRes = {tools: byDesc(masterlist.tools), mats: byDesc(masterlist.materials), ppe: byDesc(masterlist.ppe)};
+
+    const changes = [];
+    (mp || []).forEach(r => {
+      const f = mlMp.get(norm(r.role));
+      if (f && N(f.rate) !== N(r.rate)) changes.push({what: r.role, was: N(r.rate), now: N(f.rate)});
+    });
+    [['tools', tools], ['mats', mats], ['ppe', ppe]].forEach(([k, rows]) => {
+      (rows || []).forEach(r => {
+        const f = mlRes[k].get(norm(r.desc));
+        if (f && N(f.cost) !== N(r.cost)) changes.push({what: r.desc, was: N(r.cost), now: N(f.cost)});
+      });
+    });
+
+    if (!changes.length) { showToast('Every priced row already matches the masterlist.'); return; }
+
+    const money = v => 'P' + v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    const shown = changes.slice(0, 12).map(c => '  ' + c.what + ':  ' + money(c.was) + '  ->  ' + money(c.now)).join('\n');
+    const existing = history.some(h => norm(h.info && h.info.ceNum || h.ceNum) === norm(info.ceNum));
+    if (!confirm(
+      'Re-price ' + changes.length + ' row' + (changes.length === 1 ? '' : 's') + ' from the masterlist?\n\n' +
+      shown + (changes.length > 12 ? '\n  ...and ' + (changes.length - 12) + ' more' : '') +
+      '\n\nRows with no masterlist match keep the price they have.' +
+      (existing
+        ? '\n\nCAREFUL: ' + info.ceNum + ' is already saved. Saving after this REPLACES what was quoted. Clone it to a new CE number first if the original must stand.'
+        : '')
+    )) return;
+
+    setMp(prev => prev.map(r => {
+      const f = mlMp.get(norm(r.role));
+      return f ? {...r, rate: f.rate, perDiem: f.perDiem !== undefined ? f.perDiem : r.perDiem} : r;
+    }));
+    const reprice = (rows, map) => rows.map(r => {
+      const f = map.get(norm(r.desc));
+      return f ? {...r, cost: f.cost} : r;
+    });
+    setTools(prev => reprice(prev, mlRes.tools));
+    setMats(prev => reprice(prev, mlRes.mats));
+    setPpe(prev => reprice(prev, mlRes.ppe));
+    showToast('Re-priced ' + changes.length + ' row' + (changes.length === 1 ? '' : 's') + ' from the masterlist. Nothing is saved until you press Save.');
+  };
   const handleSave = async () => {
     let _overwrote = null; /* set when bulk mode lets a save replace an existing CE */
     const ceNum = (info.ceNum || '').trim().toUpperCase();
@@ -9817,6 +9872,15 @@ tab === 'dashboard' && (() => {
     onClick: handleSaveRevision,
     title: 'Save as ' + ((info.ceNum || 'CE') + '-Rn revision')
   }, "\u21BB Revise"), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...btn('def'),
+      background: OK + '22',
+      borderColor: OK + '55',
+      color: OK
+    },
+    onClick: syncRatesFromML,
+    title: 'Re-price every matching row from the masterlist. A saved CE keeps the cost it was quoted at until you do this.'
+  }, "\u21BA Sync Rates"), /*#__PURE__*/React.createElement("button", {
     style: {
       ...btn('def'),
       background: '#8B5CF622',

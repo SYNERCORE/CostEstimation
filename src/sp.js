@@ -115,7 +115,10 @@ async function getSPToken(opts){
     return null;
   }
 }
-async function spDigest(){const su=getSiteURL();const tok=await getSPToken();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json',...(tok?{'Authorization':'Bearer '+tok}:{})};const r=await fetch(`${su}/_api/contextinfo`,{method:'POST',credentials:'omit',headers:h});const d=await r.json();return{digest:d.FormDigestValue,token:tok};}
+async function spDigest(){const su=getSiteURL();const tok=await getSPToken();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json',...(tok?{'Authorization':'Bearer '+tok}:{})};/* Through the gate as well: this runs before every write, so outside it a
+     throttled site still takes two requests for every one we thought we were
+     holding back. */
+  const r=await spFetch(`${su}/_api/contextinfo`,{method:'POST',credentials:'omit',headers:h},'post','contextinfo');const d=await r.json();return{digest:d.FormDigestValue,token:tok};}
 /* A 403 is not a network problem and will never resolve itself, but it used to
    arrive as the bare string "SP get Users:403" and land in the same catch as
    being offline -- so the app quietly fell back to the stale local copy and
@@ -128,6 +131,65 @@ async function spDigest(){const su=getSiteURL();const tok=await getSPToken();con
 function spDenied(e){/* Digit-bounded, not \b: a CE number like SHIC-CE-2026-0403 must not
    read as a permission error. */
   return /(^|[^0-9])(401|403)([^0-9]|$)|access is denied|unauthoriz/i.test(String((e&&e.message)||e||''));}
+/* ---- Site-wide throttle gate -------------------------------------------
+
+   SharePoint answers a throttled request with a 302 to its Throttle page,
+   which carries no CORS headers -- so the browser blocks it and the call
+   surfaces as a bare "Failed to fetch" TypeError, never as a 429. Every retry
+   path was therefore blind to throttling on exactly the requests that were
+   being throttled, and each caller kept firing, which is what kept the site
+   throttled.
+
+   One gate for the whole app. When SharePoint says stop, every caller stops
+   until the clock runs out, instead of each one discovering the throttle for
+   itself at the site's expense. */
+let _spCooldownUntil = 0;
+let _spThrottleStreak = 0;
+function spThrottleLeft(){ return Math.max(0, Math.ceil((_spCooldownUntil - Date.now()) / 1000)); }
+function spNoteThrottled(seconds){
+  _spThrottleStreak++;
+  /* Each throttle in a row doubles the wait, up to five minutes. SharePoint
+     lifts a throttle sooner for a client that backs off than for one that
+     keeps knocking. */
+  const base = Number(seconds) > 0 ? Number(seconds) : 20;
+  const wait = Math.min(base * Math.pow(2, Math.min(_spThrottleStreak - 1, 4)), 300);
+  _spCooldownUntil = Math.max(_spCooldownUntil, Date.now() + wait * 1000);
+  try{ window._shicThrottleUntil = _spCooldownUntil; }catch(_){}
+  return wait;
+}
+function spNoteOk(){ _spThrottleStreak = 0; }
+function _spGateError(){
+  const e = new Error('SharePoint is throttling this site. Waiting ' + spThrottleLeft() +
+    's before trying again — nothing is lost, the work stays in this browser.');
+  e.throttled = true; e.retryAfter = spThrottleLeft(); e.gated = true;
+  return e;
+}
+/* Every SharePoint call goes through here: it refuses while the gate is shut,
+   and recognises a blocked-by-CORS failure as the throttle it almost always
+   is. A genuine outage looks identical from here, and backing off is the right
+   answer to both. */
+async function spFetch(url, opts, verb, list){
+  if(Date.now() < _spCooldownUntil) throw _spGateError();
+  let r;
+  try{
+    r = await fetch(url, opts);
+  }catch(err){
+    /* TypeError: Failed to fetch. Offline, or the throttle redirect. */
+    if(typeof navigator !== 'undefined' && navigator.onLine === false) throw err;
+    const wait = spNoteThrottled(0);
+    const e = new Error('SP ' + verb + ' ' + list + ': the request was blocked before it reached SharePoint, ' +
+      'which is what a throttled site looks like from a browser. Backing off ' + wait + 's.');
+    e.throttled = true; e.retryAfter = wait;
+    throw e;
+  }
+  if(r.status === 429 || r.status === 503){
+    const wait = spNoteThrottled(r.headers && r.headers.get('Retry-After'));
+    const e = spErr(verb, list, r.status, '', wait);
+    throw e;
+  }
+  spNoteOk();
+  return r;
+}
 function spErr(verb,list,status,body,retryAfter){
   /* Throttling FIRST. SharePoint's 429 body contains the word "throttl", which
      the view-threshold branch below matched -- so every throttled request was
@@ -190,7 +252,7 @@ async function spGet(l,f='',sel=''){
   let url=`${su}/_api/web/lists/getbytitle('${l}')/items?${qs.join('&')}`;
   /* Follow odata.nextLink to page through lists larger than 5000 items */
   while(url){
-    const r=await fetch(url,{credentials:'omit',headers:h});
+    const r=await spFetch(url,{credentials:'omit',headers:h},'get',l);
     if(!r.ok){
       /* The body is the only place SharePoint says WHY. Without it a threshold
          error, a missing column and a genuine outage all read as a bare 500. */
@@ -203,15 +265,15 @@ async function spGet(l,f='',sel=''){
   }
   return results;
 }
-async function spPost(l,data){const su=getSiteURL();if(!su)throw new Error('SP not configured');const{digest,token}=await spDigest();if(!token)throw new Error('SP: No auth token. Please sign in via Connect & Test first.');const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'Authorization':'Bearer '+token};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items`,{method:'POST',credentials:'omit',headers:h,body:JSON.stringify(data)});if(!r.ok){const t=await r.text();throw spErr('post',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}return r.json();}
-async function spPatch(l,id,data){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*','X-HTTP-Method':'MERGE',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'PATCH',credentials:'omit',headers:h,body:JSON.stringify(data)});if(!r.ok){let t='';try{t=await r.text();}catch(_){}throw spErr('patch',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}}
-async function spDelete(l,id){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*',...(token?{'Authorization':'Bearer '+token}:{})};const r=await fetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'DELETE',credentials:'omit',headers:h});if(!r.ok){let t='';try{t=await r.text();}catch(_){}throw spErr('delete',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}}
+async function spPost(l,data){const su=getSiteURL();if(!su)throw new Error('SP not configured');const{digest,token}=await spDigest();if(!token)throw new Error('SP: No auth token. Please sign in via Connect & Test first.');const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'Authorization':'Bearer '+token};const r=await spFetch(`${su}/_api/web/lists/getbytitle('${l}')/items`,{method:'POST',credentials:'omit',headers:h,body:JSON.stringify(data)},'post',l);if(!r.ok){const t=await r.text();throw spErr('post',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}return r.json();}
+async function spPatch(l,id,data){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*','X-HTTP-Method':'MERGE',...(token?{'Authorization':'Bearer '+token}:{})};const r=await spFetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'PATCH',credentials:'omit',headers:h,body:JSON.stringify(data)},'patch',l);if(!r.ok){let t='';try{t=await r.text();}catch(_){}throw spErr('patch',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}}
+async function spDelete(l,id){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*',...(token?{'Authorization':'Bearer '+token}:{})};const r=await spFetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'DELETE',credentials:'omit',headers:h},'delete',l);if(!r.ok){let t='';try{t=await r.text();}catch(_){}throw spErr('delete',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}}
 
 async function spGetAttachments(listName, itemId){
   const su=getSiteURL(); if(!su) return [];
   const tok=await getSPToken(); if(!tok) return [];
   const h={'Accept':'application/json;odata=nometadata','Authorization':'Bearer '+tok};
-  const r=await fetch(`${su}/_api/web/lists/getbytitle('${listName}')/items(${itemId})/AttachmentFiles`,{credentials:'omit',headers:h});
+  const r=await spFetch(`${su}/_api/web/lists/getbytitle('${listName}')/items(${itemId})/AttachmentFiles`,{credentials:'omit',headers:h},'get',listName);
   if(!r.ok) return [];
   const json=await r.json();
   return json.value||[];
@@ -220,7 +282,7 @@ async function spAddAttachment(listName, itemId, fileName, fileBuffer){
   const su=getSiteURL(); if(!su) throw new Error('No SP site');
   const {digest,token}=await spDigest();
   const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/octet-stream','X-RequestDigest':digest,...(token?{'Authorization':'Bearer '+token}:{})};
-  const r=await fetch(`${su}/_api/web/lists/getbytitle('${listName}')/items(${itemId})/AttachmentFiles/add(FileName='${encodeURIComponent(fileName)}')`,{method:'POST',credentials:'omit',headers:h,body:fileBuffer});
+  const r=await spFetch(`${su}/_api/web/lists/getbytitle('${listName}')/items(${itemId})/AttachmentFiles/add(FileName='${encodeURIComponent(fileName)}')`,{method:'POST',credentials:'omit',headers:h,body:fileBuffer},'post',listName);
   if(!r.ok) throw new Error('SP attach '+r.status);
   return await r.json();
 }
@@ -228,7 +290,7 @@ async function spDeleteAttachment(listName, itemId, fileName){
   const su=getSiteURL(); if(!su) throw new Error('No SP site');
   const {digest,token}=await spDigest();
   const h={'Accept':'application/json;odata=nometadata','X-RequestDigest':digest,'X-HTTP-Method':'DELETE','IF-MATCH':'*',...(token?{'Authorization':'Bearer '+token}:{})};
-  const r=await fetch(`${su}/_api/web/lists/getbytitle('${listName}')/items(${itemId})/AttachmentFiles/getByFileName('${encodeURIComponent(fileName)}')`,{method:'POST',credentials:'omit',headers:h});
+  const r=await spFetch(`${su}/_api/web/lists/getbytitle('${listName}')/items(${itemId})/AttachmentFiles/getByFileName('${encodeURIComponent(fileName)}')`,{method:'POST',credentials:'omit',headers:h},'post',listName);
   if(!r.ok) throw new Error('SP del attach '+r.status);
 }
 /* Upload a client document and return its server-relative URL, or null.

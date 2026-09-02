@@ -49,7 +49,11 @@ function runSpGet(opts) {
     Promise, JSON, Object, Array, String, Number, encodeURIComponent,
     getSiteURL: () => opts.site === undefined ? 'https://x.sharepoint.com' : opts.site,
     getSPToken: async () => opts.token,
-    fetch: async () => ({ ok: true, json: async () => ({ value: opts.rows || [] }) })
+    fetch: async () => ({ ok: true, json: async () => ({ value: opts.rows || [] }) }),
+    /* Every SharePoint call goes through the throttle gate now. The harness
+       supplies a pass-through so this stays a test of spGet's own behaviour
+       rather than of the gate, which test-throttle-gate.js covers. */
+    spFetch: async (url, o) => ctx.fetch(url, o)
   };
   vm.createContext(ctx);
   vm.runInContext(spGetSrc + '\nglobalThis._get = spGet;', ctx);

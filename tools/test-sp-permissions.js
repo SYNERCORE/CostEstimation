@@ -32,7 +32,7 @@ const ck = (name, cond, extra) => {
 
 /* ---- the real spDenied / spErr, lifted ----------------------------------- */
 const src = (sp.match(/function spDenied\(e\)\{[\s\S]*?\n\}\n/) || [''])[0]
-          + (sp.match(/function spErr\(verb,list,status,body\)\{[\s\S]*?\n\}\n/) || [''])[0];
+          + (sp.match(/function spErr\(verb,list,status,body,retryAfter\)\{[\s\S]*?\n\}\n/) || [''])[0];
 if (!/spDenied/.test(src) || !/spErr/.test(src)) { console.error('spDenied / spErr not found in src/sp.js'); process.exit(1); }
 const ctx = { Error, String, RegExp };
 vm.createContext(ctx);

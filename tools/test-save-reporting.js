@@ -66,7 +66,12 @@ ck('so does the debounced cell edit',
 console.log('\nthe local push acts on it:');
 const push = fs.readFileSync('src/components/LocalToSPSync.js', 'utf8');
 ck('a refused CE is counted as a failure, not a sync',
-  /if \(res && res\.sp === false\)[\s\S]{0,300}continue;/.test(push));
+  /if \(res && res\.sp === false\) \{\s+ceFail\+\+;/.test(push),
+  'dbSaveHistory returns normally on a SharePoint failure, so without this the repair ticks every CE green');
+/* Throttling is the site saying stop, not this CE failing. Counting it as a
+   failure and moving on would skip the very CE the push exists to repair. */
+ck('but a throttle pauses and retries instead of counting a failure',
+  /ceFail--;/.test(push) && /pausing \$\{wait\}s/.test(push));
 ck('and says which CE and why', /SharePoint refused it/.test(push));
 ck('and the masterlist push does the same', /Masterlist: SharePoint refused it/.test(push));
 ck('it still refuses to push a summary with no line items',

@@ -109,12 +109,32 @@ function LocalToSPSync() {
           if (res && res.sp === false) {
             ceFail++;
             addLog(`  ✗ ${ceNum}: SharePoint refused it — ${String(res.reason || 'unknown').slice(0,90)}`);
+            /* Throttling is not a per-CE failure, it is the site saying stop.
+               Grinding through the remaining CEs guarantees every one of them
+               fails AND keeps the throttle alive -- 896 CEs of that is how a
+               site ends up throttled for the rest of the morning. Wait it out
+               in place, once, and carry on where we left off. */
+            if (/throttl/i.test(String(res.reason || ''))) {
+              const wait = (typeof spThrottleLeft === 'function' ? spThrottleLeft() : 0) || 30;
+              addLog(`  ⏸ SharePoint is throttling — pausing ${wait}s, then continuing from ${ceNum}`);
+              await new Promise(r => setTimeout(r, (wait + 2) * 1000));
+              i--;          /* retry this CE rather than skipping it */
+              ceFail--;
+              continue;
+            }
             if (i < hist.length - 1) await new Promise(r => setTimeout(r, 300));
             continue;
           }
           ceOk++;
           addLog(`  ✓ ${ceNum} (${i+1}/${hist.length})`);
         } catch (err) {
+          if (err && err.throttled) {
+            const wait = (typeof spThrottleLeft === 'function' ? spThrottleLeft() : 0) || 30;
+            addLog(`  ⏸ SharePoint is throttling — pausing ${wait}s, then continuing from ${ceNum}`);
+            await new Promise(r => setTimeout(r, (wait + 2) * 1000));
+            i--;
+            continue;
+          }
           ceFail++;
           addLog(`  ✗ ${ceNum}: ${err.message.slice(0,80)}`);
         }

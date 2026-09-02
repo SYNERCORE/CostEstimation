@@ -2682,6 +2682,53 @@ function App({
       vehicles: ['Transport', 'Fuel', 'Allowance', 'Meals', 'Travel', 'Accommodation', 'Personnel', 'Equipment Rental', 'Permit / Fee', 'Miscellaneous']
     };
     const filtered = (masterlist[mlTab] || []).filter(r => !mlQ || (r.role || r.desc || '').toLowerCase().includes(mlQ.toLowerCase()) || r.category.toLowerCase().includes(mlQ.toLowerCase()));
+    /* mlTab names the tab; the history stores each resource under its own
+       key, and the two are not the same word. */
+    const ML_HIST_KIND = {
+      manpower: 'mp', tools: 'tools', materials: 'mats',
+      ppe: 'ppe', vehicles: 'vehicles'
+    };
+    /* An item priced at zero is not a cheap item, it is an unpriced one -- and
+       a masterlist full of them is how a CE goes out understating its own
+       cost. The company has bought most of these before; until now nothing
+       read that back.
+
+       Only rates from CEs this company actually issued are used. A figure the
+       file analyser lifted out of some spreadsheet is worth showing beside a
+       rate for a person to weigh, which the clock does, but it is not worth
+       writing into the masterlist unattended. */
+    const fillFromHistory = () => {
+      const kind = ML_HIST_KIND[mlTab];
+      const key = (mlTab === 'manpower' || mlTab === 'vehicles') ? 'rate' : 'cost';
+      const nk = mlTab === 'manpower' ? 'role' : 'desc';
+      const list = masterlist[mlTab] || [];
+      const blank = list.filter(r => !N(r[key]) && String(r[nk] || '').trim());
+      if (!blank.length) {
+        showToast('Every item in ' + mlTab + ' already has a price.');
+        return;
+      }
+      const found = [];
+      blank.forEach(r => {
+        const issued = (typeof shicRateUses === 'function' ? shicRateUses(kind, r[nk], 10) : [])
+          .filter(u => u.issued);
+        if (issued.length) found.push({ id: r.id, name: r[nk], rate: issued[0].rate, ce: issued[0].ceNum, n: issued.length });
+      });
+      if (!found.length) {
+        showToast(blank.length + ' item(s) have no price, and none of them appear in any saved CE.', true);
+        return;
+      }
+      const sample = found.slice(0, 8)
+        .map(f => '  ' + f.name.slice(0, 38) + '  P' + f.rate.toLocaleString('en-PH', { minimumFractionDigits: 2 }) + '  (' + f.ce + ')')
+        .join('\n');
+      if (!confirm('Price ' + found.length + ' of ' + blank.length + ' unpriced item(s) from the most recent CE each was charged on?\n\n' +
+        sample + (found.length > 8 ? '\n  ... and ' + (found.length - 8) + ' more' : '') +
+        '\n\nThe other ' + (blank.length - found.length) + ' appear in no saved CE and are left alone.\n' +
+        'Rates read out of analysed spreadsheets are not used.')) return;
+      const byId = {};
+      found.forEach(f => { byId[f.id] = f.rate; });
+      saveML({ ...masterlist, [mlTab]: list.map(r => byId[r.id] !== undefined ? { ...r, [key]: byId[r.id] } : r) });
+      showToast('Priced ' + found.length + ' item(s) from CE history. ' + (blank.length - found.length) + ' still unpriced.');
+    };
     const updML = (id, k, v) => {
       const next = { ...masterlist, [mlTab]: masterlist[mlTab].map(r => r.id === id ? { ...r, [k]: v } : r) };
       setMasterlist(next);
@@ -2853,7 +2900,11 @@ function App({
           showToast('Cleared ' + mlTab + ' list.');
         }
       }
-    }, "Clear List"), /*#__PURE__*/React.createElement("label", {
+    }, "Clear List"), /*#__PURE__*/React.createElement("button", {
+      style: btn('acc', true),
+      title: "Price every item in this tab that has none, using the most recent CE it was actually charged on",
+      onClick: fillFromHistory
+    }, "Fill missing prices"), /*#__PURE__*/React.createElement("label", {
       style: {
         ...btn('def', true),
         cursor: 'pointer',
@@ -2968,6 +3019,15 @@ function App({
         min: 0,
         value: costVal,
         onChange: e => updML(r.id, costKey, parseFloat(e.target.value) || 0)
+      }),
+      /* What this item was actually charged at, beside the rate the list
+         claims. Maintaining a masterlist without that is guesswork: the list
+         says one thing and thirty CEs say another, and nothing showed the
+         disagreement. */
+      /*#__PURE__*/React.createElement(RateHistory, {
+        kind: ML_HIST_KIND[mlTab],
+        name: r[nameKey],
+        onPick: v => updML(r.id, costKey, v)
       })), mlTab === 'manpower' && /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, /*#__PURE__*/React.createElement("input", {

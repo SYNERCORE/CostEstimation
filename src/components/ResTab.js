@@ -306,6 +306,13 @@ const ResTab = ({
       ...x,
       cost: e.target.value
     } : x))
+  }),
+  /* What we charged for this item before, on the row rather than three clicks
+     away in the ML panel. Clicking a past rate adopts it. */
+  /*#__PURE__*/React.createElement(RateHistory, {
+    kind: mlType === 'materials' ? 'mats' : mlType,
+    name: r.desc,
+    onPick: v => set(p => p.map(x => x.id === r.id ? { ...x, cost: v } : x))
   })), /*#__PURE__*/React.createElement("td", {
     style: {
       ...TDS,

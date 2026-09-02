@@ -270,6 +270,157 @@ ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.c
 
 
 
+
+/* WHAT WE CHARGED LAST TIME.
+   ==========================
+   The rate history existed, but only for manpower (SHIC_ML.suggestRates reads
+   ce.mp and nothing else) and only inside the ML Insights panel -- you had to
+   know to go and ask. Tools, consumables, PPE and miscellaneous had no lookup
+   at all, which is why a warehouse item with no price had nowhere to get one
+   from even though the company had bought it a dozen times.
+
+   This reads every resource type out of the same history, and the button that
+   uses it sits on the row, where the rate is actually being typed. */
+
+/* window.shicHistory is saved CEs PLUS anything scraped out of OneDrive or a
+   local folder by the file analyser. A scraped spreadsheet row is not a rate
+   this company issued to a client, so it is labelled and never silently mixed
+   in with one that is. */
+function shicRateUses(kind, name, limit) {
+  var hist = (typeof window !== 'undefined' && window.shicHistory) || [];
+  var want = String(name || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+  if (!want) return [];
+  /* Not a straight kind-to-key mapping, and it must not be treated as one.
+     A saved CE's `misc` is an object of totals, not line items -- the
+     mobilisation and demobilisation rows live in their own arrays, and both
+     tables are the same editor, so both are searched. */
+  var lists = {
+    mp: ['mp'], tools: ['tools'], mats: ['mats'], ppe: ['ppe'],
+    vehicles: ['mobVehicles', 'demobVehicles']
+  }[kind];
+  if (!lists) return [];
+  var out = [];
+  hist.forEach(function (ce) {
+    var info = ce.info || {};
+    lists.forEach(function (k) {
+      (ce[k] || []).forEach(function (r) {
+        var nm = String(r.role || r.desc || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+        if (nm !== want) return;
+        var v = Number(r.rate !== undefined && r.rate !== '' && r.rate !== null ? r.rate : r.cost);
+        if (!isFinite(v) || v <= 0) return;
+        out.push({
+          rate: v,
+          qty: Number(r.qty) || 0,
+          ceNum: info.ceNum || ce.ceNum || '',
+          client: info.client || '',
+          when: ce.savedAt || info.date || '',
+          /* A CE this company saved has a savedAt and a CE number. A row the
+             file analyser lifted out of a spreadsheet has neither, and must
+             not be read as a rate anybody approved. */
+          issued: !!(ce.savedAt && (info.ceNum || ce.ceNum))
+        });
+      });
+    });
+  });
+  out.sort(function (a, b) {
+    var da = Date.parse(a.when) || 0, db = Date.parse(b.when) || 0;
+    if (db !== da) return db - da;
+    return String(b.ceNum).localeCompare(String(a.ceNum));
+  });
+  return out.slice(0, limit || 10);
+}
+
+/* A clock beside the rate. Dim when this item has never been costed before,
+   so the absence of history is itself visible -- an item nobody has bought is
+   worth a second look before it goes out at a made-up price. */
+function RateHistory(props) {
+  var kind = props.kind, name = props.name, onPick = props.onPick;
+  var _o = React.useState(false), open = _o[0], setOpen = _o[1];
+  var uses = React.useMemo(function () {
+    return open ? shicRateUses(kind, name, 10) : [];
+  }, [open, kind, name]);
+  var has = React.useMemo(function () {
+    return !!name && shicRateUses(kind, name, 1).length > 0;
+  }, [kind, name]);
+  React.useEffect(function () {
+    if (!open) return;
+    var close = function () { setOpen(false); };
+    /* Next tick: the click that opened this is still travelling. */
+    var t = setTimeout(function () { window.addEventListener('click', close); }, 0);
+    return function () { clearTimeout(t); window.removeEventListener('click', close); };
+  }, [open]);
+  if (!name) return null;
+  var money = function (n) {
+    return 'P' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+  var day = function (w) {
+    var d = new Date(w);
+    return isNaN(d) ? '' : d.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+  /* The headline range is drawn from issued CEs alone where there are any.
+     A figure lifted out of an analysed spreadsheet is flagged amber in the
+     list precisely because it is not a rate anybody approved -- letting it set
+     the top of "P40.00 to P999.00" would put it back into the summary with all
+     that doubt stripped off. Where every row is imported, the range says so
+     rather than pretending there is nothing to show. */
+  var issued = uses.filter(function (u) { return u.issued; });
+  var basis = issued.length ? issued : uses;
+  var rates = basis.map(function (u) { return u.rate; });
+  var lo = rates.length ? Math.min.apply(null, rates) : 0;
+  var hi = rates.length ? Math.max.apply(null, rates) : 0;
+  return React.createElement('span', { style: { position: 'relative', display: 'inline-block' } },
+    React.createElement('button', {
+      type: 'button',
+      title: has ? 'What we charged for this before' : 'Never costed before',
+      onClick: function (e) { e.stopPropagation(); setOpen(!open); },
+      style: {
+        background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px',
+        fontSize: 12, lineHeight: 1, opacity: has ? 1 : 0.28,
+        color: has ? '#F0A429' : '#7D8590'
+      }
+    }, '⏱'),
+    open ? React.createElement('div', {
+      onClick: function (e) { e.stopPropagation(); },
+      style: {
+        position: 'absolute', top: 18, right: 0, zIndex: 500, width: 320,
+        background: '#161B22', border: '1px solid #30363D', borderRadius: 8,
+        boxShadow: '0 8px 28px #000a', padding: 10, textAlign: 'left',
+        fontWeight: 400, color: '#E6EDF3'
+      }
+    },
+      React.createElement('div', { style: { fontSize: 11, fontWeight: 700, marginBottom: 2 } }, name),
+      uses.length ? React.createElement('div', { style: { fontSize: 10, color: '#7D8590', marginBottom: 6 } },
+        basis.length + (uses.length === 10 ? '+ uses' : ' use' + (basis.length === 1 ? '' : 's')) +
+        (issued.length ? '' : ' (imported, none issued)') +
+        (lo === hi ? ' · ' + money(lo) + ' every time' : ' · ' + money(lo) + ' to ' + money(hi))
+      ) : React.createElement('div', { style: { fontSize: 10, color: '#F59E0B', marginBottom: 2 } },
+        'Never costed before. Nothing to compare against.'),
+      uses.map(function (u, i) {
+        return React.createElement('div', {
+          key: i,
+          onClick: function () { if (onPick) { onPick(u.rate); setOpen(false); } },
+          title: onPick ? 'Use ' + money(u.rate) : '',
+          style: {
+            display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline',
+            padding: '4px 6px', borderRadius: 5, cursor: onPick ? 'pointer' : 'default',
+            background: i % 2 ? '#0D1117' : 'transparent'
+          }
+        },
+          React.createElement('span', { style: { fontSize: 10, color: '#7D8590', minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+            React.createElement('span', { style: { color: u.issued ? '#E6EDF3' : '#F59E0B' } },
+              u.issued ? (u.ceNum || '(no CE number)') : 'imported file'),
+            u.client ? ' · ' + u.client : '',
+            u.when ? ' · ' + day(u.when) : ''),
+          React.createElement('span', { style: { fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: '#F0A429', fontWeight: 700 } }, money(u.rate))
+        );
+      }),
+      uses.some(function (u) { return !u.issued; }) ? React.createElement('div', {
+        style: { fontSize: 9, color: '#F59E0B', marginTop: 6, borderTop: '1px solid #30363D', paddingTop: 5 }
+      }, 'Amber rows came from an analysed spreadsheet, not a CE this company issued.') : null
+    ) : null
+  );
+}
+
 window.SHIC_ML=(function(){
   function tokenize(txt){return(txt||'').toLowerCase().replace(/[^a-z0-9\s]/g,' ').split(/\s+/).filter(Boolean);}
   function cosineSim(a,b){var ta=tokenize(a),tb=tokenize(b);if(!ta.length||!tb.length)return 0;var all=[].concat(ta,tb).filter(function(v,i,s){return s.indexOf(v)===i;});var va=all.map(function(w){return ta.filter(function(x){return x===w;}).length;});var vb=all.map(function(w){return tb.filter(function(x){return x===w;}).length;});var dot=va.reduce(function(s,v,i){return s+v*vb[i];},0);var magA=Math.sqrt(va.reduce(function(s,v){return s+v*v;},0));var magB=Math.sqrt(vb.reduce(function(s,v){return s+v*v;},0));return(magA&&magB)?dot/(magA*magB):0;}

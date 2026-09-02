@@ -8576,6 +8576,11 @@ tab === 'dashboard' && (() => {
           ...xr,
           rate: e.target.value
         } : xr))
+      }),
+      /*#__PURE__*/React.createElement(RateHistory, {
+        kind: 'vehicles',
+        name: r.desc,
+        onPick: v => setRows(p => p.map(xr => xr.id === r.id ? { ...xr, rate: v } : xr))
       })), /*#__PURE__*/React.createElement("td", {
         style: {
           ...TDS,
@@ -9134,7 +9139,14 @@ tab === 'dashboard' && (() => {
         value: r.rate,
         onChange: e => updRow(setMp, r.id, 'rate', Math.max(0, parseFloat(e.target.value) || 0))
       }),
-      /* Feature 12: AI rate hint from history */
+      /*#__PURE__*/React.createElement(RateHistory, {
+        kind: 'mp',
+        name: r.role,
+        onPick: v => updRow(setMp, r.id, 'rate', v)
+      }),
+      /* The average stays: it answers "is this rate normal" at a glance, which
+         is a different question from "what exactly did we charge, and when".
+         The clock beside it answers that one. */
       (() => {
         if (!r.role || !history.length) return null;
         const roleUpper = r.role.toUpperCase();

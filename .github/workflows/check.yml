@@ -74,6 +74,8 @@ jobs:
         run: node tools/test-print-without-loading.js
       - name: A saved CE keeps its quoted cost until Sync Rates is pressed
         run: node tools/test-sync-rates.js
+      - name: Rate history
+        run: node tools/test-rate-history.js
       - name: An imported CE is filed under what its rows cost
         run: node tools/test-import-total.js
       - name: Saving a CE clears its draft and reports where it went

@@ -110,9 +110,47 @@
     }catch(e){addLog('Access check failed: '+e.message.slice(0,120));}
     setProgress(null);setBusy(false);
   };
+  /* Opening the Users tab used to run handleConnect, which runs the FULL
+     provisioning: an interactive sign-in, then twelve lists, every column and
+     every index verified one request at a time. The tab mounts every time it
+     is opened, so that ran on every visit -- it is why the panel appeared to
+     reconnect each time, and it is almost certainly what was tipping the site
+     into 429 throttling.
+
+     Nothing about opening a tab justifies rewriting a site's schema. All this
+     needs to know is whether the connection still works, which is one cheap
+     read against a token we already hold. Provisioning stays where it belongs:
+     on "Connect & Auto-Setup" and on "Repair lists & columns", both of which
+     someone presses on purpose. */
   React.useEffect(()=>{
-    const saved=getSPConfig();
-    if(saved.siteUrl&&saved.clientId)handleConnect();
+    let cancelled=false;
+    (async()=>{
+      const saved=getSPConfig();
+      if(!(saved.siteUrl&&saved.clientId))return;
+      try{
+        /* Not interactive. A silent token means the session is still good; no
+           token means sign in again, and the user does that by pressing
+           Connect -- not by having a popup thrown at them for opening a tab. */
+        const tok=await getSPToken();
+        if(cancelled)return;
+        if(!tok){setStatus('idle');return;}
+        const r=await fetch(saved.siteUrl.replace(/\/$/,'')+'/_api/web/currentuser',
+          {credentials:'omit',headers:{'Accept':'application/json;odata=nometadata','Authorization':'Bearer '+tok}});
+        if(cancelled)return;
+        if(r.ok){
+          setStatus('connected');
+          try{const u=await r.json();addLog('Connected as '+(u.Title||u.LoginName||'user')+'. Lists were not re-checked — press "Repair lists & columns" if this version needs a new one.');}
+          catch(_){setStatus('connected');}
+        }else if(r.status===401||r.status===403){
+          setStatus('idle');
+        }else{
+          setStatus('error: HTTP '+r.status);
+        }
+      }catch(e){
+        if(!cancelled)setStatus('idle');
+      }
+    })();
+    return()=>{cancelled=true;};
   },[]);
   const pfx=cfg.listPrefix||'SHICCE';const stC=status==='connected'?OK:status.startsWith('error')?ERR:MT;
   return React.createElement('div',null,

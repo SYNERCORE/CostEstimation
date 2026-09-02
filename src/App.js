@@ -5199,7 +5199,46 @@ function App({
             text: e.target.value
           } : r)),
           placeholder: item.type === 'main' ? 'Main scope step...' : 'Sub-step detail...'
-        }), /*#__PURE__*/React.createElement("button", {
+        }),
+        /* Steps could only be appended and never moved, so a method written in
+           the wrong order had to be retyped. Resources point at a step by id,
+           not by position, so inserting or moving one keeps everything filed
+           where it was. */
+        /*#__PURE__*/React.createElement("button", {
+          title: "Move up",
+          disabled: idx === 0,
+          style: {...btn('def', true), fontSize: 10, padding: '2px 5px', flexShrink: 0},
+          onClick: () => setRows(p => {
+            const a = [...p];
+            [a[idx - 1], a[idx]] = [a[idx], a[idx - 1]];
+            return a;
+          })
+        }, "^"), /*#__PURE__*/React.createElement("button", {
+          title: "Move down",
+          disabled: idx === scopeRows.length - 1,
+          style: {...btn('def', true), fontSize: 10, padding: '2px 5px', flexShrink: 0},
+          onClick: () => setRows(p => {
+            const a = [...p];
+            [a[idx], a[idx + 1]] = [a[idx + 1], a[idx]];
+            return a;
+          })
+        }, "v"), /*#__PURE__*/React.createElement("button", {
+          title: "Insert a main step below this one",
+          style: {...btn('def', true), fontSize: 10, padding: '2px 5px', flexShrink: 0},
+          onClick: () => setRows(p => {
+            const a = [...p];
+            a.splice(idx + 1, 0, {id: uid(), type: 'main', text: ''});
+            return a;
+          })
+        }, "+1"), /*#__PURE__*/React.createElement("button", {
+          title: "Insert a sub-step below this one",
+          style: {...btn('info', true), fontSize: 10, padding: '2px 5px', flexShrink: 0},
+          onClick: () => setRows(p => {
+            const a = [...p];
+            a.splice(idx + 1, 0, {id: uid(), type: 'sub', text: ''});
+            return a;
+          })
+        }, "+a"), /*#__PURE__*/React.createElement("button", {
           onClick: () => setRows(p => p.filter(r => r.id !== item.id)),
           style: {
             background: 'none',
@@ -7065,8 +7104,25 @@ function App({
           [a[idx], a[idx + 1]] = [a[idx + 1], a[idx]];
           return a;
         })
-      }, "v"), item.type === 'main' && /*#__PURE__*/React.createElement("button", {
-        title: "Add sub-item below",
+      }, "v"),
+      /* A main step could only ever be APPENDED. Remembering a step you left
+         out of the middle of a method meant adding it at the end and clicking
+         Move up until it arrived -- once per position. Both kinds insert where
+         you are now; the buttons at the top still add at the end. */
+      /*#__PURE__*/React.createElement("button", {
+        title: "Insert a main item below this one",
+        style: btn('def', true),
+        onClick: () => setSowItems(p => {
+          const a = [...p];
+          a.splice(idx + 1, 0, {
+            id: uid(),
+            type: 'main',
+            text: ''
+          });
+          return a;
+        })
+      }, "+1"), item.type === 'main' && /*#__PURE__*/React.createElement("button", {
+        title: "Insert a sub-item below this one",
         style: btn('info', true),
         onClick: () => setSowItems(p => {
           const a = [...p];
@@ -7077,7 +7133,7 @@ function App({
           });
           return a;
         })
-      }, "+"), /*#__PURE__*/React.createElement("button", {
+      }, "+a"), /*#__PURE__*/React.createElement("button", {
         title: "Delete",
         style: {
           background: 'none',

@@ -52,6 +52,8 @@ jobs:
         run: node tools/test-offline-prefetch.js
       - name: A throttled SharePoint is waited out, not hammered
         run: node tools/test-throttling.js
+      - name: Opening the Users tab does not reprovision the site
+        run: node tools/test-users-tab-mount.js
       - name: The Scope Library survives its own export
         run: node tools/test-scopelib-roundtrip.js
       - name: Tools are filed by what they do

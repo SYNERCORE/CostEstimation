@@ -105,5 +105,23 @@ ck('a tool genuinely named with a trailing letter-number keeps its name',
   IMP([{ID: 1, Title: 'T', ScopeText: 's', Tools: 'BORING BAR MX2'}])[1].tools[0].name === 'BORING BAR MX2',
   'only a trailing " xN" is read as a quantity');
 
+/* A step could only ever be appended. Remembering one you left out of the
+   middle of a method meant adding it at the end and clicking Move up until it
+   arrived -- once per position, on both screens. */
+const app2 = fs.readFileSync('src/App.js', 'utf8');
+console.log('\na step can be put where it belongs:');
+ck('the Scope of Work tab can insert a main item',
+  app2.indexOf('title: "Insert a main item below this one"') > 0);
+ck('and a sub-item', app2.indexOf('title: "Insert a sub-item below this one"') > 0);
+ck('the Scope Library can insert a main step',
+  app2.indexOf('title: "Insert a main step below this one"') > 0);
+ck('and a sub-step', app2.indexOf('title: "Insert a sub-step below this one"') > 0);
+ck('the library can reorder at all, which it could not before',
+  (app2.match(/title: "Move up"/g) || []).length >= 2,
+  'a method written in the wrong order had to be retyped');
+ck('inserting keeps resources filed, because a resource names its step by id',
+  app2.indexOf('step: (rows[r.step] || rows[0] || {}).id') > 0,
+  'by position, inserting a step above would move every resource under it');
+
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nscope library round trip OK');
 process.exit(bad ? 1 : 0);

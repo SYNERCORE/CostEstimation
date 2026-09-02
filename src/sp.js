@@ -12,6 +12,18 @@ let _spMsalApp=null,_spToken=null,_spExpiry=0;
    online. The UI reads this to offer a Sign in button; without it the user is
    simply locked out with nothing to click. */
 let _spNeedsSignIn=false;
+/* A silent refresh that failed will fail again for the same reason: the
+   refresh token is expired or revoked, and only signing in fixes it. Nothing
+   about the next caller changes that. Without a cooldown every list read on
+   the page mounts its own acquireTokenSilent, each one a POST to
+   login.microsoftonline.com that comes back 400, and opening a tab filled the
+   console with hundreds of them. Retry occasionally in case the session came
+   back on its own; otherwise answer from what we already know. */
+const SP_SILENT_RETRY_MS=60000;
+let _spSilentFailedUntil=0;
+/* And callers arrive together, so the first one in does the work and the rest
+   wait on it rather than starting their own. */
+let _spTokenInflight=null;
 function spNeedsSignIn(){return _spNeedsSignIn&&!!getSiteURL();}
 /* The one place that performs a user-initiated sign-in. Clears the flag on
    success so the banner disappears without a reload. */
@@ -52,6 +64,15 @@ async function _loadMSAL(){
    edited. */
 async function getSPToken(opts){
   const interactive=!!(opts&&opts.interactive);
+  /* A person clicking Sign in is asking us to try again now. */
+  if(interactive)_spSilentFailedUntil=0;
+  else if(_spNeedsSignIn&&Date.now()<_spSilentFailedUntil)return null;
+  if(_spTokenInflight)return _spTokenInflight;
+  _spTokenInflight=_getSPTokenNow(opts).finally(()=>{_spTokenInflight=null;});
+  return _spTokenInflight;
+}
+async function _getSPTokenNow(opts){
+  const interactive=!!(opts&&opts.interactive);
   const cfg=getSPConfig();
   if(!cfg.clientId){console.warn('SP: No Client ID configured');return null;}
   const su=getSiteURL();if(!su)return null;
@@ -91,6 +112,7 @@ async function getSPToken(opts){
            and locked out of every list with only a console warning. Raise the
            state so the UI can show a Sign in button. */
         _spNeedsSignIn=true;
+        _spSilentFailedUntil=Date.now()+SP_SILENT_RETRY_MS;
         try{window.dispatchEvent(new Event('shic-auth-required'));}catch(_e){}
         return null;
       }
@@ -108,6 +130,7 @@ async function getSPToken(opts){
     _spToken=res.accessToken;
     _spExpiry=res.expiresOn?res.expiresOn.getTime():Date.now()+3600000;
     _spNeedsSignIn=false;
+    _spSilentFailedUntil=0;
     return _spToken;
   }catch(e){
     console.warn('SP token:',e.message||e);

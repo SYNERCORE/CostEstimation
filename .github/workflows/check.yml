@@ -52,6 +52,8 @@ jobs:
         run: node tools/test-offline-prefetch.js
       - name: One throttle gate holds back every SharePoint caller
         run: node tools/test-throttle-gate.js
+      - name: Token storm
+        run: node tools/test-token-storm.js
       - name: A throttled SharePoint is waited out, not hammered
         run: node tools/test-throttling.js
       - name: Opening the Users tab does not reprovision the site

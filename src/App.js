@@ -4759,6 +4759,29 @@ function App({
       startEdit(blank);
       showToast('New service added — it is the first one in the list.');
     };
+    /* Merge-on-save left every replaced service in SharePoint alongside the
+       one that replaced it, so a library imported over another shows both.
+       Loading now keeps one of each, but the extra rows are still on the site
+       until something writes over them -- this is that something, on purpose
+       and with a count, rather than as a side effect of editing a service. */
+    const dedupeLib = () => {
+      const key = s => String(s.cat || '').toUpperCase().trim() + '|' + String(s.title || '').toUpperCase().trim();
+      const seen = {};
+      const kept = [];
+      let dropped = 0;
+      /* Later wins: the newest import is the one worth keeping. */
+      [...sowLib].reverse().forEach(s => {
+        const k = key(s);
+        if (seen[k]) { dropped++; return; }
+        seen[k] = true;
+        kept.unshift(s);
+      });
+      if (!dropped) { showToast('No duplicates — every service is listed once.'); return; }
+      if (!confirm('Remove ' + dropped + ' duplicate service' + (dropped === 1 ? '' : 's') + '?\n\n' +
+        kept.length + ' will remain. Where two services share a category and title, the more recently imported one is kept.')) return;
+      saveSowLib(kept);
+      showToast('Removed ' + dropped + ' duplicate' + (dropped === 1 ? '' : 's') + ' — ' + kept.length + ' services remain.');
+    };
     const resetLib = () => {
       if (!confirm('Reset to defaults? All custom changes will be lost.')) return;
       saveSowLib(window.SOW_LIBRARY);
@@ -5445,6 +5468,10 @@ function App({
         e.target.value = '';
       }
     })), /*#__PURE__*/React.createElement("button", {
+      style: btn('def', true),
+      title: "Keep one of each service where a category and title appear twice",
+      onClick: dedupeLib
+    }, "Remove duplicates"), /*#__PURE__*/React.createElement("button", {
       style: btn('def', true),
       onClick: resetLib
     }, "Reset Defaults"), /*#__PURE__*/React.createElement("button", {

@@ -731,15 +731,33 @@ async function dbSaveSowLib(lib){
       /* Build local map: svc.id (string) → svc */
       const localMap={};
       lib.forEach(s=>localMap[String(s.id)]=s);
-      /* MERGE: SP-only services are preserved; local wins on same id */
-      const merged={...spMap};
-      lib.forEach(s=>{ merged[String(s.id)]={spId:(spMap[String(s.id)]||{}).spId,svc:s}; });
-      /* Upsert merged result; Title = readable "Cat | Name" */
-      for(const key of Object.keys(merged)){
-        const{spId,svc}=merged[key];
-        const data={Title:(svc.cat||'')+(svc.cat&&svc.title?' | ':'')+svc.title,shicData:JSON.stringify(svc)};
+      /* SharePoint is made to MATCH the library it was handed.
+
+         It used to merge, preserving any service SharePoint had and the caller
+         did not. Two things followed, and both were reported as bugs. Importing
+         a replacement library kept every old service alongside the new ones --
+         the import says it replaces the library, and once SharePoint was
+         connected that was simply untrue. And deleting a service did nothing:
+         it went locally, the merge put it straight back on the next save.
+
+         A service missing from `lib` is a service the caller means to be gone. */
+      for(const s of lib){
+        const spId=(spMap[String(s.id)]||{}).spId;
+        const data={Title:(s.cat||'')+(s.cat&&s.title?' | ':'')+s.title,shicData:JSON.stringify(s)};
         if(spId!=null)await spPatch(spList('SowLib'),spId,data);
         else await spPost(spList('SowLib'),data);
+      }
+      /* Never on an empty list. A failed read or a half-loaded editor handing
+         over [] must not be able to empty the site's library, and no legitimate
+         caller ever saves an empty one -- Reset Defaults writes the seeded set,
+         not nothing. */
+      if(lib.length){
+        for(const r of existing){
+          let id=null;
+          try{const d=JSON.parse(r.shicData||'{}');id=d&&d.id!=null?String(d.id):null;}catch{}
+          if(id===null||localMap[id]===undefined)
+            await spDelete(spList('SowLib'),r.Id).catch(()=>{});
+        }
       }
       return true;
     }catch(e){console.warn('dbSaveSowLib:',e.message);}
@@ -755,7 +773,22 @@ async function dbGetSowLib(){
       const rows=await spGet(spList('SowLib'),'','Id,Title,shicData');
       if(rows.length){
         const parsed=rows.filter(r=>r.shicData).map(r=>{try{return JSON.parse(r.shicData);}catch{return null;}}).filter(Boolean);
-        if(parsed.length)return parsed.sort((a,b)=>String(a.id||'').localeCompare(String(b.id||''),undefined,{numeric:true}));
+        /* One service per id, and one per title within a category. A site that
+           was merged before this fix holds both the old library and the new
+           one, and the reader is where that stops being visible: the last row
+           wins, which is the most recently written. */
+        const byId={},byName={};
+        for(const svc of parsed){
+          if(svc&&svc.id!=null)byId[String(svc.id)]=svc;
+          else byName['\u0000'+Math.random()]=svc;
+        }
+        const uniq=[];
+        for(const svc of Object.values(byId)){
+          const key=String(svc.cat||'').toUpperCase().trim()+'|'+String(svc.title||'').toUpperCase().trim();
+          byName[key]=svc;
+        }
+        for(const svc of Object.values(byName))uniq.push(svc);
+        if(uniq.length)return uniq.sort((a,b)=>String(a.id||'').localeCompare(String(b.id||''),undefined,{numeric:true}));
       }
     }catch(e){console.warn('dbGetSowLib:',e.message);}
   }

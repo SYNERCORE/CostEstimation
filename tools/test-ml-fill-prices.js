@@ -26,7 +26,7 @@ const ck = (n, c, x) => { if (c) console.log('  PASS  ' + n); else { console.log
 
 /* ---- run the real fillFromHistory against a fake masterlist -------------- */
 const fn = (app.match(/    const fillFromHistory = \(\) => \{[\s\S]*?\n    \};/) || [''])[0];
-const kinds = (app.match(/    const ML_HIST_KIND = \{[\s\S]*?\n    \};/) || [''])[0];
+const kinds = (app.match(/  const ML_HIST_KIND = \{[\s\S]*?\n  \};/) || [''])[0];
 const uses = (w.match(/function shicRateUses\(kind, name, limit\) \{[\s\S]*?\n\}/) || [''])[0];
 if (!fn || !kinds || !uses) { console.error('fillFromHistory / ML_HIST_KIND / shicRateUses not found'); process.exit(1); }
 

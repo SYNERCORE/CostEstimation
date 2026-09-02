@@ -58,6 +58,185 @@ function mlShape(ml) {
   return out;
 }
 
+/* RATE TRENDS.
+   ============
+   The clock answers "what did we charge for this" one row at a time. This
+   answers the question you cannot ask a row: which of these rates has the
+   masterlist stopped keeping up with?
+
+   A list goes stale quietly. Nobody notices a rate that has not moved in two
+   years, because nothing anywhere compares it to what the CEs are actually
+   charging -- and by the time somebody does, every quote built on it has
+   already gone out. The default view is that comparison, worst first.
+
+   It lives out here rather than inside App deliberately. Declared in there it
+   would take a fresh function identity on every App render and React would
+   remount it each time, recomputing both memos; rendering it as a bare call
+   instead would only move the problem, since the call is conditional on the
+   masterlist tab and its hooks would come and go from App's own hook
+   sequence. check-remounting-editors.js is the guard that says so. */
+function MlTrendModal({ mlTrend, setMlTrend, masterlist, ML_HIST_KIND }) {
+  /* Every hook runs on every render: the guard for "the view is closed" sits
+     BELOW them, not above. An early return that skips a hook changes the hook
+     order between renders of the same mounted component. */
+  const tab = (mlTrend && mlTrend.tab) || 'materials';
+  const pick = (mlTrend && mlTrend.pick) || null;
+  const kind = ML_HIST_KIND[tab];
+  const key = (tab === 'manpower' || tab === 'vehicles') ? 'rate' : 'cost';
+  const nk = tab === 'manpower' ? 'role' : 'desc';
+  const money = v => (v === null || v === undefined) ? '—' :
+    '₱' + Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  /* --- how far the masterlist has drifted from what we actually charge --- */
+  const drift = React.useMemo(() => {
+    if (!mlTrend) return [];
+    /* One pass over the history, not one per row. Asking shicRateUses for
+       every item would rescan all 896 CEs two thousand times over, and
+       Materials -- the biggest tab -- is the one most likely to be opened. */
+    const norm = n => String(n || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+    const listKey = { mp: 'mp', tools: 'tools', mats: 'mats', ppe: 'ppe' }[kind];
+    const keys = listKey ? [listKey] : ['mobVehicles', 'demobVehicles'];
+    const idx = {};
+    ((typeof window !== 'undefined' && window.shicHistory) || []).forEach(ce => {
+      const info = ce.info || {};
+      /* Issued CEs only, for the same reason Fill missing prices uses them: a
+         figure scraped out of a spreadsheet is not a rate anybody approved,
+         and it must not be the thing that tells you your list is wrong. */
+      if (!(ce.savedAt && (info.ceNum || ce.ceNum))) return;
+      keys.forEach(k => (ce[k] || []).forEach(r => {
+        const nm = norm(r.role || r.desc);
+        if (!nm) return;
+        const v = Number(r.rate !== undefined && r.rate !== '' && r.rate !== null ? r.rate : r.cost);
+        if (!isFinite(v) || v <= 0) return;
+        (idx[nm] = idx[nm] || []).push({ rate: v, when: ce.savedAt, ceNum: info.ceNum || ce.ceNum || '' });
+      }));
+    });
+    Object.keys(idx).forEach(k => idx[k].sort((a, b) => (Date.parse(b.when) || 0) - (Date.parse(a.when) || 0)));
+    const rows = [];
+    (masterlist[tab] || []).forEach(r => {
+      const nm = String(r[nk] || '').trim();
+      if (!nm) return;
+      const u = idx[norm(nm)];
+      if (!u || !u.length) return;
+      const listed = N(r[key]);
+      /* An unpriced row is not drifted, it is empty -- Fill missing prices is
+         the tool for that, and mixing the two would bury the rates that really
+         have moved under six hundred blanks. */
+      if (!listed) return;
+      const latest = u[0].rate;
+      rows.push({ name: nm, listed, latest, uses: u, gap: latest - listed, pct: (latest - listed) / listed });
+    });
+    rows.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+    return rows;
+  }, [tab, kind, key, nk, masterlist, !!mlTrend]);
+
+  /* --- one item, by quarter --- */
+  const detail = React.useMemo(() => {
+    if (!pick) return null;
+    const u = (typeof shicRateUses === 'function' ? shicRateUses(kind, pick, 200) : []).filter(x => x.issued);
+    const q = {};
+    u.forEach(x => {
+      const d = new Date(x.when);
+      const k = isNaN(d) ? 'undated' : d.getFullYear() + ' Q' + (Math.floor(d.getMonth() / 3) + 1);
+      (q[k] = q[k] || []).push(x);
+    });
+    return Object.keys(q).sort().reverse().map(k => {
+      const rs = q[k].map(x => x.rate);
+      return {
+        q: k, n: rs.length,
+        min: Math.min.apply(null, rs), max: Math.max.apply(null, rs),
+        avg: rs.reduce((a, b) => a + b, 0) / rs.length,
+        rows: q[k]
+      };
+    });
+  }, [pick, kind]);
+
+  const hi = detail && detail.length ? Math.max.apply(null, detail.map(d => d.max)) : 0;
+  if (!mlTrend) return null;
+
+  return React.createElement('div', {
+    style: {
+      position: 'fixed', inset: 0, background: '#000A', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', zIndex: 200, padding: 16
+    },
+    onClick: e => { if (e.target === e.currentTarget) setMlTrend(null); }
+  },
+    React.createElement('div', { style: { ...CS, maxWidth: 860, width: '100%', maxHeight: '90vh', overflowY: 'auto' } },
+      React.createElement('div', { style: { display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 } },
+        React.createElement('span', { style: { fontWeight: 700, fontSize: 13 } }, 'Rate Trends'),
+        React.createElement('span', { style: { color: MT, fontSize: 11 } }, tab),
+        React.createElement('button', {
+          style: { ...btn('def', true), marginLeft: 'auto' },
+          onClick: () => setMlTrend(null)
+        }, 'Close')),
+
+      pick ? React.createElement('div', null,
+        React.createElement('button', {
+          style: { ...btn('def', true), marginBottom: 10 },
+          onClick: () => setMlTrend({ tab, pick: null })
+        }, '← All items'),
+        React.createElement('div', { style: { fontWeight: 700, fontSize: 12, marginBottom: 8 } }, pick),
+        !detail || !detail.length
+          ? React.createElement('div', { style: { color: '#F59E0B', fontSize: 11 } },
+            'No issued CE has costed this item.')
+          : React.createElement('table', { style: { width: '100%', borderCollapse: 'collapse' } },
+            React.createElement('thead', null, React.createElement('tr', null,
+              ['Quarter', 'CEs', 'Low', 'Average', 'High', ''].map(h =>
+                React.createElement('th', { key: h, style: { ...THS, textAlign: (h === 'Quarter' || h === '') ? 'left' : 'right' } }, h)))),
+            React.createElement('tbody', null, detail.map(d =>
+              React.createElement('tr', { key: d.q },
+                React.createElement('td', { style: TDS }, d.q),
+                React.createElement('td', { style: { ...TDS, textAlign: 'right' } }, d.n),
+                React.createElement('td', { style: { ...TDS, ...MONO, textAlign: 'right', color: MT } }, money(d.min)),
+                React.createElement('td', { style: { ...TDS, ...MONO, textAlign: 'right', fontWeight: 700, color: ACC } }, money(d.avg)),
+                React.createElement('td', { style: { ...TDS, ...MONO, textAlign: 'right', color: MT } }, money(d.max)),
+                /* A bar, not a chart. The shape of the movement is the whole
+                   question and it does not need axes to be read. */
+                React.createElement('td', { style: { ...TDS, width: 180 } },
+                  React.createElement('div', {
+                    title: d.rows.map(r => (r.ceNum || '?') + ': ' + money(r.rate)).join('\n'),
+                    style: {
+                      background: ACC + '33', height: 8, borderRadius: 4,
+                      width: hi ? Math.max(4, Math.round(d.avg / hi * 170)) : 4
+                    }
+                  }))))))
+      ) : React.createElement('div', null,
+        React.createElement('div', { style: { color: MT, fontSize: 11, marginBottom: 10 } },
+          drift.length
+            ? 'Where the masterlist and the most recent CE disagree, furthest first. Click an item for its history by quarter.'
+            : 'No item in this tab has both a price and a saved CE to compare it against.'),
+        React.createElement('table', { style: { width: '100%', borderCollapse: 'collapse' } },
+          React.createElement('thead', null, React.createElement('tr', null,
+            ['Item', 'Masterlist', 'Last charged', 'Difference', 'CEs'].map(h =>
+              React.createElement('th', { key: h, style: { ...THS, textAlign: h === 'Item' ? 'left' : 'right' } }, h)))),
+          React.createElement('tbody', null, drift.slice(0, 60).map(d => {
+            const up = d.gap > 0;
+            const flat = Math.abs(d.pct) < 0.005;
+            return React.createElement('tr', {
+              key: d.name,
+              onClick: () => setMlTrend({ tab, pick: d.name }),
+              style: { cursor: 'pointer' }
+            },
+              React.createElement('td', { style: TDS }, d.name),
+              React.createElement('td', { style: { ...TDS, ...MONO, textAlign: 'right', color: MT } }, money(d.listed)),
+              React.createElement('td', { style: { ...TDS, ...MONO, textAlign: 'right' } }, money(d.latest)),
+              React.createElement('td', {
+                style: {
+                  ...TDS, ...MONO, textAlign: 'right', fontWeight: 700,
+                  color: flat ? MT : (up ? '#F85149' : '#3FB950')
+                }
+              }, flat ? 'in step' : (up ? '+' : '') + Math.round(d.pct * 100) + '%'),
+              React.createElement('td', { style: { ...TDS, textAlign: 'right', color: MT } }, d.uses.length));
+          }))),
+        drift.length > 60 ? React.createElement('div', { style: { color: MT, fontSize: 10, marginTop: 8 } },
+          'Showing the 60 furthest out of ' + drift.length + '.') : null,
+        /* Red is the one that costs money: the list is under what the CEs
+           charge, so every quote built on it under-recovers. */
+        drift.length ? React.createElement('div', { style: { color: MT, fontSize: 10, marginTop: 8 } },
+          'Red means the masterlist is BELOW what was last charged — a quote built on it under-recovers.') : null
+      )));
+}
+
 function App({
   currentUser,
   onLogout
@@ -2402,6 +2581,14 @@ function App({
      in a component that is itself declared in another component is thrown away
      on every render, which is what ate keystrokes in this very editor before. */
   const [mlCalc, setMlCalc] = useState(null);
+  const [mlTrend, setMlTrend] = useState(null);   /* Rate Trends: null, or {tab, pick} */
+  /* mlTab names the tab; the history stores each resource under its own
+     key, and the two are not the same word. Up here because the editor and
+     the trends view both need it. */
+  const ML_HIST_KIND = {
+    manpower: 'mp', tools: 'tools', materials: 'mats',
+    ppe: 'ppe', vehicles: 'vehicles'
+  };
   const [mlQ, setMlQ] = useState('');
   const [mlPage, setMlPage] = useState(0);
   const [mlQuickAdd, setMlQuickAdd] = useState('');
@@ -2682,12 +2869,6 @@ function App({
       vehicles: ['Transport', 'Fuel', 'Allowance', 'Meals', 'Travel', 'Accommodation', 'Personnel', 'Equipment Rental', 'Permit / Fee', 'Miscellaneous']
     };
     const filtered = (masterlist[mlTab] || []).filter(r => !mlQ || (r.role || r.desc || '').toLowerCase().includes(mlQ.toLowerCase()) || r.category.toLowerCase().includes(mlQ.toLowerCase()));
-    /* mlTab names the tab; the history stores each resource under its own
-       key, and the two are not the same word. */
-    const ML_HIST_KIND = {
-      manpower: 'mp', tools: 'tools', materials: 'mats',
-      ppe: 'ppe', vehicles: 'vehicles'
-    };
     /* An item priced at zero is not a cheap item, it is an unpriced one -- and
        a masterlist full of them is how a CE goes out understating its own
        cost. The company has bought most of these before; until now nothing
@@ -2904,7 +3085,11 @@ function App({
       style: btn('acc', true),
       title: "Price every item in this tab that has none, using the most recent CE it was actually charged on",
       onClick: fillFromHistory
-    }, "Fill missing prices"), /*#__PURE__*/React.createElement("label", {
+    }, "Fill missing prices"), /*#__PURE__*/React.createElement("button", {
+      style: btn('info', true),
+      title: "Which rates in this list have stopped keeping up with what the CEs actually charge",
+      onClick: () => setMlTrend({ tab: mlTab, pick: null })
+    }, "Rate Trends"), /*#__PURE__*/React.createElement("label", {
       style: {
         ...btn('def', true),
         cursor: 'pointer',
@@ -7681,7 +7866,7 @@ tab === 'sowbreak' && (() => {
   );
 })(),
 tab === 'scopelib' && ScopeLibraryEditor(),
-tab === 'masterlist' && MlEditor(), tab === 'masterlist' && MlCalcModal(),
+tab === 'masterlist' && MlEditor(), tab === 'masterlist' && MlCalcModal(), tab === 'masterlist' && /*#__PURE__*/React.createElement(MlTrendModal, { mlTrend, setMlTrend, masterlist, ML_HIST_KIND }),
 tab === 'history' && /*#__PURE__*/React.createElement(HistPanel, null),
 
 /* ── Status Panel Modal ──────────────────────────────────────────────────────

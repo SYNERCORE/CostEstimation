@@ -87,6 +87,22 @@ const row = (spId, id, title) => ({Id: spId, shicData: JSON.stringify({id, title
   ck('it keeps the more recently imported one', /\[\.\.\.sowLib\]\.reverse\(\)/.test(app));
   ck('and says so when there is nothing to do', /No duplicates — every service is listed once/.test(app));
 
+  console.log('\nand importing one service does not delete the rest:');
+  ck('merge is the default, not replace', /Merge: keep your other/.test(app),
+    'uploading one new service deleted the other sixty-eight');
+  ck('it keeps every service not in the file',
+    /const merged = sowLib\.map\(s => \{/.test(app) &&
+    /\.concat\(parsed\.filter\(s => !byId\[String\(s\.id\)\]\)\)/.test(app));
+  ck('a service already in the library is updated, not duplicated',
+    /const hit = parsed\.find\(p => String\(p\.id\) === String\(s\.id\)\);/.test(app));
+  ck('it says how many are new and how many update',
+    /will update a service you already have/.test(app));
+
+  console.log('\nreplacing is still possible, but it says what it deletes:');
+  ck('there is a second prompt for it', /Replace the ENTIRE library/.test(app));
+  ck('it names what will go', /not in this file will be DELETED/.test(app));
+  ck('and it is not offered when there is nothing to lose', /else if \(rest > 0 &&/.test(app));
+
   console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nscope library replace OK');
   process.exit(bad ? 1 : 0);
 })();

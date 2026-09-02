@@ -5458,9 +5458,32 @@ function App({
             showToast('No valid services found in file.', true);
             return;
           }
-          if (confirm('Import ' + parsed.length + ' services? This will replace the current library.')) {
+          /* Import used to replace the whole library, which is right for a
+             rebuilt library and badly wrong for everything else: uploading one
+             new service deleted the other sixty-eight. Merging is the common
+             case and the safe one, so it is the default; replacing is still
+             reachable, but it now says what it will delete first. */
+          const byId = {};
+          sowLib.forEach(s => { byId[String(s.id)] = true; });
+          const fresh = parsed.filter(s => !byId[String(s.id)]).length;
+          const upd = parsed.length - fresh;
+          const rest = sowLib.length - upd;
+          const summary = 'Import ' + parsed.length + ' service' + (parsed.length === 1 ? '' : 's') + '?\n\n' +
+            '  ' + fresh + ' new\n' +
+            '  ' + upd + ' will update a service you already have\n\n';
+          if (confirm(summary + 'OK  \u2014  Merge: keep your other ' + rest + ' service' + (rest === 1 ? '' : 's') + '.\n' +
+                      'Cancel  \u2014  other options.')) {
+            const merged = sowLib.map(s => {
+              const hit = parsed.find(p => String(p.id) === String(s.id));
+              return hit || s;
+            }).concat(parsed.filter(s => !byId[String(s.id)]));
+            saveSowLib(merged);
+            showToast('Imported ' + parsed.length + ' \u2014 ' + merged.length + ' services in the library.');
+          } else if (rest > 0 && confirm('Replace the ENTIRE library with these ' + parsed.length + ' services?\n\n' +
+                     rest + ' service' + (rest === 1 ? '' : 's') + ' not in this file will be DELETED, here and in SharePoint.\n\n' +
+                     'Export a backup first if you are not sure.')) {
             saveSowLib(parsed);
-            showToast('Imported ' + parsed.length + ' services.');
+            showToast('Library replaced \u2014 ' + parsed.length + ' services.');
           }
         } catch (err) {
           showToast('Import failed: ' + err.message, true);

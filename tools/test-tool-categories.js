@@ -71,12 +71,20 @@ ck('the masterlist dropdown offers the row\'s own category when the list has dro
   'otherwise an older item shows an empty dropdown and reads as uncategorised');
 ck('so does the CE resource editor',
   /r\.cat && catOpts\.indexOf\(r\.cat\) < 0 \? \[r\.cat\] : \[\]/.test(app));
-ck('and a blank row falls to the first category, not a name that no longer exists',
-  /value: r\.cat \|\| catOpts\[0\]/.test(app));
+/* This used to assert catOpts[0]. Fine while a list held four entries; with
+   nineteen materials it showed an uncategorised row as an abrasive. The point
+   was never "first alphabetically" -- it was "a real category, not a name the
+   list has dropped". General says that better where a list has one. */
+ck('and a blank row falls to a real category, not a name that no longer exists',
+  /catOpts\.indexOf\('General'\) >= 0 \? 'General' : catOpts\[0\]/.test(app));
 
 console.log('\nthe other lists are left alone:');
 ck('manpower is still by discipline', /manpower: \['Electrical', 'Mechanical', 'Civil', 'General'\]/.test(app));
-ck('materials too', /materials: \['Electrical', 'Mechanical', 'Civil', 'General'\]/.test(app));
+/* Materials no longer is. It got the same treatment for the same reason --
+   see tools/test-material-categories.js. Manpower and PPE genuinely are filed
+   by discipline, so they stay. */
+ck('materials has its own list now, not the disciplines',
+  /materials: MATERIAL_CATEGORIES,/.test(app));
 ck('PPE too', /ppe: \['General', 'Welding', 'Electrical', 'Mechanical'\]/.test(app));
 
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\ntool categories OK');

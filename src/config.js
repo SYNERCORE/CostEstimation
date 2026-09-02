@@ -440,6 +440,44 @@ const TOOL_CATEGORIES = [
   'Welding & Cutting Equipment'
 ];
 
+/* Materials offered Electrical / Mechanical / Civil / General -- the discipline
+   list, borrowed. It says nothing about a material: every abrasive, gas,
+   chemical and fastener in the warehouse landed in one of four buckets, so the
+   Materials tab could not be filtered, searched by category, or reported on.
+
+   These come from the warehouse export's own Category column, cleaned up: the
+   "(INV)-WHD" suffix dropped, and the pairs the warehouse splits but a CE never
+   does merged into one -- welding consumables with welding accessories, cutting
+   with cutting, sandblasting with sandblasting, machining with turning.
+
+   PPE and uniforms are deliberately absent. They have their own tab, and a
+   material category that duplicates it only invites the same item being costed
+   twice.
+
+   Alphabetical, for the same reason as the tools. A material filed under an
+   older category keeps it -- nothing here re-files anything. */
+const MATERIAL_CATEGORIES = [
+  'Abrasives & Grinding',
+  'Air & Pneumatic Accessories',
+  'Balancing Consumables',
+  'Cleaning Chemicals & Consumables',
+  'Construction & Admin Supply',
+  'Cutting Consumables & Accessories',
+  'Electrical Consumables',
+  'Fuel, Oil & Lubricants',
+  'General',
+  'Hardware & Fasteners',
+  'Industrial Gases',
+  'Machining & Turning Consumables',
+  'NDT Chemicals',
+  'Painting & Coating Materials',
+  'Pantry & Office Supplies',
+  'Plumbing Consumables',
+  'Preservation Chemicals',
+  'Sandblasting Consumables & Accessories',
+  'Welding Consumables & Accessories'
+];
+
 const CE_DEFAULT_ANY = 'ANY';
 const CE_DISCIPLINES = ['Electrical', 'Mechanical', 'Civil', 'General'];
 

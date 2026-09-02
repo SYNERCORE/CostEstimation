@@ -2677,7 +2677,7 @@ function App({
     const catOpts = {
       manpower: ['Electrical', 'Mechanical', 'Civil', 'General'],
       tools: TOOL_CATEGORIES,
-      materials: ['Electrical', 'Mechanical', 'Civil', 'General'],
+      materials: MATERIAL_CATEGORIES,
       ppe: ['General', 'Welding', 'Electrical', 'Mechanical'],
       vehicles: ['Transport', 'Fuel', 'Allowance', 'Meals', 'Travel', 'Accommodation', 'Personnel', 'Equipment Rental', 'Permit / Fee', 'Miscellaneous']
     };
@@ -4809,7 +4809,7 @@ function App({
         ppe: masterlist.ppe
       };
       const mlItems = mlMap[type] || [];
-      const catOpts = type === 'mp' ? ['Electrical', 'Mechanical', 'Civil', 'General'] : type === 'ppe' ? ['General', 'Welding', 'Electrical', 'Mechanical'] : type === 'tools' ? TOOL_CATEGORIES : ['Electrical', 'Mechanical', 'Civil', 'General'];
+      const catOpts = type === 'mp' ? ['Electrical', 'Mechanical', 'Civil', 'General'] : type === 'ppe' ? ['General', 'Welding', 'Electrical', 'Mechanical'] : type === 'tools' ? TOOL_CATEGORIES : type === 'mats' ? MATERIAL_CATEGORIES : ['Electrical', 'Mechanical', 'Civil', 'General'];
       /* Updater form, not a new array built from props: two edits landing in one
          React batch both read the same rendered snapshot, so the second would
          quietly undo the first. Callers that only accept an array still work --
@@ -4905,7 +4905,11 @@ function App({
           ...INP,
           width: 110
         },
-        value: r.cat || catOpts[0],
+        /* First alphabetically is not a sensible default. With four
+           categories it barely showed; with nineteen, an uncategorised
+           material reads as an abrasive. Fall back to General where the
+           list has one. */
+        value: r.cat || (catOpts.indexOf('General') >= 0 ? 'General' : catOpts[0]),
         onChange: e => upd(r.id, 'cat', e.target.value)
         /* Same as the masterlist: a row carrying a category this list no longer
            offers keeps it rather than showing an empty dropdown. Tools moved off

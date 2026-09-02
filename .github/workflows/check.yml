@@ -64,6 +64,8 @@ jobs:
         run: node tools/test-scopelib-roundtrip.js
       - name: Tools are filed by what they do
         run: node tools/test-tool-categories.js
+      - name: Material categories
+        run: node tools/test-material-categories.js
       - name: The tools template carries the tier figures
         run: node tools/test-tools-template.js
       - name: Tool tier pricing reproduces the masterlist workbook

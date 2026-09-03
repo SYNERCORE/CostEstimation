@@ -78,6 +78,8 @@ jobs:
         run: node tools/test-rate-history.js
       - name: Masterlist price fill
         run: node tools/test-ml-fill-prices.js
+      - name: Masterlist rounding
+        run: node tools/test-ml-rounding.js
       - name: Rate trends
         run: node tools/test-rate-trends.js
       - name: An imported CE is filed under what its rows cost

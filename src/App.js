@@ -45,6 +45,45 @@ function ceNumKey(num) {
   return [Number(m[1]), Number(m[2]), ...(rest.match(/\d+/g) || []).map(Number)];
 }
 
+/* Money in the masterlist is held to centavos.
+
+   A tool's daily cost is annualCost / 365, and that divides evenly almost
+   never: the list was showing 52.602739726027394 in a field somebody has to
+   read a price out of. Rounding only on the way to the screen would leave the
+   stored figure ragged, so an export, a CE built from that row, and the list
+   itself would disagree in the third decimal -- and pennies compounded across
+   a thousand-line CE stop being pennies.
+
+   So it is rounded once, in the shape every path shares, rather than at each
+   of the places that read it.
+
+   A blank is left blank. An empty cost means "not priced yet" and a 0 means
+   "free", and turning the first into the second is how an unpriced item goes
+   out of the door looking deliberate. */
+function mlRound(ml) {
+  if (!ml || typeof ml !== 'object') return ml;
+  const secs = ['manpower', 'tools', 'materials', 'ppe', 'vehicles'];
+  const money = ['cost', 'rate', 'perDiem'];
+  const out = { ...ml };
+  secs.forEach(k => {
+    if (!Array.isArray(out[k])) return;
+    out[k] = out[k].map(r => {
+      if (!r || typeof r !== 'object') return r;
+      let hit = null;
+      money.forEach(f => {
+        if (r[f] === undefined || r[f] === null || r[f] === '') return;
+        const v = parseFloat(r[f]);
+        if (!isFinite(v)) return;
+        const rounded = Math.round(v * 100) / 100;
+        if (rounded === r[f]) return;
+        (hit = hit || { ...r })[f] = rounded;
+      });
+      return hit || r;
+    });
+  });
+  return out;
+}
+
 function mlShape(ml) {
   if (!ml || typeof ml !== 'object' || Array.isArray(ml)) return null;
   /* 'materials' and 'vehicles', not 'mats'. The wrong name meant a stored
@@ -55,7 +94,9 @@ function mlShape(ml) {
   if (!secs.some(k => Array.isArray(ml[k]) && ml[k].length)) return null;
   const out = { ...ml };
   secs.forEach(k => { if (!Array.isArray(out[k])) out[k] = (typeof DEFAULT_ML !== 'undefined' && Array.isArray(DEFAULT_ML[k])) ? DEFAULT_ML[k] : []; });
-  return out;
+  /* Rounds a list already stored ragged, so an existing masterlist is tidied
+     by opening it rather than only by editing every row. */
+  return mlRound(out);
 }
 
 /* RATE TRENDS.
@@ -763,7 +804,10 @@ function App({
     }
     setHistBusy(false);
   };
-  const saveML = async ml => {
+  const saveML = async _ml => {
+    /* Import, the tier calculator, Fill missing prices, Sync Rates and Reset
+       Defaults all land here. */
+    const ml = mlRound(_ml);
     setMasterlist(ml);
     try{window.shicMasterlist=ml;}catch(_e){}
     setSyncStatus({masterlist:'saving', dirty:true});
@@ -2918,8 +2962,15 @@ function App({
       if (mlSaveTimer.current) clearTimeout(mlSaveTimer.current);
       mlSaveTimer.current = setTimeout(async () => {
         setSyncStatus({ masterlist: 'saving', dirty: true });
+        /* Rounded here and not in the keystroke above: rounding what somebody
+           is halfway through typing rewrites the field under the cursor. By
+           the time this fires they have stopped, and 1.005 becoming 1.01 is
+           what "two decimals" means rather than a surprise. */
+        const rounded = mlRound(next);
+        setMasterlist(rounded);
+        try { window.shicMasterlist = rounded; } catch (_e) {}
         try {
-          const res = await dbSaveML(next);
+          const res = await dbSaveML(rounded);
           if (res && res.sp === false) {
             setSyncStatus({ masterlist: 'error', dirty: true });
             showToast('Masterlist saved in this browser only — SharePoint refused it: ' + String(res.reason||'unknown').slice(0,100), true);

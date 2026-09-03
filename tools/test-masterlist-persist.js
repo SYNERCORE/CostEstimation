@@ -37,15 +37,26 @@ ck('Clear List saves', /saveML\(\{\s*\.\.\.masterlist,\s*\[mlTab\]: \[\]/.test(e
 ck('Reset Defaults saves', /saveML\(\{\s*\.\.\.masterlist,\s*\[mlTab\]: DEFAULT_ML\[mlTab\]/.test(ed));
 ck('Add / delete / bulk adjust save', (ed.match(/saveML\(/g) || []).length >= 5,
   'found ' + (ed.match(/saveML\(/g) || []).length);
-ck('the cell edit persists on its debounce', /await dbSaveML\(next\)/.test(ed));
+/* It persists `rounded`, not `next`: `next` is what the keystroke put on
+   screen, and the debounce rounds money to centavos before storing it.
+   Storing one figure while showing another is the bug the rounding was
+   added to fix, so the two must be the same object. */
+ck('the cell edit persists on its debounce', /await dbSaveML\(rounded\)/.test(ed));
+ck('and stores exactly what it puts on screen',
+  /const rounded = mlRound\(next\);/.test(ed) && /setMasterlist\(rounded\);/.test(ed));
 
 console.log('\nand nothing changes it without persisting:');
 /* setMasterlist inside the editor is only legitimate as part of the debounced
    cell edit, which calls dbSaveML itself. Any other bare call is the bug this
    file exists for. */
 const bare = (ed.match(/setMasterlist\(/g) || []).length;
-ck('no stray setMasterlist left in the editor', bare <= 1,
+/* Two now, both inside the debounced cell edit: one for the keystroke and one
+   for the rounded figure that is about to be stored. Everything else must
+   still go through saveML. */
+ck('no stray setMasterlist left in the editor', bare <= 2,
   bare + ' call(s); only the debounced cell edit may set state directly, because it calls dbSaveML itself');
+ck('and both belong to it', (ed.match(/setMasterlist\(next\)|setMasterlist\(rounded\)/g) || []).length === bare,
+  'a setMasterlist with any other argument is a change that never reaches storage');
 
 console.log('\nthe toast is not fired from inside a state updater:');
 ck('the import reports after saving, not during', !/showToast\([^)]*added[\s\S]{0,80}return \{/.test(ed),

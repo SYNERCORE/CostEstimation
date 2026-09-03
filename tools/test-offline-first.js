@@ -61,6 +61,8 @@ ck('mlShape lives in App.js with its call sites',
   /function mlShape/.test(app) && !/function mlShape/.test(rd('src/helpers.js')),
   'cross-file helper can break under a partially-updated cache');
 /* Behavioural check, not just presence. */
+/* mlShape rounds money on the way in, so mlRound has to come with it. */
+global.mlRound = eval('(' + (app.match(/function mlRound\(ml\) \{[\s\S]*?\n\}/) || [''])[0] + ')');
 const mlShape = eval('(' + (app.match(/function mlShape\(ml\) \{[\s\S]*?\n\}/) || [''])[0] + ')');
 global.DEFAULT_ML = { manpower: [{ role: 'd' }], tools: [{ d: 1 }], mats: [], ppe: [] };
 ck('rejects an array', mlShape([{ a: 1 }]) === null);

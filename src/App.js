@@ -6687,7 +6687,7 @@ function App({
       fontSize: 13
     },
     onClick: () => copyMenu && setCopyMenu(null)
-  }, /*#__PURE__*/React.createElement(SignInBanner, null), /*#__PURE__*/React.createElement(SPDeniedBanner, null), /*#__PURE__*/React.createElement(SyncStatusBar, null),
+  }, /*#__PURE__*/React.createElement(StatusBar, { currentUser }), /*#__PURE__*/React.createElement(SignInBanner, null), /*#__PURE__*/React.createElement(SPDeniedBanner, null), /*#__PURE__*/React.createElement(SyncStatusBar, null),
   bulkOn && isAdmin && /*#__PURE__*/React.createElement("div", {
     style: { background: alpha(ERR, '22'), borderBottom: `1px solid ${alpha(ERR, '55')}`, padding: '6px 16px',
              display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }
@@ -7198,10 +7198,10 @@ function App({
       borderBottom: `1px solid ${BDR}`,
       display: 'flex',
       alignItems: 'stretch',
-      height: 48,
+      height: 'var(--h-top)',
       padding: '0 16px',
       position: 'sticky',
-      top: 0,
+      top: 'var(--y-top)',
       zIndex: 50,
       /* Height is fixed (the tab strip sticks at top:48), so scroll rather than
          wrap when the buttons no longer fit. */
@@ -7334,7 +7334,7 @@ function App({
       padding: '0 16px',
       overflowX: 'auto',
       position: 'sticky',
-      top: 48,
+      top: 'var(--y-tabs)',
       zIndex: 49
     }
   }, TABS.map(t => {
@@ -11146,9 +11146,9 @@ tab === 'dashboard' && (() => {
       borderLeft: `1px solid ${BDR}`,
       background: CARD,
       position: 'sticky',
-      top: 96,
+      top: 'var(--y-body)',
       alignSelf: 'flex-start',
-      height: 'calc(100vh - 96px)',
+      height: 'calc(100vh - var(--y-body))',
       overflowY: 'auto'
     }
   }, /*#__PURE__*/React.createElement("div", {
@@ -11333,7 +11333,8 @@ tab === 'dashboard' && (() => {
   /*#__PURE__*/React.createElement("div", {
     style: { color: MT, fontSize: 9, textAlign: 'center', marginTop: 10, opacity: .6 },
     title: 'Build version. Reload the page if this is behind the current release.'
-  }, "build ", typeof APP_BUILD === 'undefined' ? '?' : APP_BUILD)))));
+  }, "build ", typeof APP_BUILD === 'undefined' ? '?' : APP_BUILD)),
+  /*#__PURE__*/React.createElement(FooterBar, null))));
 }
 class AppBoundary extends React.Component {
   constructor(props) {

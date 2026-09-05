@@ -475,6 +475,85 @@ function ThemeSwitch() {
   }, seg('light', '☀', 'Executive Light'), seg('dark', '☽', 'Dark Slate'));
 }
 
+/* THE ENTERPRISE STATUS BARS, at module scope.
+   Declared inside App they would take a new identity on every render and be
+   remounted -- and they hold hooks, so React would lose their subscription
+   each time. check-remounting-editors.js enforces this from the other side. */
+/* ENTERPRISE STATUS BAR (mockup, top row).
+   Reports state the app already holds -- the build, whether SharePoint is
+   connected, who is signed in. It reads; it does not decide. */
+function StatusBar({ currentUser }) {
+  /* Read through the getter, and re-read when the app says it moved. The
+     status is module state in db.js, not React state -- naming it directly
+     is a ReferenceError, and polling it would never repaint. */
+  const _s = React.useState(() => getSyncStatus()), sync = _s[0], setSync = _s[1];
+  React.useEffect(() => {
+    const f = () => setSync({...getSyncStatus()});
+    window.addEventListener('shic:sync:updated', f);
+    return () => window.removeEventListener('shic:sync:updated', f);
+  }, []);
+  return /*#__PURE__*/React.createElement("div", {
+  style: {
+    height: 'var(--h-status)', display: 'flex', alignItems: 'center', gap: 10,
+    padding: '0 16px', fontSize: 10, letterSpacing: '.04em',
+    background: 'var(--bg-surface-elevated)',
+    borderBottom: `1px solid ${BDR}`, color: MT,
+    position: 'sticky', top: 0, zIndex: 51, whiteSpace: 'nowrap', overflow: 'hidden'
+  }
+},
+  /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 800, color: ACC, letterSpacing: '.08em',
+      border: `1px solid ${alpha(ACC, '55')}`, borderRadius: 4, padding: '1px 6px'
+    }
+  }, "SYNERCORE CE"),
+  /*#__PURE__*/React.createElement("span", {style: {...MONO, color: 'var(--text-muted)'}},
+    "v" + (typeof APP_BUILD === 'undefined' ? '?' : APP_BUILD) + " Enterprise"),
+  /*#__PURE__*/React.createElement("span", {style: {color: 'var(--text-muted)'}}, "|"),
+  /*#__PURE__*/React.createElement("span", {
+    style: {display: 'inline-flex', alignItems: 'center', gap: 5}
+  },
+    /*#__PURE__*/React.createElement("span", {
+      style: {
+        width: 6, height: 6, borderRadius: '50%', display: 'inline-block',
+        background: sync.sp === 'connected' ? OK : sync.masterlist === 'error' ? ERR : MT
+      }
+    }),
+    /*#__PURE__*/React.createElement("span", {style: MONO},
+      "DB: " + (sync.sp === 'connected' ? 'Realtime Sync' : 'Local only'))),
+  /*#__PURE__*/React.createElement("span", {style: {marginLeft: 'auto', ...MONO, color: 'var(--text-muted)'}},
+    currentUser.username ? currentUser.username + " / " + String(currentUser.role || '').toUpperCase() : ''));
+}
+
+/* FOOTER STATUS BAR (mockup, bottom row). */
+function FooterBar() {
+  const _s = React.useState(() => getSyncStatus()), sync = _s[0], setSync = _s[1];
+  React.useEffect(() => {
+    const f = () => setSync({...getSyncStatus()});
+    window.addEventListener('shic:sync:updated', f);
+    return () => window.removeEventListener('shic:sync:updated', f);
+  }, []);
+  return /*#__PURE__*/React.createElement("div", {
+  style: {
+    display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+    padding: '7px 16px', fontSize: 10, color: MT, letterSpacing: '.04em',
+    background: 'var(--bg-surface-elevated)', borderTop: `1px solid ${BDR}`
+  }
+},
+  /*#__PURE__*/React.createElement("span", {style: {display: 'inline-flex', alignItems: 'center', gap: 5}},
+    /*#__PURE__*/React.createElement("span", {
+      style: {
+        width: 6, height: 6, borderRadius: '50%', display: 'inline-block',
+        background: sync.sp === 'connected' ? OK : MT
+      }
+    }),
+    "Database: " + (sync.sp === 'connected' ? 'SharePoint (synced)' : 'This browser only')),
+  /*#__PURE__*/React.createElement("span", {style: {...MONO, color: 'var(--text-muted)'}},
+    "Engine build " + (typeof APP_BUILD === 'undefined' ? '?' : APP_BUILD)),
+  /*#__PURE__*/React.createElement("span", {style: {marginLeft: 'auto', ...MONO, color: 'var(--text-muted)'}},
+    "Keyboard: Ctrl+S save"));
+}
+
 window.SHIC_ML=(function(){
   function tokenize(txt){return(txt||'').toLowerCase().replace(/[^a-z0-9\s]/g,' ').split(/\s+/).filter(Boolean);}
   function cosineSim(a,b){var ta=tokenize(a),tb=tokenize(b);if(!ta.length||!tb.length)return 0;var all=[].concat(ta,tb).filter(function(v,i,s){return s.indexOf(v)===i;});var va=all.map(function(w){return ta.filter(function(x){return x===w;}).length;});var vb=all.map(function(w){return tb.filter(function(x){return x===w;}).length;});var dot=va.reduce(function(s,v,i){return s+v*vb[i];},0);var magA=Math.sqrt(va.reduce(function(s,v){return s+v*v;},0));var magB=Math.sqrt(vb.reduce(function(s,v){return s+v*v;},0));return(magA&&magB)?dot/(magA*magB):0;}

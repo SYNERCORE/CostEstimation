@@ -294,3 +294,14 @@ function ceDeadline(deadline, dateSubmitted, status) {
       : days + 'd early'
   };
 }
+
+
+/* The company a CE belongs to is already in its number.
+   SHIC-CE-2026-0004 is SHIC's; SY3-CE-2026-0004 is SY3's. The monitoring
+   table kept a separate companyDesig field that defaulted to 'SHIC' whatever
+   the number said, so SY3 CEs sat under a SHIC label. */
+function ceNumPrefix(ceNum) {
+  const t = String(ceNum || '').toUpperCase();
+  const i = t.indexOf('-CE-');
+  return i > 0 ? t.slice(0, i) : '';
+}

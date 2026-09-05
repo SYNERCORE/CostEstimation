@@ -3500,6 +3500,19 @@ function App({
   /* A draft has no monitoring record -- there is no CE to attach a deadline or
      a received-by to yet -- so it reports the one field it does know. */
   const monOf = e => monData[e.id] || (e && e._draft ? {status: 'Draft'} : {});
+  /* Every prefix on file, plus any a CE already carries -- an old CE from a
+     company since removed must still be filterable by its own label.
+
+     At App scope, not inside the sortedHistory memo: a hook called from
+     within another hook's callback runs conditionally, which React cannot
+     survive. */
+  const coOptions = useMemo(() => {
+    const set = {};
+    (companies || []).forEach(c => { const p = String(c.cePrefix || '').toUpperCase().trim(); if (p) set[p] = 1; });
+    monRows.forEach(e => { const p = ceNumPrefix((e.info && e.info.ceNum) || e.ceNum); if (p) set[p] = 1; });
+    const out = Object.keys(set).sort();
+    return out.length ? out : ['SHIC'];
+  }, [companies, monRows]);
   const sortedHistory = useMemo(() => {
     const filtered = monRows.filter(e => {
       const m = monOf(e);
@@ -3525,7 +3538,9 @@ function App({
     const sortVal = (e, m) => {
       switch (monSortCol) {
         case 'ceeName':      return m.ceeName || m.preparedBy || e.savedBy || '';
-        case 'companyDesig': return m.companyDesig || 'SHIC';
+        /* What the cell shows, which is the CE number's own prefix. Sorting by
+           the stored field put a SY3 CE among the SHIC ones. */
+        case 'companyDesig': return ceNumPrefix((e.info && e.info.ceNum) || e.ceNum) || m.companyDesig || 'SHIC';
         case 'ceNum':        return e.info?.ceNum || e.ceNum || '';
         case 'designation':  return m.designation || m.discipline || e.info?.discipline || e.info?.projType || '';
         case 'customer':     return m.customer || e.info?.client || '';
@@ -4412,6 +4427,12 @@ function App({
       month: 'short',
       day: 'numeric'
     }) : '';
+    /* Whose CE this is. The number already says -- SHIC-CE-2026-0004 is
+       SHIC's -- so a stored companyDesig that disagrees with it is stale, and
+       an absent one needs no default guess. It fell back to a flat 'SHIC',
+       which labelled every SY3 CE as SHIC's. */
+    const coDesig = ceNumPrefix(ceNum) || m.companyDesig || 'SHIC';
+
     /* Deadline countdown, which stops when the CE is submitted. */
     const dl = ceDeadline(m.deadline, m.dateSubmitted, m.status);
     const deadlineDays = dl.days;
@@ -4481,11 +4502,19 @@ function App({
         width: '100%'
       },
       key: e.id + 'companyDesig',
-      defaultValue: m.companyDesig || 'SHIC',
+      defaultValue: coDesig,
       onChange: ev => { updateMon(e.id, 'companyDesig', ev.target.value); }
-    }, ['SHIC', 'SY3', 'ACE', 'MCR', 'EMN', 'SDB', 'RML', 'MFS', 'JAVV', 'Other'].map(o => /*#__PURE__*/React.createElement("option", {
+      /* Built from the companies actually on file, not a hardcoded list.
+         That list had grown to hold MFS, JAVV and EMN -- estimator initials,
+         not companies -- so the column that answers "whose CE is this" was
+         offering the name of the person who wrote it.
+
+         The row's own value comes first when the list no longer offers it, so
+         a CE filed under a company since removed keeps its label instead of
+         showing an empty dropdown. */
+    }, [...(coDesig && coOptions.indexOf(coDesig) < 0 ? [coDesig] : []), ...coOptions].map(o => /*#__PURE__*/React.createElement("option", {
       key: o
-    }, o))) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11}}, m.companyDesig||'SHIC')), /*#__PURE__*/React.createElement("td", {
+    }, o))) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11}}, coDesig)), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
         padding: '4px 6px',

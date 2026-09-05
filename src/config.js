@@ -364,6 +364,29 @@ const DEFAULT_ML={
    missing from this list, so nobody could actually select them. */
 const DEFAULT_STATUS_OPTIONS = ['Draft', 'Pending', 'Ongoing', 'For site insp.', 'For Approval', 'Waiting in...', 'Approved', 'Cancelled', 'On Hold', 'No Quote', 'Submitted'];
 
+/* WHEN A CE IS FINISHED WITH.
+   ===========================
+   Approved was counted as open. It is the opposite: the estimate has been
+   signed off and the estimator owes nothing further on it, so it was inflating
+   the Open CEs figure and sitting in the deadline queue above work that had
+   not been done at all.
+
+   Closed means nobody still owes work on this estimate -- signed off, sent,
+   declined or dropped. It is not the same as "won"; that is a different
+   question and this list does not answer it.
+
+   On Hold is deliberately NOT here. Paused work comes back, and dropping it
+   out of view is how it gets forgotten.
+
+   One list, used by the dashboard and by the deadline countdown alike. Two
+   definitions of "open" would eventually disagree, and the one nobody looked
+   at would be the wrong one. */
+const CE_CLOSED_STATUSES = ['Approved', 'Submitted', 'No Quote', 'Cancelled'];
+/* Blank is Draft: a CE nobody has set a status on is work in progress. */
+function ceIsOpen(status) {
+  return CE_CLOSED_STATUSES.indexOf(String(status || 'Draft').trim()) < 0;
+}
+
 /* Two Status fields describe the same CE:
 
      Project Info  -> the DOCUMENT state printed on the estimate

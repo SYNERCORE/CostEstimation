@@ -76,13 +76,15 @@ ck('a bad submitted date falls back to counting down', D('2026-07-18', 'rubbish'
   'better a live countdown than a made-up result');
 
 console.log('\nthe monitoring table uses it:');
-ck('the cell', /const dl = ceDeadline\(m\.deadline, m\.dateSubmitted\);/.test(app));
+/* The status is passed too: a closed CE stops the clock as surely as a
+   submission date does -- see tools/test-open-ce.js. */
+ck('the cell', /const dl = ceDeadline\(m\.deadline, m\.dateSubmitted, m\.status\);/.test(app));
 ck('and renders its label rather than rebuilding one', /\}, dl\.label\)/.test(app));
 ck('a finished CE is not left amber forever',
   /dl\.done \? \(dl\.late \? ERR : OK\)/.test(app),
   'amber means "due soon", which a CE submitted in July is not');
 ck('and the cell says what it is comparing', /Submitted ' \+ m\.dateSubmitted \+ ' against a '/.test(app));
-ck('sorting follows the number on screen', /const _d = ceDeadline\(m\.deadline, m\.dateSubmitted\)\.days;/.test(app));
+ck('sorting follows the number on screen', /const _d = ceDeadline\(m\.deadline, m\.dateSubmitted, m\.status\)\.days;/.test(app));
 ck('a row with no deadline still sorts last either way', /_d === null \? '' : _d/.test(app),
   'a number would beat the blanks-last rule and pin those rows to one end');
 

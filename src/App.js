@@ -3525,7 +3525,7 @@ function App({
            A row with no deadline returns '' rather than a number, so the
            blanks-last rule below catches it whichever way the column points. */
         case 'deadlineDays': {
-          const _d = ceDeadline(m.deadline, m.dateSubmitted).days;
+          const _d = ceDeadline(m.deadline, m.dateSubmitted, m.status).days;
           return _d === null ? '' : _d;
         }
         case 'dateSubmitted':return m.dateSubmitted || '';
@@ -4384,7 +4384,7 @@ function App({
       day: 'numeric'
     }) : '';
     /* Deadline countdown, which stops when the CE is submitted. */
-    const dl = ceDeadline(m.deadline, m.dateSubmitted);
+    const dl = ceDeadline(m.deadline, m.dateSubmitted, m.status);
     const deadlineDays = dl.days;
     /* A finished CE is history, not a warning. Late still reads red -- it is
        the fact of the matter -- but an on-time one is green however close to
@@ -8152,14 +8152,14 @@ tab === 'dashboard' && (() => {
   const avgVal = history.length ? history.reduce((s,h)=>s+N(h.grand||0),0)/history.length : 0;
   const statuses = monRows.map(h=>monOf(h).status||'Draft');
   /* An "open" CE is one still needing work. Submitted, No Quote and Cancelled
-     are the three end states -- everything else, Draft included, is open.
+     CE_CLOSED_STATUSES are the end states -- everything else, Draft and On
+     Hold included, is open.
      Sorted by deadline so the next thing due is the first thing read. A CE
      with no deadline set cannot be ranked, so it sorts to the bottom; as a
      plain string compare an empty deadline would sort to the very top and
      bury the genuinely urgent rows. */
-  const CLOSED_STATUSES = ['Submitted', 'No Quote', 'Cancelled'];
   const openCEs = monRows.map(h => ({h, m: monOf(h)}))
-    .filter(x => CLOSED_STATUSES.indexOf(x.m.status || 'Draft') < 0)
+    .filter(x => ceIsOpen(x.m.status))
     .sort((a, b) => {
       const da = a.m.deadline || '', db = b.m.deadline || '';
       if (!da && !db) return 0;

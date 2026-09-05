@@ -256,10 +256,20 @@ function _ceToday() {
   const n = new Date();
   return new Date(n.getFullYear(), n.getMonth(), n.getDate());
 }
-function ceDeadline(deadline, dateSubmitted) {
+function ceDeadline(deadline, dateSubmitted, status) {
+  /* A status that closes the CE stops the clock as surely as a submission
+     date does, and the two must not disagree: a CE marked Approved is off
+     the dashboard's open list, and leaving it counting down in the table
+     beside that would be the same CE described two ways. */
+  const closed = typeof ceIsOpen === 'function' && status !== undefined && !ceIsOpen(status);
   const due = _ceMidnight(deadline);
-  if (!due) return { days: null, label: '—', done: false, late: false };
+  if (!due) return { days: null, label: '—', done: closed, late: false };
   const sub = _ceMidnight(dateSubmitted);
+  if (!sub && closed) {
+    /* Closed, but nobody recorded when it went out. There is no honest number
+       of days to report, so it says the one thing that is true. */
+    return { days: null, label: 'closed', done: true, late: false };
+  }
   const days = Math.round((due - (sub || _ceToday())) / 86400000);
   if (!sub) {
     /* Still running. Negative is overdue and keeps growing, which is the

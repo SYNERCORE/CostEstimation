@@ -4261,16 +4261,7 @@ function App({
       borderRadius: 7,
       border: `1px solid ${BDR}`
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 700,
-      fontSize: 11,
-      marginBottom: 8,
-      color: MT,
-      textTransform: 'uppercase',
-      letterSpacing: '0.05em'
-    }
-  }, "Status Options"), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("div", {style: {color: MT, fontSize: 11, fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.07em'}}, "Status Options"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       flexWrap: 'wrap',
@@ -8308,16 +8299,7 @@ tab === 'dashboard' && (() => {
           /*#__PURE__*/React.createElement("div",{style:{...MONO,fontSize:10,color:OK}},'₱'+ph(d.total)))))));
 })(), tab === 'info' && /*#__PURE__*/React.createElement("div", null, companies.length === 0 && /*#__PURE__*/React.createElement("div", {style: {margin: '0 0 14px 0', padding: '12px 16px', background: '#F8514920', border: '1px solid #F85149', borderRadius: 8, color: ERR, fontSize: 12, fontWeight: 600}}, "⚠ No companies configured. Go to the Admin → Users tab and set up at least one company before creating a CE."), /*#__PURE__*/React.createElement("div", {
     style: CS
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 700,
-      marginBottom: 14,
-      fontSize: 11,
-      textTransform: 'uppercase',
-      letterSpacing: '0.07em',
-      color: MT
-    }
-  }, "Project Details"), /*#__PURE__*/React.createElement("div", {
+  }, secHead("Project Details", MT, null, {size: 11, mb: 14}), /*#__PURE__*/React.createElement("div", {
     style: {marginBottom: 16, padding: '12px 14px', background: '#A78BFA11', borderRadius: 8, border: '2px solid #A78BFA44', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap'}
   }, /*#__PURE__*/React.createElement("div", {style: {flex: 1, minWidth: 200}},
     /*#__PURE__*/React.createElement("label", {style: {...LBL, color: 'var(--accent-violet)', fontWeight: 700, fontSize: 11, letterSpacing: '0.05em'}}, "🏢 Issuing Company"),
@@ -8535,16 +8517,7 @@ tab === 'dashboard' && (() => {
       ...CS,
       borderColor: alpha(INFO, '44')
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 700,
-      marginBottom: 12,
-      fontSize: 11,
-      textTransform: 'uppercase',
-      letterSpacing: '0.07em',
-      color: INFO
-    }
-  }, "Client Document"), !docFile ? /*#__PURE__*/React.createElement("div", {
+  }, secHead("Client Document", INFO, null, {size: 11, mb: 12}), !docFile ? /*#__PURE__*/React.createElement("div", {
     style: {
       border: `2px dashed ${BDR}`,
       borderRadius: 8,
@@ -8993,16 +8966,7 @@ tab === 'dashboard' && (() => {
         ...CS,
         borderColor: alpha(INFO, '44')
       }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontWeight: 700,
-        marginBottom: 12,
-        fontSize: 11,
-        textTransform: 'uppercase',
-        letterSpacing: '0.07em',
-        color: INFO
-      }
-    }, "Mobilization Expenses"), /*#__PURE__*/React.createElement(ExpenseTable, {
+    }, secHead("Mobilization Expenses", INFO, "Add each charge as a separate line item", {size: 11, mb: 12}), /*#__PURE__*/React.createElement(ExpenseTable, {
       rows: mobVehicles,
       setRows: setMobVehicles,
       idPfx: "mv",
@@ -9027,16 +8991,7 @@ tab === 'dashboard' && (() => {
         ...CS,
         borderColor: alpha(ACC, '44')
       }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontWeight: 700,
-        marginBottom: 12,
-        fontSize: 11,
-        textTransform: 'uppercase',
-        letterSpacing: '0.07em',
-        color: ACC
-      }
-    }, "Demobilization Expenses"), /*#__PURE__*/React.createElement(ExpenseTable, {
+    }, secHead("Demobilization Expenses", ACC, "Add each charge as a separate line item", {size: 11, mb: 12}), /*#__PURE__*/React.createElement(ExpenseTable, {
       rows: demobVehicles,
       setRows: setDemobVehicles,
       idPfx: "dv",
@@ -9338,17 +9293,7 @@ tab === 'dashboard' && (() => {
         boxShadow: '0 4px 20px #0008',
         padding: 8
       }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        color: MT,
-        fontSize: 10,
-        fontWeight: 700,
-        textTransform: 'uppercase',
-        letterSpacing: '0.06em',
-        marginBottom: 6,
-        padding: '0 4px'
-      }
-    }, "Copy to shift:"), Object.entries(SHIFTS).filter(([sk]) => sk !== shiftKey).map(([sk, sv]) => /*#__PURE__*/React.createElement("button", {
+    }, /*#__PURE__*/React.createElement("div", {style: {color: MT, fontSize: 10, fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.07em'}}, "Copy to shift:"), Object.entries(SHIFTS).filter(([sk]) => sk !== shiftKey).map(([sk, sv]) => /*#__PURE__*/React.createElement("button", {
       key: sk,
       style: {
         ...btn('def', true),
@@ -9642,16 +9587,7 @@ tab === 'dashboard' && (() => {
       borderLeft: `1px solid ${BDR}`,
       paddingLeft: 24
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      color: ACC,
-      fontSize: 11,
-      fontWeight: 700,
-      marginBottom: 2,
-      textTransform: 'uppercase',
-      letterSpacing: '0.07em'
-    }
-  }, "Manpower Total"), /*#__PURE__*/React.createElement("div", {
+  }, secHead("Manpower Total", ACC, null, {size: 11, mb: 2}), /*#__PURE__*/React.createElement("div", {
     style: {
       ...MONO,
       fontWeight: 800,
@@ -9664,16 +9600,7 @@ tab === 'dashboard' && (() => {
       borderColor: alpha(ACC, '44'),
       marginTop: 8
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 700,
-      fontSize: 12,
-      marginBottom: 12,
-      textTransform: 'uppercase',
-      letterSpacing: '0.05em',
-      color: ACC
-    }
-  }, "C.7 Benefits & Others"), /*#__PURE__*/React.createElement("div", {
+  }, secHead("C.7 Benefits & Others", ACC, "Standard Philippine mandated formula", {size: 12, mb: 12}), /*#__PURE__*/React.createElement("div", {
     style: {
       overflowX: 'auto'
     }

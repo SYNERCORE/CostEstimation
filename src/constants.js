@@ -72,6 +72,46 @@ const btn = (v = "def", sm = false) => ({
   color: v === "acc" ? ON_ACC : v === "ok" ? OK : v === "info" ? INFO : v === "danger" ? ERR : TX,
   border: v === "acc" ? `1px solid ${ACC}` : v === "ok" ? `1px solid ${alpha(OK, "55")}` : v === "info" ? `1px solid ${alpha(INFO, "55")}` : v === "danger" ? `1px solid ${alpha(ERR, "55")}` : `1px solid ${BDR}`
 });
+
+/* A SECTION HEADER.
+   =================
+   Written out inline at fourteen sites, each with its own font size and
+   margin, so they had drifted from one another -- 9px in one panel, 18px in
+   another, all meant to read as the same thing.
+
+   The dot is the mockup's: it carries the section's colour, which lets the
+   label itself stay quiet. Tracking is 0.05em per DESIGN.md section 3.
+
+   `note` is the grey aside the mockups put after several of these -- "Add each
+   charge as a separate line item". It stays out of the coloured label so the
+   heading is still scannable on its own. */
+const secHead = (label, color, note, opts) => {
+  const o = opts || {};
+  return React.createElement('div', {
+    style: {
+      display: 'flex', alignItems: 'baseline', gap: 7, flexWrap: 'wrap',
+      marginBottom: o.mb === undefined ? 12 : o.mb
+    }
+  },
+    React.createElement('span', {
+      style: {
+        width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+        alignSelf: 'center', display: 'inline-block',
+        background: color || ACC
+      }
+    }),
+    React.createElement('span', {
+      style: {
+        fontWeight: 600, fontSize: o.size === undefined ? 12 : o.size,
+        textTransform: 'uppercase', letterSpacing: '0.05em',
+        color: color || ACC
+      }
+    }, label),
+    note ? React.createElement('span', {
+      style: {fontSize: 11, color: MT, fontWeight: 400, textTransform: 'none', letterSpacing: 0}
+    }, note) : null);
+};
+
 const CS = {
   background: "var(--bg-surface-card)",
   border: `1px solid ${BDR}`,

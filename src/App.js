@@ -7383,9 +7383,7 @@ function App({
       }
     }, cnt));
   })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex'
-    }
+    className: "shic-workspace"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       flex: 1,
@@ -11128,17 +11126,11 @@ tab === 'dashboard' && (() => {
       title: ''
     }])
   }, "+ Add Signatory"))))), /*#__PURE__*/React.createElement("div", {
+    className: "shic-rail",
     style: {
-      width: 184,
-      flexShrink: 0,
-      padding: '14px 12px',
+      padding: '14px 14px',
       borderLeft: `1px solid ${BDR}`,
-      background: CARD,
-      position: 'sticky',
-      top: 'var(--y-body)',
-      alignSelf: 'flex-start',
-      height: 'calc(100vh - var(--y-body))',
-      overflowY: 'auto'
+      background: CARD
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -11167,33 +11159,46 @@ tab === 'dashboard' && (() => {
       fontSize: 11,
       color: val > 0 ? TX : MT
     }
-  }, "P", ph(val)))), /*#__PURE__*/React.createElement("div", {
+  }, "\u20b1", ph(val)))), /*#__PURE__*/React.createElement("div", {
+    /* The grand total is the one figure the rail exists for, so it is a card
+       rather than another line. The gradient is the theme's, which keeps it
+       dark in both -- an amber total on a deep ground is the same reading in
+       Executive Light as in Dark Slate, and DESIGN.md section 5.4 asks for
+       exactly that. */
     style: {
-      borderTop: `1px solid ${BDR}`,
-      marginTop: 6,
-      paddingTop: 8
+      marginTop: 10,
+      padding: '12px 14px',
+      borderRadius: 10,
+      background: 'var(--highlight-gradient)',
+      border: `1px solid ${alpha(ACC, '44')}`,
+      boxShadow: 'var(--card-shadow)'
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       color: MT,
       fontSize: 10,
-      marginBottom: 2
+      textTransform: 'uppercase',
+      letterSpacing: '0.06em',
+      marginBottom: 3
     }
-  }, "GRAND TOTAL"), /*#__PURE__*/React.createElement("div", {
+  }, "Grand Total Estimate"), /*#__PURE__*/React.createElement("div", {
     style: {
       ...MONO,
       fontWeight: 800,
-      fontSize: 15,
+      /* 28px per DESIGN.md section 3, but it has to survive a nine-figure
+         total in a 260px rail, so it gives way rather than overflowing. */
+      fontSize: 'clamp(18px, 2.2vw, 28px)',
+      lineHeight: 1.1,
       color: ACC
     }
-  }, "P", ph(grand)), /*#__PURE__*/React.createElement("div", {
+  }, "\u20b1", ph(grand)), /*#__PURE__*/React.createElement("div", {
     style: {
       ...MONO,
       fontSize: 10,
       color: MT,
-      marginTop: 2
+      marginTop: 3
     }
-  }, "Unit: P", ph(unitP))), /*#__PURE__*/React.createElement("div", {
+  }, "Unit rate: \u20b1", ph(unitP))), /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 12,
       borderTop: `1px solid ${BDR}`,
@@ -11207,30 +11212,47 @@ tab === 'dashboard' && (() => {
       textTransform: 'uppercase',
       letterSpacing: '0.07em'
     }
-  }, "Quick Rates"), masterlist.manpower.slice(0, 5).map(r => /*#__PURE__*/React.createElement("div", {
+  }, "Standard Quick Rates"),
+  /* Two across, as the mockup has them: the rail is wide enough now, and a
+     stacked list of five wastes most of it. The role keeps its full name --
+     it was cut to the first word to fit 184px, which turned "Lead Electrical"
+     and "Electrician" into the same entry. */
+  /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(108px, 1fr))',
+      gap: 6
+    }
+  }, masterlist.manpower.slice(0, 5).map(r => /*#__PURE__*/React.createElement("div", {
     key: r.id,
     style: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      marginBottom: 3
+      border: `1px solid ${BDR}`,
+      borderRadius: 6,
+      padding: '5px 8px',
+      minWidth: 0,
+      background: 'var(--bg-surface-elevated)'
     }
-  }, /*#__PURE__*/React.createElement("span", {
+  }, /*#__PURE__*/React.createElement("div", {
     style: {
       color: MT,
-      fontSize: 10,
+      fontSize: 9,
+      textTransform: 'uppercase',
+      letterSpacing: '0.05em',
       overflow: 'hidden',
       textOverflow: 'ellipsis',
-      whiteSpace: 'nowrap',
-      flex: 1,
-      paddingRight: 3
-    }
-  }, r.role.split(' ')[0]), /*#__PURE__*/React.createElement("span", {
+      whiteSpace: 'nowrap'
+    },
+    title: r.role
+  }, r.role), /*#__PURE__*/React.createElement("div", {
     style: {
       ...MONO,
-      fontSize: 10,
-      color: TX
+      fontSize: 12,
+      fontWeight: 700,
+      color: ACC
     }
-  }, "P", r.rate))), /*#__PURE__*/React.createElement("div", {
+  }, "₱", r.rate, /*#__PURE__*/React.createElement("span", {
+    style: {fontSize: 9, color: MT, fontWeight: 400}
+  }, "/day"))))), /*#__PURE__*/React.createElement("div", {
     style: {
       color: MT,
       fontSize: 9,

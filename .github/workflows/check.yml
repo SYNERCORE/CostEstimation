@@ -100,6 +100,8 @@ jobs:
         run: node tools/test-shift-bars.js
       - name: Summary screen
         run: node tools/test-summary-screen.js
+      - name: Financial rail
+        run: node tools/test-financial-rail.js
       - name: Rate trends
         run: node tools/test-rate-trends.js
       - name: An imported CE is filed under what its rows cost

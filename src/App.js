@@ -2372,7 +2372,7 @@ function App({
       const c = colors[cat] || 'var(--text-secondary)';
       return /*#__PURE__*/React.createElement("span", {
         style: {
-          background: c + '22',
+          background: alpha(c, '22'),
           color: c,
           fontSize: 9,
           fontWeight: 700,
@@ -4655,7 +4655,7 @@ function App({
         padding: '4px 6px'
       }
     }, /*#__PURE__*/React.createElement("div", null,
-      /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',background:statusColor+'22',color:statusColor,fontWeight:700,fontSize:10,padding:'2px 8px',borderRadius:12,whiteSpace:'nowrap'}}, m.status||'—'),
+      /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',background:alpha(statusColor, '22'),color:statusColor,fontWeight:700,fontSize:10,padding:'2px 8px',borderRadius:12,whiteSpace:'nowrap'}}, m.status||'—'),
       m.statusChangedAt && /*#__PURE__*/React.createElement("div", {style:{fontSize:9,color:MT,marginTop:2,lineHeight:1.3},title:'Changed by '+(m.statusChangedBy||'unknown')}, new Date(m.statusChangedAt).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}), m.statusChangedBy?' · '+m.statusChangedBy.split(' ')[0]:'')
     )), /*#__PURE__*/React.createElement("td", {
       style: {
@@ -7016,7 +7016,7 @@ function App({
         borderRadius: 7,
         padding: '7px 8px',
         cursor: 'pointer',
-        background: isSel ? p.bc + '18' : SURF,
+        background: isSel ? alpha(p.bc, '18') : SURF,
         transition: 'all .12s'
       }
     }, /*#__PURE__*/React.createElement("div", {
@@ -7035,7 +7035,7 @@ function App({
       }
     }, p.label), /*#__PURE__*/React.createElement("span", {
       style: {
-        background: p.bc + '33',
+        background: alpha(p.bc, '33'),
         color: p.bc,
         fontSize: 9,
         fontWeight: 700,
@@ -7241,9 +7241,9 @@ function App({
     key: ceKey,
     onClick: () => setCeType(ceKey),
     style: {
-      background: ceType === ceKey ? ceVal.color + '1A' : 'transparent',
+      background: ceType === ceKey ? alpha(ceVal.color, '1A') : 'transparent',
       color: ceType === ceKey ? ceVal.color : MT,
-      border: ceType === ceKey ? `1px solid ${ceVal.color}55` : '1px solid transparent',
+      border: ceType === ceKey ? `1px solid ${alpha(ceVal.color, '55')}` : '1px solid transparent',
       borderRadius: 5,
       padding: '5px 10px',
       cursor: 'pointer',
@@ -7280,7 +7280,7 @@ function App({
     style: {
       ...btn('def', true),
       fontSize: 10,
-      borderColor: getApiKey() && provInfo ? provInfo.bc + '88' : alpha(ERR, '88'),
+      borderColor: getApiKey() && provInfo ? alpha(provInfo.bc, '88') : alpha(ERR, '88'),
       color: getApiKey() && provInfo ? provInfo.bc : ERR
     },
     onClick: () => {
@@ -9100,7 +9100,13 @@ tab === 'dashboard' && (() => {
       key: shiftKey,
       style: {
         ...CS,
-        borderColor: rows.length > 0 ? shiftColor + '55' : BDR,
+        padding: collapsed ? '10px 14px' : 16,
+        borderColor: rows.length > 0 ? alpha(shiftColor, '55') : BDR,
+        /* A shift carrying people is ringed rather than only tinted: on the
+           light canvas a tint alone is nearly invisible against the card. */
+        boxShadow: rows.length > 0
+          ? '0 0 0 1px ' + alpha(shiftColor, '33') + ', var(--card-shadow)'
+          : 'var(--card-shadow)',
         marginBottom: 8
       }
     }, /*#__PURE__*/React.createElement("div", {
@@ -9139,27 +9145,31 @@ tab === 'dashboard' && (() => {
       }
     }, shiftInfo.label), /*#__PURE__*/React.createElement("span", {
       style: {
-        background: shiftColor + '22',
+        background: alpha(shiftColor, '22'),
         color: shiftColor,
         fontSize: 10,
         fontWeight: 700,
         padding: '1px 7px',
         borderRadius: 3
       }
-    }, shiftInfo.mult, "x"), shiftWorkers > 0 && /*#__PURE__*/React.createElement("span", {
+    }, shiftInfo.mult, "\u00d7", rows.length > 0 ? " Multiplier" : ""),
+    /* The head count and the subtotal are stated even at zero. Hidden, an
+       empty shift and a shift nobody has opened look identical, and the row
+       silently changes shape the moment the first person is added. */
+    /*#__PURE__*/React.createElement("span", {
       style: {
-        color: MT,
+        color: shiftWorkers > 0 ? MT : 'var(--text-muted)',
         fontSize: 11
       }
-    }, shiftWorkers, " worker", shiftWorkers !== 1 ? 's' : ''))), shiftSub > 0 && /*#__PURE__*/React.createElement("span", {
+    }, shiftWorkers, " worker", shiftWorkers !== 1 ? 's' : ''))), /*#__PURE__*/React.createElement("span", {
       style: {
         ...MONO,
-        color: shiftColor,
+        color: shiftSub > 0 ? shiftColor : 'var(--text-muted)',
         fontWeight: 700,
         fontSize: 13,
         flexShrink: 0
       }
-    }, "P", ph(shiftSub)), /*#__PURE__*/React.createElement("div", {
+    }, "\u20b1", ph(shiftSub)), /*#__PURE__*/React.createElement("div", {
       style: {
         display: 'flex',
         gap: 5,
@@ -9528,13 +9538,13 @@ tab === 'dashboard' && (() => {
         color: MT,
         fontSize: 11
       }
-    }, "Subtotal (", shiftInfo.mult, "x multiplier): "), /*#__PURE__*/React.createElement("span", {
+    }, "Subtotal (", shiftInfo.mult, "× Multiplier applied): "), /*#__PURE__*/React.createElement("span", {
       style: {
         ...MONO,
         color: shiftColor,
         fontWeight: 700
       }
-    }, "P", ph(shiftSub)))));
+    }, "₱", ph(shiftSub)))));
   }), /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,

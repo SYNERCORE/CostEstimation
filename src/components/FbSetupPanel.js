@@ -154,7 +154,7 @@
   },[]);
   const pfx=cfg.listPrefix||'SHICCE';const stC=status==='connected'?OK:status.startsWith('error')?ERR:MT;
   return React.createElement('div',null,
-    React.createElement('div',{style:{fontWeight:700,marginBottom:12,fontSize:13,display:'flex',alignItems:'center',gap:8}},'SP SharePoint Sync',React.createElement('span',{style:{fontSize:10,padding:'2px 8px',borderRadius:10,background:stC+'22',color:stC,fontWeight:700,marginLeft:4}},status)),
+    React.createElement('div',{style:{fontWeight:700,marginBottom:12,fontSize:13,display:'flex',alignItems:'center',gap:8}},'SP SharePoint Sync',React.createElement('span',{style:{fontSize:10,padding:'2px 8px',borderRadius:10,background:alpha(stC, '22'),color:stC,fontWeight:700,marginLeft:4}},status)),
     React.createElement('div',{style:{color:MT,fontSize:11,marginBottom:12,lineHeight:1.6}},'Connect to SharePoint. CEs stored across separate lists - no blob limits, 20+ concurrent users.'),
     React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}},
       React.createElement('div',{style:{gridColumn:'1/-1'}},React.createElement('label',{style:LBL},'Site URL ',React.createElement('span',{style:{color:ERR}},'*')),React.createElement('input',{style:INP,value:cfg.siteUrl||'',onChange:e=>setCfg(p=>({...p,siteUrl:e.target.value.trim()})),placeholder:'https://yourcompany.sharepoint.com/sites/SiteName'})),

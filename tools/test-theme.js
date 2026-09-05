@@ -65,7 +65,11 @@ ck('it emits color-mix, which accepts a variable', /^color-mix\(in srgb, var\(--
 ck('and it is clamped', A('X', 'FF').indexOf('100%') > 0);
 
 console.log('\nno concatenated alpha is left anywhere:');
-const CONCAT = /\b(ACC|OK|ERR|INFO|MT|TX|BDR|SURF|CARD|BG)\s*\+\s*'[0-9A-Fa-f]{2}'|\$\{(ACC|OK|ERR|INFO|MT|TX|BDR|SURF|CARD|BG)\}[0-9A-Fa-f]{2}\b/;
+/* ANY identifier, not just the ten constants this used to name. shiftColor,
+   statusColor and spColor are locals holding those same variables, and all
+   three silently lost their tinted backgrounds for two builds because nothing
+   here was looking at them. */
+const CONCAT = /\b[A-Za-z_][A-Za-z0-9_.]*\s*\+\s*'[0-9A-Fa-f]{2}'|\$\{[A-Za-z_][A-Za-z0-9_.]*\}[0-9A-Fa-f]{2}\b/;
 for (const f of UI.concat(['src/constants.js'])) {
   const body = fs.readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   ck(f, !CONCAT.test(body), 'var(--x)22 is not a colour: the browser drops it silently');

@@ -6216,6 +6216,21 @@ function App({
       v: (Array.isArray(misc[k]) ? misc[k] : []).reduce((t, r) => t + N(r.qty) * N(r.cost), 0)
     })).filter(x => x.v > 0).map((x, j) => ({...x, letter: parent.replace('.', '') + '.' + (j + 1)}));
   }, [ceSections, ceType, misc]);
+  /* One colour per cost group, matched to the tab each is costed on, so the
+     matrix row and the tab it came from read as the same thing. Keyed on the
+     label rather than position: the mob/demob rows only exist for onsite, and
+     an index would shift the whole palette on the other CE types. */
+  const SUMMARY_DOT = {
+    'Mobilization Expenses': INFO,
+    'Demobilization Expenses': ACC,
+    'Manpower Cost': ACC,
+    'Tools & Equipment': INFO,
+    'Materials & Consumables': OK,
+    'PPE': 'var(--accent-violet)',
+    'Miscellaneous': MT,
+    'Mobilization / Demobilization': INFO
+  };
+  const summaryDot = label => SUMMARY_DOT[String(label).replace(/^[A-Z]\.\s+/, '')] || MT;
   const summaryRows = [...(cfg.mobDemob ? [['Mobilization Expenses', mobSubT], ['Demobilization Expenses', demobSubT]] : []), ...ceSections.filter(x => x.printLabel !== 'MOBILIZATION/DEMOBILIZATION').map(x => [(x.letter ? x.letter + '  ' : '') + x.label, x.v])];
   const handleGenerateCE = () => {
     const fmt = (n, d = 2) => 'P' + N(n).toLocaleString('en-PH', {
@@ -10118,28 +10133,59 @@ tab === 'dashboard' && (() => {
       style: { ...CS, marginBottom: 10, borderColor: clean ? alpha(OK, '55') : errs ? alpha(ERR, '55') : '#F59E0B55' }
     },
       /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
-        /*#__PURE__*/React.createElement("span", { style: { fontWeight: 700, fontSize: 12 } }, clean ? "✓ CE looks complete" : "Check CE"),
-        /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: MT } },
-          clean
-            ? "No issues found."
-            : (errs ? errs + " to fix" : "") + (errs && warns ? " · " : "") + (warns ? warns + " to review" : "")),
+        /*#__PURE__*/React.createElement("span", {
+          style: {
+            fontWeight: 600, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em',
+            color: clean ? OK : errs ? ERR : 'var(--status-warning)'
+          }
+        }, clean ? "✓ CE Audit — complete" : "⚠ CE Audit"),
+        /* Counts as chips, in the severity's own colour. The old run-on --
+           "2 to fix · 2 to review" -- made the more urgent half the harder
+           one to pick out. */
+        !clean && errs > 0 && /*#__PURE__*/React.createElement("span", {
+          style: {
+            background: alpha(ERR, '22'), color: ERR, border: `1px solid ${alpha(ERR, '55')}`,
+            fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10
+          }
+        }, errs, " item", errs === 1 ? '' : 's', " to fix"),
+        !clean && warns > 0 && /*#__PURE__*/React.createElement("span", {
+          style: {
+            background: alpha('var(--status-warning)', '22'), color: 'var(--status-warning)',
+            border: `1px solid ${alpha('var(--status-warning)', '55')}`,
+            fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10
+          }
+        }, warns, " to review"),
+        clean && /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: MT } }, "No issues found."),
         /*#__PURE__*/React.createElement("span", { style: { ...MONO, marginLeft: 'auto', fontSize: 13, fontWeight: 700, color: grand > 0 ? ACC : MT } }, "₱" + ph(grand))
       ),
-      !clean && /*#__PURE__*/React.createElement("div", { style: { marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 } },
-        issues.map((i, n) => /*#__PURE__*/React.createElement("div", {
-          key: n,
-          style: { display: 'flex', alignItems: 'baseline', gap: 7, fontSize: 11, padding: '3px 0', borderTop: n ? `1px solid ${BDR}` : 'none' }
-        },
-          /*#__PURE__*/React.createElement("span", { style: { color: i.sev === 'err' ? ERR : 'var(--status-warning)', fontWeight: 700, width: 12, flexShrink: 0 } }, i.sev === 'err' ? "!" : "?"),
-          /*#__PURE__*/React.createElement("span", { style: { flex: 1, minWidth: 160 } },
-            i.msg,
-            i.hint && /*#__PURE__*/React.createElement("span", { style: { color: MT, display: 'block', fontSize: 10, marginTop: 1 } }, i.hint)
-          ),
-          i.tabId && i.tabId !== 'summary' && /*#__PURE__*/React.createElement("button", {
-            style: { ...btn('def', true), fontSize: 10, flexShrink: 0 },
-            onClick: () => setTab(i.tabId)
-          }, "Go →")
-        ))
+      /* Pills rather than a stacked list. Each finding is a self-contained
+         thing to go and fix, and a column of them reads as one long paragraph
+         of problems -- which is how the shorter ones got skipped. */
+      !clean && /*#__PURE__*/React.createElement("div", { style: { marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 } },
+        issues.map((i, n) => {
+          const c = i.sev === 'err' ? ERR : 'var(--status-warning)';
+          return /*#__PURE__*/React.createElement("div", {
+            key: n,
+            style: {
+              display: 'flex', alignItems: 'baseline', gap: 7, fontSize: 11,
+              padding: '6px 10px', borderRadius: 8, flex: '1 1 260px', minWidth: 0,
+              background: alpha(c, '11'), border: `1px solid ${alpha(c, '44')}`
+            }
+          },
+            /*#__PURE__*/React.createElement("span", { style: { color: c, fontWeight: 700, flexShrink: 0 } }, i.sev === 'err' ? "●" : "○"),
+            /*#__PURE__*/React.createElement("span", { style: { flex: 1, minWidth: 0 } },
+              i.msg,
+              i.hint && /*#__PURE__*/React.createElement("span", { style: { color: MT, display: 'block', fontSize: 10, marginTop: 1 } }, i.hint)
+            ),
+            i.tabId && i.tabId !== 'summary' && /*#__PURE__*/React.createElement("button", {
+              style: {
+                background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0,
+                color: c, fontWeight: 700, fontSize: 10, fontFamily: 'inherit', padding: 0
+              },
+              onClick: () => setTab(i.tabId)
+            }, i.sev === 'err' ? "Fix →" : "View →")
+          );
+        })
       )
     );
   })(),
@@ -10700,22 +10746,28 @@ tab === 'dashboard' && (() => {
     }
   }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
     style: THS
-  }, "Item"), /*#__PURE__*/React.createElement("th", {
+  }, "Cost Group / Scope Classification"), /*#__PURE__*/React.createElement("th", {
     style: {
       ...THS,
       textAlign: 'right'
     }
-  }, "Amount (P)"), /*#__PURE__*/React.createElement("th", {
+  }, "Computed Cost (₱)"), /*#__PURE__*/React.createElement("th", {
     style: {
       ...THS,
       textAlign: 'right',
-      width: 60
+      width: 74
     }
-  }, "Share"))), /*#__PURE__*/React.createElement("tbody", null, summaryRows.map(([label, val]) => /*#__PURE__*/React.createElement("tr", {
+  }, "% Total Share"))), /*#__PURE__*/React.createElement("tbody", null, summaryRows.map(([label, val]) => /*#__PURE__*/React.createElement("tr", {
     key: label
   }, /*#__PURE__*/React.createElement("td", {
     style: TDS
-  }, label), /*#__PURE__*/React.createElement("td", {
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: 7, height: 7, borderRadius: '50%', display: 'inline-block',
+      marginRight: 8, verticalAlign: 'middle', flexShrink: 0,
+      background: val > 0 ? summaryDot(label) : BDR
+    }
+  }), label), /*#__PURE__*/React.createElement("td", {
     style: {
       ...TDS,
       ...MONO,

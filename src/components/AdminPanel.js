@@ -332,27 +332,27 @@
   }) => {
     const m = {
       approved: {
-        bg: OK + '22',
+        bg: alpha(OK, '22'),
         c: OK,
         t: 'Approved'
       },
       pending: {
-        bg: ACC + '22',
+        bg: alpha(ACC, '22'),
         c: ACC,
         t: 'Pending'
       },
       rejected: {
-        bg: ERR + '22',
+        bg: alpha(ERR, '22'),
         c: ERR,
         t: 'Rejected'
       },
       disabled: {
-        bg: MT + '22',
+        bg: alpha(MT, '22'),
         c: MT,
         t: 'Disabled'
       }
     }[s] || {
-      bg: MT + '22',
+      bg: alpha(MT, '22'),
       c: MT,
       t: s
     };
@@ -405,7 +405,7 @@
     style: TDS
   }, /*#__PURE__*/React.createElement("span", {
     style: {
-      color: isOwnerRole(u.role) ? '#A855F7' : (u.role === 'admin' ? ACC : MT),
+      color: isOwnerRole(u.role) ? 'var(--accent-violet)' : (u.role === 'admin' ? ACC : MT),
       fontWeight: hasAdminPowers(u.role) ? 700 : 400,
       fontSize: 11
     },
@@ -584,10 +584,10 @@
      still change every other admin, so an install that has not been claimed
      needs to say so rather than look settled. */
   /*#__PURE__*/React.createElement("div", {
-    style: { ...CS, borderColor: (owner ? '#A855F7' : '#F59E0B') + '55',
+    style: { ...CS, borderColor: (owner ? 'var(--accent-violet)' : 'var(--status-warning)') + '55',
              display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }
   },
-    /*#__PURE__*/React.createElement("span", { style: { fontWeight: 700, color: owner ? '#A855F7' : '#F59E0B' } },
+    /*#__PURE__*/React.createElement("span", { style: { fontWeight: 700, color: owner ? 'var(--accent-violet)' : 'var(--status-warning)' } },
       owner ? '★ Owner' : '⚠ No owner set'),
     /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, color: TX } },
       owner
@@ -608,7 +608,7 @@
   /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
-      borderColor: ACC + '44'
+      borderColor: alpha(ACC, '44')
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -649,8 +649,8 @@
   }, showCreate ? 'Cancel' : '+ Create User')), showCreate && /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
-      borderColor: ACC + '55',
-      background: ACC + '06',
+      borderColor: alpha(ACC, '55'),
+      background: alpha(ACC, '06'),
       marginTop: 8
     }
   }, /*#__PURE__*/React.createElement("div", {
@@ -716,7 +716,7 @@
       fontSize: 12,
       marginBottom: 10,
       padding: '6px 10px',
-      background: ERR + '11',
+      background: alpha(ERR, '11'),
       borderRadius: 5
     }
   }, createErr), /*#__PURE__*/React.createElement("div", {
@@ -767,14 +767,14 @@
       display: 'flex',
       alignItems: 'center',
       gap: 14,
-      borderColor: ACC + '44'
+      borderColor: alpha(ACC, '44')
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       width: 40,
       height: 40,
       borderRadius: '50%',
-      background: ACC + '33',
+      background: alpha(ACC, '33'),
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -859,7 +859,7 @@
           onClick:()=>{ if(confirm('Clear local audit log?')){LS.set('auditlog',[]);setAuditEntries([]);toast2('Local audit log cleared.');} }
         }, "Clear Local Log")
       ),
-      auditListMissing && /*#__PURE__*/React.createElement("div", {style:{color:'#F59E0B',fontSize:12,padding:'8px 10px',background:'#F59E0B11',border:'1px solid #F59E0B44',borderRadius:6,marginBottom:8}},
+      auditListMissing && /*#__PURE__*/React.createElement("div", {style:{color:'var(--status-warning)',fontSize:12,padding:'8px 10px',background:'#F59E0B11',border:'1px solid #F59E0B44',borderRadius:6,marginBottom:8}},
         '⚠ The AuditLog SharePoint list doesn\'t exist yet. Go to the SharePoint Setup section below and click "Setup SharePoint" to create it, then reload this tab.'
       ),
       log.length === 0
@@ -872,7 +872,7 @@
                 )
               ),
               /*#__PURE__*/React.createElement("tbody", null, log.map((e,i)=>
-                /*#__PURE__*/React.createElement("tr",{key:i,style:{borderBottom:'1px solid '+BDR+'44'}},
+                /*#__PURE__*/React.createElement("tr",{key:i,style:{borderBottom:'1px solid '+alpha(BDR, '44')}},
                   /*#__PURE__*/React.createElement("td",{style:{padding:'4px 8px',color:MT,whiteSpace:'nowrap'}},new Date(e.ts).toLocaleString()),
                   /*#__PURE__*/React.createElement("td",{style:{padding:'4px 8px'}},
                     /*#__PURE__*/React.createElement("span",{style:{padding:'1px 6px',borderRadius:4,fontSize:10,background:(actionColor[e.action]||MT)+'22',color:actionColor[e.action]||MT,fontWeight:600}},e.action)
@@ -905,7 +905,7 @@
     style: {
       ...CS,
       marginTop: 8,
-      borderColor: INFO + '33'
+      borderColor: alpha(INFO, '33')
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -964,7 +964,7 @@
       ['Store', storage.idb ? 'IndexedDB' : 'localStorage fallback', !storage.idb]
     ].map(([label, val, warn], i) => /*#__PURE__*/React.createElement("div", { key: i },
       /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: MT, textTransform: 'uppercase', letterSpacing: '0.06em' } }, label),
-      /*#__PURE__*/React.createElement("div", { style: { fontSize: 15, fontWeight: 700, color: warn ? '#F59E0B' : TX } }, String(val))
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 15, fontWeight: 700, color: warn ? 'var(--status-warning)' : TX } }, String(val))
     ))
   ),
   storage && /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: MT, marginBottom: 8 } },
@@ -1029,7 +1029,7 @@
     style: {
       ...CS,
       marginTop: 8,
-      borderColor: INFO + '33'
+      borderColor: alpha(INFO, '33')
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {

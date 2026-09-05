@@ -164,7 +164,7 @@
     ),
     React.createElement('div',{style:{fontSize:10,color:MT,marginBottom:10,padding:'8px 10px',background:SURF,borderRadius:6,lineHeight:1.7}},
       React.createElement('b',{style:{color:TX}},'Azure Redirect URI (must match exactly): '),React.createElement('br',null),
-      React.createElement('code',{style:{color:'#F0A429',wordBreak:'break-all'}},window.location.origin+window.location.pathname.replace(/\/[^\/]*$/,'/')),
+      React.createElement('code',{style:{color:'var(--brand-accent)',wordBreak:'break-all'}},window.location.origin+window.location.pathname.replace(/\/[^\/]*$/,'/')),
       React.createElement('hr',{style:{border:'none',borderTop:'1px solid #30363D',margin:'6px 0'}}),
       React.createElement('b',{style:{color:TX}},'Lists: '),pfx+'_Users | '+pfx+'_CEs | '+pfx+'_CE_MP | '+pfx+'_CE_Resources | '+pfx+'_Masterlist | '+pfx+'_Drafts'
     ),
@@ -194,7 +194,7 @@
       orphans.length>0&&React.createElement('div',{style:{fontSize:10,color:MT,marginBottom:8,lineHeight:1.6}},
         'The header reached SharePoint and the rows did not. Monitoring shows the total; opening the CE shows nothing. Re-import the source file, or open the local copy if this browser has one and press Save.'),
       orphans.length>0&&React.createElement('div',{style:{maxHeight:220,overflowY:'auto'}},
-        orphans.slice(0,200).map(o=>React.createElement('div',{key:o.id,style:{display:'flex',gap:8,fontSize:10,padding:'3px 0',borderBottom:'1px solid '+BDR+'44'}},
+        orphans.slice(0,200).map(o=>React.createElement('div',{key:o.id,style:{display:'flex',gap:8,fontSize:10,padding:'3px 0',borderBottom:'1px solid '+alpha(BDR, '44')}},
           React.createElement('span',{style:{fontFamily:"'JetBrains Mono',monospace",minWidth:150}},o.ceNum),
           React.createElement('span',{style:{minWidth:100,textAlign:'right',color:ERR}},'P'+o.total.toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2})),
           React.createElement('span',{style:{color:MT}},o.savedBy||''),

@@ -200,8 +200,8 @@
     placeholder: "password"
   })), err && /*#__PURE__*/React.createElement("div", {
     style: {
-      background: ERR + '18',
-      border: `1px solid ${ERR}44`,
+      background: alpha(ERR, '18'),
+      border: `1px solid ${alpha(ERR, '44')}`,
       borderRadius: 6,
       padding: '7px 12px',
       color: ERR,
@@ -271,8 +271,8 @@
     style: {
       marginTop: 10,
       padding: '10px 12px',
-      background: INFO + '11',
-      border: `1px solid ${INFO}33`,
+      background: alpha(INFO, '11'),
+      border: `1px solid ${alpha(INFO, '33')}`,
       borderRadius: 7,
       fontSize: 11,
       lineHeight: 1.8

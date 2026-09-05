@@ -176,13 +176,13 @@ function LocalToSPSync() {
       style: {
         fontSize:11, fontFamily:"'JetBrains Mono',monospace", marginBottom:2,
         color: (l.startsWith('❌')||l.startsWith('  ✗')) ? ERR
-             : (l.startsWith('⚠')||l.startsWith('  ⚠')) ? '#F59E0B'
+             : (l.startsWith('⚠')||l.startsWith('  ⚠')) ? 'var(--status-warning)'
              : (l.startsWith('✅')||l.startsWith('  ✓')||l.startsWith('🎉')) ? OK
              : MT
       }
     }, l))),
     done && counts && React.createElement('div', {
-      style:{marginTop:8,fontSize:12,fontWeight:700,color: counts.fail === 0 ? OK : '#F59E0B',
+      style:{marginTop:8,fontSize:12,fontWeight:700,color: counts.fail === 0 ? OK : 'var(--status-warning)',
              padding:'8px 12px',background:SURF,borderRadius:6,border:'1px solid '+BDR}
     }, counts.fail === 0
       ? `✅ All ${counts.ok} item(s) pushed successfully. Other users can now refresh and log in.`

@@ -77,8 +77,8 @@ function ChangePasswordModal({ currentUser }) {
             React.createElement('label', { style: LBL }, 'Confirm New Password'),
             React.createElement('input', { style: INP, type: 'password', value: confirmPw, onChange: e => setConfirmPw(e.target.value), autoComplete: 'new-password' })
           ),
-          err && React.createElement('div', { style: { color: ERR, fontSize: 11, marginBottom: 10, padding: '6px 10px', background: ERR + '18', borderRadius: 5 } }, err),
-          ok  && React.createElement('div', { style: { color: OK,  fontSize: 11, marginBottom: 10, padding: '6px 10px', background: OK  + '18', borderRadius: 5 } }, ok),
+          err && React.createElement('div', { style: { color: ERR, fontSize: 11, marginBottom: 10, padding: '6px 10px', background: alpha(ERR, '18'), borderRadius: 5 } }, err),
+          ok  && React.createElement('div', { style: { color: OK,  fontSize: 11, marginBottom: 10, padding: '6px 10px', background: alpha(OK, '18'), borderRadius: 5 } }, ok),
           React.createElement('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end' } },
             React.createElement('button', { type: 'button', style: btn('def', true), onClick: close, disabled: busy }, 'Cancel'),
             React.createElement('button', { type: 'submit', style: btn('acc', true), disabled: busy }, busy ? 'Saving…' : 'Change Password')

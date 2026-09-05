@@ -317,7 +317,7 @@ const ResTab = ({
     style: {
       ...TDS,
       fontFamily: "'JetBrains Mono',monospace",
-      color: tot > 0 ? '#F0A429' : '#7D8590',
+      color: tot > 0 ? 'var(--brand-accent)' : 'var(--text-secondary)',
       fontWeight: 700,
       textAlign: 'right',
       minWidth: 96
@@ -332,7 +332,7 @@ const ResTab = ({
     style: {
       background: 'none',
       border: 'none',
-      color: '#F85149',
+      color: 'var(--status-danger)',
       cursor: 'pointer',
       fontSize: 15,
       padding: '1px 5px'
@@ -341,13 +341,13 @@ const ResTab = ({
 })))), /*#__PURE__*/React.createElement("div", {
   style: {
     marginTop: 10,
-    borderTop: `1px solid ${'#21262D'}`,
+    borderTop: `1px solid ${'var(--border-subtle)'}`,
     paddingTop: 10,
     textAlign: 'right'
   }
 }, /*#__PURE__*/React.createElement("span", {
   style: {
-    color: '#F0A429',
+    color: 'var(--brand-accent)',
     fontWeight: 700,
     fontSize: 13
   }

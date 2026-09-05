@@ -218,7 +218,7 @@ function MlTrendModal({ mlTrend, setMlTrend, masterlist, ML_HIST_KIND }) {
         }, '← All items'),
         React.createElement('div', { style: { fontWeight: 700, fontSize: 12, marginBottom: 8 } }, pick),
         !detail || !detail.length
-          ? React.createElement('div', { style: { color: '#F59E0B', fontSize: 11 } },
+          ? React.createElement('div', { style: { color: 'var(--status-warning)', fontSize: 11 } },
             'No issued CE has costed this item.')
           : React.createElement('table', { style: { width: '100%', borderCollapse: 'collapse' } },
             React.createElement('thead', null, React.createElement('tr', null,
@@ -237,7 +237,7 @@ function MlTrendModal({ mlTrend, setMlTrend, masterlist, ML_HIST_KIND }) {
                   React.createElement('div', {
                     title: d.rows.map(r => (r.ceNum || '?') + ': ' + money(r.rate)).join('\n'),
                     style: {
-                      background: ACC + '33', height: 8, borderRadius: 4,
+                      background: alpha(ACC, '33'), height: 8, borderRadius: 4,
                       width: hi ? Math.max(4, Math.round(d.avg / hi * 170)) : 4
                     }
                   }))))))
@@ -264,7 +264,7 @@ function MlTrendModal({ mlTrend, setMlTrend, masterlist, ML_HIST_KIND }) {
               React.createElement('td', {
                 style: {
                   ...TDS, ...MONO, textAlign: 'right', fontWeight: 700,
-                  color: flat ? MT : (up ? '#F85149' : '#3FB950')
+                  color: flat ? MT : (up ? 'var(--status-danger)' : 'var(--status-success)')
                 }
               }, flat ? 'in step' : (up ? '+' : '') + Math.round(d.pct * 100) + '%'),
               React.createElement('td', { style: { ...TDS, textAlign: 'right', color: MT } }, d.uses.length));
@@ -2354,14 +2354,14 @@ function App({
       cat
     }) => {
       const colors = {
-        'On-Site Services': '#58A6FF',
-        'Turbine Repair': '#F85149',
-        'Valve Repair': '#A78BFA',
-        'Fabrication': '#3FB950',
-        'Ndt - Level 2': '#F0A429',
-        'Ndt \u2013 Level 2': '#F0A429',
-        'Boiler Protection': '#EC4899',
-        'Rebabbitting': '#FBBF24',
+        'On-Site Services': 'var(--accent-cyan)',
+        'Turbine Repair': 'var(--status-danger)',
+        'Valve Repair': 'var(--accent-violet)',
+        'Fabrication': 'var(--status-success)',
+        'Ndt - Level 2': 'var(--brand-accent)',
+        'Ndt \u2013 Level 2': 'var(--brand-accent)',
+        'Boiler Protection': 'var(--accent-violet)',
+        'Rebabbitting': 'var(--brand-accent)',
         'Materials & Spare Parts': '#34D399',
         'Rental \u2013 Machinery & Tools': '#818CF8',
         'Hard Surfacing & Pulverizer': '#FB923C',
@@ -2369,7 +2369,7 @@ function App({
         'Long Term Service Contracts': '#A5B4FC',
         'Precision Machining & Fabrication': '#67E8F9'
       };
-      const c = colors[cat] || '#7D8590';
+      const c = colors[cat] || 'var(--text-secondary)';
       return /*#__PURE__*/React.createElement("span", {
         style: {
           background: c + '22',
@@ -2399,7 +2399,7 @@ function App({
       style: {
         fontWeight: 700,
         fontSize: 12,
-        color: '#A78BFA'
+        color: 'var(--accent-violet)'
       }
     }, "Service Scope Builder"), /*#__PURE__*/React.createElement("span", {
       style: {
@@ -2476,7 +2476,7 @@ function App({
           alignItems: 'center',
           gap: 8,
           padding: '7px 10px',
-          borderBottom: `1px solid ${BDR}22`,
+          borderBottom: `1px solid ${alpha(BDR, '22')}`,
           background: isSel ? '#A78BFA12' : 'transparent',
           transition: 'background .1s'
         }
@@ -2489,7 +2489,7 @@ function App({
           height: 15,
           cursor: 'pointer',
           flexShrink: 0,
-          accentColor: '#A78BFA'
+          accentColor: 'var(--accent-violet)'
         }
       }), /*#__PURE__*/React.createElement("div", {
         style: {
@@ -2578,7 +2578,7 @@ function App({
         padding: '10px 12px',
         background: SURF,
         borderRadius: 6,
-        border: `1px solid ${'#A78BFA'}44`
+        border: `1px solid ${'var(--accent-violet)'}44`
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -2588,7 +2588,7 @@ function App({
       style: {
         fontWeight: 700,
         fontSize: 12,
-        color: '#A78BFA'
+        color: 'var(--accent-violet)'
       }
     }, selCount, " service", selCount !== 1 ? 's' : '', " selected -- ", totalQty, " total application", totalQty !== 1 ? 's' : ''), /*#__PURE__*/React.createElement("div", {
       style: {
@@ -3064,7 +3064,7 @@ function App({
     return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
       style: {
         ...CS,
-        borderColor: INFO + '44'
+        borderColor: alpha(INFO, '44')
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -3389,15 +3389,15 @@ function App({
     })())));
   };
   const STATUS_COLOR_MAP = {
-    'Draft': '#8B5CF6',
+    'Draft': 'var(--accent-violet)',
     'No Quote': '#94A3B8',
     'Pending': '#6B7280',
-    'Ongoing': '#F59E0B',
-    'For site insp.': '#8B5CF6',
-    'For Approval': '#3B82F6',
-    'Waiting in...': '#EC4899',
-    'Approved': '#10B981',
-    'Cancelled': '#EF4444',
+    'Ongoing': 'var(--status-warning)',
+    'For site insp.': 'var(--accent-violet)',
+    'For Approval': 'var(--accent-cyan)',
+    'Waiting in...': 'var(--accent-violet)',
+    'Approved': 'var(--status-success)',
+    'Cancelled': 'var(--status-danger)',
     'On Hold': '#F97316',
     'Submitted': '#06B6D4'
   };
@@ -4093,7 +4093,7 @@ function App({
   const HistPanel = () => /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
-      borderColor: INFO + '44',
+      borderColor: alpha(INFO, '44'),
       marginBottom: 0,
       borderBottomLeftRadius: 0,
       borderBottomRightRadius: 0,
@@ -4441,14 +4441,14 @@ function App({
        the wire it went, rather than amber for the rest of its life. */
     const daysColor = deadlineDays === null ? MT
       : dl.done ? (dl.late ? ERR : OK)
-      : deadlineDays < 0 ? ERR : deadlineDays <= 7 ? '#F59E0B' : OK;
+      : deadlineDays < 0 ? ERR : deadlineDays <= 7 ? 'var(--status-warning)' : OK;
     const statusColor = getStatusColor(m.status || '');
-    const trBg = rowIdx % 2 === 0 ? 'transparent' : SURF + '88';
+    const trBg = rowIdx % 2 === 0 ? 'transparent' : alpha(SURF, '88');
     return /*#__PURE__*/React.createElement("tr", {
       key: e.id,
       style: {
         background: trBg,
-        borderBottom: `1px solid ${BDR}22`
+        borderBottom: `1px solid ${alpha(BDR, '22')}`
       }
     }, /*#__PURE__*/React.createElement("td", {style:{...TDS,padding:'4px',textAlign:'center'}},
       /*#__PURE__*/React.createElement("input", {
@@ -4526,7 +4526,7 @@ function App({
       /* A saved CE whose status is Draft and an unsaved draft both read
          "Draft" in the status column. This badge says which is which. */
       title: 'Unsaved draft by ' + (e.savedByName || e.savedBy || 'someone') + ' — Load to pick it up',
-      style: {marginLeft: 5, fontSize: 8, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 8, background: '#8B5CF622', color: '#A78BFA', border: '1px solid #8B5CF644'}
+      style: {marginLeft: 5, fontSize: 8, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 8, background: '#8B5CF622', color: 'var(--accent-violet)', border: '1px solid #8B5CF644'}
     }, 'UNSAVED')), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
@@ -4841,7 +4841,7 @@ function App({
   })(),
   /* ── Compare bar (floats when 2 CEs selected) ── */
   compareSet.size === 2 && /*#__PURE__*/React.createElement("div", {
-    style:{position:'fixed',bottom:24,left:'50%',transform:'translateX(-50%)',zIndex:500,background:ACC,color:'#000',borderRadius:12,padding:'10px 20px',display:'flex',gap:12,alignItems:'center',boxShadow:'0 4px 20px #0008',fontWeight:700,fontSize:13}
+    style:{position:'fixed',bottom:24,left:'50%',transform:'translateX(-50%)',zIndex:500,background:ACC,color:ON_ACC,borderRadius:12,padding:'10px 20px',display:'flex',gap:12,alignItems:'center',boxShadow:'0 4px 20px #0008',fontWeight:700,fontSize:13}
   }, "⚖ 2 CEs selected",
     /*#__PURE__*/React.createElement("button", {
       style:{background:'#000',color:ACC,border:'none',borderRadius:6,padding:'4px 14px',fontWeight:700,cursor:'pointer',fontSize:12},
@@ -4863,7 +4863,7 @@ function App({
       }
     }, "Compare →"),
     /*#__PURE__*/React.createElement("button", {
-      style:{background:'transparent',color:'#000',border:'1px solid #0004',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:12},
+      style:{background:'transparent',color:ON_ACC,border:`1px solid ${alpha(ON_ACC,'26')}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:12},
       onClick: () => setCompareSet(new Set())
     }, "✕")
   ),
@@ -4917,7 +4917,7 @@ function App({
         /*#__PURE__*/React.createElement("tbody", null, rows.map(([label,key]) => {
           const va = sA[key]||0, vb = sB[key]||0, diff = vb-va;
           const isGrand = key==='grand';
-          return /*#__PURE__*/React.createElement("tr", {key, style:{borderBottom:`1px solid ${BDR}22`,background:isGrand?SURF+'88':'transparent'}},
+          return /*#__PURE__*/React.createElement("tr", {key, style:{borderBottom:`1px solid ${alpha(BDR, '22')}`,background:isGrand?alpha(SURF, '88'):'transparent'}},
             /*#__PURE__*/React.createElement("td", {style:{...TDS,fontWeight:isGrand?700:400}}, label),
             /*#__PURE__*/React.createElement("td", {style:{...TDS,...MONO,textAlign:'right',color:isGrand?ACC:TX}}, '₱'+ph(va)),
             /*#__PURE__*/React.createElement("td", {style:{...TDS,...MONO,textAlign:'right',color:isGrand?INFO:TX}}, '₱'+ph(vb)),
@@ -4927,7 +4927,7 @@ function App({
       ),
       /*#__PURE__*/React.createElement("div", {style:{marginTop:14,display:'flex',gap:8,justifyContent:'flex-end'}},
         /*#__PURE__*/React.createElement("button", {style:{...btn('acc',true),fontSize:11}, onClick:()=>{handleLoad(a);setCompareModal(null);}}, "Load "+ceA),
-        /*#__PURE__*/React.createElement("button", {style:{...btn('info',true)||btn('def',true),fontSize:11,borderColor:INFO+'55',color:INFO}, onClick:()=>{handleLoad(b);setCompareModal(null);}}, "Load "+ceB)
+        /*#__PURE__*/React.createElement("button", {style:{...btn('info',true)||btn('def',true),fontSize:11,borderColor:alpha(INFO, '55'),color:INFO}, onClick:()=>{handleLoad(b);setCompareModal(null);}}, "Load "+ceB)
       )
     ));
   })()
@@ -5367,7 +5367,7 @@ function App({
     }, /*#__PURE__*/React.createElement("div", {
       style: {background:BG,border:`1px solid ${BDR}`,borderRadius:10,padding:28,width:440,maxWidth:'95vw',boxShadow:'0 8px 40px #0008'}
     }, /*#__PURE__*/React.createElement("div", {
-      style: {fontWeight:700,fontSize:15,marginBottom:4,color:'#A78BFA'}
+      style: {fontWeight:700,fontSize:15,marginBottom:4,color:'var(--accent-violet)'}
     }, "☁ SharePoint Sync — Scope Library"),
     /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,marginBottom:18}},
       spConnected
@@ -5475,7 +5475,7 @@ function App({
         fontWeight: 700,
         marginBottom: 12,
         fontSize: 13,
-        color: '#A78BFA'
+        color: 'var(--accent-violet)'
       }
     }, "Editing: ", editSvc.title), /*#__PURE__*/React.createElement("div", {
       style: {
@@ -5942,7 +5942,7 @@ function App({
               !open && /*#__PURE__*/React.createElement("div", {
                 style: { color: MT, fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 420 }
               }, ((svc.scope || [])[0] || '').slice(0, 90) + (((svc.scope || [])[0] || '').length > 90 ? '...' : ''))),
-            /*#__PURE__*/React.createElement("span", { style: { color: '#A78BFA', fontSize: 11 } }, svc.cat),
+            /*#__PURE__*/React.createElement("span", { style: { color: 'var(--accent-violet)', fontSize: 11 } }, svc.cat),
             /*#__PURE__*/React.createElement("span", { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 } },
               /*#__PURE__*/React.createElement("span", { style: { ...MONO, color: MT, fontSize: 10 } }, counts),
               /*#__PURE__*/React.createElement("button", { style: btn('info', true), onClick: toggle }, open ? 'Close' : 'Edit')
@@ -6024,7 +6024,7 @@ function App({
       }
     }, "Masterlist - ", picker.type), selCount > 0 && /*#__PURE__*/React.createElement("span", {
       style: {
-        background: ACC + '22',
+        background: alpha(ACC, '22'),
         color: ACC,
         borderRadius: 12,
         padding: '2px 10px',
@@ -6094,15 +6094,15 @@ function App({
         style: {
           padding: '10px 16px',
           cursor: 'pointer',
-          borderBottom: `1px solid ${BDR}22`,
+          borderBottom: `1px solid ${alpha(BDR, '22')}`,
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          background: isSelected ? ACC + '15' : 'transparent',
+          background: isSelected ? alpha(ACC, '15') : 'transparent',
           borderLeft: isSelected ? `3px solid ${ACC}` : '3px solid transparent'
         },
-        onMouseEnter: e => e.currentTarget.style.background = isSelected ? ACC + '22' : SURF,
-        onMouseLeave: e => e.currentTarget.style.background = isSelected ? ACC + '15' : 'transparent'
+        onMouseEnter: e => e.currentTarget.style.background = isSelected ? alpha(ACC, '22') : SURF,
+        onMouseLeave: e => e.currentTarget.style.background = isSelected ? alpha(ACC, '15') : 'transparent'
       }, /*#__PURE__*/React.createElement("div", {
         style: {
           display: 'flex',
@@ -6123,7 +6123,7 @@ function App({
         }
       }, isSelected && /*#__PURE__*/React.createElement("span", {
         style: {
-          color: '#000',
+          color: ON_ACC,
           fontSize: 10,
           fontWeight: 900,
           lineHeight: 1
@@ -6689,7 +6689,7 @@ function App({
     onClick: () => copyMenu && setCopyMenu(null)
   }, /*#__PURE__*/React.createElement(SignInBanner, null), /*#__PURE__*/React.createElement(SPDeniedBanner, null), /*#__PURE__*/React.createElement(SyncStatusBar, null),
   bulkOn && isAdmin && /*#__PURE__*/React.createElement("div", {
-    style: { background: ERR + '22', borderBottom: `1px solid ${ERR}55`, padding: '6px 16px',
+    style: { background: alpha(ERR, '22'), borderBottom: `1px solid ${alpha(ERR, '55')}`, padding: '6px 16px',
              display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }
   },
     /*#__PURE__*/React.createElement("span", { style: { fontWeight: 700, color: ERR } }, "⚠ BULK UPLOAD MODE"),
@@ -6709,7 +6709,7 @@ function App({
     }, "Turn off now")
   ), updateInfo?.available && /*#__PURE__*/React.createElement("div", {
     style: {
-      background: updateInfo.urgent ? ERR + '22' : '#22C55E22',
+      background: updateInfo.urgent ? alpha(ERR, '22') : '#22C55E22',
       borderBottom: `1px solid ${updateInfo.urgent ? ERR : OK}44`,
       padding: '8px 16px',
       display: 'flex',
@@ -6763,7 +6763,7 @@ function App({
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
-      color: '#A78BFA',
+      color: 'var(--accent-violet)',
       fontWeight: 700
     }
   }, "\u2B07 Local draft found"), /*#__PURE__*/React.createElement("span", {
@@ -6774,7 +6774,7 @@ function App({
     style: {
       ...btn('def', true),
       borderColor: '#8B5CF655',
-      color: '#A78BFA',
+      color: 'var(--accent-violet)',
       fontSize: 11
     },
     onClick: () => {
@@ -6828,7 +6828,7 @@ function App({
     style: {
       fontWeight: 700,
       fontSize: 14,
-      color: '#A78BFA'
+      color: 'var(--accent-violet)'
     }
   }, "\uD83D\uDCCB Resume Work"),/*#__PURE__*/React.createElement("span", {
     style: {
@@ -6897,7 +6897,7 @@ function App({
     }, d.info?.ceNum || '(No CE#)'), /*#__PURE__*/React.createElement("span", {
       style: {
         background: isOwn ? '#8B5CF622' : '#F0A42922',
-        color: isOwn ? '#A78BFA' : ACC,
+        color: isOwn ? 'var(--accent-violet)' : ACC,
         borderRadius: 10,
         padding: '1px 8px',
         fontSize: 10,
@@ -7219,7 +7219,7 @@ function App({
   }, /*#__PURE__*/React.createElement("span", {
     style: {
       background: ACC,
-      color: '#000',
+      color: ON_ACC,
       fontWeight: 800,
       fontSize: 10,
       padding: '3px 8px',
@@ -7289,7 +7289,7 @@ function App({
     style: {
       ...btn('def', true),
       fontSize: 10,
-      borderColor: getApiKey() && provInfo ? provInfo.bc + '88' : ERR + '88',
+      borderColor: getApiKey() && provInfo ? provInfo.bc + '88' : alpha(ERR, '88'),
       color: getApiKey() && provInfo ? provInfo.bc : ERR
     },
     onClick: () => {
@@ -7306,7 +7306,7 @@ function App({
       paddingLeft: 12,
       borderLeft: `1px solid ${BDR}`
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(ThemeSwitch, null), /*#__PURE__*/React.createElement("div", {
     className: "shic-hide-narrow",
     style: {
       textAlign: 'right'
@@ -7367,8 +7367,8 @@ function App({
         ? cnt + ' resource row' + (cnt === 1 ? '' : 's') + ' not yet assigned to a scope task'
         : cnt + ' item' + (cnt === 1 ? '' : 's'),
       style: {
-        background: tab === t.id ? ACC : ACC+'44',
-        color: tab === t.id ? '#000' : ACC,
+        background: tab === t.id ? ACC : alpha(ACC, '44'),
+        color: tab === t.id ? ON_ACC : ACC,
         fontSize: 9,
         fontWeight: 700,
         borderRadius: 8,
@@ -7391,7 +7391,7 @@ function App({
   }), tab === 'sow' && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
-      borderColor: INFO + '44'
+      borderColor: alpha(INFO, '44')
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -7493,8 +7493,8 @@ function App({
           resize: 'vertical',
           fontSize: isMain ? 13 : 12,
           fontWeight: isMain ? 600 : 400,
-          background: isMain ? SURF : BG + '88',
-          borderColor: isMain ? BDR + '88' : BDR + '44'
+          background: isMain ? SURF : alpha(BG, '88'),
+          borderColor: isMain ? alpha(BDR, '88') : alpha(BDR, '44')
         },
         value: item.text,
         onChange: e => setSowItems(p => p.map(s => s.id === item.id ? {
@@ -7829,7 +7829,7 @@ tab === 'sowbreak' && (() => {
     /*#__PURE__*/React.createElement("datalist", { id: "shic-uom-list" }, UOMS.map(u => /*#__PURE__*/React.createElement("option", { key: u, value: u }))),
 
     /* Intro / status */
-    /*#__PURE__*/React.createElement("div", { style: { ...CS, borderColor: INFO + '44', marginBottom: 10 } },
+    /*#__PURE__*/React.createElement("div", { style: { ...CS, borderColor: alpha(INFO, '44'), marginBottom: 10 } },
       /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
         /*#__PURE__*/React.createElement("div", { style: { minWidth: 240, flex: 1 } },
           /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 13 } }, "SOW Breakdown"),
@@ -7870,7 +7870,7 @@ tab === 'sowbreak' && (() => {
       const others = (sowItems || []).filter(o => o.id !== it.id && taskResCount(o.id) > 0);
       return /*#__PURE__*/React.createElement("div", {
         key: it.id,
-        style: { ...CS, marginBottom: 8, borderColor: rollN ? OK + '33' : BDR, marginLeft: it.type === 'sub' ? 18 : 0, padding: open ? undefined : '8px 12px' }
+        style: { ...CS, marginBottom: 8, borderColor: rollN ? alpha(OK, '33') : BDR, marginLeft: it.type === 'sub' ? 18 : 0, padding: open ? undefined : '8px 12px' }
       },
         /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: open ? 8 : 0 } },
           /*#__PURE__*/React.createElement("button", {
@@ -8068,7 +8068,7 @@ statusPanel && (() => {
       ? /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,padding:'12px 0',border:'1px dashed '+BDR,borderRadius:6,textAlign:'center'}}, "No status changes recorded yet.")
       : /*#__PURE__*/React.createElement("div", null, _shown.map((h, i) => /*#__PURE__*/React.createElement("div", {
           key: i,
-          style:{display:'flex',alignItems:'baseline',gap:8,padding:'6px 0',borderBottom:'1px solid '+BDR+'44'}
+          style:{display:'flex',alignItems:'baseline',gap:8,padding:'6px 0',borderBottom:'1px solid '+alpha(BDR, '44')}
         },
           /*#__PURE__*/React.createElement("span", {style:{background:getStatusColor(h.status||'')+'22',color:getStatusColor(h.status||''),fontWeight:700,fontSize:10,padding:'2px 8px',borderRadius:10,whiteSpace:'nowrap'}}, h.status || "—"),
           h.from && /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT}}, "from " + h.from),
@@ -8099,7 +8099,7 @@ attachPanel && /*#__PURE__*/React.createElement("div", {
     /*#__PURE__*/React.createElement("button", {style:btn('def',true), onClick:()=>setAttachPanel(null)}, "✕ Close")
   ),
   !monSpIds.has(String(attachPanel)) && /*#__PURE__*/React.createElement("div", {
-    style:{background:ERR+'22',border:`1px solid ${ERR}44`,borderRadius:6,padding:'10px 14px',fontSize:12,color:ERR,marginBottom:12}
+    style:{background:alpha(ERR, '22'),border:`1px solid ${alpha(ERR, '44')}`,borderRadius:6,padding:'10px 14px',fontSize:12,color:ERR,marginBottom:12}
   }, "⚠ This CE has no SharePoint monitoring record yet. Fill in any monitoring field (e.g. Status) and save first to enable attachments."),
   monSpIds.has(String(attachPanel)) && /*#__PURE__*/React.createElement("div", null,
     /*#__PURE__*/React.createElement("label", {
@@ -8273,7 +8273,7 @@ tab === 'dashboard' && (() => {
                   const st = x.m.status || 'Draft';
                   const dl = x.m.deadline ? new Date(x.m.deadline+'T00:00:00') : null;
                   const days = dl ? Math.round((dl - new Date())/(1000*60*60*24)) : null;
-                  const dCol = days === null ? MT : days < 0 ? ERR : days <= 7 ? '#F59E0B' : OK;
+                  const dCol = days === null ? MT : days < 0 ? ERR : days <= 7 ? 'var(--status-warning)' : OK;
                   return /*#__PURE__*/React.createElement("tr",{key:x.h.id},
                     /*#__PURE__*/React.createElement("td",{style:{...TDS,color:INFO,fontWeight:600}}, x.h.info?.ceNum || x.h.ceNum || "—"),
                     /*#__PURE__*/React.createElement("td",{style:TDS}, x.h.info?.client || x.h.client || 'Unknown'),
@@ -8297,7 +8297,7 @@ tab === 'dashboard' && (() => {
         /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,marginBottom:10,fontSize:12}}, "🏷 By Status"),
         Object.entries(statusCount).sort((a,b)=>b[1]-a[1]).map(([s,c])=>/*#__PURE__*/React.createElement("div",{key:s,style:{display:'flex',justifyContent:'space-between',marginBottom:6,fontSize:12}},
           /*#__PURE__*/React.createElement("span",null,s),
-          /*#__PURE__*/React.createElement("span",{style:{background:ACC+'33',color:ACC,borderRadius:4,padding:'0 6px',fontWeight:700}},c)))),
+          /*#__PURE__*/React.createElement("span",{style:{background:alpha(ACC, '33'),color:ACC,borderRadius:4,padding:'0 6px',fontWeight:700}},c)))),
       /* Top clients */
       /*#__PURE__*/React.createElement("div",{style:CS},
         /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,marginBottom:10,fontSize:12}}, "🏆 Top 5 Clients"),
@@ -8320,7 +8320,7 @@ tab === 'dashboard' && (() => {
   }, "Project Details"), /*#__PURE__*/React.createElement("div", {
     style: {marginBottom: 16, padding: '12px 14px', background: '#A78BFA11', borderRadius: 8, border: '2px solid #A78BFA44', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap'}
   }, /*#__PURE__*/React.createElement("div", {style: {flex: 1, minWidth: 200}},
-    /*#__PURE__*/React.createElement("label", {style: {...LBL, color: '#A78BFA', fontWeight: 700, fontSize: 11, letterSpacing: '0.05em'}}, "🏢 Issuing Company"),
+    /*#__PURE__*/React.createElement("label", {style: {...LBL, color: 'var(--accent-violet)', fontWeight: 700, fontSize: 11, letterSpacing: '0.05em'}}, "🏢 Issuing Company"),
     /*#__PURE__*/React.createElement("select", {
       style: INP,
       value: info.companyId != null ? info.companyId : (companies[0]||{}).id || '',
@@ -8340,7 +8340,7 @@ tab === 'dashboard' && (() => {
     return /*#__PURE__*/React.createElement("div", {style: {display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0}},
       selCo.logo && /*#__PURE__*/React.createElement("img", {src: selCo.logo, style: {maxWidth: 64, maxHeight: 32, objectFit: 'contain', background: '#fff', borderRadius: 4, padding: 3, border: `1px solid ${BDR}`}}),
       /*#__PURE__*/React.createElement("div", {style: {fontSize: 11, color: MT, lineHeight: 1.5}},
-        /*#__PURE__*/React.createElement("div", null, "CE Prefix: ", /*#__PURE__*/React.createElement("b", {style: {color: TX}}, selCo.cePrefix || 'SHIC'), " → ", /*#__PURE__*/React.createElement("b", {style: {color: '#A78BFA'}}, (selCo.cePrefix||'SHIC')+'-CE-'+new Date().getFullYear()+'-XXXX')),
+        /*#__PURE__*/React.createElement("div", null, "CE Prefix: ", /*#__PURE__*/React.createElement("b", {style: {color: TX}}, selCo.cePrefix || 'SHIC'), " → ", /*#__PURE__*/React.createElement("b", {style: {color: 'var(--accent-violet)'}}, (selCo.cePrefix||'SHIC')+'-CE-'+new Date().getFullYear()+'-XXXX')),
         /*#__PURE__*/React.createElement("div", null, "Doc No: ", /*#__PURE__*/React.createElement("b", {style: {color: TX}}, selCo.docNo || '—'), "  Rev: ", /*#__PURE__*/React.createElement("b", {style: {color: TX}}, selCo.revNo || '0'))
       )
     );
@@ -8533,7 +8533,7 @@ tab === 'dashboard' && (() => {
   })))), /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
-      borderColor: INFO + '44'
+      borderColor: alpha(INFO, '44')
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -8687,8 +8687,8 @@ tab === 'dashboard' && (() => {
   }, !getApiKey() && /*#__PURE__*/React.createElement("div", {
     style: {
       width: '100%',
-      background: ERR + '15',
-      border: `1px solid ${ERR}44`,
+      background: alpha(ERR, '15'),
+      border: `1px solid ${alpha(ERR, '44')}`,
       borderRadius: 6,
       padding: '7px 12px',
       color: ERR,
@@ -8718,7 +8718,7 @@ tab === 'dashboard' && (() => {
   })), /*#__PURE__*/React.createElement(ScopeBuilder, null), /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
-      borderColor: ACC + '55'
+      borderColor: alpha(ACC, '55')
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -8752,8 +8752,8 @@ tab === 'dashboard' && (() => {
   }, !getApiKey() && /*#__PURE__*/React.createElement("div", {
     style: {
       width: '100%',
-      background: ERR + '15',
-      border: `1px solid ${ERR}44`,
+      background: alpha(ERR, '15'),
+      border: `1px solid ${alpha(ERR, '44')}`,
       borderRadius: 6,
       padding: '7px 12px',
       color: ERR,
@@ -8991,7 +8991,7 @@ tab === 'dashboard' && (() => {
     return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
       style: {
         ...CS,
-        borderColor: INFO + '44'
+        borderColor: alpha(INFO, '44')
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -9011,7 +9011,7 @@ tab === 'dashboard' && (() => {
       style: {
         textAlign: 'right',
         marginTop: 10,
-        borderTop: `1px solid ${INFO}44`,
+        borderTop: `1px solid ${alpha(INFO, '44')}`,
         paddingTop: 8
       }
     }, /*#__PURE__*/React.createElement("span", {
@@ -9025,7 +9025,7 @@ tab === 'dashboard' && (() => {
     }, "P", ph(mobVehiclesT))))), /*#__PURE__*/React.createElement("div", {
       style: {
         ...CS,
-        borderColor: ACC + '44'
+        borderColor: alpha(ACC, '44')
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -9045,7 +9045,7 @@ tab === 'dashboard' && (() => {
       style: {
         textAlign: 'right',
         marginTop: 10,
-        borderTop: `1px solid ${ACC}44`,
+        borderTop: `1px solid ${alpha(ACC, '44')}`,
         paddingTop: 8
       }
     }, /*#__PURE__*/React.createElement("span", {
@@ -9059,8 +9059,8 @@ tab === 'dashboard' && (() => {
     }, "P", ph(demobVehiclesT))))), mobT > 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         ...CS,
-        borderColor: OK + '44',
-        background: OK + '08'
+        borderColor: alpha(OK, '44'),
+        background: alpha(OK, '08')
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -9091,7 +9091,7 @@ tab === 'dashboard' && (() => {
   })(), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
-      borderColor: INFO + '44',
+      borderColor: alpha(INFO, '44'),
       marginBottom: 8
     }
   }, /*#__PURE__*/React.createElement("div", {
@@ -9140,7 +9140,7 @@ tab === 'dashboard' && (() => {
       shift: shiftKey,
       rate: 0
     }]);
-    const shiftColor = shiftKey.startsWith('regular') ? INFO : shiftKey.startsWith('sunday') ? '#A78BFA' : ERR;
+    const shiftColor = shiftKey.startsWith('regular') ? INFO : shiftKey.startsWith('sunday') ? 'var(--accent-violet)' : ERR;
     return /*#__PURE__*/React.createElement("div", {
       key: shiftKey,
       style: {
@@ -9384,7 +9384,7 @@ tab === 'dashboard' && (() => {
         width: 8,
         height: 8,
         borderRadius: '50%',
-        background: sk.startsWith('regular') ? INFO : sk.startsWith('sunday') ? '#A78BFA' : ERR,
+        background: sk.startsWith('regular') ? INFO : sk.startsWith('sunday') ? 'var(--accent-violet)' : ERR,
         marginRight: 7
       }
     }), sv.label, " (", sv.mult, "x)")), /*#__PURE__*/React.createElement("button", {
@@ -9487,7 +9487,7 @@ tab === 'dashboard' && (() => {
           ...INP,
           ...MONO,
           width: 58,
-          borderColor: N(r.otHours) > 0 ? ACC + '88' : BDR
+          borderColor: N(r.otHours) > 0 ? alpha(ACC, '88') : BDR
         },
         type: "number",
         min: 0,
@@ -9593,8 +9593,8 @@ tab === 'dashboard' && (() => {
   }), /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
-      borderColor: ACC + '55',
-      background: ACC + '08'
+      borderColor: alpha(ACC, '55'),
+      background: alpha(ACC, '08')
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -9661,7 +9661,7 @@ tab === 'dashboard' && (() => {
   }, "P", ph(mpTot)))))), mp.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
-      borderColor: ACC + '44',
+      borderColor: alpha(ACC, '44'),
       marginTop: 8
     }
   }, /*#__PURE__*/React.createElement("div", {
@@ -9754,7 +9754,7 @@ tab === 'dashboard' && (() => {
       ...THS,
       textAlign: 'right',
       width: 100,
-      background: ACC + '22',
+      background: alpha(ACC, '22'),
       color: ACC
     }
   }, "Total"))), /*#__PURE__*/React.createElement("tbody", null, (() => {
@@ -9820,7 +9820,7 @@ tab === 'dashboard' && (() => {
       return /*#__PURE__*/React.createElement("tr", {
         key: g.role,
         style: {
-          background: rowIdx % 2 === 0 ? 'transparent' : SURF + '88'
+          background: rowIdx % 2 === 0 ? 'transparent' : alpha(SURF, '88')
         }
       }, /*#__PURE__*/React.createElement("td", {
         style: {
@@ -9904,14 +9904,14 @@ tab === 'dashboard' && (() => {
           ...MONO,
           color: ACC,
           fontWeight: 700,
-          background: ACC + '0A'
+          background: alpha(ACC, '0A')
         }
       }, "P", ph(rowTot)));
     });
   })()), /*#__PURE__*/React.createElement("tfoot", null, /*#__PURE__*/React.createElement("tr", {
     style: {
-      background: ACC + '14',
-      borderTop: `2px solid ${ACC}44`,
+      background: alpha(ACC, '14'),
+      borderTop: `2px solid ${alpha(ACC, '44')}`,
       fontWeight: 700
     }
   }, /*#__PURE__*/React.createElement("td", {
@@ -10133,8 +10133,8 @@ tab === 'dashboard' && (() => {
   }), /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
-      background: ACC + '08',
-      borderColor: ACC + '44',
+      background: alpha(ACC, '08'),
+      borderColor: alpha(ACC, '44'),
       marginTop: 4
     }
   }, /*#__PURE__*/React.createElement("div", {
@@ -10178,7 +10178,7 @@ tab === 'dashboard' && (() => {
     const clean = issues.length === 0;
 
     return /*#__PURE__*/React.createElement("div", {
-      style: { ...CS, marginBottom: 10, borderColor: clean ? OK + '55' : errs ? ERR + '55' : '#F59E0B55' }
+      style: { ...CS, marginBottom: 10, borderColor: clean ? alpha(OK, '55') : errs ? alpha(ERR, '55') : '#F59E0B55' }
     },
       /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
         /*#__PURE__*/React.createElement("span", { style: { fontWeight: 700, fontSize: 12 } }, clean ? "✓ CE looks complete" : "Check CE"),
@@ -10193,7 +10193,7 @@ tab === 'dashboard' && (() => {
           key: n,
           style: { display: 'flex', alignItems: 'baseline', gap: 7, fontSize: 11, padding: '3px 0', borderTop: n ? `1px solid ${BDR}` : 'none' }
         },
-          /*#__PURE__*/React.createElement("span", { style: { color: i.sev === 'err' ? ERR : '#F59E0B', fontWeight: 700, width: 12, flexShrink: 0 } }, i.sev === 'err' ? "!" : "?"),
+          /*#__PURE__*/React.createElement("span", { style: { color: i.sev === 'err' ? ERR : 'var(--status-warning)', fontWeight: 700, width: 12, flexShrink: 0 } }, i.sev === 'err' ? "!" : "?"),
           /*#__PURE__*/React.createElement("span", { style: { flex: 1, minWidth: 160 } },
             i.msg,
             i.hint && /*#__PURE__*/React.createElement("span", { style: { color: MT, display: 'block', fontSize: 10, marginTop: 1 } }, i.hint)
@@ -10209,7 +10209,7 @@ tab === 'dashboard' && (() => {
   /* Feature 12: AI Cost Suggestion banner */
   /*#__PURE__*/React.createElement("div", {style:{marginBottom:12,display:'flex',gap:8,alignItems:'flex-start',flexWrap:'wrap'}},
     /*#__PURE__*/React.createElement("button", {
-      style:{...btn('def',true),borderColor:'#A78BFA55',color:'#A78BFA'},
+      style:{...btn('def',true),borderColor:'#A78BFA55',color:'var(--accent-violet)'},
       onClick:()=>{
         const similar = history.filter(h=>h.ceType===ceType&&h.grand>0);
         if(similar.length<2){showToast('Not enough history to suggest (need 2+ similar CEs).',true);setAiSuggest(null);return;}
@@ -10220,9 +10220,9 @@ tab === 'dashboard' && (() => {
       }
     }, "💡 AI Suggest"),
     aiSuggest && /*#__PURE__*/React.createElement("div", {style:{flex:1,background:'#A78BFA11',border:'1px solid #A78BFA44',borderRadius:8,padding:'10px 14px',fontSize:11}},
-      /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,color:'#A78BFA',marginBottom:6}}, "💡 Based on "+aiSuggest.n+" similar "+ceType+" CEs:"),
+      /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,color:'var(--accent-violet)',marginBottom:6}}, "💡 Based on "+aiSuggest.n+" similar "+ceType+" CEs:"),
       /*#__PURE__*/React.createElement("div", {style:{display:'flex',gap:16,flexWrap:'wrap'}},
-        [['Grand Total','grand',ACC],['Manpower','mp',INFO],['Tools','tools',OK],['Materials','mats','#F0A429'],['PPE','ppe',ERR]].map(([label,key,color])=>
+        [['Grand Total','grand',ACC],['Manpower','mp',INFO],['Tools','tools',OK],['Materials','mats','var(--brand-accent)'],['PPE','ppe',ERR]].map(([label,key,color])=>
           /*#__PURE__*/React.createElement("div", {key:key},
             /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:10}}, label),
             /*#__PURE__*/React.createElement("div", {style:{color:color,fontWeight:700,...MONO}}, "₱"+ph(aiSuggest[key]*0.8)+" – ₱"+ph(aiSuggest[key]*1.2))
@@ -10630,8 +10630,8 @@ tab === 'dashboard' && (() => {
       alignItems: 'center',
       gap: 5,
       marginTop: 4,
-      background: INFO + '18',
-      border: `1px solid ${INFO}44`,
+      background: alpha(INFO, '18'),
+      border: `1px solid ${alpha(INFO, '44')}`,
       borderRadius: 4,
       padding: '2px 8px',
       fontSize: 10,
@@ -10657,8 +10657,8 @@ tab === 'dashboard' && (() => {
   }, "Save"), /*#__PURE__*/React.createElement("button", {
     style: {
       ...btn('def'),
-      background: INFO + '22',
-      borderColor: INFO + '55',
+      background: alpha(INFO, '22'),
+      borderColor: alpha(INFO, '55'),
       color: INFO
     },
     onClick: handleSaveRevision,
@@ -10666,8 +10666,8 @@ tab === 'dashboard' && (() => {
   }, "\u21BB Revise"), /*#__PURE__*/React.createElement("button", {
     style: {
       ...btn('def'),
-      background: OK + '22',
-      borderColor: OK + '55',
+      background: alpha(OK, '22'),
+      borderColor: alpha(OK, '55'),
       color: OK
     },
     onClick: syncRatesFromML,
@@ -10677,7 +10677,7 @@ tab === 'dashboard' && (() => {
       ...btn('def'),
       background: '#8B5CF622',
       borderColor: '#8B5CF655',
-      color: '#A78BFA'
+      color: 'var(--accent-violet)'
     },
     onClick: saveDraft,
     title: "Save draft \u2014 shared with team via SharePoint"
@@ -10686,7 +10686,7 @@ tab === 'dashboard' && (() => {
       ...btn('def'),
       background: '#8B5CF611',
       borderColor: '#8B5CF644',
-      color: '#A78BFA',
+      color: 'var(--accent-violet)',
       position: 'relative'
     },
     onClick: () => {
@@ -10699,7 +10699,7 @@ tab === 'dashboard' && (() => {
       position: 'absolute',
       top: -4,
       right: -4,
-      background: '#8B5CF6',
+      background: 'var(--accent-violet)',
       color: '#fff',
       borderRadius: '50%',
       width: 14,
@@ -10794,8 +10794,8 @@ tab === 'dashboard' && (() => {
     }
   }, grand > 0 ? (val / grand * 100).toFixed(1) + '%' : '--')))), /*#__PURE__*/React.createElement("tfoot", null, /*#__PURE__*/React.createElement("tr", {
     style: {
-      background: ACC + '14',
-      borderTop: `2px solid ${ACC}55`
+      background: alpha(ACC, '14'),
+      borderTop: `2px solid ${alpha(ACC, '55')}`
     }
   }, /*#__PURE__*/React.createElement("td", {
     style: {
@@ -10838,7 +10838,7 @@ tab === 'dashboard' && (() => {
   }, "P", ph(unitP)), /*#__PURE__*/React.createElement("td", {
     style: TDS
   })), /*#__PURE__*/React.createElement("tr", {
-    style: {background: OK+'10', borderTop: `2px solid ${OK}44`}
+    style: {background: alpha(OK, '10'), borderTop: `2px solid ${alpha(OK, '44')}`}
   }, /*#__PURE__*/React.createElement("td", {
     style: {...TDS, fontWeight:800, color: OK, paddingTop:10, paddingBottom:10}
   }, "SELLING PRICE"), /*#__PURE__*/React.createElement("td", {
@@ -10858,7 +10858,7 @@ tab === 'dashboard' && (() => {
   )))))), /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
-      borderColor: INFO + '44'
+      borderColor: alpha(INFO, '44')
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -10904,7 +10904,7 @@ tab === 'dashboard' && (() => {
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       ...MONO,
-      background: ACC + '22',
+      background: alpha(ACC, '22'),
       color: ACC,
       fontWeight: 700,
       fontSize: 11,
@@ -10983,7 +10983,7 @@ tab === 'dashboard' && (() => {
   (() => {
     const sn = (sowItems || []).filter(s => String(s.note || '').trim());
     if (!sn.length) return null;
-    return /*#__PURE__*/React.createElement("div", { style: { ...CS, borderColor: INFO + '44' } },
+    return /*#__PURE__*/React.createElement("div", { style: { ...CS, borderColor: alpha(INFO, '44') } },
       /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' } },
         /*#__PURE__*/React.createElement("span", { style: { fontWeight: 700, fontSize: 12 } }, "From the SOW Breakdown"),
         /*#__PURE__*/React.createElement("span", { style: { color: MT, fontSize: 11 } }, sn.length + " breakdown note" + (sn.length === 1 ? '' : 's') + " — these print with the notes above"),
@@ -11051,7 +11051,7 @@ tab === 'dashboard' && (() => {
       color: MT,
       background: 'transparent',
       border: 'none',
-      borderBottom: `1px dashed ${BDR}44`,
+      borderBottom: `1px dashed ${alpha(BDR, '44')}`,
       borderRadius: 0,
       padding: '2px 4px',
       marginBottom: 8,
@@ -11351,8 +11351,8 @@ class AppBoundary extends React.Component {
     if (this.state.error) {
       return /*#__PURE__*/React.createElement("div", {
         style: {
-          background: '#0D1117',
-          color: '#F85149',
+          background: 'var(--bg-canvas)',
+          color: 'var(--status-danger)',
           padding: 40,
           fontFamily: 'monospace',
           minHeight: '100vh'
@@ -11372,7 +11372,7 @@ class AppBoundary extends React.Component {
       }, this.state.error.message), /*#__PURE__*/React.createElement("pre", {
         style: {
           fontSize: 10,
-          color: '#7D8590',
+          color: 'var(--text-secondary)',
           whiteSpace: 'pre-wrap'
         }
       }, this.state.error.stack));

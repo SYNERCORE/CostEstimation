@@ -54,7 +54,7 @@
     React.createElement('div',{style:{fontSize:11,color:MT,marginBottom:12}},'Each company has its own CE prefix, logo, document number, revision number and date. Changes are '+(spConnected?'auto-synced to SharePoint for all users.':'saved locally only — connect SharePoint to share across users.')),
 
     /* Company cards */
-    companies.map(co=>React.createElement('div',{key:co.id,style:{border:'1px solid '+(editId===co.id?'#A78BFA':BDR),borderRadius:8,marginBottom:10,overflow:'hidden'}},
+    companies.map(co=>React.createElement('div',{key:co.id,style:{border:'1px solid '+(editId===co.id?'var(--accent-violet)':BDR),borderRadius:8,marginBottom:10,overflow:'hidden'}},
 
       /* Card header */
       React.createElement('div',{style:{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:editId===co.id?'#A78BFA11':SURF}},

@@ -226,8 +226,8 @@
     placeholder: "Repeat"
   }))), err && /*#__PURE__*/React.createElement("div", {
     style: {
-      background: ERR + '18',
-      border: `1px solid ${ERR}44`,
+      background: alpha(ERR, '18'),
+      border: `1px solid ${alpha(ERR, '44')}`,
       borderRadius: 6,
       padding: '7px 12px',
       color: ERR,

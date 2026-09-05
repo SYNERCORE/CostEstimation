@@ -90,6 +90,8 @@ jobs:
         run: node tools/test-ce-numbering.js
       - name: Company column
         run: node tools/test-company-column.js
+      - name: Theme
+        run: node tools/test-theme.js
       - name: Rate trends
         run: node tools/test-rate-trends.js
       - name: An imported CE is filed under what its rows cost

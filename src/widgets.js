@@ -1,4 +1,4 @@
-﻿function OnlinePill(){const[on,setOn]=React.useState(navigator.onLine);const[q,setQ]=React.useState(0);React.useEffect(()=>{const a=()=>setOn(true),b=()=>setOn(false);window.addEventListener('shic-online',a);window.addEventListener('shic-offline',b);/* Was _spQueue.length, which nothing ever pushed to -- the count was permanently 0 while real work sat unsynced. Count the CEs actually waiting to upload. */const poll=()=>{try{dbPendingCount().then(n=>setQ(n)).catch(()=>{});}catch(_e){}};poll();const t=setInterval(poll,10000);return()=>{window.removeEventListener('shic-online',a);window.removeEventListener('shic-offline',b);clearInterval(t);};},[]);const c=on?OK:'#F59E0B';return React.createElement('span',{title:on?(q?q+' CE(s) saved here not yet uploaded':'Connected — everything uploaded'):(q?'Offline — '+q+' CE(s) waiting to upload':'Offline'),style:{display:'flex',alignItems:'center',gap:4,fontSize:10,padding:'2px 8px',borderRadius:10,background:c+'22',color:c,border:'1px solid '+c+'44',cursor:'default',userSelect:'none',flexShrink:0}},React.createElement('span',{style:{width:6,height:6,borderRadius:'50%',background:c,display:'inline-block'}}),on?(q?q+' to upload':'Online'):'Offline');}
+﻿function OnlinePill(){const[on,setOn]=React.useState(navigator.onLine);const[q,setQ]=React.useState(0);React.useEffect(()=>{const a=()=>setOn(true),b=()=>setOn(false);window.addEventListener('shic-online',a);window.addEventListener('shic-offline',b);/* Was _spQueue.length, which nothing ever pushed to -- the count was permanently 0 while real work sat unsynced. Count the CEs actually waiting to upload. */const poll=()=>{try{dbPendingCount().then(n=>setQ(n)).catch(()=>{});}catch(_e){}};poll();const t=setInterval(poll,10000);return()=>{window.removeEventListener('shic-online',a);window.removeEventListener('shic-offline',b);clearInterval(t);};},[]);const c=on?OK:'var(--status-warning)';return React.createElement('span',{title:on?(q?q+' CE(s) saved here not yet uploaded':'Connected — everything uploaded'):(q?'Offline — '+q+' CE(s) waiting to upload':'Offline'),style:{display:'flex',alignItems:'center',gap:4,fontSize:10,padding:'2px 8px',borderRadius:10,background:c+'22',color:c,border:'1px solid '+c+'44',cursor:'default',userSelect:'none',flexShrink:0}},React.createElement('span',{style:{width:6,height:6,borderRadius:'50%',background:c,display:'inline-block'}}),on?(q?q+' to upload':'Online'):'Offline');}
 /* A SharePoint token lasts about an hour. When the silent refresh fails, every
    list read starts failing while the app still looks online — and because
    background reads deliberately never prompt (an unattended redirect would
@@ -20,7 +20,7 @@ function SPDeniedBanner() {
   if (!hit) return null;
   return React.createElement('div', {
     style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-      padding: '8px 14px', background: ERR + '18', borderBottom: '1px solid ' + ERR + '44', color: ERR, fontSize: 12 }
+      padding: '8px 14px', background: alpha(ERR, '18'), borderBottom: '1px solid ' + alpha(ERR, '44'), color: ERR, fontSize: 12 }
   },
     React.createElement('span', { style: { fontWeight: 700 } }, 'SharePoint denied access'),
     React.createElement('span', { style: { color: MT } },
@@ -46,7 +46,7 @@ function SignInBanner() {
   if (!need) return null;
   return React.createElement('div', {
     style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-      padding: '8px 14px', background: '#F59E0B18', borderBottom: '1px solid #F59E0B44', color: '#F59E0B', fontSize: 12 }
+      padding: '8px 14px', background: '#F59E0B18', borderBottom: '1px solid #F59E0B44', color: 'var(--status-warning)', fontSize: 12 }
   },
     React.createElement('span', { style: { fontWeight: 700 } }, 'SharePoint session expired'),
     React.createElement('span', { style: { color: MT } },
@@ -75,7 +75,7 @@ function SyncStatusBar() {
     return () => window.removeEventListener('shic:sync:updated', h);
   }, []);
 
-  const spColor = sync.sp === 'connected' ? OK : sync.sp === 'error' ? ERR : '#F59E0B';
+  const spColor = sync.sp === 'connected' ? OK : sync.sp === 'error' ? ERR : 'var(--status-warning)';
   const spLabel = sync.sp === 'connected' ? '✓ SP' : sync.sp === 'error' ? '✗ SP Error' : '○ SP';
 
   const lastSync = sync.lastSyncAt ? (() => {
@@ -83,7 +83,7 @@ function SyncStatusBar() {
     return mins < 1 ? 'just now' : mins < 60 ? mins + 'm ago' : Math.round(mins/60) + 'h ago';
   })() : 'never';
 
-  const entityColor = s => s === 'synced' ? OK : s === 'error' ? ERR : s === 'saving' ? '#F59E0B' : BDR;
+  const entityColor = s => s === 'synced' ? OK : s === 'error' ? ERR : s === 'saving' ? 'var(--status-warning)' : BDR;
   const entityIcon  = s => s === 'synced' ? '✓' : s === 'error' ? '✗' : s === 'saving' ? '↻' : '○';
 
   const entities = [
@@ -134,7 +134,7 @@ function SyncStatusBar() {
     }, '📝 Draft: ' + (() => { const mins=Math.round((Date.now()-new Date(sync.lastDraftSaveAt))/60000); return mins<1?'just now':mins+'m ago'; })()),
 
     /* dirty */
-    sync.dirty && React.createElement('span', {style:{color:'#F59E0B',fontWeight:700}}, '● Unsaved'),
+    sync.dirty && React.createElement('span', {style:{color:'var(--status-warning)',fontWeight:700}}, '● Unsaved'),
 
     /* stale */
     sync.stale && React.createElement('span', {style:{color:ERR,fontWeight:700}}, '⚠ Stale'),
@@ -230,14 +230,14 @@ function AuthGate() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: '#0D1117',
+      background: 'var(--bg-canvas)',
       gap: 10,
-      color: '#7D8590',
+      color: 'var(--text-secondary)',
       fontSize: 14
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
-      background: '#F0A429',
+      background: 'var(--brand-accent)',
       color: '#000',
       fontWeight: 800,
       padding: '4px 10px',
@@ -376,24 +376,24 @@ function RateHistory(props) {
       style: {
         background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px',
         fontSize: 12, lineHeight: 1, opacity: has ? 1 : 0.28,
-        color: has ? '#F0A429' : '#7D8590'
+        color: has ? 'var(--brand-accent)' : 'var(--text-secondary)'
       }
     }, '⏱'),
     open ? React.createElement('div', {
       onClick: function (e) { e.stopPropagation(); },
       style: {
         position: 'absolute', top: 18, right: 0, zIndex: 500, width: 320,
-        background: '#161B22', border: '1px solid #30363D', borderRadius: 8,
+        background: 'var(--bg-surface)', border: '1px solid #30363D', borderRadius: 8,
         boxShadow: '0 8px 28px #000a', padding: 10, textAlign: 'left',
-        fontWeight: 400, color: '#E6EDF3'
+        fontWeight: 400, color: 'var(--text-primary)'
       }
     },
       React.createElement('div', { style: { fontSize: 11, fontWeight: 700, marginBottom: 2 } }, name),
-      uses.length ? React.createElement('div', { style: { fontSize: 10, color: '#7D8590', marginBottom: 6 } },
+      uses.length ? React.createElement('div', { style: { fontSize: 10, color: 'var(--text-secondary)', marginBottom: 6 } },
         basis.length + (uses.length === 10 ? '+ uses' : ' use' + (basis.length === 1 ? '' : 's')) +
         (issued.length ? '' : ' (imported, none issued)') +
         (lo === hi ? ' · ' + money(lo) + ' every time' : ' · ' + money(lo) + ' to ' + money(hi))
-      ) : React.createElement('div', { style: { fontSize: 10, color: '#F59E0B', marginBottom: 2 } },
+      ) : React.createElement('div', { style: { fontSize: 10, color: 'var(--status-warning)', marginBottom: 2 } },
         'Never costed before. Nothing to compare against.'),
       uses.map(function (u, i) {
         return React.createElement('div', {
@@ -403,22 +403,76 @@ function RateHistory(props) {
           style: {
             display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline',
             padding: '4px 6px', borderRadius: 5, cursor: onPick ? 'pointer' : 'default',
-            background: i % 2 ? '#0D1117' : 'transparent'
+            background: i % 2 ? 'var(--bg-canvas)' : 'transparent'
           }
         },
-          React.createElement('span', { style: { fontSize: 10, color: '#7D8590', minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
-            React.createElement('span', { style: { color: u.issued ? '#E6EDF3' : '#F59E0B' } },
+          React.createElement('span', { style: { fontSize: 10, color: 'var(--text-secondary)', minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+            React.createElement('span', { style: { color: u.issued ? 'var(--text-primary)' : 'var(--status-warning)' } },
               u.issued ? (u.ceNum || '(no CE number)') : 'imported file'),
             u.client ? ' · ' + u.client : '',
             u.when ? ' · ' + day(u.when) : ''),
-          React.createElement('span', { style: { fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: '#F0A429', fontWeight: 700 } }, money(u.rate))
+          React.createElement('span', { style: { fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: 'var(--brand-accent)', fontWeight: 700 } }, money(u.rate))
         );
       }),
       uses.some(function (u) { return !u.issued; }) ? React.createElement('div', {
-        style: { fontSize: 9, color: '#F59E0B', marginTop: 6, borderTop: '1px solid #30363D', paddingTop: 5 }
+        style: { fontSize: 9, color: 'var(--status-warning)', marginTop: 6, borderTop: '1px solid #30363D', paddingTop: 5 }
       }, 'Amber rows came from an analysed spreadsheet, not a CE this company issued.') : null
     ) : null
   );
+}
+
+
+/* EXECUTIVE LIGHT / DARK SLATE.
+   =============================
+   The switcher writes data-theme on <html>, which is the only thing that has
+   to change: every colour constant reads a CSS variable, and index.html
+   redefines the whole set under [data-theme="light"].
+
+   The choice is stored, and index.html applies it inline before any script
+   runs -- reading it here instead would show a light-mode user a dark flash
+   on every load.
+
+   A segmented pair rather than a single toggle: with one button there is no
+   way to see which mode you are in without knowing what the icon means. */
+function ThemeSwitch() {
+  const read = () => {
+    try { return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'; }
+    catch (_e) { return 'dark'; }
+  };
+  const _s = React.useState(read), theme = _s[0], setTheme = _s[1];
+  const pick = t => {
+    setTheme(t);
+    try {
+      document.documentElement.setAttribute('data-theme', t);
+      localStorage.setItem('shic:theme', t);
+      /* The browser chrome and the address bar follow the canvas. */
+      const meta = document.querySelector('meta[name="theme-color"]');
+      /* Literal hex, never a variable: <meta name="theme-color"> is read by the
+         browser chrome, which has no stylesheet to resolve var() against. */
+      if (meta) meta.setAttribute('content', t === 'light' ? '#f8fafc' : '#060e20');
+      window.dispatchEvent(new Event('shic:theme'));
+    } catch (_e) {}
+  };
+  const seg = (t, icon, label) => React.createElement('button', {
+    type: 'button',
+    onClick: () => pick(t),
+    title: label,
+    'aria-pressed': theme === t,
+    style: {
+      cursor: 'pointer', border: 'none', borderRadius: 5, padding: '3px 8px',
+      fontSize: 11, lineHeight: '16px', fontFamily: 'inherit', fontWeight: 600,
+      background: theme === t ? 'var(--bg-surface-card)' : 'transparent',
+      color: theme === t ? 'var(--text-primary)' : 'var(--text-muted)',
+      boxShadow: theme === t ? 'var(--card-shadow)' : 'none'
+    }
+  }, icon);
+  return React.createElement('div', {
+    style: {
+      display: 'inline-flex', gap: 2, padding: 2, borderRadius: 6,
+      background: 'var(--bg-surface-elevated)',
+      border: '1px solid var(--border-subtle)', flexShrink: 0
+    }
+  }, seg('light', '☀', 'Executive Light'), seg('dark', '☽', 'Dark Slate'));
 }
 
 window.SHIC_ML=(function(){

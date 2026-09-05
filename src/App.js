@@ -4050,6 +4050,15 @@ function App({
     }
   };
 
+  /* Invoked as HistPanel(), never as an element -- it is declared inside App,
+     so as a component it takes a new identity on every App render and React
+     remounts the whole panel each time. It holds no hooks, so nothing looked
+     wrong; but it holds nine uncontrolled inputs and the search box, and a
+     remount destroys the caret and any half-typed cell along with them.
+     Calling it makes its output part of App's own tree.
+     (Written without the element-creating call by name: the guard in
+     tools/check-remounting-editors.js reads the source as text, and would
+     take a mention of it here for the real thing.) */
   const HistPanel = () => /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
@@ -4086,7 +4095,11 @@ function App({
       marginLeft: 8
     },
     placeholder: "Search CE#, client, customer...",
-    autoFocus: true,
+    /* No autoFocus. It fires whenever this input mounts, and the panel around
+       it was remounting on every App render -- so every edit to a cell threw
+       the caret back up here. It is wrong on its own terms too: a search box
+       that grabs the caret on arrival takes it from wherever the person meant
+       to be. */
     value: monSearch,
     onChange: e => { setMonSearch(e.target.value); setMonPage(0); }
   }), /*#__PURE__*/React.createElement("div", {
@@ -7933,7 +7946,7 @@ tab === 'sowbreak' && (() => {
 })(),
 tab === 'scopelib' && ScopeLibraryEditor(),
 tab === 'masterlist' && MlEditor(), tab === 'masterlist' && MlCalcModal(), tab === 'masterlist' && /*#__PURE__*/React.createElement(MlTrendModal, { mlTrend, setMlTrend, masterlist, ML_HIST_KIND }),
-tab === 'history' && /*#__PURE__*/React.createElement(HistPanel, null),
+tab === 'history' && HistPanel(),   /* invoked, not rendered — see its declaration */
 
 /* ── Status Panel Modal ──────────────────────────────────────────────────────
    Pick the new status, and read the trail of who moved it and when.

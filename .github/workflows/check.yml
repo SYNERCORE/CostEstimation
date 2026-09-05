@@ -80,6 +80,8 @@ jobs:
         run: node tools/test-ml-fill-prices.js
       - name: Masterlist rounding
         run: node tools/test-ml-rounding.js
+      - name: Deadline countdown
+        run: node tools/test-deadline-countdown.js
       - name: Rate trends
         run: node tools/test-rate-trends.js
       - name: An imported CE is filed under what its rows cost

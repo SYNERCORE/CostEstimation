@@ -227,3 +227,52 @@ function toolRowCost(row, src) {
   }
   return qty * daily * ceResDays(row);
 }
+
+
+/* DAYS LEFT, and when it stops.
+   =============================
+   The countdown measured the deadline against `new Date()` every render and
+   never looked at whether the CE had gone out. A CE submitted ON its deadline
+   in July went on accruing overdue days through August, and by September was
+   reporting "49d OD" in red beside its own on-time submission date. The work
+   was done; only the clock had not been told.
+
+   Submitting is what stops it. After that the question is no longer "how long
+   have I got" but "how did we do", and that answer never changes again.
+
+   Both dates are plain YYYY-MM-DD. `new Date('2026-07-18')` parses as UTC
+   midnight while `new Date()` is local, which in Manila is eight hours of skew
+   -- enough to report a deadline as a day out either side of midnight. Both
+   sides are pinned to local midnight so a whole number of days is what comes
+   back. */
+function _ceMidnight(v) {
+  if (!v) return null;
+  const s = String(v).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(s + 'T00:00:00');
+  return isNaN(d) ? null : d;
+}
+function _ceToday() {
+  const n = new Date();
+  return new Date(n.getFullYear(), n.getMonth(), n.getDate());
+}
+function ceDeadline(deadline, dateSubmitted) {
+  const due = _ceMidnight(deadline);
+  if (!due) return { days: null, label: '—', done: false, late: false };
+  const sub = _ceMidnight(dateSubmitted);
+  const days = Math.round((due - (sub || _ceToday())) / 86400000);
+  if (!sub) {
+    /* Still running. Negative is overdue and keeps growing, which is the
+       point -- nobody has submitted it. */
+    return { days, done: false, late: days < 0,
+             label: days < 0 ? Math.abs(days) + 'd OD' : days + 'd' };
+  }
+  /* Submitted. A settled result, not a countdown: "on time" reads as finished
+     where "0d" reads as due today. */
+  return {
+    days, done: true, late: days < 0,
+    label: days === 0 ? 'on time'
+      : days < 0 ? Math.abs(days) + 'd late'
+      : days + 'd early'
+  };
+}

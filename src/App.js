@@ -3516,9 +3516,18 @@ function App({
         case 'jobTitle':     return m.jobTitle || e.info?.description || '';
         case 'grand':        return N(e.grand);
         case 'deadline':     return m.deadline || '';
-        /* Days Left is derived from the deadline, so it sorts by the deadline
-           -- and reads the same, since fewer days left is an earlier date. */
-        case 'deadlineDays': return m.deadline || '';
+        /* It used to sort by the deadline, which read the same only while
+           every row was still counting down. Once the clock stops on
+           submission a CE three days early and one still three days from its
+           deadline show the same number and sort nowhere near each other, so
+           this sorts by what the column actually says.
+
+           A row with no deadline returns '' rather than a number, so the
+           blanks-last rule below catches it whichever way the column points. */
+        case 'deadlineDays': {
+          const _d = ceDeadline(m.deadline, m.dateSubmitted).days;
+          return _d === null ? '' : _d;
+        }
         case 'dateSubmitted':return m.dateSubmitted || '';
         case 'status':       return m.status || '';
         case 'receivedBy':   return m.receivedBy || '';
@@ -4374,10 +4383,15 @@ function App({
       month: 'short',
       day: 'numeric'
     }) : '';
-    /* Deadline countdown */
-    const deadlineDate = m.deadline ? new Date(m.deadline) : null;
-    const deadlineDays = deadlineDate ? Math.round((deadlineDate - new Date()) / (1000 * 60 * 60 * 24)) : null;
-    const daysColor = deadlineDays === null ? MT : deadlineDays < 0 ? ERR : deadlineDays <= 7 ? '#F59E0B' : OK;
+    /* Deadline countdown, which stops when the CE is submitted. */
+    const dl = ceDeadline(m.deadline, m.dateSubmitted);
+    const deadlineDays = dl.days;
+    /* A finished CE is history, not a warning. Late still reads red -- it is
+       the fact of the matter -- but an on-time one is green however close to
+       the wire it went, rather than amber for the rest of its life. */
+    const daysColor = deadlineDays === null ? MT
+      : dl.done ? (dl.late ? ERR : OK)
+      : deadlineDays < 0 ? ERR : deadlineDays <= 7 ? '#F59E0B' : OK;
     const statusColor = getStatusColor(m.status || '');
     const trBg = rowIdx % 2 === 0 ? 'transparent' : SURF + '88';
     return /*#__PURE__*/React.createElement("tr", {
@@ -4564,7 +4578,8 @@ function App({
         fontWeight: 700,
         color: daysColor
       }
-    }, deadlineDays === null ? '\u2014' : deadlineDays < 0 ? `${Math.abs(deadlineDays)}d OD` : `${deadlineDays}d`), /*#__PURE__*/React.createElement("td", {
+      , title: dl.done ? 'Submitted ' + m.dateSubmitted + ' against a ' + m.deadline + ' deadline' : ''
+    }, dl.label), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
         padding: '4px 6px'

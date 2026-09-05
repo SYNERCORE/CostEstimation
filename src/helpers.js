@@ -14,21 +14,29 @@ const esc = v => String(v == null ? '' : v)
   .replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
-function nextCeNum(history, cePrefix) {
+/* `history` is what this user can see, which for a non-admin is only their own
+   CEs. Allocating from that alone hands the same number to two estimators on
+   the same prefix, and neither finds out until one of them has finished the
+   estimate and the save is refused. `known` is every CE number in use, from
+   dbGetCeNumbers, and it is what makes the answer right. */
+function nextCeNum(history, cePrefix, known) {
   const yr = new Date().getFullYear();
   const pfx = ((cePrefix || 'SHIC') + '-CE-' + yr + '-').toUpperCase();
   let max = 0;
-  (history || []).forEach(h => {
-    const n = ((h.info && h.info.ceNum) || '').toUpperCase().replace(/-R\d+$/i, '');
-    if (n.startsWith(pfx)) {
-      const num = parseInt(n.slice(pfx.length)) || 0;
-      if (num > max) max = num;
-    }
-  });
+  const consider = n => {
+    /* A revision shares its parent's number -- SHIC-CE-2026-0004-R1 must not
+       reserve 0004 twice, nor push the next number past it. */
+    const t = String(n || '').toUpperCase().replace(/-R\d+$/i, '');
+    if (!t.startsWith(pfx)) return;
+    const num = parseInt(t.slice(pfx.length)) || 0;
+    if (num > max) max = num;
+  };
+  (history || []).forEach(h => consider((h.info && h.info.ceNum) || h.ceNum));
+  (known || []).forEach(consider);
   return pfx + String(max + 1).padStart(4, '0');
 }
-function nextCeNumForCompany(history, company) {
-  return nextCeNum(history, (company && company.cePrefix) ? company.cePrefix : 'SHIC');
+function nextCeNumForCompany(history, company, known) {
+  return nextCeNum(history, (company && company.cePrefix) ? company.cePrefix : 'SHIC', known);
 }
 const mkMP = () => ({
   id: uid(),

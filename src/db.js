@@ -342,6 +342,31 @@ async function dbDeleteUser(id){
 /* Look up a single CE by number. Save used to pull the entire history (800+
    rows) just to check whether one Title already existed, which made every save
    wait on a full list fetch. This asks SharePoint for the one row instead. */
+/* EVERY CE number in use, whoever saved it.
+   =========================================
+   dbGetHistory filters a non-admin to `shicSavedBy eq '<user>'`, which is
+   right for the CE list -- an estimator's work is their own -- and wrong for
+   picking the next number. Allocating from a list that cannot see other
+   people's CEs hands the same number to two estimators on the same prefix,
+   and neither finds out until one of them has finished the estimate and the
+   save is refused.
+
+   Titles only, and no user filter. A CE number is an identifier, not content:
+   dbFindCEByNum already reads other users' Titles to catch exactly this
+   collision, so nothing new is exposed here. */
+async function dbGetCeNumbers(){
+  if(USE_SP||getSiteURL()){
+    try{
+      const r=await spGet(spList('CEs'),'','Title');
+      return (r||[]).map(x=>String(x.Title||'')).filter(Boolean);
+    }catch(e){ console.warn('dbGetCeNumbers:',e.message); }
+  }
+  /* Offline, the local cache is all there is. It holds only what this browser
+     has seen, so the number may still collide -- the check on save is what
+     catches that, and it is the reason that check exists. */
+  try{ return (LS.get('history')||[]).map(h=>String((h.info&&h.info.ceNum)||h.ceNum||'')).filter(Boolean); }
+  catch(_e){ return []; }
+}
 async function dbFindCEByNum(ceNum){
   const t=String(ceNum||'').trim();
   if(!t)return null;

@@ -611,6 +611,8 @@ function App({
   const _live = useRef(null);       /* current state for the auto-save timer */
   /* The owner holds every admin power on top of being unmanageable by them. */
   const isAdmin = hasAdminPowers(currentUser.role);
+  /* Every CE number in use, not just this user's. See dbGetCeNumbers. */
+  const [ceNums, setCeNums] = useState([]);
   const isOwner = isOwnerRole(currentUser.role);
   const cfg = CE_CFG[ceType] || CE_CFG.onsite || {};
   const TABS = [...CE_TABS, ...(isAdmin ? [{
@@ -771,6 +773,10 @@ function App({
     } catch (_e) {}
     try {
       const spAvail = !!(USE_SP || getSiteURL());
+      /* Alongside the history, never instead of it: this is Titles only and
+         says nothing about anyone's estimates, but it is what stops two
+         people being handed the same number. */
+      dbGetCeNumbers().then(ns => { if (ns && ns.length) setCeNums(ns); }).catch(() => {});
       const h = await dbGetHistory(currentUser.username, isAdmin);
       /* Keep LS in sync with SP so fallback is never stale. Only ever write a
          NON-empty result. The old code purged the cache whenever SharePoint
@@ -1647,7 +1653,14 @@ function App({
          exist. Saving then UPDATES that CE rather than adding a second one, so
          say which one is being replaced instead of failing silently. */
       if (!(isAdmin && bulkMode.on(currentUser?.username))) {
-        showToast('CE Number "' + ceNum + '" already exists in history (saved ' + new Date(dup.savedAt).toLocaleDateString() + '). Use a unique CE Number.', true);
+        /* Naming the free number matters: this fires after the estimate is
+           finished, and "use a unique CE Number" leaves the person to work
+           out which one that is. */
+        const _free = nextCeNum(history, (ceNum.split('-CE-')[0] || null), [...ceNums, ceNum]);
+        showToast('CE Number "' + ceNum + '" is already taken' +
+          (dup.savedBy ? ' by ' + dup.savedBy : '') +
+          ' (saved ' + new Date(dup.savedAt).toLocaleDateString() + '). Next free: ' + _free, true);
+        setCeNums(p => p.indexOf(ceNum) < 0 ? [...p, ceNum] : p);
         return;
       }
       /* Recorded rather than toasted here: the success toast fires moments later
@@ -1658,6 +1671,9 @@ function App({
     try {
       const _res = await spWithRetry(() => dbSaveHistory(mkEntry()));
       auditLog('save_ce', ceNum, currentUser?.username);
+      /* Without this the next New CE in the same session is handed the
+         number just used: ceNums is only fetched on load. */
+      setCeNums(p => p.indexOf(ceNum) < 0 ? [...p, ceNum] : p);
       _checkAutoBackup();
       /* Seed the pipeline status from the document state, so a CE saved as
          FOR REVIEW arrives in Monitoring already triaged instead of sitting in
@@ -1845,7 +1861,7 @@ function App({
   };
   const handleClone = (e) => {
     const d = e.data || e;
-    handleLoad({...d, info: {...(d.info || {}), ceNum: nextCeNum(history), date: new Date().toISOString().slice(0,10)}});
+    handleLoad({...d, info: {...(d.info || {}), ceNum: nextCeNum(history, null, ceNums), date: new Date().toISOString().slice(0,10)}});
     showToast('Cloned — assigned new CE number.');
   };
   const handleRevise = (e) => {
@@ -1905,7 +1921,7 @@ function App({
     setCeType('onsite');
     setInfo({
       ...BLANK_INFO,
-      ceNum: nextCeNum(history),
+      ceNum: nextCeNum(history, null, ceNums),
       date: new Date().toISOString().slice(0, 10)
     });
     setMp([]);
@@ -8285,7 +8301,7 @@ tab === 'dashboard' && (() => {
         setInfo(p => {
           const pfx = ((selCo?.cePrefix || 'SHIC') + '-CE-').toUpperCase();
           const isDefault = !p.ceNum || p.ceNum.toUpperCase().startsWith(pfx) || /^[A-Z0-9]+-CE-\d{4}-\d+$/i.test(p.ceNum);
-          const newCeNum = isDefault ? nextCeNumForCompany(history, selCo) : p.ceNum;
+          const newCeNum = isDefault ? nextCeNumForCompany(history, selCo, ceNums) : p.ceNum;
           return {...p, companyId: rawId, ceNum: newCeNum};
         });
       }

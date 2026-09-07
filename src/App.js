@@ -327,6 +327,12 @@ function App({
   ;
   const [aiLoad, setAiLoad] = useState(false);
   const [margin, setMargin] = useState(0);
+  /* What the estimator wants a reviewer to know about a cost group --
+     "8 certified techs, night differentials included". Keyed on the
+     group's label so it survives sections appearing and disappearing:
+     mobilisation only exists on onsite CEs, and an index would move
+     every note one row up the moment a section went to zero. */
+  const [verifyNotes, setVerifyNotes] = useState({});
   const [addlCosts, setAddlCosts] = useState([]); /* [{id,desc,amount}] — additional costs after misc (delivery, per-item, etc.) */
   const [toast, setToast] = useState('');
   const [signatures, setSignatures] = useState({});
@@ -1300,6 +1306,7 @@ function App({
         ...misc
       },
       addlCosts: [...addlCosts],
+      verifyNotes: {...verifyNotes},
       /* The margin % was in the unsaved-changes signature but in neither this
          object nor the draft, so `_margin` was written as 0 every time. You set
          15%, watched the SELLING PRICE line appear on screen and on the printed
@@ -1365,6 +1372,7 @@ function App({
     })));
     setSowItems(_sow);
     if (d.approvers) setApprovers(d.approvers);
+    setVerifyNotes(d.verifyNotes || {});
     _defaultsSig.current = ''; /* a resumed draft owns its notes and signatories */
     setMobVehicles((d.mobVehicles || []).map(r => ({
       ...r,
@@ -1439,6 +1447,7 @@ function App({
         ...misc
       },
       addlCosts: [...addlCosts],
+      verifyNotes: {...verifyNotes},
       margin,
       notes: [...notes],
       sowItems: [...sowItems],
@@ -1830,6 +1839,7 @@ function App({
     });
     setSowItems(_sow);
     if (d.approvers) setApprovers(JSON.parse(JSON.stringify(d.approvers)));
+    setVerifyNotes(d.verifyNotes ? {...d.verifyNotes} : {});
     /* This content came from the CE, not from a preset, so the effect above
        must not treat it as replaceable. */
     _defaultsSig.current = '';
@@ -6683,7 +6693,10 @@ function App({
     saveDraft, hasUnsavedWork,
     /* Everything mkEntry persists belongs here, or an edit to it leaves the CE
        looking saved when it is not. ceType, approvers and scope were missing. */
-    sig: JSON.stringify([ceType, info, mp, tools, mats, ppe, misc, sowItems, notes, addlCosts, margin, approvers, scope, mobVehicles, demobVehicles])
+    /* verifyNotes belongs here or the autosave never notices a note being
+       typed -- the same way the margin was left out and written back as 0
+       on every save. */
+    sig: JSON.stringify([ceType, info, mp, tools, mats, ppe, misc, sowItems, notes, addlCosts, margin, approvers, scope, mobVehicles, demobVehicles, verifyNotes])
   };
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -10745,6 +10758,8 @@ tab === 'dashboard' && (() => {
   }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
     style: THS
   }, "Cost Group / Scope Classification"), /*#__PURE__*/React.createElement("th", {
+    style: THS
+  }, "Internal Verification Notes"), /*#__PURE__*/React.createElement("th", {
     style: {
       ...THS,
       textAlign: 'right'
@@ -10766,6 +10781,28 @@ tab === 'dashboard' && (() => {
       background: val > 0 ? summaryDot(label) : BDR
     }
   }), label), /*#__PURE__*/React.createElement("td", {
+    style: {...TDS, width: '38%'}
+  },
+  /* Typed by whoever built the estimate, for whoever reviews it. Not derived:
+     a sentence the app made up about a cost group would read as verification
+     on a document that goes to a client, and nothing would have verified it.
+
+     Uncontrolled with an onBlur, like the monitoring cells -- keystroke state
+     here would re-render the whole summary on every letter. */
+  /*#__PURE__*/React.createElement("input", {
+    key: 'vn' + label,
+    defaultValue: verifyNotes[label] || '',
+    placeholder: '—',
+    style: {
+      ...INP, background: 'transparent', border: 'none', padding: '2px 0',
+      fontSize: 11, color: verifyNotes[label] ? TX : MT
+    },
+    onBlur: ev => {
+      const v = ev.target.value;
+      if (v === (verifyNotes[label] || '')) return;
+      setVerifyNotes(p => { const n = {...p}; if (v.trim()) n[label] = v; else delete n[label]; return n; });
+    }
+  })), /*#__PURE__*/React.createElement("td", {
     style: {
       ...TDS,
       ...MONO,
@@ -10792,7 +10829,11 @@ tab === 'dashboard' && (() => {
       paddingTop: 12,
       paddingBottom: 12
     }
-  }, "TOTAL AMOUNT"), /*#__PURE__*/React.createElement("td", {
+  }, "TOTAL DIRECT PROJECT COST"), /*#__PURE__*/React.createElement("td", {
+    /* The notes column has no total. Without a cell for it the amount and the
+       share both slide one column left of the figures they belong under. */
+    style: TDS
+  }), /*#__PURE__*/React.createElement("td", {
     style: {
       ...TDS,
       ...MONO,
@@ -10803,7 +10844,7 @@ tab === 'dashboard' && (() => {
       paddingTop: 12,
       paddingBottom: 12
     }
-  }, "P", ph(grand)), /*#__PURE__*/React.createElement("td", {
+  }, "₱", ph(grand)), /*#__PURE__*/React.createElement("td", {
     style: {
       ...TDS,
       textAlign: 'right',

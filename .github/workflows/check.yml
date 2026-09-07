@@ -102,6 +102,8 @@ jobs:
         run: node tools/test-summary-screen.js
       - name: Financial rail
         run: node tools/test-financial-rail.js
+      - name: Verification notes
+        run: node tools/test-verification-notes.js
       - name: Rate trends
         run: node tools/test-rate-trends.js
       - name: An imported CE is filed under what its rows cost

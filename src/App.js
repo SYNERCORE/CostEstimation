@@ -3416,6 +3416,8 @@ function App({
   const [monSearch, setMonSearch] = useState('');
   const [monStatusFilter, setMonStatusFilter] = useState(new Set());
   const [monTypeFilter, setMonTypeFilter] = useState('all');
+  const [monDiscFilter, setMonDiscFilter] = useState('all');
+  const [monCustFilter, setMonCustFilter] = useState('all');
   const [compareSet, setCompareSet] = useState(new Set()); // CE comparison: max 2 ids
   const [compareModal, setCompareModal] = useState(null); // {a, b} loaded CE data // 'all' | 'onsite' | 'shopworks' | 'supply'
   const [showStatusFilter, setShowStatusFilter] = useState(false);
@@ -3510,6 +3512,11 @@ function App({
   /* A draft has no monitoring record -- there is no CE to attach a deadline or
      a received-by to yet -- so it reports the one field it does know. */
   const monOf = e => monData[e.id] || (e && e._draft ? {status: 'Draft'} : {});
+  /* Both fields have a monitoring value that falls back to the CE's own. Read
+     the same way by the filter, the sort and the cell, or a row could be
+     filtered out by a value the column does not show. */
+  const monDisc = (e, m) => m.designation || m.discipline || e.info?.discipline || e.info?.projType || '';
+  const monCust = (e, m) => m.customer || e.info?.client || '';
   /* Every prefix on file, plus any a CE already carries -- an old CE from a
      company since removed must still be filterable by its own label.
 
@@ -3523,6 +3530,26 @@ function App({
     const out = Object.keys(set).sort();
     return out.length ? out : ['SHIC'];
   }, [companies, monRows]);
+  /* Built from what the CEs actually hold, not a fixed list: disciplines are
+     free text on import, and there is no list of customers anywhere. Counted,
+     so a filter that would show three rows says so before it is chosen, and
+     ordered by count -- the customer you have done ninety CEs for should not
+     be somewhere in the middle of an alphabetical list of two hundred. */
+  /* Named as a hook because it is one: it calls useMemo, so both invocations
+     below must stay unconditional and in a fixed order. */
+  const useMonFacet = (read) => useMemo(() => {
+    const seen = {};
+    monRows.forEach(e => {
+      const raw = String(read(e, monOf(e)) || '').trim();
+      const key = raw.toUpperCase();
+      if (!seen[key]) seen[key] = {key, label: raw, n: 0};
+      seen[key].n++;
+    });
+    return Object.values(seen).sort((a, b) => b.n - a.n || a.label.localeCompare(b.label));
+  }, [monRows, monData]);
+  const discOptions = useMonFacet(monDisc);
+  const custOptions = useMonFacet(monCust);
+
   const sortedHistory = useMemo(() => {
     const filtered = monRows.filter(e => {
       const m = monOf(e);
@@ -3531,6 +3558,13 @@ function App({
         if (!monStatusFilter.has(s)) return false;
       }
       if (monTypeFilter !== 'all' && (e.ceType || 'onsite') !== monTypeFilter) return false;
+      /* Compared case-insensitively: the same discipline is stored as
+         "Mechanical" by the editor and "MECHANICAL" by the xlsx import, and a
+         filter that treats those as different offers both and finds half the
+         CEs under each. The blank option is its own choice -- a CE with no
+         discipline is a real thing to go looking for. */
+      if (monDiscFilter !== 'all' && monDisc(e, m).trim().toUpperCase() !== monDiscFilter) return false;
+      if (monCustFilter !== 'all' && monCust(e, m).trim().toUpperCase() !== monCustFilter) return false;
       if (!monSearch) return true;
       const q = monSearch.toLowerCase();
       return (e.info?.ceNum || '').toLowerCase().includes(q) || (e.info?.client || '').toLowerCase().includes(q) || (e.info?.description || '').toLowerCase().includes(q) || (m.customer || '').toLowerCase().includes(q) || (m.receivedBy || '').toLowerCase().includes(q) || (m.remarks || '').toLowerCase().includes(q);
@@ -3552,8 +3586,8 @@ function App({
            the stored field put a SY3 CE among the SHIC ones. */
         case 'companyDesig': return ceNumPrefix((e.info && e.info.ceNum) || e.ceNum) || m.companyDesig || 'SHIC';
         case 'ceNum':        return e.info?.ceNum || e.ceNum || '';
-        case 'designation':  return m.designation || m.discipline || e.info?.discipline || e.info?.projType || '';
-        case 'customer':     return m.customer || e.info?.client || '';
+        case 'designation':  return monDisc(e, m);
+        case 'customer':     return monCust(e, m);
         case 'jobTitle':     return m.jobTitle || e.info?.description || '';
         case 'grand':        return N(e.grand);
         case 'deadline':     return m.deadline || '';
@@ -3607,7 +3641,7 @@ function App({
          SY3-CE-2026-10, and "aestillore" must sit with "Aestillore". */
       return String(va).localeCompare(String(vb), 'en', {numeric: true, sensitivity: 'base'}) * dir;
     });
-  }, [monRows, monData, monSearch, monStatusFilter, monTypeFilter, monSortCol, monSortDir]);
+  }, [monRows, monData, monSearch, monStatusFilter, monTypeFilter, monDiscFilter, monCustFilter, monSortCol, monSortDir]);
   const toggleSort = col => {
     if (monSortCol === col) setMonSortDir(d => d === 'asc' ? 'desc' : 'asc');else {
       setMonSortCol(col);
@@ -4194,10 +4228,30 @@ function App({
     /*#__PURE__*/React.createElement("option", {value:'shopworks'}, "Shopworks"),
     /*#__PURE__*/React.createElement("option", {value:'supply'}, "Supply")
   ),
-  (monSearch || monStatusFilter.size > 0 || monTypeFilter !== 'all') && /*#__PURE__*/React.createElement("button", {
+  /*#__PURE__*/React.createElement("select", {
+    style: {...INP, fontSize:11, width:150},
+    value: monDiscFilter,
+    onChange: e => { setMonDiscFilter(e.target.value); setMonPage(0); },
+    title: "Filter by discipline"
+  },
+    /*#__PURE__*/React.createElement("option", {value:'all'}, "All Disciplines"),
+    discOptions.map(o => /*#__PURE__*/React.createElement("option", {key: o.key, value: o.key},
+      (o.label || '(none)') + '  \u00b7 ' + o.n))
+  ),
+  /*#__PURE__*/React.createElement("select", {
+    style: {...INP, fontSize:11, width:190},
+    value: monCustFilter,
+    onChange: e => { setMonCustFilter(e.target.value); setMonPage(0); },
+    title: "Filter by customer"
+  },
+    /*#__PURE__*/React.createElement("option", {value:'all'}, "All Customers"),
+    custOptions.map(o => /*#__PURE__*/React.createElement("option", {key: o.key, value: o.key},
+      (o.label || '(none)') + '  \u00b7 ' + o.n))
+  ),
+  (monSearch || monStatusFilter.size > 0 || monTypeFilter !== 'all' || monDiscFilter !== 'all' || monCustFilter !== 'all') && /*#__PURE__*/React.createElement("button", {
     style: {...btn('danger', true), fontSize:10},
     title: "Clear all filters",
-    onClick: () => { setMonSearch(''); setMonStatusFilter(new Set()); setMonTypeFilter('all'); setMonPage(0); }
+    onClick: () => { setMonSearch(''); setMonStatusFilter(new Set()); setMonTypeFilter('all'); setMonDiscFilter('all'); setMonCustFilter('all'); setMonPage(0); }
   }, "\u2715 Clear Filters"),
   /*#__PURE__*/React.createElement("div", {
     style: {

@@ -61,7 +61,16 @@ const ceNumKey = new Function('return ' + src.match(/function ceNumKey\(num\) \{
 
 /* Build the real comparator with everything it closes over. */
 const comparator = (col, dir, monOf) => {
-  const sortVal = new Function('monSortCol', 'N', 'return ' + sortValSrc[0].replace(/^const sortVal = /, '').replace(/;$/, ''))(col, N);
+  /* sortVal reads the discipline and the customer through the same helpers the
+     filter and the cell use, so the harness has to be given them -- injected,
+     not reimplemented, or this would test a copy of the app rather than the
+     app. */
+  const grabFn = name => new Function('return ' +
+    src.match(new RegExp('const ' + name + ' = [^\\n]*'))[0]
+      .replace(new RegExp('^const ' + name + ' = '), '').replace(/;$/, ''))();
+  const monDisc = grabFn('monDisc');
+  const monCust = grabFn('monCust');
+  const sortVal = new Function('monSortCol', 'N', 'monDisc', 'monCust', 'return ' + sortValSrc[0].replace(/^const sortVal = /, '').replace(/;$/, ''))(col, N, monDisc, monCust);
   const body = cmpSrc.replace(/^return \[\.\.\.filtered\]\.sort\(/, '').replace(/\);$/, '');
   return new Function('sortVal', 'monOf', 'monSortDir', 'monSortCol', 'ceNumKey', 'return ' + body)(sortVal, monOf, dir, col, ceNumKey);
 };

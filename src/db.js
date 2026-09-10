@@ -616,7 +616,12 @@ async function dbUpdateCETotal(ceNum, id, total){
     if(rec) await cePut({...rec, grand:t});
   }catch(_){}
 }
-async function dbDeleteHistory(id){if(USE_SP||getSiteURL()){try{const[m,r]=await Promise.all([_spGetByCE(spList('CE_MP'),id,'Id'),_spGetByCE(spList('CE_Resources'),id,'Id')]);const d=[...m.map(x=>spDelete(spList('CE_MP'),x.Id)),...r.map(x=>spDelete(spList('CE_Resources'),x.Id))];for(let i=0;i<d.length;i+=5)await Promise.all(d.slice(i,i+5));await spDelete(spList('CEs'),id);_spInvalidateBigList();return;}catch(e){console.warn('dbDeleteHistory:',e.message);}}LS.set('history',(LS.get('history')||[]).filter(h=>h.id!==id));await _ceDeleteById(id);}
+async function dbDeleteHistory(id,actorRole){
+  /* Deleting a saved CE is an admin/owner action. The button is hidden from
+     everyone else, but the check belongs here too -- the UI is not a
+     permission boundary, and this call reaches SharePoint. */
+  if(!hasAdminPowers(actorRole)) throw new Error('Only an admin or the owner can delete a CE.');
+  if(USE_SP||getSiteURL()){try{const[m,r]=await Promise.all([_spGetByCE(spList('CE_MP'),id,'Id'),_spGetByCE(spList('CE_Resources'),id,'Id')]);const d=[...m.map(x=>spDelete(spList('CE_MP'),x.Id)),...r.map(x=>spDelete(spList('CE_Resources'),x.Id))];for(let i=0;i<d.length;i+=5)await Promise.all(d.slice(i,i+5));await spDelete(spList('CEs'),id);_spInvalidateBigList();return;}catch(e){console.warn('dbDeleteHistory:',e.message);}}LS.set('history',(LS.get('history')||[]).filter(h=>h.id!==id));await _ceDeleteById(id);}
 /* Delete by SharePoint item Id. The archive is keyed by CE number, so find the
    record through the by_id index first; falling back to a scan keeps a record
    that predates the index from being orphaned. */

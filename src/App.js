@@ -4815,7 +4815,7 @@ function App({
         padding: '2px 8px'
       },
       onClick: () => e._draft ? resumeDraft(e._draft) : handleLoad(e.data || e)
-    }, "Load"), (isAdmin || e.savedBy === currentUser.username) && /*#__PURE__*/React.createElement("button", {
+    }, "Load"), (isAdmin || (e._draft && e.savedBy === currentUser.username)) && /*#__PURE__*/React.createElement("button", {
       style: {
         ...btn('danger', true),
         fontSize: 10,
@@ -4836,7 +4836,7 @@ function App({
         let undone = false;
         const tid = setTimeout(async () => {
           if (!undone) {
-            await dbDeleteHistory(e.id);
+            await dbDeleteHistory(e.id, currentUser.role);
             auditLog('delete_ce', ceNum, currentUser?.username);
             _checkAutoBackup();
           }

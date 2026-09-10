@@ -55,10 +55,25 @@ for (const m of src.matchAll(/\n(\s+)const ([A-Z][A-Za-z0-9_]*) = \(([^)]*)\) =>
   if (m.index < appAt) continue;
   const indent = m[1].replace(/\n/g, '');
   /* A block body ends at the first line closing at the same indentation. An
-     expression body runs to the next declaration at that indentation. */
-  const end = m[4] === '{'
-    ? src.indexOf('\n' + indent + '};', m.index)
-    : src.indexOf('\n' + indent + 'const ', m.index + 10);
+     expression body is found by balancing its brackets.
+
+     It used to look for the next declaration at that indentation, which is
+     only right when there is one nearby. ExpenseTable is expression-bodied and
+     the next such line is 2,658 lines below it, so its "body" swallowed half
+     the manpower tab and it was failed for inputs that are not its own. This
+     file's indentation is not reliable enough to find the end any other way. */
+  let end;
+  if (m[4] === '{') {
+    end = src.indexOf('\n' + indent + '};', m.index);
+  } else {
+    let d = 0, i = m.index + m[0].length - '/*#__PURE__*/React.createElement'.length;
+    for (; i < src.length; i++) {
+      const c = src[i];
+      if (c === '(' || c === '[' || c === '{') d++;
+      else if (c === ')' || c === ']' || c === '}') { d--; if (d === 0) { i++; break; } }
+    }
+    end = i;
+  }
   decls.push({name: m[2], depth: indent.length, body: src.slice(m.index, end === -1 ? src.length : end)});
 }
 

@@ -26,7 +26,12 @@ const TIERS =
   helpersSrc.match(/function ceResDays\(r\) \{[\s\S]*?\n\}/)[0] + NLC +
   helpersSrc.match(/const TIER_HOURS_PER_YEAR[\s\S]*?\nfunction toolRowCost\(row, src\) \{[\s\S]*?\n\}/)[0];
 
-const make = body => new Function('N', 'SHIFTS', 'sowItems', TIERS + NLC + body);
+/* rowCost resolves its multipliers through these now, and closes over `rr`.
+   Undefined here, so it prices at the statutory defaults -- which is what
+   every CE saved before they became editable carries. */
+const RATES = helpersSrc.match(
+  new RegExp('const OT_MULT_DEFAULT[\\s\\S]*?\\nfunction ceOtMult\\(rates\\) \\{[\\s\\S]*?\\n\\}'))[0];
+const make = body => new Function('N', 'SHIFTS', 'sowItems', 'rr', RATES + NLC + TIERS + NLC + body);
 
 const api = make(`
   ${resDaysSrc}
@@ -117,9 +122,12 @@ const sources = [['(source under test)', src],
                  ['src/helpers.js', require('fs').readFileSync(path2.join(__dirname, '..', 'src/helpers.js'), 'utf8')]];
 for (const [f, text] of sources) {
   for (const line of text.split('\n')) {
-    if (!/otHours/.test(line) || !/1\.25/.test(line)) continue;
+    /* The OT factor is the CE's own now rather than a literal 1.25, so the
+       marker is the resolver. Scanning for the old number found nothing at
+       all -- which is a passing count of zero, not a codebase without OT. */
+    if (!/otHours/.test(line) || !/ceOtMult/.test(line)) continue;
     /* Split a line that costs several rows into its individual OT terms. */
-    for (const term of line.match(/[^;{}]*otHours[^;{}]*?1\.25[^;{}]*/g) || [])
+    for (const term of line.match(/[^;{}]*otHours[^;{}]*?ceOtMult\([^)]*\)[^;{}]*/g) || [])
       otSites.push({ f, term: term.trim() });
   }
 }
@@ -236,10 +244,15 @@ check('the wage still carries it', /N\(r\.pax\) \* N\(r\.days\) \* N\(r\.rate\) 
   'dropping it there would underpay the shift itself');
 
 const helpers = require('fs').readFileSync('src/helpers.js', 'utf8');
-const rowCost = (helpers.match(/function ceMpRowCost\(r\) \{[\s\S]*?\n\}/) || [''])[0];
+/* ceMpRowCost takes the CE's own multipliers now. tools/test-editable-multipliers.js
+   asserts numerically that a CE carrying none prices exactly as it did when
+   they were constants. */
+const rowCost = (helpers.match(/function ceMpRowCost\(r, rates\) \{[\s\S]*?\n\}/) || [''])[0];
 check('the recompute path agrees with the editor', /rate = N\(r\.rate\);/.test(rowCost),
   'a CE reopened later would total differently from the one that was saved');
-check('and still pays the premium on the wage', /\* mult;/.test(rowCost) && /1\.25 \* mult;/.test(rowCost));
+check('and still pays the premium on the wage',
+  /\* mult;/.test(rowCost) && /otMult \* mult;/.test(rowCost),
+  'the OT factor is resolved rather than literal, but it still compounds with the shift');
 
 /* MONTHLY RATE is what ONE person earns in a 26-day month. It was being left
    multiplied by pax, so a P650/day helper at 2 pax read as P33,800 -- a cost,

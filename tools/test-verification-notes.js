@@ -51,7 +51,7 @@ ck('and is stripped back out on load', /const\{_addlCosts,_margin,_verifyNotes,\
   "left in, it comes back as a miscellaneous cost group named '_verifyNotes'");
 
 console.log('\nthe autosave notices it:');
-ck('it is in the unsaved-work signature', /mobVehicles, demobVehicles, verifyNotes\]/.test(app),
+ck('it is in the unsaved-work signature', /demobVehicles, verifyNotes[,\]]/.test(app),
   'the margin was left out of this once and was written back as 0 on every save');
 
 console.log('\nan empty note is removed, not stored blank:');

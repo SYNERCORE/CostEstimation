@@ -333,6 +333,14 @@ function App({
      mobilisation only exists on onsite CEs, and an index would move
      every note one row up the moment a section went to zero. */
   const [verifyNotes, setVerifyNotes] = useState({});
+  /* The multipliers this CE is priced at. Empty means "the statutory
+     defaults", which is what every CE written before this carries -- so
+     nothing already saved reprices. */
+  const [rates, setRates] = useState({});
+  /* Resolved once per render and handed to every cost site, so the editor,
+     the totals, the print and the exports cannot disagree about what a night
+     shift costs. */
+  const rr = useMemo(() => ceRates({rates}), [rates]);
   const [addlCosts, setAddlCosts] = useState([]); /* [{id,desc,amount}] — additional costs after misc (delivery, per-item, etc.) */
   const [toast, setToast] = useState('');
   const [signatures, setSignatures] = useState({});
@@ -851,9 +859,9 @@ function App({
   const provInfo = PROVIDERS[prov];
   const mpSub = useMemo(() => mp.reduce((s, r) => {
     if (!r.role) return s; /* blank starter row is not a cost */
-    const mult = SHIFTS[r.shift]?.mult || 1;
+    const mult = ceShiftMult(rr, r.shift);
     const reg = N(r.pax) * N(r.days) * N(r.rate) * mult;
-    const ot = N(r.pax) * N(r.days) * (N(r.otHours || 0) / 8) * N(r.rate) * 1.25 * mult;
+    const ot = N(r.pax) * N(r.days) * (N(r.otHours || 0) / 8) * N(r.rate) * ceOtMult(rr) * mult;
     return s + reg + ot;
   }, 0), [mp]);
   /* Benefits are computed on the BASIC day rate, never the shift-adjusted
@@ -1087,9 +1095,9 @@ function App({
     if (kind === 'tools') return toolRowCost(r);
     if (kind !== 'mp') return N(r.qty) * N(r.cost);
     if (!r.role) return 0; /* blank row: no role, no cost (calcBen SIL adds pax*30) */
-    const mult = SHIFTS[r.shift]?.mult || 1;
+    const mult = ceShiftMult(rr, r.shift);
     const reg = N(r.pax) * N(r.days) * N(r.rate) * mult;
-    const ot = N(r.pax) * N(r.days) * (N(r.otHours || 0) / 8) * N(r.rate) * 1.25 * mult;
+    const ot = N(r.pax) * N(r.days) * (N(r.otHours || 0) / 8) * N(r.rate) * ceOtMult(rr) * mult;
     return reg + ot + calcBen(r).total;
   };
   const taskCost = id => RES_TABS.reduce((s, t) => s + t.rows.filter(r => rowServesTask(r, id)).reduce((a, r) => a + rowCostForTask(t.key, r, id), 0), 0)
@@ -1307,6 +1315,7 @@ function App({
       },
       addlCosts: [...addlCosts],
       verifyNotes: {...verifyNotes},
+      rates: {...rates},
       /* The margin % was in the unsaved-changes signature but in neither this
          object nor the draft, so `_margin` was written as 0 every time. You set
          15%, watched the SELLING PRICE line appear on screen and on the printed
@@ -1373,6 +1382,7 @@ function App({
     setSowItems(_sow);
     if (d.approvers) setApprovers(d.approvers);
     setVerifyNotes(d.verifyNotes || {});
+    setRates(d.rates || {});
     _defaultsSig.current = ''; /* a resumed draft owns its notes and signatories */
     setMobVehicles((d.mobVehicles || []).map(r => ({
       ...r,
@@ -1448,6 +1458,7 @@ function App({
       },
       addlCosts: [...addlCosts],
       verifyNotes: {...verifyNotes},
+      rates: {...rates},
       margin,
       notes: [...notes],
       sowItems: [...sowItems],
@@ -1840,6 +1851,7 @@ function App({
     setSowItems(_sow);
     if (d.approvers) setApprovers(JSON.parse(JSON.stringify(d.approvers)));
     setVerifyNotes(d.verifyNotes ? {...d.verifyNotes} : {});
+    setRates(d.rates ? {...d.rates} : {});
     /* This content came from the CE, not from a preset, so the effect above
        must not treat it as replaceable. */
     _defaultsSig.current = '';
@@ -2062,15 +2074,15 @@ function App({
       shiftKeys.forEach(sk => {
         const rows = mpActive.filter(r => (r.shift || 'straight') === sk);
         if (!rows.length) return;
-        const sh = SHIFTS[sk], mult = sh?.mult || 1;
+        const sh = SHIFTS[sk], mult = ceShiftMult(rr, sk);
         const sub = rows.reduce((s, r) => s + N(r.pax) * N(r.days) * N(r.rate) * mult
-                                            + N(r.pax) * N(r.days) * (N(r.otHours) / 8) * N(r.rate) * 1.25 * mult, 0);
+                                            + N(r.pax) * N(r.days) * (N(r.otHours) / 8) * N(r.rate) * ceOtMult(rr) * mult, 0);
         bol.push([S(sh?.label || sk.toUpperCase(), 'sec')]);
         bol.push(['ITEM', 'MANPOWER LOADING', 'QTY', 'UOM', 'DAYS', 'RATE/DAY', 'TOTAL'].map(h => S(h, 'th')));
         rows.forEach((r, i) => bol.push([
           S(i + 1, 'tdc'), S(r.role || '', 'td'), S(N(r.pax) || 1, 'tdc'), S('pax', 'tdc'), S(N(r.days) || 1, 'tdc'),
           S(N(r.rate), 'tdn'),
-          S(N(r.pax) * N(r.days) * N(r.rate) * mult + N(r.pax) * N(r.days) * (N(r.otHours) / 8) * N(r.rate) * 1.25 * mult, 'tdnb')
+          S(N(r.pax) * N(r.days) * N(r.rate) * mult + N(r.pax) * N(r.days) * (N(r.otHours) / 8) * N(r.rate) * ceOtMult(rr) * mult, 'tdnb')
         ]));
         bol.push([S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('SUB TOTAL:', 'totlbl'), S(sub, 'tot')]);
         bol.push([]);
@@ -4929,7 +4941,10 @@ function App({
     const ceB = b?.info?.ceNum || 'CE B';
     const calcSections = ce => {
       if (!ce) return {};
-      const mpT = (ce.mp||[]).reduce((s,r)=>s+N(r.pax)*N(r.days)*N(r.rate)*(SHIFTS[r.shift]?.mult||1)+N(r.pax)*N(r.days)*N(r.otHours)*(N(r.rate)/8)*1.25+N(r.pax)*N(r.days)*N(r.perDiem),0);
+      /* That CE's multipliers, not the open one's: comparing two estimates
+         must price each at what it was quoted at. */
+      const _r = ceRates(ce);
+      const mpT = (ce.mp||[]).reduce((s,r)=>s+N(r.pax)*N(r.days)*N(r.rate)*ceShiftMult(_r,r.shift)+N(r.pax)*N(r.days)*N(r.otHours)*(N(r.rate)/8)*ceOtMult(_r)+N(r.pax)*N(r.days)*N(r.perDiem),0);
       const toolT = (ce.tools||[]).reduce((s,r)=>s+N(r.qty)*resDays(r)*N(r.cost),0);
       const matT = (ce.mats||[]).reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
       const ppeT = (ce.ppe||[]).reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
@@ -6401,15 +6416,15 @@ function App({
     const shiftRows = shiftKeys.map(sk=>{
       const rows=mpActive.filter(r=>(r.shift||'straight')===sk);
       if(!rows.length)return'';
-      const info2=SHIFTS[sk];const mult=info2?.mult||1;
+      const info2=SHIFTS[sk];const mult=ceShiftMult(rr, sk);const _otM=ceOtMult(rr);
       const subA=rows.reduce((s,r)=>s+N(r.pax)*N(r.days)*N(r.rate)*mult,0);
-      const subB=rows.reduce((s,r)=>s+N(r.pax)*N(r.days)*(N(r.otHours)/8)*N(r.rate)*1.25*mult,0);
+      const subB=rows.reduce((s,r)=>s+N(r.pax)*N(r.days)*(N(r.otHours)/8)*N(r.rate)*_otM*mult,0);
       return`<div class="sub">${info2?.label||sk.toUpperCase()}</div>
       <table><tr style="background:#eee"><th class="c" style="width:28px">ITEM</th><th>MANPOWER LOADING</th><th class="c" style="width:28px">QTY</th><th class="c" style="width:30px">UOM</th><th class="c" style="width:36px">DAYS</th><th class="r" style="width:60px">RATE/DAY</th><th class="r" style="width:70px">SUBTOTAL</th><th class="c" style="width:30px">AOT</th><th class="r" style="width:55px">RATE OT</th><th class="r" style="width:70px">TOTAL</th></tr>
       ${rows.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.role||'')}</td><td class="c">${esc(r.pax||1)}</td><td class="c">pax</td><td class="c">${esc(r.days||1)}</td><td class="r">${fmt(r.rate)}</td><td class="r">${fmt(N(r.pax)*N(r.days)*N(r.rate)*mult)}</td>${/* AOT is the ACCUMULATED overtime on the printed form: the reader multiplies
       this column by RATE OT. otHours is now per day, so the total is what
       belongs here -- printing the per-day figure would understate the row
-      against its own TOTAL column. */''}<td class="c">${esc(N(r.otHours)*N(r.days)||0)}</td><td class="r">${fmt(N(r.rate)/8*1.25*mult)}</td><td class="r b">${fmt(N(r.pax)*N(r.days)*N(r.rate)*mult+N(r.pax)*N(r.days)*(N(r.otHours)/8)*N(r.rate)*1.25*mult)}</td></tr>`).join('')}
+      against its own TOTAL column. */''}<td class="c">${esc(N(r.otHours)*N(r.days)||0)}</td><td class="r">${fmt(N(r.rate)/8*_otM*mult)}</td><td class="r b">${fmt(N(r.pax)*N(r.days)*N(r.rate)*mult+N(r.pax)*N(r.days)*(N(r.otHours)/8)*N(r.rate)*_otM*mult)}</td></tr>`).join('')}
       <tr class="tot"><td colspan="9" class="r b">SUB TOTAL:</td><td class="r b">${fmt(subA+subB)}</td></tr></table>`;
     }).join('');
 
@@ -6664,16 +6679,16 @@ function App({
       docHead(a, 'BILL OF MANPOWER LOADING', 10);
       [...new Set(mpActive.map(r => r.shift || 'regular_day'))].forEach(sk => {
         const rows = mpActive.filter(r => (r.shift || 'regular_day') === sk);
-        const mult = (SHIFTS[sk] && SHIFTS[sk].mult) || 1;
+        const mult = ceShiftMult(rr, sk);
         a.title(shiftLabel(sk), 10);
         a.head('ITEM', 'MANPOWER LOADING', 'QTY', 'UOM', 'DAYS', 'RATE/DAY', 'SUBTOTAL', 'AOT', 'RATE OT', 'TOTAL');
         let subA = 0, subB = 0;
         rows.forEach((r, i) => {
           const base = N(r.pax) * N(r.days) * N(r.rate) * mult;
-          const ot = N(r.pax) * N(r.days) * (N(r.otHours) / 8) * N(r.rate) * 1.25 * mult;
+          const ot = N(r.pax) * N(r.days) * (N(r.otHours) / 8) * N(r.rate) * ceOtMult(rr) * mult;
           subA += base; subB += ot;
           a.row(i + 1, r.role || '', N(r.pax), 'pax', N(r.days), a.money(r.rate),
-            a.money(base), N(r.otHours) * N(r.days), a.money(N(r.rate) / 8 * 1.25 * mult), a.money(base + ot));
+            a.money(base), N(r.otHours) * N(r.days), a.money(N(r.rate) / 8 * ceOtMult(rr) * mult), a.money(base + ot));
         });
         a.total('', '', '', '', '', '', '', '', 'SUB TOTAL:', a.money(subA + subB));
         a.blank();
@@ -6750,7 +6765,7 @@ function App({
     /* verifyNotes belongs here or the autosave never notices a note being
        typed -- the same way the margin was left out and written back as 0
        on every save. */
-    sig: JSON.stringify([ceType, info, mp, tools, mats, ppe, misc, sowItems, notes, addlCosts, margin, approvers, scope, mobVehicles, demobVehicles, verifyNotes])
+    sig: JSON.stringify([ceType, info, mp, tools, mats, ppe, misc, sowItems, notes, addlCosts, margin, approvers, scope, mobVehicles, demobVehicles, verifyNotes, rates])
   };
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -9146,9 +9161,36 @@ tab === 'dashboard' && (() => {
       color: MT,
       fontSize: 11
     }
-  }, "Rows are grouped by shift type. Add under the shift you need."))), Object.entries(SHIFTS).map(([shiftKey, shiftInfo]) => {
+  }, "Rows are grouped by shift type. Add under the shift you need."),
+  /* The OT factor sits with the shift multipliers because it is one: the two
+     compound on every overtime hour, and having one editable while the other
+     stayed a constant would have been the more confusing half-measure. */
+  /*#__PURE__*/React.createElement("span", {
+    style: {display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 'auto', fontSize: 10, color: MT}
+  }, "OT rate", /*#__PURE__*/React.createElement("input", {
+    key: 'otm' + ceOtMult(rr),
+    defaultValue: ceOtMult(rr),
+    type: "number", min: "0", step: "0.05",
+    title: "What an overtime hour costs, as a multiple of the hourly rate (day rate / 8). Default "
+      + OT_MULT_DEFAULT + "×. It compounds with the shift multiplier, so a night OT hour is "
+      + (ceOtMult(rr) * ceShiftMult(rr, 'regular_night')).toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
+      + "× the hourly rate.",
+    style: {
+      ...INP, ...MONO, width: 54, padding: '2px 4px', fontSize: 10, fontWeight: 700,
+      textAlign: 'right', color: ceOtMult(rr) === OT_MULT_DEFAULT ? TX : ACC
+    },
+    onBlur: ev => {
+      const v = parseFloat(ev.target.value);
+      setRates(p => {
+        const n = {...p};
+        if (!isFinite(v) || v <= 0 || v === OT_MULT_DEFAULT) delete n.otMult; else n.otMult = v;
+        return n;
+      });
+    }
+  }), "×"))), Object.entries(SHIFTS).map(([shiftKey, shiftInfo]) => {
     const rows = mp.filter(r => r.shift === shiftKey);
-    const shiftSub = rows.reduce((s, r) => s + N(r.pax) * N(r.days) * N(r.rate) * (shiftInfo.mult || 1), 0);
+    const shiftMult = ceShiftMult(rr, shiftKey);
+    const shiftSub = rows.reduce((s, r) => s + N(r.pax) * N(r.days) * N(r.rate) * shiftMult, 0);
     /* Head count = total PAX across rows that actually name a role. A blank
        starter row defaults to pax 1, so counting rows reported "1 worker" on an
        empty CE, and a row of 3 electricians only counted as one. */
@@ -9223,16 +9265,52 @@ tab === 'dashboard' && (() => {
         fontWeight: 700,
         fontSize: 13
       }
-    }, shiftInfo.label), /*#__PURE__*/React.createElement("span", {
+    }, shiftInfo.label),
+    /* The pill is the field. The statutory figures are the defaults, not the
+       law of the app -- DOLE changes, and a CE agreed at a negotiated rate is
+       a real thing. Edited here it is stored on THIS CE, so nothing already
+       saved reprices.
+
+       Uncontrolled with an onBlur: keystroke state would recost every row in
+       the tab on each digit, and "1." is not a multiplier. */
+    /*#__PURE__*/React.createElement("span", {
+      onClick: e => e.stopPropagation(),
       style: {
+        display: 'inline-flex', alignItems: 'center', gap: 1,
         background: alpha(shiftColor, '22'),
         color: shiftColor,
         fontSize: 10,
         fontWeight: 700,
-        padding: '1px 7px',
+        padding: '1px 5px 1px 7px',
         borderRadius: 3
       }
-    }, shiftInfo.mult, "\u00d7", rows.length > 0 ? " Multiplier" : ""),
+    }, /*#__PURE__*/React.createElement("input", {
+      key: 'sm' + shiftKey + shiftMult,
+      defaultValue: shiftMult,
+      type: "number", min: "0", step: "0.05",
+      title: "Multiplier for this shift on this CE. Default " + shiftInfo.mult + "\u00d7."
+        + (shiftMult !== shiftInfo.mult ? " Changed from the default." : ""),
+      style: {
+        ...INP, ...MONO, width: 42, padding: 0, border: 'none', background: 'transparent',
+        color: 'inherit', fontSize: 10, fontWeight: 700, textAlign: 'right'
+      },
+      onBlur: ev => {
+        const v = parseFloat(ev.target.value);
+        setRates(p => {
+          const m = {...(p.shiftMults || {})};
+          /* Back to the statutory figure rather than storing a copy of it, so
+             a CE only carries what actually differs. */
+          if (!isFinite(v) || v <= 0 || v === shiftInfo.mult) delete m[shiftKey];
+          else m[shiftKey] = v;
+          return {...p, shiftMults: m};
+        });
+      }
+    }), "\u00d7",
+    shiftMult !== shiftInfo.mult && /*#__PURE__*/React.createElement("span", {
+      title: "Default is " + shiftInfo.mult + "\u00d7",
+      style: {marginLeft: 3, opacity: .75}
+    }, "\u25cf"),
+    rows.length > 0 ? " Multiplier" : ""),
     /* The head count and the subtotal are stated even at zero. Hidden, an
        empty shift and a shift nobody has opened look identical, and the row
        silently changes shape the moment the first person is added. */
@@ -9328,7 +9406,7 @@ tab === 'dashboard' && (() => {
           p2.g.slice(1).forEach(r => drop.add(r.id));
         });
         setMp(p2 => p2.filter(r => !drop.has(r.id)).map(r => patch[r.id] ? { ...r, ...patch[r.id] } : r));
-        const after = plan.reduce((a, p2) => a + p2.pax * p2.days * N(p2.g[0].rate) * (shiftInfo.mult || 1), 0)
+        const after = plan.reduce((a, p2) => a + p2.pax * p2.days * N(p2.g[0].rate) * shiftMult, 0)
           + rows.filter(r => !dupes.flat().includes(r)).reduce((a, r) => a + rowCost('mp', r), 0);
         showToast('Consolidated ' + plan.length + ' role' + (plan.length === 1 ? '' : 's') + '. ' +
           (after > before ? 'The manpower cost rose — the crew is now costed for the whole duration.' : 'Totals updated.'));
@@ -9465,8 +9543,8 @@ tab === 'dashboard' && (() => {
       key: h,
       style: THS
     }, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map(r => {
-      const regAmt = N(r.pax) * N(r.days) * N(r.rate) * shiftInfo.mult;
-      const otAmt = N(r.pax) * N(r.days) * (N(r.otHours || 0) / 8) * N(r.rate) * 1.25 * shiftInfo.mult;
+      const regAmt = N(r.pax) * N(r.days) * N(r.rate) * shiftMult;
+      const otAmt = N(r.pax) * N(r.days) * (N(r.otHours || 0) / 8) * N(r.rate) * ceOtMult(rr) * shiftMult;
       const tot = regAmt + otAmt;
       return /*#__PURE__*/React.createElement("tr", {
         key: r.id
@@ -9529,7 +9607,7 @@ tab === 'dashboard' && (() => {
         step: 0.5,
         value: r.otHours || 0,
         onChange: e => updRow(setMp, r.id, 'otHours', Math.max(0, parseFloat(e.target.value) || 0)),
-        title: "Overtime hours PER DAY, charged at 1.25x the hourly rate (day rate / 8) for every day in the Days column. 3 hrs over 10 days = 30 OT hours."
+        title: "Overtime hours PER DAY, charged at " + ceOtMult(rr) + "× the hourly rate (day rate / 8) for every day in the Days column. 3 hrs over 10 days = 30 OT hours."
       })), /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, /*#__PURE__*/React.createElement("input", {
@@ -9593,7 +9671,7 @@ tab === 'dashboard' && (() => {
           display: 'block',
           fontWeight: 400
         }
-      }, "OT: P", ph(N(r.pax) * N(r.days) * (N(r.otHours) / 8) * N(r.rate) * 1.25 * (shiftInfo.mult || 1)))), /*#__PURE__*/React.createElement("td", {
+      }, "OT: \u20b1", ph(N(r.pax) * N(r.days) * (N(r.otHours) / 8) * N(r.rate) * ceOtMult(rr) * shiftMult))), /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, /*#__PURE__*/React.createElement("button", {
         onClick: () => delRow(setMp, r.id),
@@ -9618,7 +9696,7 @@ tab === 'dashboard' && (() => {
         color: MT,
         fontSize: 11
       }
-    }, "Subtotal (", shiftInfo.mult, "× Multiplier applied): "), /*#__PURE__*/React.createElement("span", {
+    }, "Subtotal (", shiftMult, "× Multiplier applied): "), /*#__PURE__*/React.createElement("span", {
       style: {
         ...MONO,
         color: shiftColor,
@@ -9779,7 +9857,7 @@ tab === 'dashboard' && (() => {
     const grouped = {};
     mp.forEach(r => {
       const key = r.role.trim().toUpperCase();
-      const mult = SHIFTS[r.shift]?.mult || 1;
+      const mult = ceShiftMult(rr, r.shift);
       /* Basic rate: this row feeds the benefits columns only, and benefits do
          not carry the shift premium. See calcBen. */
       const rate = N(r.rate);
@@ -11354,7 +11432,11 @@ tab === 'dashboard' && (() => {
       marginTop: 4,
       lineHeight: 1.5
     }
-  }, "Night x1.25 - Sun x1.3", /*#__PURE__*/React.createElement("br", null), "Holiday x2.0 - Benefits +20%")), /*#__PURE__*/React.createElement("div", {
+  /* Read from the CE rather than written out: a fixed caption goes on
+     claiming 1.25x the moment somebody edits the multiplier. */
+  }, "Night ×" + ceShiftMult(rr, 'regular_night') + " · Sun ×" + ceShiftMult(rr, 'sunday_day'),
+     /*#__PURE__*/React.createElement("br", null),
+     "Holiday ×" + ceShiftMult(rr, 'holiday_day') + " · OT ×" + ceOtMult(rr))), /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 12,
       borderTop: `1px solid ${BDR}`,

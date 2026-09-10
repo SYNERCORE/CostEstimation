@@ -22,21 +22,31 @@ const CE_CFG = { onsite: { mobDemob: true }, shopworks: { mobDemob: false }, sup
    computeCEGrand now go through toolRowCost -- so both harnesses below have to
    be given it, or they are testing something the app does not run. */
 const TIERS = grab(helpersSrc, /const TIER_HOURS_PER_YEAR[\s\S]*?\nfunction toolRowCost\(row, src\) \{[\s\S]*?\n\}/, 'tool tiers');
+/* The multiplier resolvers now sit between SHIFTS and every cost function, so
+   both harnesses need them or they are running something the app does not.
+   Given no rates they answer with the statutory defaults, which is exactly the
+   property the assertions below depend on. */
+const RATES = grab(helpersSrc,
+  /const OT_MULT_DEFAULT[\s\S]*?\nfunction ceOtMult\(rates\) \{[\s\S]*?\n\}/, 'rate resolvers');
 const helper = new Function('N', 'SHIFTS', 'CE_CFG',
+  RATES + '\n' +
   grab(helpersSrc, /function ceResDays\(r\) \{[\s\S]*?\n\}/, 'ceResDays') + '\n' + TIERS + '\n' +
-  grab(helpersSrc, /function ceMpRowCost\(r\) \{[\s\S]*?\n\}/, 'ceMpRowCost') + '\n' +
+  grab(helpersSrc, /function ceMpRowCost\(r, rates\) \{[\s\S]*?\n\}/, 'ceMpRowCost') + '\n' +
   grab(helpersSrc, /function computeCEGrand\(ce\) \{[\s\S]*?\n\}/, 'computeCEGrand') + '\n' +
   'return { computeCEGrand, ceResDays, ceMpRowCost };'
 )(N, SHIFTS, CE_CFG);
 
 /* --- the editor's own per-row cost, for cross-checking --- */
-const editor = new Function('N', 'SHIFTS',
+/* `rr` is the resolved rates the editor closes over. Passed undefined here,
+   so rowCost prices at the defaults -- which is what an existing CE does. */
+const editor = new Function('N', 'SHIFTS', 'rr',
+  RATES + '\n' +
   grab(helpersSrc, /function ceResDays\(r\) \{[\s\S]*?\n\}/, 'ceResDays') + '\n' + TIERS + '\n' +
   grab(appSrc, /const resDays = r => [^\n]*;/, 'resDays') + '\n' +
   grab(appSrc, /const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen') + '\n' +
   grab(appSrc, /const rowCost = \(kind, r\) => \{[\s\S]*?\n  \};/, 'rowCost') + '\n' +
   'return { rowCost, resDays };'
-)(N, SHIFTS);
+)(N, SHIFTS, undefined);
 
 let fails = 0;
 const check = (name, cond, extra) => {

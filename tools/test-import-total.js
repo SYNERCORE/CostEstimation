@@ -33,7 +33,10 @@ ck('it is computed after misc is on the entry',
 const N = v => Number(v) || 0;
 const SHIFTS = {regular_day: {mult: 1}, regular_night: {mult: 1.25}};
 const CE_CFG = {shopworks: {mobDemob: false}};
+const RATES = helpers.match(
+  new RegExp('const OT_MULT_DEFAULT[\\s\\S]*?\\nfunction ceOtMult\\(rates\\) \\{[\\s\\S]*?\\n\\}'))[0];
 const fns = new Function('N', 'SHIFTS', 'CE_CFG',
+  RATES + ';' +
   helpers.match(/function ceResDays[\s\S]*?\n\}\nfunction computeCEGrand[\s\S]*?\n\}/)[0] +
   '; return {ceMpRowCost, computeCEGrand};')(N, SHIFTS, CE_CFG);
 

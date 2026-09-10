@@ -50,7 +50,10 @@ ck('and the same resource columns', /'ITEM', 'DESCRIPTION', 'QTY', 'UOM'[\s\S]{0
 console.log('\nThe figures agree with the printed CE:');
 ck('AOT is the accumulated overtime, not the per-day figure', /N\(r\.otHours\) \* N\(r\.days\)/.test(exp),
   'the printed form multiplies AOT by RATE OT, so a per-day figure would understate the row');
-ck('RATE OT carries the shift multiplier', /N\(r\.rate\) \/ 8 \* 1\.25 \* mult/.test(exp));
+/* The OT factor is the CE's own now, not a literal 1.25 -- see
+   tools/test-editable-multipliers.js. It still has to carry the shift
+   multiplier on top, which is the thing this line exists to check. */
+ck('RATE OT carries the shift multiplier', /N\(r\.rate\) \/ 8 \* ceOtMult\(rr\) \* mult/.test(exp));
 ck('the regular subtotal does too', /N\(r\.pax\) \* N\(r\.days\) \* N\(r\.rate\) \* mult/.test(exp));
 ck('overtime is per day, as everywhere else', /\(N\(r\.otHours\) \/ 8\)/.test(exp),
   'this is the seventh place that formula appears and it must match the other six');

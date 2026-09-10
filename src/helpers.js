@@ -106,17 +106,61 @@ const mkMiscRow = () => ({
    Reads SHIFTS and CE_CFG from config.js at call time (config.js loads after
    this file, which is fine because nothing here runs at load).
    tools/test-recompute.js asserts this stays in step with the editor. */
+
+/* THE MULTIPLIERS A CE WAS PRICED AT.
+   ===================================
+   SHIFTS and the 1.25 OT factor were constants, so the day the law or the
+   company changes one, every CE ever written silently reprices -- including
+   the ones already sent to a client. The rule this project settled on for
+   rates applies here too: a CE keeps what it was quoted at.
+
+   So they are data the CE carries, and SHIFTS remains the default for any CE
+   that does not carry them. Every existing CE has no `rates`, resolves to the
+   statutory figures, and costs exactly what it always did.
+
+   A value is only honoured if it is a real positive number. A blank field, a
+   deleted one, or a zero falls back to the default rather than pricing a
+   night shift at nothing. */
+const OT_MULT_DEFAULT = 1.25;
+function ceRates(src) {
+  const raw = (src && src.rates) || {};
+  const rawShifts = raw.shiftMults || {};
+  const shiftMults = {};
+  const keys = (typeof SHIFTS !== 'undefined') ? Object.keys(SHIFTS) : [];
+  keys.forEach(k => {
+    const v = parseFloat(rawShifts[k]);
+    shiftMults[k] = (isFinite(v) && v > 0) ? v : SHIFTS[k].mult;
+  });
+  const ot = parseFloat(raw.otMult);
+  return {shiftMults, otMult: (isFinite(ot) && ot > 0) ? ot : OT_MULT_DEFAULT};
+}
+/* One shift's multiplier. Takes a resolved rates object, or undefined -- a
+   caller that has not got one still gets the statutory figure rather than 1,
+   which would quietly bill a holiday at straight time. */
+function ceShiftMult(rates, shiftKey) {
+  const r = (rates && rates.shiftMults) ? rates : ceRates(null);
+  const v = r.shiftMults[shiftKey];
+  return (isFinite(v) && v > 0) ? v : 1;
+}
+function ceOtMult(rates) {
+  const v = rates && parseFloat(rates.otMult);
+  return (isFinite(v) && v > 0) ? v : OT_MULT_DEFAULT;
+}
+
 function ceResDays(r) {
   return (r.days === undefined || r.days === null || r.days === '') ? 1 : (parseFloat(r.days) || 0);
 }
-function ceMpRowCost(r) {
+function ceMpRowCost(r, rates) {
   if (!r || !r.role) return 0;
-  const mult = (typeof SHIFTS !== 'undefined' && SHIFTS[r.shift] && SHIFTS[r.shift].mult) || 1;
+  /* Omitted, this resolves to the statutory defaults, so every caller that
+     has not been given the CE's own rates still prices as it always did. */
+  const mult = ceShiftMult(rates, r.shift);
+  const otMult = ceOtMult(rates);
   /* Benefits use the basic rate, the wage uses the shift-adjusted one.
      Kept in step with calcBen in src/App.js by tools/test-recompute.js. */
   const pax = N(r.pax), days = N(r.days), rate = N(r.rate);
   const reg = pax * days * N(r.rate) * mult;
-  const ot = pax * days * (N(r.otHours || 0) / 8) * N(r.rate) * 1.25 * mult;
+  const ot = pax * days * (N(r.otHours || 0) / 8) * N(r.rate) * otMult * mult;
   const thirteenth = rate / 12 * days * pax;
   const sss = rate * 0.25 * 0.75 * days * pax / 26;
   const hdmf = rate * 0.16 * days * pax / 26 * 2;
@@ -128,7 +172,10 @@ function computeCEGrand(ce) {
   if (!ce) return 0;
   const cfg = (typeof CE_CFG !== 'undefined' && CE_CFG[ce.ceType]) || {};
   const arr = v => Array.isArray(v) ? v : [];
-  const mpT = arr(ce.mp).reduce((s, r) => s + ceMpRowCost(r), 0);
+  /* The CE's own multipliers, so a recompute reproduces what it was quoted
+     at rather than what today's rules would charge. */
+  const _rates = ceRates(ce);
+  const mpT = arr(ce.mp).reduce((s, r) => s + ceMpRowCost(r, _rates), 0);
   /* Through toolRowCost, so a tiered CE recomputes to what the editor shows.
      A row naming no tier is Tier 2, which is exactly the old expression. */
   const toolsT = arr(ce.tools).reduce((s, r) => s + toolRowCost(r), 0);

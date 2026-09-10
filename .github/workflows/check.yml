@@ -100,6 +100,8 @@ jobs:
         run: node tools/test-section-headers.js
       - name: Shift bars
         run: node tools/test-shift-bars.js
+      - name: Editable multipliers
+        run: node tools/test-editable-multipliers.js
       - name: Summary screen
         run: node tools/test-summary-screen.js
       - name: Financial rail

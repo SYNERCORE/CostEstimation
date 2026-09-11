@@ -104,6 +104,8 @@ jobs:
         run: node tools/test-attachments.js
       - name: Persistence audit
         run: node tools/test-persistence-audit.js
+      - name: Highlighted costs
+        run: node tools/test-highlighted-costs.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents

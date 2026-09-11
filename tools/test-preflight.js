@@ -13,11 +13,21 @@ const rules = m[0];
 
 const N = v => parseFloat(v) || 0;
 
+/* The real resolvers, lifted rather than restated: a highlighted cost can add
+   several sources up, so whether one of them has gone missing is exactly the
+   logic under test here. */
+const lift = name => {
+  const g = src.match(new RegExp('  const ' + name + ' = r => [\\s\\S]*?;\\n  const '));
+  if (!g) { console.error('could not find ' + name + ' in src/App.js'); process.exit(1); }
+  return g[0].replace(/\n  const $/, '');
+};
+const resolvers = lift('hlKeys') + '\n' + lift('hlMissing');
+
 function run(ctx) {
   const fn = new Function(
     'N', 'grand', 'collectZeroCost', 'info', 'sowItems', 'sowUnassignedCount',
     'margin', 'addlCosts', 'hlSources', 'approvers',
-    rules + '\n return { issues, errs, warns, clean };'
+    resolvers + '\n' + rules + '\n return { issues, errs, warns, clean };'
   );
   return fn(
     N, ctx.grand, () => ctx.zero || [], ctx.info || {}, ctx.sowItems || [],
@@ -102,6 +112,21 @@ const manual = run({
   hlSources: [{ k: 'calc:unit' }],
 });
 check('a manual highlighted cost is not flagged', manual.clean, JSON.stringify(manual.issues.map(i => i.msg)));
+
+/* A callout that adds several lines up is the case worth guarding: lose one of
+   them and the figure still looks plausible, it is just short by that line. */
+const base = { grand: 250000, info: { client: 'P', description: 'x', qty: '1' },
+               sowItems: [{ id: 't1' }], margin: 10, approvers: [{ name: 'A' }],
+               hlSources: [{ k: 'row:mp:a' }, { k: 'row:tools:b' }] };
+const sumOk = run({ ...base, addlCosts: [{ label: 'DELIVERY', srcs: ['row:mp:a', 'row:tools:b'] }] });
+check('a sum of lines that all still exist is clean', sumOk.clean, JSON.stringify(sumOk.issues.map(i => i.msg)));
+const sumGone = run({ ...base, addlCosts: [{ label: 'DELIVERY', srcs: ['row:mp:a', 'row:tools:deleted'] }] });
+check('one deleted line inside a sum is still flagged',
+  sumGone.errs === 1 && has(sumGone, 'no longer exists'),
+  'the total would silently be short by that line');
+const emptySum = run({ ...base, addlCosts: [{ label: 'PICKUP', srcs: [], amount: 5000 }] });
+check('an empty list reads as manual, not as broken', emptySum.clean,
+  JSON.stringify(emptySum.issues.map(i => i.msg)));
 
 /* Blank quantity falls back to 1 for the unit price. */
 const noQty = run({

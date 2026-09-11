@@ -341,7 +341,11 @@ function App({
      the totals, the print and the exports cannot disagree about what a night
      shift costs. */
   const rr = useMemo(() => ceRates({rates}), [rates]);
-  const [addlCosts, setAddlCosts] = useState([]); /* [{id,desc,amount}] — additional costs after misc (delivery, per-item, etc.) */
+  const [addlCosts, setAddlCosts] = useState([]); /* [{id,label,src,srcs,amount}] — callouts of costs already inside the CE */
+  /* Which highlighted row has its source picker open, and what has been typed
+     into that picker's filter. Editor-only: neither is saved with the CE. */
+  const [hlPick, setHlPick] = useState(null);
+  const [hlPickQ, setHlPickQ] = useState('');
   const [toast, setToast] = useState('');
   const [signatures, setSignatures] = useState({});
   const [sigModal, setSigModal] = useState(null);
@@ -965,6 +969,21 @@ function App({
      as the price of one of them, which is the one thing it is not. Show it
      only when a quantity was actually given. */
   const showUnitP = (N(info.qty) || 1) > 1;
+  /* What one row of a section costs. The single definition every subtotal,
+     the SOW breakdown and the highlighted-cost picker all read, so none of
+     them can price the same row differently. */
+  const rowCost = (kind, r) => {
+    /* Tools carry a tier. The source figures ride on the row itself, copied
+       from the masterlist when it was added, so a later masterlist change
+       cannot silently re-price a CE that has already been quoted. */
+    if (kind === 'tools') return toolRowTotal(r, kwhRate);
+    if (kind !== 'mp') return N(r.qty) * N(r.cost);
+    if (!r.role) return 0; /* blank row: no role, no cost (calcBen SIL adds pax*30) */
+    const mult = ceShiftMult(rr, r.shift);
+    const reg = N(r.pax) * N(r.days) * N(r.rate) * mult;
+    const ot = N(r.pax) * N(r.days) * (N(r.otHours || 0) / 8) * N(r.rate) * ceOtMult(rr) * mult;
+    return reg + ot + calcBen(r).total;
+  };
   /* ── Highlighted costs ──────────────────────────────────────────────────
      Callouts of money that is ALREADY counted in the sections above (e.g. a
      client wants "DELIVERY TO PAGBILAO" or "THIRD PARTY COST" shown on its
@@ -984,19 +1003,58 @@ function App({
     o.push({ k: 'sec:mats', g: 'Sections', l: 'Materials & Consumables', v: matsT });
     o.push({ k: 'sec:ppe', g: 'Sections', l: 'PPE', v: ppeT });
     o.push({ k: 'sec:misc', g: 'Sections', l: 'Miscellaneous', v: miscT });
+    /* Individual rows, so a callout can name ONE crane or ONE technician
+       rather than the whole section it sits in. The amount comes from the
+       same rowCost the section total is summed from, so a line highlighted
+       here can never disagree with the line printed above it -- overtime,
+       the shift multiplier, benefits, the tool tier and its power are all
+       already in it. */
+    if (cfg.mobDemob) {
+      [['mob', 'Mobilization', mobVehicles], ['demob', 'Demobilization', demobVehicles]].forEach(([kk, nm, rows]) => {
+        (rows || []).forEach((r, i) => {
+          if (!r.desc) return;
+          o.push({ k: 'row:' + kk + ':' + (r.id || i), g: 'Line Items · ' + nm, l: r.desc,
+                   v: N(r.qty) * N(r.days) * N(r.rate) });
+        });
+      });
+    }
+    [['mp', 'Manpower', mp, 'role'], ['tools', 'Tools & Equipment', tools, 'desc'],
+     ['mats', 'Materials & Consumables', mats, 'desc'], ['ppe', 'PPE', ppe, 'desc']].forEach(([kk, nm, rows, nameKey]) => {
+      (rows || []).forEach((r, i) => {
+        const nme = r[nameKey];
+        if (!nme) return;
+        o.push({ k: 'row:' + kk + ':' + (r.id || i), g: 'Line Items · ' + nm, l: nme, v: rowCost(kk, r) });
+      });
+    });
     (MISC_DEF[ceType] || MISC_DEF['onsite']).forEach(([key, lbl]) => {
       const nm = lbl.replace(/^[A-Z]\.\d+\s*/, '');
       const arr = Array.isArray(misc[key]) ? misc[key] : [];
       o.push({ k: 'miscCat:' + key, g: 'Misc Categories', l: nm, v: arr.reduce((s, r) => s + N(r.qty) * N(r.cost), 0) });
       arr.forEach((r, i) => {
         if (!r.desc) return;
-        o.push({ k: 'miscRow:' + key + ':' + (r.id || i), g: 'Misc Line Items', l: nm + ' → ' + r.desc, v: N(r.qty) * N(r.cost) });
+        o.push({ k: 'miscRow:' + key + ':' + (r.id || i), g: 'Line Items · Miscellaneous', l: nm + ' → ' + r.desc, v: N(r.qty) * N(r.cost) });
       });
     });
     return o;
-  }, [unitP, grand, mobSubT, demobSubT, mpTot, toolsT, matsT, ppeT, miscT, misc, ceType, cfg.mobDemob]);
-  /* Resolve a highlighted row to its current amount / label. */
-  const hlAmt = r => (r.src && r.src !== 'manual') ? N((hlSources.find(o => o.k === r.src) || {}).v) : N(r.amount);
+  }, [unitP, grand, mobSubT, demobSubT, mpTot, toolsT, matsT, ppeT, miscT, misc, ceType,
+      cfg.mobDemob, mp, tools, mats, ppe, mobVehicles, demobVehicles, kwhRate, rr]);
+  /* ── Resolving a highlighted row ────────────────────────────────────────
+     A row links to nothing (a typed amount), to one figure, or to SEVERAL --
+     "DELIVERY" is often a truck line plus a driver plus a permit, three rows
+     in three different sections that the client wants to see as one number.
+     `srcs` is the list; `src` is the single link every CE saved before this
+     carries, and is read as a list of one so nothing has to be re-entered. */
+  const hlKeys = r => (Array.isArray(r.srcs) && r.srcs.length) ? r.srcs
+    : ((r.src && r.src !== 'manual') ? [r.src] : []);
+  const hlIsLinked = r => hlKeys(r).length > 0;
+  /* Keys whose cost has since been deleted from the CE. Summing around a
+     missing one would quietly shrink the callout instead of saying so. */
+  const hlMissing = r => hlKeys(r).filter(k => !hlSources.some(o => o.k === k));
+  const hlAmt = r => {
+    const ks = hlKeys(r);
+    if (!ks.length) return N(r.amount);
+    return ks.reduce((s, k) => s + N((hlSources.find(o => o.k === k) || {}).v), 0);
+  };
   const hlLabel = r => r.label || r.desc || '';
   const hlRows = (addlCosts || []).filter(r => hlLabel(r));
   const addRow = (set, t) => set(p => [...p, t === 'mp' ? mkMP() : mkRes()]);
@@ -1095,18 +1153,6 @@ function App({
     if (t === 1) return 'per project';
     if (t === 3) return (N(r.hours) || 0) + ' hrs';
     return resDays(r) + (resDays(r) === 1 ? ' day' : ' days');
-  };
-  const rowCost = (kind, r) => {
-    /* Tools carry a tier. The source figures ride on the row itself, copied
-       from the masterlist when it was added, so a later masterlist change
-       cannot silently re-price a CE that has already been quoted. */
-    if (kind === 'tools') return toolRowTotal(r, kwhRate);
-    if (kind !== 'mp') return N(r.qty) * N(r.cost);
-    if (!r.role) return 0; /* blank row: no role, no cost (calcBen SIL adds pax*30) */
-    const mult = ceShiftMult(rr, r.shift);
-    const reg = N(r.pax) * N(r.days) * N(r.rate) * mult;
-    const ot = N(r.pax) * N(r.days) * (N(r.otHours || 0) / 8) * N(r.rate) * ceOtMult(rr) * mult;
-    return reg + ot + calcBen(r).total;
   };
   const taskCost = id => RES_TABS.reduce((s, t) => s + t.rows.filter(r => rowServesTask(r, id)).reduce((a, r) => a + rowCostForTask(t.key, r, id), 0), 0)
     + miscFlat().filter(r => rowServesTask(r, id)).reduce((a, r) => a + rowCostForTask('misc', r, id), 0);
@@ -10320,7 +10366,9 @@ tab === 'dashboard' && (() => {
     else if (sowUnassignedCount > 0) add('warn', sowUnassignedCount + ' resource row' + (sowUnassignedCount === 1 ? '' : 's') + ' not assigned to a scope task.', 'sowbreak');
     if (N(margin) === 0) add('warn', 'Margin is 0% — the selling price equals cost.', 'summary');
     if (!N(info.qty)) add('warn', 'Quantity is blank, so the unit price falls back to 1.', 'info');
-    const dangling = (addlCosts || []).filter(r => r.src && r.src !== 'manual' && !hlSources.some(o => o.k === r.src));
+    /* One deleted line inside a summed callout is the dangerous case: the
+       number still looks plausible, it is just short by that line. */
+    const dangling = (addlCosts || []).filter(r => hlMissing(r).length);
     if (dangling.length) add('err', dangling.length + ' highlighted cost' + (dangling.length === 1 ? '' : 's') + ' point at a cost that no longer exists.', 'summary');
     if (!(approvers || []).some(a => (a.name || '').trim())) add('warn', 'No approvers named.', 'summary');
 
@@ -10426,7 +10474,7 @@ tab === 'dashboard' && (() => {
       }, "+ Add Row")
     ),
     /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:10,marginBottom:8,fontStyle:'italic'}},
-      "These are already included in the Grand Total — they are shown separately on the CE, never added on top."),
+      "These are already included in the Grand Total — they are shown separately on the CE, never added on top. Link one to a whole section, to a single line, or tick several lines to show them as one figure."),
     addlCosts.length === 0 && /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:11,fontStyle:'italic',padding:'6px 0'}}, "No highlighted costs. Click \"+ Add Row\" to call out a delivery charge, third party cost, unit price, etc."),
     addlCosts.length > 0 && /*#__PURE__*/React.createElement("table", {style:{width:'100%',borderCollapse:'collapse',fontSize:12}},
       /*#__PURE__*/React.createElement("thead", null,
@@ -10438,9 +10486,33 @@ tab === 'dashboard' && (() => {
         )
       ),
       /*#__PURE__*/React.createElement("tbody", null, addlCosts.map(r=>{
-        const linked = r.src && r.src !== 'manual';
-        const missing = linked && !hlSources.some(o=>o.k===r.src);
-        return /*#__PURE__*/React.createElement("tr", {key:r.id},
+        const keys = hlKeys(r), gone = hlMissing(r), linked = keys.length > 0;
+        const open = hlPick === r.id;
+        /* Toggling one source in or out. The first pick also names the row, so
+           the common case -- call out one line by its own name -- takes a
+           single click. `src` is cleared as soon as a list exists so the two
+           can never both be live and disagree about what the row points at. */
+        const toggle = k => setAddlCosts(p=>p.map(x=>{
+          if (x.id!==r.id) return x;
+          const cur = hlKeys(x);
+          const next = cur.indexOf(k) >= 0 ? cur.filter(v=>v!==k) : [...cur, k];
+          const hit = hlSources.find(o=>o.k===k);
+          return {...x, srcs: next, src: '', desc: undefined,
+                  label: (hlLabel(x) || (next.length===1 && hit ? hit.l : ''))};
+        }));
+        /* What the closed button says. One source reads as its own name; a sum
+           has to say how many lines it is made of, or a deleted line inside it
+           would never be noticed. */
+        const summary = !linked ? '— type amount manually —'
+          : keys.length === 1
+            ? (gone.length ? '⚠ linked cost no longer exists'
+                           : (hlSources.find(o=>o.k===keys[0])||{}).l)
+            : keys.length + ' lines' + (gone.length ? '  ⚠ ' + gone.length + ' missing' : '');
+        const groups = [];
+        hlSources.forEach(o=>{ if (groups.indexOf(o.g) < 0) groups.push(o.g); });
+        const q = hlPickQ.trim().toLowerCase();
+        return /*#__PURE__*/React.createElement(React.Fragment, {key:r.id},
+        /*#__PURE__*/React.createElement("tr", null,
           /*#__PURE__*/React.createElement("td", {style:TDS},
             /*#__PURE__*/React.createElement("input", {
               style:{...INP,width:'100%'},
@@ -10450,37 +10522,20 @@ tab === 'dashboard' && (() => {
             })
           ),
           /*#__PURE__*/React.createElement("td", {style:TDS},
-            /*#__PURE__*/React.createElement("select", {
-              style:{...INP,width:'100%',fontSize:11},
-              value:r.src||'manual',
-              onChange:e=>{
-                const src = e.target.value;
-                setAddlCosts(p=>p.map(x=>{
-                  if (x.id!==r.id) return x;
-                  const hit = hlSources.find(o=>o.k===src);
-                  /* Prefill an empty label with the source name for convenience. */
-                  return {...x, src, label: (hlLabel(x) || (hit ? hit.l : '')), desc: undefined};
-                }));
-              }
-            },
-              /*#__PURE__*/React.createElement("option", {value:'manual'}, "— type amount manually —"),
-              ['Computed','Sections','Misc Categories','Misc Line Items'].map(g=>{
-                const inGroup = hlSources.filter(o=>o.g===g);
-                if (!inGroup.length) return null;
-                return /*#__PURE__*/React.createElement("optgroup", {key:g,label:g},
-                  inGroup.map(o=>/*#__PURE__*/React.createElement("option", {key:o.k,value:o.k}, o.l + '  (₱' + ph(o.v) + ')'))
-                );
-              }),
-              /* Keep a stale link selectable so the row is not silently rewritten. */
-              missing && /*#__PURE__*/React.createElement("option", {value:r.src}, "⚠ linked cost no longer exists")
-            )
+            /*#__PURE__*/React.createElement("button", {
+              style:{...INP,width:'100%',fontSize:11,textAlign:'left',cursor:'pointer',
+                     color: gone.length ? ERR : (linked ? OK : MT),
+                     borderColor: open ? OK : undefined},
+              title: linked ? 'Click to change which costs this adds up' : 'Click to link this to costs already in the CE',
+              onClick:()=>{ setHlPick(open?null:r.id); setHlPickQ(''); }
+            }, summary + (open ? '  ▾' : '  ▸'))
           ),
           /*#__PURE__*/React.createElement("td", {style:{...TDS,textAlign:'right'}},
             linked
               ? /*#__PURE__*/React.createElement("span", {
-                  style:{...MONO,fontSize:12,color:missing?ERR:OK},
-                  title: missing ? 'The linked cost was removed from the CE — pick another source or switch to manual.' : 'Linked — updates automatically when this cost changes'
-                }, missing ? '⚠ —' : '₱' + ph(hlAmt(r)))
+                  style:{...MONO,fontSize:12,color:gone.length?ERR:OK},
+                  title: gone.length ? 'A cost this points at was removed from the CE — the amount shown is short by it.' : 'Linked — updates automatically when these costs change'
+                }, gone.length && keys.length === 1 ? '⚠ —' : '₱' + ph(hlAmt(r)))
               : /*#__PURE__*/React.createElement("input", {
                   style:{...INP,...MONO,width:140,textAlign:'right'},
                   type:'number',min:0,step:0.01,
@@ -10495,6 +10550,67 @@ tab === 'dashboard' && (() => {
               onClick:()=>setAddlCosts(p=>p.filter(x=>x.id!==r.id))
             }, "✕")
           )
+        ),
+        /* The picker, in a row of its own under the one being edited rather
+           than floating over it -- the running subtotal has to stay readable
+           beside the CE totals while lines are being ticked. */
+        open && /*#__PURE__*/React.createElement("tr", null,
+          /*#__PURE__*/React.createElement("td", {colSpan:4, style:{...TDS,padding:0}},
+            /*#__PURE__*/React.createElement("div", {style:{border:'1px solid '+alpha(OK,'66'),borderRadius:6,padding:8,margin:'2px 0 8px'}},
+              /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',gap:8,marginBottom:6,flexWrap:'wrap'}},
+                /*#__PURE__*/React.createElement("input", {
+                  style:{...INP,flex:'1 1 200px',fontSize:11},
+                  value:hlPickQ, autoFocus:true,
+                  placeholder:"Filter — type part of a line, role or section name...",
+                  onChange:e=>setHlPickQ(e.target.value)
+                }),
+                /*#__PURE__*/React.createElement("span", {style:{...MONO,fontSize:12,color:OK,fontWeight:700}},
+                  keys.length ? (keys.length + (keys.length===1?' line · ₱':' lines · ₱') + ph(hlAmt(r))) : 'nothing picked'),
+                keys.length > 0 && /*#__PURE__*/React.createElement("button", {
+                  style:{...btn('def',true),fontSize:10},
+                  title:"Unlink every source and go back to typing the amount by hand",
+                  onClick:()=>setAddlCosts(p=>p.map(x=>x.id===r.id?{...x,srcs:[],src:'',amount:N(hlAmt(x))}:x))
+                }, "Type manually instead"),
+                /*#__PURE__*/React.createElement("button", {
+                  style:{...btn('ok',true),fontSize:10},
+                  onClick:()=>setHlPick(null)
+                }, "Done")
+              ),
+              /* A key that no longer matches anything in the CE cannot be
+                 offered in the list below, so it is shown here -- otherwise
+                 the only way to clear it would be to delete the whole row. */
+              gone.map(k=>/*#__PURE__*/React.createElement("div", {key:k,
+                style:{fontSize:11,color:ERR,display:'flex',alignItems:'center',gap:6,marginBottom:4}},
+                "⚠ a cost this points at was deleted from the CE",
+                /*#__PURE__*/React.createElement("button", {style:{...btn('danger',true),fontSize:10,padding:'1px 6px'},
+                  onClick:()=>toggle(k)}, "remove it")
+              )),
+              /*#__PURE__*/React.createElement("div", {style:{maxHeight:260,overflowY:'auto'}},
+                groups.map(g=>{
+                  const inGroup = hlSources.filter(o=>o.g===g &&
+                    (!q || (g + ' ' + o.l).toLowerCase().indexOf(q) >= 0));
+                  if (!inGroup.length) return null;
+                  return /*#__PURE__*/React.createElement("div", {key:g,style:{marginBottom:6}},
+                    /*#__PURE__*/React.createElement("div", {style:{fontSize:10,fontWeight:700,color:MT,textTransform:'uppercase',letterSpacing:.5,padding:'2px 0'}}, g),
+                    inGroup.map(o=>{
+                      const on = keys.indexOf(o.k) >= 0;
+                      return /*#__PURE__*/React.createElement("label", {key:o.k,
+                        style:{display:'flex',alignItems:'center',gap:8,fontSize:11,padding:'3px 6px',
+                               borderRadius:4,cursor:'pointer',background:on?alpha(OK,'1A'):'transparent'}},
+                        /*#__PURE__*/React.createElement("input", {type:'checkbox',checked:on,onChange:()=>toggle(o.k)}),
+                        /*#__PURE__*/React.createElement("span", {style:{flex:1}}, o.l),
+                        /*#__PURE__*/React.createElement("span", {style:{...MONO,fontSize:11,color:MT}}, '₱' + ph(o.v))
+                      );
+                    })
+                  );
+                }),
+                q && !hlSources.some(o=>(o.g + ' ' + o.l).toLowerCase().indexOf(q) >= 0) &&
+                  /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:11,fontStyle:'italic',padding:'6px 2px'}},
+                    'Nothing in this CE matches "' + hlPickQ.trim() + '".')
+              )
+            )
+          )
+        )
         );
       }))
     )

@@ -1,4 +1,4 @@
-const CACHE='shic-ce-v144';
+const CACHE='shic-ce-v145';
 /* The libraries now ship in ./vendor and are precached as part of APP, so the
    app no longer needs the public internet at all after its first load. Only
    MSAL is still fetched remotely, and only as a fallback behind the local copy
@@ -16,36 +16,36 @@ const EXTRA=['./vendor/pdf.worker.min.js','./vendor/msal-browser.min.js'];
    app did. Kept in step with index.html by tools/check-sw-precache.js.
    APP_START */
 const APP=[
-  './vendor/react.production.min.js?v=144',
-  './vendor/react-dom.production.min.js?v=144',
-  './vendor/xlsx.full.min.js?v=144',
-  './vendor/pdf.min.js?v=144',
-  './vendor/mammoth.browser.min.js?v=144',
-  './src/constants.js?v=144',
-  './src/helpers.js?v=144',
-  './src/xlsx-styled.js?v=144',
-  './src/ai.js?v=144',
-  './src/ai_models.js?v=144',
-  './src/config.js?v=144',
-  './src/update.js?v=144',
-  './src/sp.js?v=144',
-  './src/idb.js?v=144',
-  './src/db.js?v=144',
-  './src/auth.js?v=144',
-  './src/components/LoginPage.js?v=144',
-  './src/components/RegisterPage.js?v=144',
-  './src/components/CompanyDBPanel.js?v=144',
-  './src/components/CeDefaultsPanel.js?v=144',
-  './src/components/FbSetupPanel.js?v=144',
-  './src/components/LocalToSPSync.js?v=144',
-  './src/components/ChangePasswordModal.js?v=144',
-  './src/components/UpdatePublisher.js?v=144',
-  './src/components/AdminPanel.js?v=144',
-  './src/components/ResTab.js?v=144',
-  './src/App.js?v=144',
-  './src/widgets.js?v=144',
-  './src/tests.js?v=144',
-  './src/ml_utils.js?v=144'
+  './vendor/react.production.min.js?v=145',
+  './vendor/react-dom.production.min.js?v=145',
+  './vendor/xlsx.full.min.js?v=145',
+  './vendor/pdf.min.js?v=145',
+  './vendor/mammoth.browser.min.js?v=145',
+  './src/constants.js?v=145',
+  './src/helpers.js?v=145',
+  './src/xlsx-styled.js?v=145',
+  './src/ai.js?v=145',
+  './src/ai_models.js?v=145',
+  './src/config.js?v=145',
+  './src/update.js?v=145',
+  './src/sp.js?v=145',
+  './src/idb.js?v=145',
+  './src/db.js?v=145',
+  './src/auth.js?v=145',
+  './src/components/LoginPage.js?v=145',
+  './src/components/RegisterPage.js?v=145',
+  './src/components/CompanyDBPanel.js?v=145',
+  './src/components/CeDefaultsPanel.js?v=145',
+  './src/components/FbSetupPanel.js?v=145',
+  './src/components/LocalToSPSync.js?v=145',
+  './src/components/ChangePasswordModal.js?v=145',
+  './src/components/UpdatePublisher.js?v=145',
+  './src/components/AdminPanel.js?v=145',
+  './src/components/ResTab.js?v=145',
+  './src/App.js?v=145',
+  './src/widgets.js?v=145',
+  './src/tests.js?v=145',
+  './src/ml_utils.js?v=145'
 ];
 /* APP_END */
 self.addEventListener('install',e=>{

@@ -53,8 +53,11 @@ console.log('\nautoFocus that remains is on things that open on demand:');
 const rest = src.slice(0, i) + src.slice(i + panel.length);
 for (const m of rest.matchAll(/autoFocus\s*:/g)) {
   const near = rest.slice(Math.max(0, m.index - 900), m.index);
+  /* hlPick is the highlighted-cost source picker: null until the row's button
+     is clicked, so its filter box only ever mounts because someone asked for
+     it -- the same shape as selProv, and the reason autoFocus is safe there. */
   ck('an autoFocus at ' + m.index + ' sits in a modal or picker',
-    /Picker|modal|Modal|selProv|position: 'fixed'/.test(near),
+    /Picker|modal|Modal|selProv|hlPick|position: 'fixed'/.test(near),
     'autofocusing something always on screen takes the caret from wherever the person meant to be');
 }
 

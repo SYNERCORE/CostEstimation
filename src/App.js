@@ -1013,7 +1013,9 @@ function App({
      task and the resources it needs stay aligned -- delete the task and its
      resources go with it. Rows with no taskId are simply "Unassigned", which is
      what every pre-existing CE looks like. */
-  const _mkResRow = (item, taskId) => ({ ...mkRes(), desc: item ? item.desc : '', uom: item ? item.uom : 'Lot', cost: item ? item.cost : 0, taskId: taskId || '' });
+  /* kw only when the Masterlist entry has one -- writing 0 would read as a
+     tool that draws nothing rather than one nobody has rated yet. */
+  const _mkResRow = (item, taskId) => ({ ...mkRes(), desc: item ? item.desc : '', uom: item ? item.uom : 'Lot', cost: item ? item.cost : 0, ...(item && N(item.kw) > 0 ? {kw: N(item.kw)} : {}), taskId: taskId || '' });
   const RES_TABS = [
     { key: 'mp', label: 'Manpower', set: setMp, rows: mp, qtyKey: 'pax', nameKey: 'role', costKey: 'rate', ml: 'manpower',
       mk: (item, taskId) => ({ ...mkMP(), role: item ? item.role : '', rate: item ? item.rate : 0, perDiem: item ? (item.perDiem || 0) : 0, taskId: taskId || '' }) },
@@ -2191,9 +2193,19 @@ function App({
       const m = (masterlist?.manpower || []).find(r => r.role.toUpperCase() === role.toUpperCase());
       return m ? m.perDiem || 0 : 0;
     };
+    const findTool = desc =>
+      (masterlist?.tools || []).find(r => r.desc.toUpperCase() === desc.toUpperCase());
     const findToolCost = desc => {
-      const t = (masterlist?.tools || []).find(r => r.desc.toUpperCase() === desc.toUpperCase());
+      const t = findTool(desc);
       return t ? t.cost : 0;
+    };
+    /* The kW rating travels with the cost. A tool brought in from a scope
+       library entry is the same machine as one picked from the Masterlist by
+       hand, and it has to arrive knowing what it draws -- otherwise a
+       shopworks CE built from a saved scope silently charges no power. */
+    const findToolKw = desc => {
+      const t = findTool(desc);
+      return t && N(t.kw) > 0 ? N(t.kw) : undefined;
     };
     const findMatCost = desc => {
       const m = (masterlist?.materials || []).find(r => r.desc.toUpperCase() === desc.toUpperCase());
@@ -2302,7 +2314,9 @@ function App({
             if (!desc) return;
             const key = mkey(svc, step, desc);
             if (toolMap[key]) toolMap[key].qty += iq;
-            else toolMap[key] = { id: uid(), desc, qty: iq, uom: 'Lot', cost: findToolCost(desc), taskId: taskFor(svc, step) };
+            else toolMap[key] = { id: uid(), desc, qty: iq, uom: 'Lot', cost: findToolCost(desc),
+              ...(findToolKw(desc) !== undefined ? {kw: findToolKw(desc)} : {}),
+              taskId: taskFor(svc, step) };
           });
           /* Consumables: merge by description — add qty */
           (svc.mats || []).forEach(raw => {

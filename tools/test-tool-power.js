@@ -160,6 +160,25 @@ ck('the Masterlist has a cell for it', /'projectsPerYear', 'maintPerYear', 'kw'\
 ck('and the import workbook a column', /'Maintenance per Year', 'Power \(kW\)'\]/.test(app));
 ck('under the headings a shop sheet actually uses', /powerkw: 'kw', kw: 'kw'/.test(app));
 
+console.log('\nthe registry keeps it per tool, with no schema change:');
+ck('the masterlist is one JSON blob',
+  /shicData:JSON\.stringify\(data\)/.test(db),
+  'a per-tool field rides in it, so no site has to be repaired to store kW');
+ck('and is read back whole', /JSON\.parse\(r\[0\]\.shicData\)/.test(db));
+ck('the tier calculator does not wipe it',
+  /tools: \(masterlist\.tools \|\| \[\]\)\.map\(r => r\.id === mlCalc\.id \? \{\s*\.\.\.r,/.test(app),
+  'rebuilding the item instead of spreading it would drop every field the dialog does not know about');
+
+console.log('\nevery way a tool reaches a CE brings the rating with it:');
+ck('the Masterlist picker', /\.\.\.\(item\.kw \? \{kw: item\.kw\} : \{\}\)/.test(restab));
+ck('the SOW breakdown picker', /\.\.\.\(item && N\(item\.kw\) > 0 \? \{kw: N\(item\.kw\)\} : \{\}\)/.test(app),
+  'a tool added against a task is the same machine as one added on the tab');
+ck('and a scope library entry', /\.\.\.\(findToolKw\(desc\) !== undefined \? \{kw: findToolKw\(desc\)\} : \{\}\)/.test(app),
+  'a shopworks CE built from a saved scope would otherwise charge no power at all');
+ck('an unrated tool gets no kw key rather than a 0',
+  /N\(t\.kw\) > 0 \? N\(t\.kw\) : undefined/.test(app),
+  'a stored 0 reads as a tool that draws nothing, not one nobody has rated yet');
+
 console.log('\nit survives a save and a reload:');
 ck('written to SharePoint', /shicKW:r\.kw\|\|0,shicRunHrs:r\.runHrs\|\|0/.test(db));
 ck('read back out', /kw:r\.shicKW\|\|0,runHrs:r\.shicRunHrs\|\|0/.test(db));

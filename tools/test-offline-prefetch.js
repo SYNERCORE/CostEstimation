@@ -51,10 +51,14 @@ let archive = [];
 const ceAll = async () => archive;
 
 const src = db.match(/async function dbCacheAllCEs[\s\S]*?\nfunction _assembleCE[\s\S]*?\n\}\n/)[0];
+/* The real one, lifted from db.js rather than restated -- a stub that always
+   returned {} would hide a tool row losing its tier basis on prefetch. */
+const _srcParse = new Function('return ' + db.match(/function _srcParse\(v\)\{[\s\S]*?\n\}/)[0])();
+
 const scope = new Function(
-  'spGet', 'spList', '_shParse', 'ceBulkPut', 'ceAll', 'USE_SP', 'getSiteURL', '_spGetTolerant', 'console',
+  'spGet', 'spList', '_shParse', '_srcParse', 'ceBulkPut', 'ceAll', 'USE_SP', 'getSiteURL', '_spGetTolerant', 'console',
   src + '; return {dbCacheAllCEs, _assembleCE};'
-)(spGet, spList, _shParse, ceBulkPut, ceAll, true, () => 'x', spGet, console);
+)(spGet, spList, _shParse, _srcParse, ceBulkPut, ceAll, true, () => 'x', spGet, console);
 
 let bad = 0;
 const ck = (n, c, x) => { if (c) console.log('  PASS  ' + n); else { console.log('  FAIL  ' + n + (x ? '  -> ' + x : '')); bad++; } };

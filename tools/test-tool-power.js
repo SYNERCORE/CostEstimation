@@ -185,7 +185,7 @@ ck('read back out', /kw:r\.shicKW\|\|0,runHrs:r\.shicRunHrs\|\|0/.test(db));
 ck('selected in both read paths',
   (db.match(/shicTier,shicHours,shicKW,shicRunHrs/g) || []).length === 2);
 ck('and tolerated when the site has not been repaired',
-  /'shicTier','shicHours','shicKW','shicRunHrs'\]/.test(db),
+  /'shicTier','shicHours','shicKW','shicRunHrs'/.test(db),
   'without this an unrepaired site fails to open any CE at all');
 ck('Repair knows to create them',
   /\[9,'shicKW'\],\[9,'shicRunHrs'\]/.test(fs.readFileSync('src/components/RegisterPage.js', 'utf8')));
@@ -199,7 +199,7 @@ ck('saved in the misc blob', /_rates:\(e\.rates\|\|\{\}\)/.test(db),
   'no new column, so no site has to be repaired for it');
 ck('read back out', /rates:\(\(\)=>\{const m=h\.shicMisc\?JSON\.parse\(h\.shicMisc\):\{\};return m\._rates\|\|\{\};\}\)\(\)/.test(db));
 ck('and stripped so it is not a cost group',
-  /const\{_addlCosts,_margin,_verifyNotes,_rates,\.\.\.rest\}=m/.test(db));
+  /const\{_addlCosts,_margin,_verifyNotes,_rates,_docRef,\.\.\.rest\}=m/.test(db));
 
 console.log('\nthe tariff edit writes only what differs:');
 ck('setting it back to the default removes it',

@@ -138,7 +138,7 @@ ck('and asked for in both read paths',
   (db.match(/shicShares,shicTier,shicHours,shicKW,shicRunHrs/g) || []).length === 2,
   'dbLoadCE and the offline prefetch both have to select it');
 ck('a site without the columns still opens its CEs',
-  /'shicInfo','shicTier','shicHours','shicKW','shicRunHrs'\]/.test(db),
+  /'shicInfo','shicTier','shicHours','shicKW','shicRunHrs'/.test(db),
   'the tolerant retry is what stops an unrepaired site breaking on load');
 
 console.log('\na CE that never heard of tiers is untouched:');

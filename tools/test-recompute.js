@@ -27,7 +27,7 @@ const TIERS = grab(helpersSrc, /const TIER_HOURS_PER_YEAR[\s\S]*?\nfunction tool
    Given no rates they answer with the statutory defaults, which is exactly the
    property the assertions below depend on. */
 const RATES = grab(helpersSrc,
-  /const OT_MULT_DEFAULT[\s\S]*?\nfunction ceOtMult\(rates\) \{[\s\S]*?\n\}/, 'rate resolvers');
+  /const OT_MULT_DEFAULT[\s\S]*?\nfunction toolRowTotal\(row, kwhRate, src\) \{[\s\S]*?\n\}/, 'rate resolvers');
 const helper = new Function('N', 'SHIFTS', 'CE_CFG',
   RATES + '\n' +
   grab(helpersSrc, /function ceResDays\(r\) \{[\s\S]*?\n\}/, 'ceResDays') + '\n' + TIERS + '\n' +
@@ -39,14 +39,14 @@ const helper = new Function('N', 'SHIFTS', 'CE_CFG',
 /* --- the editor's own per-row cost, for cross-checking --- */
 /* `rr` is the resolved rates the editor closes over. Passed undefined here,
    so rowCost prices at the defaults -- which is what an existing CE does. */
-const editor = new Function('N', 'SHIFTS', 'rr',
+const editor = new Function('N', 'SHIFTS', 'rr', 'kwhRate',
   RATES + '\n' +
   grab(helpersSrc, /function ceResDays\(r\) \{[\s\S]*?\n\}/, 'ceResDays') + '\n' + TIERS + '\n' +
   grab(appSrc, /const resDays = r => [^\n]*;/, 'resDays') + '\n' +
   grab(appSrc, /const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen') + '\n' +
   grab(appSrc, /const rowCost = \(kind, r\) => \{[\s\S]*?\n  \};/, 'rowCost') + '\n' +
   'return { rowCost, resDays };'
-)(N, SHIFTS, undefined);
+)(N, SHIFTS, undefined, 0);
 
 let fails = 0;
 const check = (name, cond, extra) => {

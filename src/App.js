@@ -940,7 +940,13 @@ function App({
      `days` is optional and defaults to 1, so any row that never sets it costs
      exactly qty x cost and existing CEs keep their totals. */
   const resDays = r => (r.days === undefined || r.days === null || r.days === '') ? 1 : (N(r.days) || 0);
-  const toolsT = useMemo(() => tools.reduce((s, r) => s + toolRowCost(r), 0), [tools]);
+  /* The tariff this CE charges power at: the CE's own figure on shopworks,
+     and zero everywhere else, which is what switches power costing off. One
+     value, read by the tab, the totals, the print and both exports, so none
+     of them can disagree about whether power was counted. */
+  const powerOn = !!cfg.power;
+  const kwhRate = powerOn ? ceKwhRate(rr) : 0;
+  const toolsT = useMemo(() => tools.reduce((s, r) => s + toolRowTotal(r, kwhRate), 0), [tools, kwhRate]);
   const matsT = useMemo(() => mats.reduce((s, r) => s + N(r.qty) * N(r.cost), 0), [mats]);
   const ppeT = useMemo(() => ppe.reduce((s, r) => s + N(r.qty) * N(r.cost), 0), [ppe]);
   const miscT = useMemo(() => (MISC_DEF[ceType] || MISC_DEF['onsite']).reduce((s, [k]) => {
@@ -1092,7 +1098,7 @@ function App({
     /* Tools carry a tier. The source figures ride on the row itself, copied
        from the masterlist when it was added, so a later masterlist change
        cannot silently re-price a CE that has already been quoted. */
-    if (kind === 'tools') return toolRowCost(r);
+    if (kind === 'tools') return toolRowTotal(r, kwhRate);
     if (kind !== 'mp') return N(r.qty) * N(r.cost);
     if (!r.role) return 0; /* blank row: no role, no cost (calcBen SIL adds pax*30) */
     const mult = ceShiftMult(rr, r.shift);
@@ -1608,7 +1614,7 @@ function App({
       const f = mlRes.tools.get(norm(r.desc));
       if (!f) return r;
       const n = {...r, cost: f.cost};
-      ['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear'].forEach(k => {
+      ['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear', 'kw'].forEach(k => {
         if (f[k] !== undefined) n[k] = f[k];
       });
       return n;
@@ -2107,7 +2113,7 @@ function App({
       s.push(['ITEM', 'DESCRIPTION', 'QTY', 'UOM', 'BASIS', 'UNIT PRICE', 'TOTAL'].map(h => S(h, 'th')));
       toolsActive.forEach((r, i) => s.push([
         S(i + 1, 'tdc'), S(r.desc || '', 'td'), S(N(r.qty) || 1, 'tdc'), S(r.uom || 'Lot', 'tdc'), S(toolBasis(r), 'tdc'),
-        S(N(r.cost), 'tdn'), S(toolRowCost(r), 'tdnb')]));
+        S(N(r.cost), 'tdn'), S(toolRowTotal(r, kwhRate), 'tdnb')]));
       s.push([S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('TOTAL:', 'totlbl'), S(N(toolsT), 'tot')]);
       sheets.push({name: 'BOTE', cols: COLS, rows: s});
     }
@@ -2772,7 +2778,7 @@ function App({
          could be typed into the calculator one item at a time and no other
          way. Cost stays where it is so an older template still imports. */
       tools: ['Item Code', 'Category', 'Description', 'Cost (P)', 'UOM',
-        'Unit Price', 'Service Life (Years)', 'Projects per Year', 'Maintenance per Year'],
+        'Unit Price', 'Service Life (Years)', 'Projects per Year', 'Maintenance per Year', 'Power (kW)'],
       materials: ['Item Code', 'Category', 'Description', 'Cost (P)', 'UOM'],
       ppe: ['Item Code', 'Category', 'Description', 'Cost (P)', 'UOM'],
       vehicles: ['Item Code', 'Category', 'Description', 'Rate (P)', 'UOM']
@@ -2781,7 +2787,7 @@ function App({
       const colMap = {
         manpower: ['code', 'category', 'role', 'rate', 'perDiem', 'uom'],
         tools: ['code', 'category', 'desc', 'cost', 'uom',
-          'unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear'],
+          'unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear', 'kw'],
         materials: ['code', 'category', 'desc', 'cost', 'uom'],
         ppe: ['code', 'category', 'desc', 'cost', 'uom'],
         vehicles: ['code', 'category', 'desc', 'rate', 'uom']
@@ -2862,7 +2868,10 @@ function App({
           servicelifespan: 'serviceLife', servicelife: 'serviceLife',
           estprojectperyear: 'projectsPerYear', projectsperyear: 'projectsPerYear',
           projectperyear: 'projectsPerYear', noofprojectsperyear: 'projectsPerYear',
-          maintenanceperyear: 'maintPerYear', maintperyear: 'maintPerYear'
+          maintenanceperyear: 'maintPerYear', maintperyear: 'maintPerYear',
+          /* Power rating, under every heading the shop's sheets use for it. */
+          powerkw: 'kw', kw: 'kw', power: 'kw', rating: 'kw', ratingkw: 'kw',
+          powerrating: 'kw', powerratingkw: 'kw', kilowatt: 'kw', kilowatts: 'kw'
         };
         const rekey = r => {
           const o = {};
@@ -2895,7 +2904,7 @@ function App({
              tool that costs nothing to own, and the tiers would read as real
              prices of zero. */
           if (tab === 'tools') {
-            ['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear'].forEach(k => {
+            ['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear', 'kw'].forEach(k => {
               if (rk[k] !== undefined && rk[k] !== '') {
                 const v = parseFloat(rk[k]);
                 if (isFinite(v)) item[k] = v;
@@ -3331,7 +3340,7 @@ function App({
          Editable here as well, because typing one number is quicker than
          opening a dialog to change it. */
       ...(mlTab === 'tools'
-        ? ['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear'].map(k =>
+        ? ['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear', 'kw'].map(k =>
             /*#__PURE__*/React.createElement("td", {
               key: k,
               style: TDS
@@ -3339,7 +3348,7 @@ function App({
               style: {
                 ...INP,
                 ...MONO,
-                width: k === 'serviceLife' ? 74 : 96,
+                width: (k === 'serviceLife' || k === 'kw') ? 74 : 96,
                 fontSize: 10
               },
               type: "number",
@@ -3352,7 +3361,8 @@ function App({
                 unitPrice: 'What the tool cost to buy',
                 serviceLife: 'Over how many years it is written off',
                 projectsPerYear: 'Projects it is used on in a year — Tier 1 only',
-                maintPerYear: 'Yearly maintenance, often 20% of unit price'
+                maintPerYear: 'Yearly maintenance, often 20% of unit price',
+                kw: 'Power rating in kilowatts — used to cost electricity on shopworks CEs'
               }[k],
               onChange: e => updML(r.id, k, e.target.value === '' ? '' : (parseFloat(e.target.value) || 0))
             })))
@@ -6440,9 +6450,9 @@ function App({
     const toolsActive=tools.filter(r=>r.desc&&(N(r.cost)>0||r.desc.trim()));
     const toolsPage=toolsActive.length?`<div class="blk">
       <div class="sec">BILL OF TOOLS AND EQUIPMENT</div>
-      <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:28px">QTY</th><th class="c" style="width:35px">UOM</th><th class="c" style="width:52px">BASIS</th><th class="r" style="width:80px">UNIT PRICE</th><th class="r" style="width:80px">TOTAL</th></tr>
-      ${toolsActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.uom||'Lot')}</td><td class="c">${esc(toolBasis(r))}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(toolRowCost(r))}</td></tr>`).join('')}
-      <tr class="tot"><td colspan="6" class="r b">TOTAL:</td><td class="r b">${fmt(toolsT)}</td></tr></table></div>` : '';
+      <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:28px">QTY</th><th class="c" style="width:35px">UOM</th><th class="c" style="width:52px">BASIS</th>${powerOn?'<th class="r" style="width:64px">POWER</th>':''}<th class="r" style="width:80px">UNIT PRICE</th><th class="r" style="width:80px">TOTAL</th></tr>
+      ${toolsActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.uom||'Lot')}</td><td class="c">${esc(toolBasis(r))}</td>${powerOn?`<td class="r">${toolPowerCost(r, kwhRate)>0?fmt(toolPowerCost(r, kwhRate)):'&#8212;'}</td>`:''}<td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(toolRowTotal(r, kwhRate))}</td></tr>`).join('')}
+      <tr class="tot"><td colspan="${powerOn?7:6}" class="r b">TOTAL:</td><td class="r b">${fmt(toolsT)}</td></tr></table></div>` : '';
 
     /* Materials &#8212; skip zero rows */
     const matsActive=mats.filter(r=>r.desc&&(N(r.cost)>0||r.desc.trim()));
@@ -6709,13 +6719,17 @@ function App({
     const bill = (name, heading, rows, withDays, total) => {
       if (!rows.length) return;
       sheet(name, a => {
-        docHead(a, heading, withDays ? 7 : 6);
         /* withDays is only ever true for tools, which is the one bill whose
-           rows can be charged per project or by the hour. */
-        a.head('ITEM', 'DESCRIPTION', 'QTY', 'UOM', ...(withDays ? ['BASIS'] : []), 'UNIT PRICE', 'TOTAL');
+           rows can be charged per project or by the hour. POWER joins it on
+           shopworks, where the shop's own electricity is part of the cost. */
+        const pwrCol = withDays && powerOn;
+        docHead(a, heading, (withDays ? 7 : 6) + (pwrCol ? 1 : 0));
+        a.head('ITEM', 'DESCRIPTION', 'QTY', 'UOM', ...(withDays ? ['BASIS'] : []),
+          ...(pwrCol ? ['POWER'] : []), 'UNIT PRICE', 'TOTAL');
         rows.forEach((r, i) => {
           a.row(i + 1, r.desc || '', N(r.qty), r.uom || 'Lot', ...(withDays ? [toolBasis(r)] : []),
-            a.money(r.cost), a.money(withDays ? toolRowCost(r) : N(r.qty) * N(r.cost)));
+            ...(pwrCol ? [a.money(toolPowerCost(r, kwhRate))] : []),
+            a.money(r.cost), a.money(withDays ? toolRowTotal(r, kwhRate) : N(r.qty) * N(r.cost)));
         });
         a.blank();
         a.total('', 'TOTAL:', '', '', ...(withDays ? [''] : []), '', a.money(total));
@@ -10036,6 +10050,16 @@ tab === 'dashboard' && (() => {
        of its own and comes back with the CE. */
     defaultTier: N(info.toolTier) || 2,
     setDefaultTier: v => setInfo(p => ({...p, toolTier: v})),
+    showPower: powerOn,
+    kwhRate,
+    /* A rate equal to the default is removed rather than stored, so a CE that
+       was never touched is not frozen against a future change to it -- the
+       same rule the shift multipliers follow. */
+    setKwhRate: v => setRates(p => {
+      const n = {...p}, f = parseFloat(v);
+      if (!isFinite(f) || f < 0 || f === KWH_RATE_DEFAULT) delete n.kwhRate; else n.kwhRate = f;
+      return n;
+    }),
     masterlist, showToast, setPicker
   }), tab === 'materials' && /*#__PURE__*/React.createElement(ResTab, {
     rows: mats,

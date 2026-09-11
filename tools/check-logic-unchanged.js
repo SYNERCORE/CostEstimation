@@ -65,8 +65,37 @@ function grab(src, name, kind) {
     re = new RegExp('\\bconst ' + name + '\\s*=\\s*[^;\\n]*=>\\s*\\{[\\s\\S]*?\\n  \\};'
       + '|\\bconst ' + name + '\\s*=\\s*[^\\n]*;', 'm');
   } else {
-    re = new RegExp('\\bconst ' + name + '\\s*=\\s*[\\[{][\\s\\S]*?\\n\\];?'
-      + '|\\bconst ' + name + '\\s*=\\s*[\\[{][\\s\\S]*?\\n\\};?', 'm');
+    /* This looked for the literal's closing bracket at the start of a line --
+       `\n};` for an object, `\n];` for an array -- as one alternation. Two
+       things were wrong with it.
+
+       JS takes the LEFT branch of an alternation wherever it can match at all,
+       so SHIFTS, an object, was closed by the first `\n];` ANYWHERE below it,
+       which is inside DEFAULT_ML. Its fingerprint quietly covered CE_CFG and
+       half the default masterlist, and adding one field to a CE type reported
+       SHIFTS as changed.
+
+       And a constant written on ONE line -- CE_CLOSED_STATUSES,
+       DEFAULT_STATUS_OPTIONS -- has no closing bracket at the start of any
+       line, so neither branch could match its own end. Both ran on into
+       ceIsOpen below them.
+
+       Counting brackets ends every constant at its own, on one line or a
+       hundred, with no pattern to get wrong. */
+    const start = src.search(new RegExp('\\bconst ' + name + '\\s*=\\s*[\\[{]'));
+    if (start < 0) return null;
+    let i = src.search(new RegExp('\\bconst ' + name + '\\s*=\\s*')) ;
+    i = src.indexOf('=', i);
+    while (i < src.length && src[i] !== '[' && src[i] !== '{') i++;
+    let d = 0;
+    for (; i < src.length; i++) {
+      const c = src[i];
+      if (c === '(' || c === '[' || c === '{') d++;
+      else if (c === ')' || c === ']' || c === '}') { d--; if (d === 0) { i++; break; } }
+    }
+    /* Take the trailing semicolon too, so the extent is the whole statement. */
+    if (src[i] === ';') i++;
+    return src.slice(start, i);
   }
   const m = src.match(re);
   return m ? m[0] : null;

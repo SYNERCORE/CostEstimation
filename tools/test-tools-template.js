@@ -23,7 +23,10 @@ console.log('the downloaded template offers them:');
 ck('the four columns are in the tools header row',
   /'Unit Price', 'Service Life \(Years\)', 'Projects per Year', 'Maintenance per Year'/.test(app));
 ck('and the keys behind them line up',
-  /'unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear'\]/.test(app));
+  /'unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear', 'kw'\]/.test(app));
+ck('the power rating is offered too',
+  /'Maintenance per Year', 'Power \(kW\)'\]/.test(app),
+  'a kW column in the workbook is how a shop fills 600 tools in one import instead of one at a time');
 ck('Cost stays where it was, so an older template still imports',
   /tools: \['Item Code', 'Category', 'Description', 'Cost \(P\)', 'UOM',/.test(app));
 
@@ -109,8 +112,8 @@ ck('and the die grinder comes in at its workbook rate',
    the calculator was stored and then appeared nowhere -- which reads as the
    calculator having failed, and sends people to enter it again. */
 console.log('\nthe masterlist SHOWS the figures it stores:');
-ck('there is a cell for each of the four',
-  /\[\'unitPrice\', \'serviceLife\', \'projectsPerYear\', \'maintPerYear\'\]\.map\(k =>/.test(app));
+ck('there is a cell for each of the four, and for the kW rating',
+  /\[\'unitPrice\', \'serviceLife\', \'projectsPerYear\', \'maintPerYear\', \'kw\'\]\.map\(k =>/.test(app));
 ck('they are editable, not just displayed',
   /onChange: e => updML\(r\.id, k, e\.target\.value === \'\'/.test(app));
 ck('an empty cell stays empty rather than becoming 0',
@@ -123,8 +126,9 @@ ck('and only on the tools tab', /mlTab === \'tools\'\n?[\s]*\\? \[\'unitPrice\'/
    first extra one sits under the wrong heading -- which is what put the delete
    button under "Unit Price". */
 const toolsHdr = app.match(/tools: \[\'Item Code\'[^\]]*\]/)[0];
-ck('the tools heading row declares nine columns',
-  (toolsHdr.match(/\'/g) || []).length / 2 === 9,
+/* Nine, plus Power (kW) once tools started carrying a power rating. */
+ck('the tools heading row declares ten columns',
+  (toolsHdr.match(/\'/g) || []).length / 2 === 10,
   toolsHdr);
 
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\ntools template OK');

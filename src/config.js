@@ -35,7 +35,11 @@ const CE_CFG = {
     color: "#A78BFA",
     mobDemob: true,
     docNo: "SHIC-F-TSG-025",
-    hasConc: false
+    hasConc: false,
+    /* Shop work runs on the shop's own supply, so the electricity a tool draws
+       is a cost we carry and bill. Onsite and supply run on the client's
+       power, which is not ours to charge for. */
+    power: true
   },
   supply: {
     color: "#3FB950",

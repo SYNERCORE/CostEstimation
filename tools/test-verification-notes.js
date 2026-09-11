@@ -47,7 +47,7 @@ ck('and when a draft is resumed', /setVerifyNotes\(d\.verifyNotes \? \{\.\.\.d\.
 console.log('\nno SharePoint column had to be added:');
 ck('it rides in the existing misc blob', /_verifyNotes/.test(db) && !/shicVerifyNotes/.test(db),
   'a new column means every site has to run Repair first');
-ck('and is stripped back out on load', /const\{_addlCosts,_margin,_verifyNotes,\.\.\.rest\}=m/.test(db),
+ck('and is stripped back out on load', /const\{_addlCosts,_margin,_verifyNotes,_rates,\.\.\.rest\}=m/.test(db),
   "left in, it comes back as a miscellaneous cost group named '_verifyNotes'");
 
 console.log('\nthe autosave notices it:');

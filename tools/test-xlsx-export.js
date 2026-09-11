@@ -62,7 +62,7 @@ ck('overtime is per day, as everywhere else', /\(N\(r\.otHours\) \/ 8\)/.test(ex
    same function the CE totals with, and prints the basis of the charge instead
    of a DAYS column that says nothing on two of the three tiers. */
 ck('tools are costed by the one tier function, not by hand',
-  /a\.money\(withDays \? toolRowCost\(r\) : N\(r\.qty\) \* N\(r\.cost\)\)/.test(exp));
+  /a\.money\(withDays \? toolRowTotal\(r, kwhRate\) : N\(r\.qty\) \* N\(r\.cost\)\)/.test(exp));
 ck('and only tools get a BASIS column', /withDays \? \['BASIS'\] : \[\]/.test(exp),
   'a consumable is not billed by the day, the hour or the project');
 ck('the summary reuses the same rows the app shows', /summaryRows\.forEach/.test(exp),

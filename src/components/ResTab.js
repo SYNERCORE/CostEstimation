@@ -11,7 +11,14 @@ const ResTab = ({
   setPicker,
   showDays, /* Tools only: equipment can be charged per day (qty x days x cost) */
   defaultTier, /* Tools only: what a new row starts on */
-  setDefaultTier
+  setDefaultTier,
+  /* Shopworks tools only -- onsite and supply work run on the client's
+     supply, so the electricity a tool draws is not ours to bill. The columns
+     are shown by showPower (the CE type), NOT by the tariff being non-zero:
+     a shop that sets the rate to 0 still needs somewhere to type the kW. */
+  showPower,
+  kwhRate,
+  setKwhRate
 }) => {
   /* Days is optional per row and defaults to 1, so a row that never sets it
      costs exactly qty x cost -- existing CEs are unaffected. */
@@ -19,7 +26,8 @@ const ResTab = ({
   /* Tools carry a tier; everything else is qty x cost. toolRowCost is the same
      function the grand total, the recompute and both exports use, so the row
      total on screen cannot disagree with the CE it adds up to. */
-  const rowTot = r => showDays ? toolRowCost(r) : N(r.qty) * N(r.cost);
+  const rowPwr = r => showPower ? toolPowerCost(r, kwhRate) : 0;
+  const rowTot = r => showDays ? toolRowCost(r) + rowPwr(r) : N(r.qty) * N(r.cost);
   const tierOf = r => N(r.tier) || 2;
   const [_rtNewId, _rtSetNewId] = useState(null);
   const _rtDescRef = useRef(null);
@@ -41,7 +49,28 @@ const ResTab = ({
   style: {
     fontWeight: 700
   }
-}, label), /*#__PURE__*/React.createElement("div", {
+}, label),
+/* The tariff, on the CE rather than in a constant, for the same reason the
+   shift multipliers are: an estimate keeps what it was quoted at when the
+   utility puts its rate up. */
+showPower && /*#__PURE__*/React.createElement("label", {
+  style: {
+    display: 'flex', alignItems: 'center', gap: 6,
+    fontSize: 11, color: 'var(--text-secondary)'
+  },
+  title: "Pesos per kilowatt-hour, charged on every tool with a kW rating and running hours. Set it to 0 to bill no power on this CE."
+}, "Electricity", /*#__PURE__*/React.createElement("input", {
+  style: {
+    ...INP,
+    fontFamily: "'JetBrains Mono',monospace",
+    width: 72
+  },
+  type: "number",
+  min: 0,
+  step: "0.01",
+  value: kwhRate,
+  onChange: e => setKwhRate(e.target.value)
+}), "P/kWh"), /*#__PURE__*/React.createElement("div", {
   style: {
     display: 'flex',
     gap: 6
@@ -55,7 +84,9 @@ const ResTab = ({
       desc: item.desc,
       qty: 1,
       uom: item.uom,
-      cost: item.cost
+      cost: item.cost,
+      /* Copied onto the row, not looked up later -- see the kW column. */
+      ...(item.kw ? {kw: item.kw} : {})
     }])
   })
 }, "From Masterlist"), /*#__PURE__*/React.createElement("button", {
@@ -72,7 +103,7 @@ const ResTab = ({
          Tier 1 or Tier 3 row has nothing to derive from and quietly falls back
          to the daily rate. */
       const _src = {};
-      ['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear'].forEach(k => {
+      ['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear', 'kw'].forEach(k => {
         if (f[k] !== undefined) _src[k] = f[k];
       });
       return {...r, ..._src, cost: f.cost !== undefined ? f.cost : (f.rate !== undefined ? f.rate : r.cost)};
@@ -172,7 +203,7 @@ const ResTab = ({
     borderCollapse: 'collapse',
     fontSize: 12
   }
-}, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Description', 'Qty', ...(showDays ? ['Tier', 'Days', 'Hrs'] : []), 'UOM', 'Unit Cost (P)', 'Row Total', ''].map(h => /*#__PURE__*/React.createElement("th", {
+}, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Description', 'Qty', ...(showDays ? ['Tier', 'Days', 'Hrs'] : []), ...(showPower ? ['kW', 'Run hrs', 'Power (P)'] : []), 'UOM', 'Unit Cost (P)', 'Row Total', ''].map(h => /*#__PURE__*/React.createElement("th", {
   key: h,
   style: THS
 }, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map(r => {
@@ -197,7 +228,8 @@ const ResTab = ({
         desc: d,
         ...(f ? {
           cost: f.cost,
-          uom: f.uom
+          uom: f.uom,
+          ...(f.kw ? {kw: f.kw} : {})
         } : {})
       } : x));
     },
@@ -279,7 +311,67 @@ const ResTab = ({
       ...x,
       hours: e.target.value
     } : x))
-  })), /*#__PURE__*/React.createElement("td", {
+  })),
+  /* Power rating. Comes across from the Masterlist when the item is picked,
+     and sits on the row from then on -- a later Masterlist edit must not
+     reprice a CE that has already been quoted, the same rule the unit cost
+     follows. */
+  showPower && /*#__PURE__*/React.createElement("td", {
+    style: TDS
+  }, /*#__PURE__*/React.createElement("input", {
+    style: {
+      ...INP,
+      fontFamily: "'JetBrains Mono',monospace",
+      width: 62
+    },
+    type: "number",
+    min: 0,
+    step: "0.1",
+    value: r.kw === undefined || r.kw === null ? '' : r.kw,
+    placeholder: "0",
+    title: "Power rating of the tool in kilowatts. Leave blank for anything that does not draw power.",
+    onChange: e => set(p => p.map(x => x.id === r.id ? {
+      ...x,
+      kw: e.target.value
+    } : x))
+  })),
+  /* Hours the tool actually draws, typed -- not days x 8. A grinder on the
+     floor for five days does not run for 120 hours, and costing it as though
+     it did quotes more power than the shop consumes. Independent of the tier,
+     because a Tier 1 or Tier 2 tool draws power just the same. */
+  showPower && /*#__PURE__*/React.createElement("td", {
+    style: TDS
+  }, /*#__PURE__*/React.createElement("input", {
+    style: {
+      ...INP,
+      fontFamily: "'JetBrains Mono',monospace",
+      width: 62
+    },
+    type: "number",
+    min: 0,
+    value: r.runHrs === undefined || r.runHrs === null ? '' : r.runHrs,
+    placeholder: "0",
+    title: "Hours this tool actually runs -- not how long it is on the floor.",
+    onChange: e => set(p => p.map(x => x.id === r.id ? {
+      ...x,
+      runHrs: e.target.value
+    } : x))
+  })),
+  showPower && /*#__PURE__*/React.createElement("td", {
+    style: {
+      ...TDS,
+      fontFamily: "'JetBrains Mono',monospace",
+      textAlign: 'right',
+      color: rowPwr(r) > 0 ? 'var(--accent-amber)' : 'var(--text-secondary)',
+      whiteSpace: 'nowrap'
+    },
+    title: rowPwr(r) > 0
+      ? N(r.qty) + ' x ' + N(r.kw) + ' kW x ' + N(r.runHrs) + ' hrs x P' + N(kwhRate) + '/kWh'
+      : 'Set a kW rating and running hours to charge power on this row.'
+  }, rowPwr(r) > 0 ? 'P' + rowPwr(r).toLocaleString('en-PH', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }) : '--'), /*#__PURE__*/React.createElement("td", {
     style: TDS
   }, /*#__PURE__*/React.createElement("select", {
     style: {

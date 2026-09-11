@@ -122,6 +122,9 @@ const mkMiscRow = () => ({
    deleted one, or a zero falls back to the default rather than pricing a
    night shift at nothing. */
 const OT_MULT_DEFAULT = 1.25;
+/* Pesos per kWh. A starting figure only -- it is editable on the CE, and the
+   shop's actual tariff should be typed in. */
+const KWH_RATE_DEFAULT = 12;
 function ceRates(src) {
   const raw = (src && src.rates) || {};
   const rawShifts = raw.shiftMults || {};
@@ -132,7 +135,17 @@ function ceRates(src) {
     shiftMults[k] = (isFinite(v) && v > 0) ? v : SHIFTS[k].mult;
   });
   const ot = parseFloat(raw.otMult);
-  return {shiftMults, otMult: (isFinite(ot) && ot > 0) ? ot : OT_MULT_DEFAULT};
+  /* The electricity tariff rides here for the same reason the multipliers do:
+     a CE keeps what it was quoted at. A utility rate change must not reprice
+     an estimate that has already gone to a client. Zero is a legitimate
+     value -- it means power is not being charged -- so unlike a multiplier it
+     is honoured rather than replaced by the default. */
+  const kwh = parseFloat(raw.kwhRate);
+  return {
+    shiftMults,
+    otMult: (isFinite(ot) && ot > 0) ? ot : OT_MULT_DEFAULT,
+    kwhRate: (isFinite(kwh) && kwh >= 0) ? kwh : KWH_RATE_DEFAULT
+  };
 }
 /* One shift's multiplier. Takes a resolved rates object, or undefined -- a
    caller that has not got one still gets the statutory figure rather than 1,
@@ -145,6 +158,36 @@ function ceShiftMult(rates, shiftKey) {
 function ceOtMult(rates) {
   const v = rates && parseFloat(rates.otMult);
   return (isFinite(v) && v > 0) ? v : OT_MULT_DEFAULT;
+}
+function ceKwhRate(rates) {
+  const v = rates && parseFloat(rates.kwhRate);
+  return (isFinite(v) && v >= 0) ? v : KWH_RATE_DEFAULT;
+}
+/* Power is charged on shopworks only, and the CE type is what says so -- not
+   the presence of a kW figure on a row. The same welding machine on an onsite
+   job runs on the client's supply, so its power is not ours to bill. */
+function cePowerOn(ceType) {
+  const c = (typeof CE_CFG !== 'undefined' && CE_CFG[ceType]) || {};
+  return !!c.power;
+}
+/* Electricity for one tool row: rating x running hours x tariff.
+   Running hours are typed, not derived from days. A grinder on the floor for
+   five days does not draw for 120 hours, and billing it as though it did is
+   how a shopworks CE ends up quoting more power than the shop consumes. */
+function toolPowerCost(row, kwhRate) {
+  if (!row) return 0;
+  const rate = N(kwhRate);
+  if (!(rate > 0)) return 0;
+  const kw = N(row.kw), hrs = N(row.runHrs);
+  if (!(kw > 0) || !(hrs > 0)) return 0;
+  return N(row.qty) * kw * hrs * rate;
+}
+/* What a tool row costs all in: rental plus the power it draws. Every place
+   that shows a row total -- the editor, the printed CE, both exports and the
+   grand total -- goes through this one function, so none of them can disagree
+   about whether power was counted. */
+function toolRowTotal(row, kwhRate, src) {
+  return toolRowCost(row, src) + toolPowerCost(row, kwhRate);
 }
 
 function ceResDays(r) {
@@ -178,7 +221,8 @@ function computeCEGrand(ce) {
   const mpT = arr(ce.mp).reduce((s, r) => s + ceMpRowCost(r, _rates), 0);
   /* Through toolRowCost, so a tiered CE recomputes to what the editor shows.
      A row naming no tier is Tier 2, which is exactly the old expression. */
-  const toolsT = arr(ce.tools).reduce((s, r) => s + toolRowCost(r), 0);
+  const _kwh = cePowerOn(ce.ceType) ? ceKwhRate(_rates) : 0;
+  const toolsT = arr(ce.tools).reduce((s, r) => s + toolRowTotal(r, _kwh), 0);
   const matsT = arr(ce.mats).reduce((s, r) => s + N(r.qty) * N(r.cost), 0);
   const ppeT = arr(ce.ppe).reduce((s, r) => s + N(r.qty) * N(r.cost), 0);
   const miscT = Object.keys(ce.misc || {}).reduce((s, k) => {

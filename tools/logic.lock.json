@@ -3,7 +3,7 @@
   "src/helpers.js:nextCeNumForCompany": "028f2814d1883c5e",
   "src/helpers.js:ceResDays": "69d119775b0bcee9",
   "src/helpers.js:ceMpRowCost": "e7290e79538cd497",
-  "src/helpers.js:computeCEGrand": "d3d023310a24e2ff",
+  "src/helpers.js:computeCEGrand": "435185f7460b2875",
   "src/helpers.js:toolAnnualCost": "b93577d56916ff92",
   "src/helpers.js:toolTierRates": "b713b02d8955f3e8",
   "src/helpers.js:toolRowCost": "7c1e923f0cf70989",
@@ -16,11 +16,11 @@
   "src/App.js:ceNumKey": "2f304e6e71500df6",
   "src/config.js:ceDefaultFor": "ee0edc4390eb29b1",
   "src/config.js:ceIsOpen": "5f6ea7dfcc4e1200",
-  "src/db.js:_assembleCE": "ac90d6be069bb250",
+  "src/db.js:_assembleCE": "fbedec0378a5cb5d",
   "src/App.js:calcBen": "89a48c1521638f56",
-  "src/App.js:rowCost": "0d703d2340aace77",
+  "src/App.js:rowCost": "ef061fddad54417e",
   "src/App.js:resDays": "21ab8d19b1b29084",
-  "src/config.js:SHIFTS": "2ad44ea285c7a81d",
-  "src/config.js:CE_CLOSED_STATUSES": "f3b24ece571618c7",
-  "src/config.js:DEFAULT_STATUS_OPTIONS": "d6739bd191f1c33d"
+  "src/config.js:SHIFTS": "9c3561660876ca9b",
+  "src/config.js:CE_CLOSED_STATUSES": "79c90d521d28eedc",
+  "src/config.js:DEFAULT_STATUS_OPTIONS": "6847cb0b39e53f7e"
 }

@@ -30,8 +30,11 @@ const TIERS =
    Undefined here, so it prices at the statutory defaults -- which is what
    every CE saved before they became editable carries. */
 const RATES = helpersSrc.match(
-  new RegExp('const OT_MULT_DEFAULT[\\s\\S]*?\\nfunction ceOtMult\\(rates\\) \\{[\\s\\S]*?\\n\\}'))[0];
-const make = body => new Function('N', 'SHIFTS', 'sowItems', 'rr', RATES + NLC + TIERS + NLC + body);
+  new RegExp('const OT_MULT_DEFAULT[\\s\\S]*?\\nfunction toolRowTotal\\(row, kwhRate, src\\) \\{[\\s\\S]*?\\n\\}'))[0];
+/* kwhRate is the tariff rowCost charges tool power at. Zero here, which is
+   what every non-shopworks CE carries -- so the assertions below are the
+   rental-only figures they have always been. */
+const make = body => new Function('N', 'SHIFTS', 'sowItems', 'rr', 'kwhRate', RATES + NLC + TIERS + NLC + body);
 
 const api = make(`
   ${resDaysSrc}
@@ -39,7 +42,7 @@ const api = make(`
   ${rowCostSrc}
   ${groupSrc}
   return { rowCost, sowTaskGroup, calcBen, resDays };
-`)(N, SHIFTS, []);
+`)(N, SHIFTS, [], undefined, 0);
 
 let fails = 0;
 const check = (name, cond, extra) => {
@@ -157,7 +160,7 @@ const list = [
   { id: 'b', type: 'main' }, { id: 'b1', type: 'sub' },
   { id: 'c', type: 'main' },
 ];
-const g = make(`${groupSrc} return sowTaskGroup;`)(N, SHIFTS, list);
+const g = make(`${groupSrc} return sowTaskGroup;`)(N, SHIFTS, list, undefined, 0);
 check('main "a" takes a1 + a2', JSON.stringify(g({ id: 'a', type: 'main' })) === '["a","a1","a2"]', JSON.stringify(g({ id: 'a', type: 'main' })));
 check('stops at the next main', !g({ id: 'a', type: 'main' }).includes('b'));
 check('main "b" takes only b1', JSON.stringify(g({ id: 'b', type: 'main' })) === '["b","b1"]', JSON.stringify(g({ id: 'b', type: 'main' })));

@@ -125,9 +125,9 @@ const reg = fs.readFileSync('src/components/RegisterPage.js', 'utf8');
 
 console.log('\nthere is one costing path, not four:');
 ck('the editor row total goes through it', /const rowTot = r => showDays \? toolRowCost\(r\)/.test(restab));
-ck('so does the CE total', /const toolsT = useMemo\(\(\) => tools\.reduce\(\(s, r\) => s \+ toolRowCost\(r\), 0\)/.test(app));
-ck('so does the per-task cost', /if \(kind === 'tools'\) return toolRowCost\(r\);/.test(app));
-ck('and so does the recompute', /arr\(ce\.tools\)\.reduce\(\(s, r\) => s \+ toolRowCost\(r\), 0\)/.test(helpers),
+ck('so does the CE total', /const toolsT = useMemo\(\(\) => tools\.reduce\(\(s, r\) => s \+ toolRowTotal\(r, kwhRate\), 0\)/.test(app));
+ck('so does the per-task cost', /if \(kind === 'tools'\) return toolRowTotal\(r, kwhRate\);/.test(app));
+ck('and so does the recompute', /arr\(ce\.tools\)\.reduce\(\(s, r\) => s \+ toolRowTotal\(r, _kwh\), 0\)/.test(helpers),
   'Monitoring and the editor disagreeing on a total is the bug we already had');
 
 console.log('\nthe tier survives a round trip:');
@@ -135,10 +135,10 @@ ck('it is provisioned', /\[9,'shicTier'\],\[9,'shicHours'\]/.test(reg));
 ck('written', /shicTier:r\.tier\|\|0,shicHours:r\.hours\|\|0/.test(db));
 ck('read back', /tier:r\.shicTier\|\|2,hours:r\.shicHours\|\|0/.test(db));
 ck('and asked for in both read paths',
-  (db.match(/shicShares,shicTier,shicHours/g) || []).length === 2,
+  (db.match(/shicShares,shicTier,shicHours,shicKW,shicRunHrs/g) || []).length === 2,
   'dbLoadCE and the offline prefetch both have to select it');
 ck('a site without the columns still opens its CEs',
-  /'shicInfo','shicTier','shicHours'\]/.test(db),
+  /'shicInfo','shicTier','shicHours','shicKW','shicRunHrs'\]/.test(db),
   'the tolerant retry is what stops an unrepaired site breaking on load');
 
 console.log('\na CE that never heard of tiers is untouched:');
@@ -158,9 +158,9 @@ ck('and a shared row is split by hours on Tier 3, not days',
 
 console.log('\nand the source figures follow the rate:');
 ck('Sync Rates carries them onto the CE',
-  /\['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear'\]\.forEach/.test(app),
+  /\['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear', 'kw'\]\.forEach/.test(app),
   'without them a Tier 1 or Tier 3 row has nothing to derive from');
-ck('so does the tab-level Sync Rates', /\['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear'\]\.forEach/.test(restab));
+ck('so does the tab-level Sync Rates', /\['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear', 'kw'\]\.forEach/.test(restab));
 
 /* The client's copy has to say what it is charging for. A DAYS column says
    nothing on a row charged per project, and reads as a mistake on an hourly
@@ -186,9 +186,9 @@ ck('and no document still prints DAYS for a tool',
   !/'ITEM', 'DESCRIPTION', 'QTY', 'UOM', 'DAYS'/.test(app) && !/>DAYS<\/th><th class="r" style="width:80px">UNIT PRICE/.test(app));
 
 console.log('\nand every printed total is the tiered one:');
-ck('the printed CE', /fmt\(toolRowCost\(r\)\)/.test(app));
-ck('Export CE', /S\(toolRowCost\(r\), 'tdnb'\)/.test(app));
-ck('Export Detailed', /a\.money\(withDays \? toolRowCost\(r\) : N\(r\.qty\) \* N\(r\.cost\)\)/.test(app));
+ck('the printed CE', /fmt\(toolRowTotal\(r, kwhRate\)\)/.test(app));
+ck('Export CE', /S\(toolRowTotal\(r, kwhRate\), 'tdnb'\)/.test(app));
+ck('Export Detailed', /a\.money\(withDays \? toolRowTotal\(r, kwhRate\) : N\(r\.qty\) \* N\(r\.cost\)\)/.test(app));
 ck('none of them recompute qty x days x cost by hand',
   !/N\(r\.qty\) \* N\(r\.cost\) \* resDays\(r\)/.test(app),
   'a document doing its own arithmetic is a document that can disagree with the CE');

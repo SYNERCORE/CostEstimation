@@ -100,6 +100,10 @@ jobs:
         run: node tools/test-section-headers.js
       - name: Shift bars
         run: node tools/test-shift-bars.js
+      - name: Tool power usage
+        run: node tools/test-tool-power.js
+      - name: Logic guard extents
+        run: node tools/test-logic-guard.js
       - name: Delete permission
         run: node tools/test-delete-permission.js
       - name: Editable multipliers

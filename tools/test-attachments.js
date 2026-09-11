@@ -97,5 +97,20 @@ ck('the error is cleared when the panel is reopened',
   /setAttachPanel\(ceId\); setAttachList\(\[\]\); setAttachErr\(''\);/.test(app),
   'a stale error would stick to the next CE opened');
 
+console.log('\ndeleting one follows the same rule as deleting the CE:');
+/* Against the comment-stripped copy, so /*#__PURE__*\/ is not in the way. */
+ck('the button is admin/owner only',
+  /isAdmin && React\.createElement\("button", \{\s*style:\{\.\.\.btn\('danger',true\),fontSize:10,padding:'2px 6px'/.test(app),
+  'an attachment on a saved CE is a drawing or a TOR the estimate was built from');
+ck('and the handler refuses regardless of the button',
+  /if \(!isAdmin\) \{ showToast\('Only an admin or the owner can delete an attachment\.', true\); return; \}/.test(app),
+  'the UI is not a permission boundary and this call reaches SharePoint');
+ck('the check runs before the SharePoint delete',
+  app.indexOf('Only an admin or the owner can delete an attachment') <
+  app.indexOf("spDeleteAttachment(spList('Monitoring')"),
+  'a guard after the call is not a guard');
+ck('isAdmin is the owner-inclusive test', /const isAdmin = hasAdminPowers\(currentUser\.role\)/.test(app),
+  'hasAdminPowers is owner OR admin, so the owner is never locked out');
+
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nattachments OK');
 process.exit(bad ? 1 : 0);

@@ -3520,6 +3520,9 @@ function App({
   };
 
   const handleAttachDelete = async (ceId, fileName) => {
+    /* The button is hidden from everyone else, but the UI is not a permission
+       boundary and this call reaches SharePoint. */
+    if (!isAdmin) { showToast('Only an admin or the owner can delete an attachment.', true); return; }
     setAttachBusy(true);
     try {
       const spId = _monSpIdCache[ceId];
@@ -8262,9 +8265,13 @@ attachPanel && /*#__PURE__*/React.createElement("div", {
           target:'_blank', rel:'noopener noreferrer',
           style:{flex:1,fontSize:12,color:INFO,wordBreak:'break-all',textDecoration:'none'}
         }, f.FileName),
-        /*#__PURE__*/React.createElement("button", {
+        /* Same rule as deleting the CE itself: an attachment on a saved CE is
+           a company record -- a drawing or a TOR the estimate was built from --
+           and removing it is an admin/owner action. */
+        isAdmin && /*#__PURE__*/React.createElement("button", {
           style:{...btn('danger',true),fontSize:10,padding:'2px 6px',flexShrink:0},
           disabled:attachBusy,
+          title:"Delete this attachment",
           onClick:()=>handleAttachDelete(attachPanel, f.FileName)
         }, "✕")
       ))

@@ -3476,17 +3476,24 @@ function App({
   const [statusPanel, setStatusPanel] = React.useState(null); // ceId or null
   const [attachList, setAttachList] = React.useState([]);
   const [attachBusy, setAttachBusy] = React.useState(false);
+  /* Why the list is empty. Without this the panel says "No attachments yet"
+     whether the CE really has none or the read failed, and someone looking for
+     a drawing that IS there is told it is not. */
+  const [attachErr, setAttachErr] = React.useState('');
   const monTopScrollRef = React.useRef(null);
   const monTableWrapRef = React.useRef(null);
 
   const openAttachPanel = async (ceId) => {
-    setAttachPanel(ceId); setAttachList([]); setAttachBusy(true);
+    setAttachPanel(ceId); setAttachList([]); setAttachErr(''); setAttachBusy(true);
     try {
       const spId = _monSpIdCache[ceId];
       if (!spId) { setAttachBusy(false); return; }
       const files = await spGetAttachments(spList('Monitoring'), spId);
       setAttachList(files);
-    } catch(e) { showToast('Could not load attachments: ' + e.message, true); }
+    } catch(e) {
+      setAttachErr(e.message || String(e));
+      showToast('Could not load attachments: ' + e.message, true);
+    }
     setAttachBusy(false);
   };
 
@@ -8231,9 +8238,13 @@ attachPanel && /*#__PURE__*/React.createElement("div", {
       })
     ),
     attachBusy && /*#__PURE__*/React.createElement("span", {style:{fontSize:11,color:MT,marginLeft:8}}, "Please wait…"),
-    attachList.length === 0 && !attachBusy && /*#__PURE__*/React.createElement("div", {
+    attachList.length === 0 && !attachBusy && !attachErr && /*#__PURE__*/React.createElement("div", {
       style:{textAlign:'center',padding:'20px 0',color:MT,fontSize:12,border:`1px dashed ${BDR}`,borderRadius:6}
     }, "No attachments yet. Upload drawings, TOR, or other documents."),
+    attachErr && !attachBusy && /*#__PURE__*/React.createElement("div", {
+      style:{padding:'12px 14px',color:ERR,fontSize:12,border:`1px solid ${alpha(ERR, '44')}`,background:alpha(ERR, '22'),borderRadius:6}
+    }, "⚠ Could not read the attachments on this CE — ", attachErr,
+       ". They have not been deleted; this list is unreadable right now. Try signing in to SharePoint again."),
     attachList.length > 0 && /*#__PURE__*/React.createElement("div", {style:{marginTop:8,display:'flex',flexDirection:'column',gap:6}},
       attachList.map(f => /*#__PURE__*/React.createElement("div", {
         key:f.FileName,
@@ -8247,7 +8258,7 @@ attachPanel && /*#__PURE__*/React.createElement("div", {
           f.FileName.match(/\.(jpe?g|png|gif|webp)$/i) ? '🖼' : '📎'
         ),
         /*#__PURE__*/React.createElement("a", {
-          href: f.ServerRelativeUrl,
+          href: spAbsUrl(f.ServerRelativeUrl),
           target:'_blank', rel:'noopener noreferrer',
           style:{flex:1,fontSize:12,color:INFO,wordBreak:'break-all',textDecoration:'none'}
         }, f.FileName),
@@ -8724,7 +8735,7 @@ tab === 'dashboard' && (() => {
       marginTop: 2
     }
   }, docFile.size > 0 ? Math.round(docFile.size / 1024) + ' KB - ' : '', docFile.text ? docFile.text.split(/\s+/).filter(Boolean).length.toLocaleString() + ' words' : 'reference only', docFile.spUrl && /*#__PURE__*/React.createElement(React.Fragment, null, " - ", /*#__PURE__*/React.createElement("a", {
-    href: SITE_URL + docFile.spUrl,
+    href: spAbsUrl(docFile.spUrl),
     target: "_blank",
     style: {
       color: INFO,
@@ -10802,7 +10813,7 @@ tab === 'dashboard' && (() => {
       color: INFO
     }
   }, "Doc: ", docFile.name, docFile.spUrl && /*#__PURE__*/React.createElement("a", {
-    href: SITE_URL + docFile.spUrl,
+    href: spAbsUrl(docFile.spUrl),
     target: "_blank",
     style: {
       color: INFO,

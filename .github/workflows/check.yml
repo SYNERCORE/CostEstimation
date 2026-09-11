@@ -100,6 +100,8 @@ jobs:
         run: node tools/test-section-headers.js
       - name: Shift bars
         run: node tools/test-shift-bars.js
+      - name: Monitoring attachments
+        run: node tools/test-attachments.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents

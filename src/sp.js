@@ -292,12 +292,29 @@ async function spPost(l,data){const su=getSiteURL();if(!su)throw new Error('SP n
 async function spPatch(l,id,data){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*','X-HTTP-Method':'MERGE',...(token?{'Authorization':'Bearer '+token}:{})};const r=await spFetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'PATCH',credentials:'omit',headers:h,body:JSON.stringify(data)},'patch',l);if(!r.ok){let t='';try{t=await r.text();}catch(_){}throw spErr('patch',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}}
 async function spDelete(l,id){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*',...(token?{'Authorization':'Bearer '+token}:{})};const r=await spFetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'DELETE',credentials:'omit',headers:h},'delete',l);if(!r.ok){let t='';try{t=await r.text();}catch(_){}throw spErr('delete',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}}
 
+/* SharePoint answers with a SERVER-relative url -- /sites/TSG/Lists/... -- and
+   this app is served from synercore.github.io, so using one as a link href
+   resolved it against github.io and every attachment 404'd. Sticking the site
+   url on the front is not the fix either: the path already contains /sites/TSG,
+   so that produced .../sites/TSG/sites/TSG/... Only the ORIGIN belongs in
+   front, which is what resolving against the site url does. */
+function spAbsUrl(u){
+  if(!u) return '';
+  if(/^https?:\/\//i.test(u)) return u;
+  const su=getSiteURL();
+  if(!su) return u;
+  try{ return new URL(u, su).href; }catch(_e){ return u; }
+}
 async function spGetAttachments(listName, itemId){
   const su=getSiteURL(); if(!su) return [];
-  const tok=await getSPToken(); if(!tok) return [];
+  /* An empty array meant both "no attachments" and "the request failed", and
+     the panel shows the first. Someone opening a CE whose token had expired
+     was told there were no documents on it. A failure throws now; the caller
+     already reports it. */
+  const tok=await getSPToken(); if(!tok) throw new Error('not signed in to SharePoint');
   const h={'Accept':'application/json;odata=nometadata','Authorization':'Bearer '+tok};
   const r=await spFetch(`${su}/_api/web/lists/getbytitle('${listName}')/items(${itemId})/AttachmentFiles`,{credentials:'omit',headers:h},'get',listName);
-  if(!r.ok) return [];
+  if(!r.ok) throw new Error('SP attachments '+r.status);
   const json=await r.json();
   return json.value||[];
 }

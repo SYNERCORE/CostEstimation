@@ -106,6 +106,8 @@ jobs:
         run: node tools/test-persistence-audit.js
       - name: Highlighted costs
         run: node tools/test-highlighted-costs.js
+      - name: CE revisions
+        run: node tools/test-ce-revisions.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents

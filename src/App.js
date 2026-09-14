@@ -45,6 +45,69 @@ function ceNumKey(num) {
   return [Number(m[1]), Number(m[2]), ...(rest.match(/\d+/g) || []).map(Number)];
 }
 
+/* ── A CE and its revisions ───────────────────────────────────────────────
+   R01 of a CE is not another CE. Counted as one, a job revised twice was
+   three rows in the list, three in the CE count, and its value three times
+   over in the pipeline -- so the figure the Dashboard reported was overstated
+   by every superseded revision on file.
+
+   Revision markers take every shape anyone has typed. The app's own Revise
+   button writes -R1, but the numbers in the lists are mostly R01, sometimes
+   with a space, and a CE revised off a revision carries both: -R2-R3. The
+   family is what is left once they are all stripped, compared with spaces,
+   dashes and case removed -- "0912B R01" and "0912BR01" differ by exactly one
+   space somebody did or did not type, and they have to land in the same
+   family or the whole exercise misses the case it was built for.
+
+   The LAST marker written is the revision in force: -R2-R3 is revision 3. */
+const CE_REV_RE = /[\s_.-]*R(\d+)\s*$/i;
+function ceFamily(num) {
+  let s = String(num || '').trim();
+  let rev = null, m;
+  while ((m = s.match(CE_REV_RE))) {
+    if (rev === null) rev = Number(m[1]);
+    s = s.slice(0, m.index);
+    if (!s.trim()) break;   /* a number that is nothing BUT a revision marker */
+  }
+  return {
+    key: s.toUpperCase().replace(/[\s_.-]+/g, ''),
+    base: s.trim(),
+    rev: rev === null ? 0 : rev
+  };
+}
+/* Collapse a list of CEs so each one appears once, at its newest revision.
+
+   `dup` is the case that must not be quietly merged: two entries claiming the
+   SAME revision of the same number are not a base and its revision, they are
+   a numbering collision -- two different jobs, two different estimators, two
+   different amounts. Merging them would hide one of the two and the money with
+   it. So a family holding a collision is not collapsed at all; every row stays,
+   flagged, for a person to sort out. */
+function groupCERevisions(rows, numOf) {
+  const fam = {}, order = [];
+  rows.forEach((e, i) => {
+    const f = ceFamily(numOf(e));
+    /* No parseable number is no family: such a row stands alone rather than
+       joining every other unnumbered row in one meaningless group. */
+    const k = f.key || ('#unnumbered:' + i);
+    if (!fam[k]) { fam[k] = []; order.push(k); }
+    fam[k].push({e, rev: f.rev});
+  });
+  const out = [];
+  order.forEach(k => {
+    const list = fam[k];
+    if (list.length === 1) { out.push({head: list[0].e, revs: [], rev: list[0].rev, dup: false}); return; }
+    const top = list.reduce((mx, x) => Math.max(mx, x.rev), 0);
+    if (list.filter(x => x.rev === top).length > 1) {
+      list.forEach(x => out.push({head: x.e, revs: [], rev: x.rev, dup: true}));
+      return;
+    }
+    const sorted = list.slice().sort((a, b) => b.rev - a.rev);
+    out.push({head: sorted[0].e, revs: sorted.slice(1).map(x => x.e), rev: sorted[0].rev, dup: false});
+  });
+  return out;
+}
+
 /* Money in the masterlist is held to centavos.
 
    A tool's daily cost is annualCost / 365, and that divides evenly almost
@@ -1785,19 +1848,34 @@ function App({
       return;
     }
     const allHist = await dbGetHistory(null, true).catch(() => []);
-    /* Find highest existing revision for this CE number */
-    const base = ceNum.toUpperCase().replace(/-R\d+$/, '');
-    const revEntries = allHist.filter(h => {
-      const n = (h.info?.ceNum || '').toUpperCase().replace(/-R\d+$/, '');
-      return n === base;
+    /* Find the highest revision already on file for this CE.
+
+       This matched only a trailing "-R1". Almost none of the numbers in the
+       lists are written that way -- they are R01, or " R01" -- so revising
+       SHIC-CE-2026-0912BR01 produced SHIC-CE-2026-0912BR01-R1: a revision of
+       a revision, in a family of its own, counted as a separate CE. ceFamily
+       reads every shape in use, so the next revision now follows the one
+       before it. */
+    const fam = ceFamily(ceNum);
+    const base = fam.base;
+    let nextRev = fam.rev + 1;
+    allHist.forEach(h => {
+      const f = ceFamily(h.info?.ceNum || '');
+      if (f.key && f.key === fam.key) nextRev = Math.max(nextRev, f.rev + 1);
     });
-    let nextRev = 1;
-    revEntries.forEach(h => {
-      const m = (h.info?.ceNum || '').match(/-R(\d+)$/i);
-      if (m) nextRev = Math.max(nextRev, parseInt(m[1]) + 1);
-    });
-    const revLabel = 'R' + nextRev;
-    const revCeNum = base + '-' + revLabel;
+    /* Matched to how this CE's number was already written: one on R01 goes to
+       R02, one on -R1 goes to -R2, one on " R01" keeps its space. A CE with no
+       revision yet gets -R1, which is what this has always written. Imposing a
+       single house style on an existing number would only mean one CE written
+       two ways. */
+    let sep = '-', pad = false;
+    if (fam.rev > 0) {
+      const tail = ceNum.slice(fam.base.length);   /* "R01", " R01", "-R1" */
+      sep = tail.replace(/R\d+\s*$/i, '');
+      pad = /R0\d/i.test(tail);
+    }
+    const revLabel = 'R' + (pad && nextRev < 10 ? '0' + nextRev : String(nextRev));
+    const revCeNum = base + sep + revLabel;
     /* Check uniqueness */
     const dup = allHist.find(h => (h.info?.ceNum || '').toUpperCase() === revCeNum);
     if (dup) {
@@ -1942,16 +2020,24 @@ function App({
   };
   const handleRevise = (e) => {
     const d = e.data || e;
-    const base = (d.info?.ceNum || '').replace(/-R\d+$/i, '');
-    let maxR = 0;
+    /* Same shapes as handleSaveRevision, and for the same reason: matching
+       only "-R1" meant revising an R01 CE started a second family instead of
+       continuing the first. */
+    const raw = (d.info?.ceNum || '').trim();
+    const fam = ceFamily(raw);
+    const base = fam.base;
+    let nextRev = fam.rev + 1;
     (history || []).forEach(h => {
-      const n = (h.info?.ceNum || '');
-      if (n.replace(/-R\d+$/i,'').toUpperCase() === base.toUpperCase()) {
-        const m = n.match(/-R(\d+)$/i);
-        if (m) maxR = Math.max(maxR, parseInt(m[1]));
-      }
+      const f = ceFamily(h.info?.ceNum || '');
+      if (f.key && f.key === fam.key) nextRev = Math.max(nextRev, f.rev + 1);
     });
-    const newCeNum = base + '-R' + (maxR + 1);
+    let sep = '-', pad = false;
+    if (fam.rev > 0) {
+      const tail = raw.slice(fam.base.length);
+      sep = tail.replace(/R\d+\s*$/i, '');
+      pad = /R0\d/i.test(tail);
+    }
+    const newCeNum = base + sep + 'R' + (pad && nextRev < 10 ? '0' + nextRev : String(nextRev));
     handleLoad({...d, info: {...(d.info || {}), ceNum: newCeNum, date: new Date().toISOString().slice(0,10)}});
     showToast('Revision ' + newCeNum + ' loaded — review & save when ready.');
   };
@@ -3514,6 +3600,9 @@ function App({
   const [monSortDir, setMonSortDir] = useState('desc');
   const [showStatusMgr, setShowStatusMgr] = useState(false);
   const [monPage, setMonPage] = useState(0);
+  /* Which CEs have their superseded revisions showing. Editor state: a CE is
+     collapsed again the next time the tab is opened. */
+  const [monRevOpen, setMonRevOpen] = useState(() => new Set());
   const MON_PAGE_SIZE = 20;
   const [editingRow, setEditingRow] = React.useState(null);
   const [attachPanel, setAttachPanel] = React.useState(null); // ceId or null
@@ -3702,7 +3791,13 @@ function App({
         default:             return e.savedAt || '';   /* Date Recv. */
       }
     };
-    return [...filtered].sort((a, b) => {
+    /* Collapsed AFTER filtering, so a filter that matches only the newest
+       revision still shows that CE -- and the count beside the title counts
+       CEs, not rows. The superseded revisions ride along on the row that
+       supersedes them, one click away rather than gone. */
+    const heads = groupCERevisions(filtered, e => (e.info && e.info.ceNum) || e.ceNum || '')
+      .map(g => (g.revs.length || g.dup) ? {...g.head, _revs: g.revs, _dup: g.dup, _rev: g.rev} : g.head);
+    return heads.sort((a, b) => {
       const va = sortVal(a, monOf(a)), vb = sortVal(b, monOf(b));
       const dir = monSortDir === 'asc' ? 1 : -1;
       /* Blanks last, whichever way the column is pointing. A column of dashes
@@ -3734,6 +3829,19 @@ function App({
       return String(va).localeCompare(String(vb), 'en', {numeric: true, sensitivity: 'base'}) * dir;
     });
   }, [monRows, monData, monSearch, monStatusFilter, monTypeFilter, monDiscFilter, monCustFilter, monSortCol, monSortDir]);
+  /* The rows actually drawn: one page of CEs, with the superseded revisions of
+     any CE that has been expanded slotted in underneath it. Expanded after the
+     page is cut, so a page is always the same 25 CEs whether or not anyone has
+     opened a revision history. */
+  const monPageRows = useMemo(() => {
+    const page = sortedHistory.slice(monPage * MON_PAGE_SIZE, (monPage + 1) * MON_PAGE_SIZE);
+    const out = [];
+    page.forEach(e => {
+      out.push(e);
+      if (monRevOpen.has(e.id)) (e._revs || []).forEach(r => out.push({...r, _isRev: true}));
+    });
+    return out;
+  }, [sortedHistory, monPage, monRevOpen]);
   const toggleSort = col => {
     if (monSortCol === col) setMonSortDir(d => d === 'asc' ? 'desc' : 'asc');else {
       setMonSortCol(col);
@@ -4254,7 +4362,12 @@ function App({
       color: MT,
       fontSize: 11
     }
-  }, sortedHistory.length, " estimates", isAdmin ? ' (all users)' : ''), /*#__PURE__*/React.createElement("input", {
+  }, sortedHistory.length, " estimates",
+     /* Revisions are folded in, so the count is of CEs. Saying how many rows
+        were folded away stops the number reading as if work had gone missing. */
+     (() => { const r = sortedHistory.reduce((s, e) => s + (e._revs || []).length, 0);
+              return r ? ' · ' + r + ' revision' + (r === 1 ? '' : 's') + ' folded in' : ''; })(),
+     isAdmin ? ' (all users)' : ''), /*#__PURE__*/React.createElement("input", {
     style: {
       ...INP,
       width: 200,
@@ -4557,7 +4670,7 @@ function App({
       background: SURF,
       borderLeft: `1px solid ${BDR}`
     }
-  }, "Actions"))),/*#__PURE__*/React.createElement("tbody", null, sortedHistory.slice(monPage * MON_PAGE_SIZE, (monPage + 1) * MON_PAGE_SIZE).map((e, rowIdx) => {
+  }, "Actions"))),/*#__PURE__*/React.createElement("tbody", null, monPageRows.map((e, rowIdx) => {
     /* The 16 columns total ~1570px, so on any normal screen Actions sits past
        the right edge and the row has to be scrolled sideways to reach it —
        which is why people reported the buttons as missing rather than
@@ -4591,11 +4704,16 @@ function App({
       : deadlineDays < 0 ? ERR : deadlineDays <= 7 ? 'var(--status-warning)' : OK;
     const statusColor = getStatusColor(m.status || '');
     const trBg = rowIdx % 2 === 0 ? 'transparent' : alpha(SURF, '88');
+    /* A superseded revision is shown dimmed and indented under the revision
+       that replaced it: still readable, still openable, but plainly not the
+       row that counts. */
     return /*#__PURE__*/React.createElement("tr", {
       key: e.id,
       style: {
-        background: trBg,
-        borderBottom: `1px solid ${alpha(BDR, '22')}`
+        background: e._isRev ? alpha(INFO, '0F') : trBg,
+        opacity: e._isRev ? .62 : 1,
+        borderBottom: `1px solid ${alpha(BDR, '22')}`,
+        ...(e._isRev ? {borderLeft: '3px solid ' + alpha(INFO, '55')} : {})
       }
     }, /*#__PURE__*/React.createElement("td", {style:{...TDS,padding:'4px',textAlign:'center'}},
       /*#__PURE__*/React.createElement("input", {
@@ -4669,12 +4787,38 @@ function App({
         fontSize: 10,
         whiteSpace: 'nowrap'
       }
-    }, ceNum, e._draft && /*#__PURE__*/React.createElement("span", {
+    }, e._isRev ? '↳ ' + ceNum : ceNum,
+    e._isRev && /*#__PURE__*/React.createElement("span", {
+      title: 'Superseded by a later revision — kept for reference, and not counted as a separate CE',
+      style: {marginLeft: 5, fontSize: 8, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 8,
+              background: alpha(INFO, '22'), color: INFO, border: '1px solid ' + alpha(INFO, '44')}
+    }, 'SUPERSEDED'),
+    e._draft && /*#__PURE__*/React.createElement("span", {
       /* A saved CE whose status is Draft and an unsaved draft both read
          "Draft" in the status column. This badge says which is which. */
       title: 'Unsaved draft by ' + (e.savedByName || e.savedBy || 'someone') + ' — Load to pick it up',
       style: {marginLeft: 5, fontSize: 8, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 8, background: '#8B5CF622', color: 'var(--accent-violet)', border: '1px solid #8B5CF644'}
-    }, 'UNSAVED')), /*#__PURE__*/React.createElement("td", {
+    }, 'UNSAVED'),
+    /* Superseded revisions are folded into the row that supersedes them. The
+       chip says how many, so a CE with history is visible as such without
+       having to take three rows to say it. */
+    (e._revs || []).length > 0 && /*#__PURE__*/React.createElement("button", {
+      title: monRevOpen.has(e.id)
+        ? 'Hide the superseded revisions'
+        : 'Show the ' + e._revs.length + ' superseded revision' + (e._revs.length === 1 ? '' : 's') + ' of this CE',
+      onClick: () => setMonRevOpen(p => { const n = new Set(p); n.has(e.id) ? n.delete(e.id) : n.add(e.id); return n; }),
+      style: {marginLeft: 5, fontSize: 8, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 8,
+              background: alpha(INFO, '22'), color: INFO, border: '1px solid ' + alpha(INFO, '44'), cursor: 'pointer'}
+    }, (monRevOpen.has(e.id) ? '▾ ' : '▸ ') + '+' + e._revs.length + ' rev'),
+    /* Two rows claiming the same revision of the same number are not a CE and
+       its revision -- they are two different jobs filed under one number. They
+       are deliberately NOT merged, because merging would hide one of them and
+       its value with it. */
+    e._dup && /*#__PURE__*/React.createElement("span", {
+      title: 'Another CE on file carries this same number and revision. They have been left as separate rows — one of them needs renumbering.',
+      style: {marginLeft: 5, fontSize: 8, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 8,
+              background: alpha(ERR, '22'), color: ERR, border: '1px solid ' + alpha(ERR, '44')}
+    }, '⚠ DUPLICATE No.')), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
         padding: '4px 6px'
@@ -8383,10 +8527,17 @@ sigModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',ins
 /* ── Feature 9: Dashboard Tab ── */
 tab === 'dashboard' && (() => {
   const now = new Date(); const thisMonth = now.getMonth(); const thisYear = now.getFullYear();
-  const monthHist = history.filter(h => { const d=new Date(h.savedAt||h.createdAt||0); return d.getMonth()===thisMonth&&d.getFullYear()===thisYear; });
+  /* R01 of a CE is the same job, priced again. Counted as its own CE it was
+     an extra row in every tally on this page and its whole value again in the
+     pipeline -- so a job revised twice reported three times the money it could
+     ever bring in. Every figure below is of the NEWEST revision only. */
+  const liveOnly = rows => groupCERevisions(rows, h => (h.info && h.info.ceNum) || h.ceNum || '').map(g => g.head);
+  const liveHist = liveOnly(history), liveRows = liveOnly(monRows);
+  const supersededN = history.length - liveHist.length;
+  const monthHist = liveHist.filter(h => { const d=new Date(h.savedAt||h.createdAt||0); return d.getMonth()===thisMonth&&d.getFullYear()===thisYear; });
   const totalThis = monthHist.reduce((s,h)=>s+N(h.grand||0),0);
-  const avgVal = history.length ? history.reduce((s,h)=>s+N(h.grand||0),0)/history.length : 0;
-  const statuses = monRows.map(h=>monOf(h).status||'Draft');
+  const avgVal = liveHist.length ? liveHist.reduce((s,h)=>s+N(h.grand||0),0)/liveHist.length : 0;
+  const statuses = liveRows.map(h=>monOf(h).status||'Draft');
   /* An "open" CE is one still needing work. Submitted, No Quote and Cancelled
      CE_CLOSED_STATUSES are the end states -- everything else, Draft and On
      Hold included, is open.
@@ -8394,7 +8545,7 @@ tab === 'dashboard' && (() => {
      with no deadline set cannot be ranked, so it sorts to the bottom; as a
      plain string compare an empty deadline would sort to the very top and
      bury the genuinely urgent rows. */
-  const openCEs = monRows.map(h => ({h, m: monOf(h)}))
+  const openCEs = liveRows.map(h => ({h, m: monOf(h)}))
     .filter(x => ceIsOpen(x.m.status))
     .sort((a, b) => {
       const da = a.m.deadline || '', db = b.m.deadline || '';
@@ -8405,17 +8556,22 @@ tab === 'dashboard' && (() => {
     });
   const openValue = openCEs.reduce((t, x) => t + N(x.h.grand || 0), 0);
   const statusCount = statuses.reduce((m,s)=>{m[s]=(m[s]||0)+1;return m;},{});
-  const clients = {}; history.forEach(h=>{const c=h.info?.client||h.client||'Unknown';clients[c]=(clients[c]||{count:0,total:0});clients[c].count++;clients[c].total+=N(h.grand||0);});
+  const clients = {}; liveHist.forEach(h=>{const c=h.info?.client||h.client||'Unknown';clients[c]=(clients[c]||{count:0,total:0});clients[c].count++;clients[c].total+=N(h.grand||0);});
   const top5 = Object.entries(clients).sort((a,b)=>b[1].total-a[1].total).slice(0,5);
-  const prefixMap = {}; history.forEach(h=>{const cn=(h.info?.ceNum||'').toUpperCase();const pfx=cn.split('-CE-')[0]||'?';prefixMap[pfx]=(prefixMap[pfx]||{count:0,total:0});prefixMap[pfx].count++;prefixMap[pfx].total+=N(h.grand||0);});
+  const prefixMap = {}; liveHist.forEach(h=>{const cn=(h.info?.ceNum||'').toUpperCase();const pfx=cn.split('-CE-')[0]||'?';prefixMap[pfx]=(prefixMap[pfx]||{count:0,total:0});prefixMap[pfx].count++;prefixMap[pfx].total+=N(h.grand||0);});
   const months=[]; for(let i=5;i>=0;i--){const d=new Date(thisYear,thisMonth-i,1);months.push({label:d.toLocaleString('default',{month:'short'})+' '+d.getFullYear().toString().slice(2),month:d.getMonth(),year:d.getFullYear()});}
-  const monthTotals = months.map(m=>({...m,total:history.filter(h=>{const d=new Date(h.savedAt||0);return d.getMonth()===m.month&&d.getFullYear()===m.year;}).reduce((s,h)=>s+N(h.grand||0),0)}));
+  const monthTotals = months.map(m=>({...m,total:liveHist.filter(h=>{const d=new Date(h.savedAt||0);return d.getMonth()===m.month&&d.getFullYear()===m.year;}).reduce((s,h)=>s+N(h.grand||0),0)}));
   const maxBar = Math.max(...monthTotals.map(m=>m.total),1);
   const kpiCard = (label,value,color) => /*#__PURE__*/React.createElement("div",{style:{background:SURF,border:'1px solid '+BDR,borderRadius:8,padding:'14px 18px',flex:1,minWidth:140}},
     /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT,marginBottom:4}},label),
     /*#__PURE__*/React.createElement("div",{style:{fontSize:20,fontWeight:800,color:color||TX,...MONO}},value));
   return /*#__PURE__*/React.createElement("div",{style:{padding:'0 0 24px'}},
-    /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:15,marginBottom:16,color:ACC}}, "📊 Dashboard"),
+    /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:15,marginBottom:supersededN?4:16,color:ACC}}, "📊 Dashboard"),
+    /* Said out loud, because a figure that quietly drops is a figure nobody
+       trusts: these numbers moved the day revisions stopped being counted. */
+    supersededN > 0 && /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT,marginBottom:16}},
+      'Counting the newest revision of each CE — ' + supersededN + ' superseded revision' +
+      (supersededN === 1 ? '' : 's') + ' excluded from every figure below.'),
     /* KPI row */
     /*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:12,flexWrap:'wrap',marginBottom:20}},
       kpiCard('CEs This Month', monthHist.length, INFO),

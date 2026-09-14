@@ -56,7 +56,9 @@ const mon = new Map([
   [rows[1], {customer: 'Alpha', status: 'Approved'}],
   [rows[2], {customer: '', status: ''}]
 ]);
-const cmpSrc = src.match(/return \[\.\.\.filtered\]\.sort\(\(a, b\) => \{[\s\S]*?\n    \}\);/)[0];
+/* `heads` is the filtered list with each CE's superseded revisions folded
+   into the row that supersedes them -- the comparator itself is unchanged. */
+const cmpSrc = src.match(/return heads\.sort\(\(a, b\) => \{[\s\S]*?\n    \}\);/)[0];
 const ceNumKey = new Function('return ' + src.match(/function ceNumKey\(num\) \{[\s\S]*?\n\}/)[0])();
 
 /* Build the real comparator with everything it closes over. */
@@ -71,7 +73,7 @@ const comparator = (col, dir, monOf) => {
   const monDisc = grabFn('monDisc');
   const monCust = grabFn('monCust');
   const sortVal = new Function('monSortCol', 'N', 'monDisc', 'monCust', 'return ' + sortValSrc[0].replace(/^const sortVal = /, '').replace(/;$/, ''))(col, N, monDisc, monCust);
-  const body = cmpSrc.replace(/^return \[\.\.\.filtered\]\.sort\(/, '').replace(/\);$/, '');
+  const body = cmpSrc.replace(/^return heads\.sort\(/, '').replace(/\);$/, '');
   return new Function('sortVal', 'monOf', 'monSortDir', 'monSortCol', 'ceNumKey', 'return ' + body)(sortVal, monOf, dir, col, ceNumKey);
 };
 const run = (col, dir) =>

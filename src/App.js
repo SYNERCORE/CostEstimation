@@ -1314,6 +1314,37 @@ function App({
     return RES_TABS.reduce((s, t) => s + t.rows.filter(r => r[t.nameKey] && bad(r)).length, 0)
       + miscFlat().filter(r => r.desc && bad(r)).length;
   })();
+  /* One snapshot of everything a scope deletion can touch, and one way to put
+     it all back. Deleting a step used to be undoable only when it carried
+     sub-steps or resources, so an empty main step, any sub-step and Clear All
+     all went with a single click and no way back. Every scope deletion is
+     undoable now, whether or not anything was hanging off it. */
+  const SOW_UNDO_MS = 20000;
+  const sowSnapshot = () => ({
+    sow: [...sowItems], mp: [...mp], tools: [...tools], mats: [...mats],
+    ppe: [...ppe], misc: JSON.parse(JSON.stringify(misc))
+  });
+  const sowRestore = snap => {
+    setSowItems(snap.sow); setMp(snap.mp); setTools(snap.tools);
+    setMats(snap.mats); setPpe(snap.ppe); setMisc(snap.misc);
+  };
+  /* A second deletion must not inherit the first one's countdown, or the new
+     bar disappears early -- so any pending timer is cleared first. */
+  const sowUndoTimer = useRef(null);
+  const sowOfferUndo = (msg, snap) => {
+    if (sowUndoTimer.current) clearTimeout(sowUndoTimer.current);
+    sowUndoTimer.current = setTimeout(() => { sowUndoTimer.current = null; setUndoToast(null); }, SOW_UNDO_MS);
+    setUndoToast({
+      msg,
+      onUndo: () => {
+        if (sowUndoTimer.current) clearTimeout(sowUndoTimer.current);
+        sowUndoTimer.current = null;
+        sowRestore(snap);
+        setUndoToast(null);
+        showToast('Delete undone.');
+      }
+    });
+  };
   /* Delete a scope task and, with confirmation, the resources assigned to it. */
   const deleteSowTask = item => {
     const ids = sowTaskGroup(item);
@@ -1323,24 +1354,28 @@ function App({
       (subs > 0 ? ' and its ' + subs + ' sub-task' + (subs === 1 ? '' : 's') : '') +
       (n > 0 ? ', plus the ' + n + ' resource row' + (n === 1 ? '' : 's') + ' assigned to ' + (subs > 0 ? 'them' : 'it') : '') +
       '?' + (n > 0 ? '\n\nThe resources will be removed from the Manpower / Tools / Consumables / PPE / Miscellaneous tabs too, so the totals will change.' : '') +
-      '\n\nYou can undo this for 10 seconds.')) return;
-    const snap = { sow: [...sowItems], mp: [...mp], tools: [...tools], mats: [...mats], ppe: [...ppe], misc: JSON.parse(JSON.stringify(misc)) };
+      '\n\nYou can undo this for ' + (SOW_UNDO_MS / 1000) + ' seconds.')) return;
+    const snap = sowSnapshot();
     setSowItems(p => p.filter(s => !ids.includes(s.id)));
     if (n > 0) { RES_TABS.forEach(t => t.set(p => p.filter(r => !ids.includes(r.taskId)))); ids.forEach(id => miscClearTask(id)); }
-    if (n > 0 || subs > 0) {
-      const tid = setTimeout(() => setUndoToast(null), 10000);
-      setUndoToast({
-        msg: (ids.length > 1 ? ids.length + ' scope tasks' : 'Scope task') + (n > 0 ? ' and ' + n + ' resource row' + (n === 1 ? '' : 's') : '') + ' deleted.',
-        onUndo: () => {
-          clearTimeout(tid);
-          setSowItems(snap.sow); setMp(snap.mp); setTools(snap.tools); setMats(snap.mats); setPpe(snap.ppe); setMisc(snap.misc);
-          setUndoToast(null);
-          showToast('Delete undone.');
-        }
-      });
-    }
+    sowOfferUndo(
+      (ids.length > 1 ? ids.length + ' scope tasks' : (item.type === 'sub' ? 'Sub-item' : 'Scope task')) +
+      (n > 0 ? ' and ' + n + ' resource row' + (n === 1 ? '' : 's') : '') + ' deleted.', snap);
   };
-
+  /* Clear All: the scope goes, the resources stay and fall back to Unassigned.
+     One click used to take the whole method with it. */
+  const clearAllSow = () => {
+    if (!confirm('Clear all scope items?\n\nResources stay in their tabs and keep their costs, but they will all become Unassigned in the SOW Breakdown.' +
+      '\n\nYou can undo this for ' + (SOW_UNDO_MS / 1000) + ' seconds.')) return;
+    const snap = sowSnapshot();
+    const count = sowItems.length;
+    setSowItems([]);
+    /* Drop the now-dangling task links so every row shows up as Unassigned
+       rather than pointing at a task that no longer exists. */
+    RES_TABS.forEach(t => t.set(p => p.map(r => r.taskId ? { ...r, taskId: '' } : r)));
+    setMisc(p => { const n = { ...p }; Object.keys(n).forEach(k => { if (Array.isArray(n[k])) n[k] = n[k].map(r => r.taskId ? { ...r, taskId: '' } : r); }); return n; });
+    sowOfferUndo('All ' + count + ' scope item' + (count === 1 ? '' : 's') + ' cleared.', snap);
+  };
   /* ---- Document reading ---- */
   const readDoc = async file => {
     const ext = file.name.split('.').pop().toLowerCase();
@@ -7825,15 +7860,7 @@ function App({
     }])
   }, "+ Sub Item"), sowItems.length > 0 && /*#__PURE__*/React.createElement("button", {
     style: btn('danger', true),
-    onClick: () => {
-      if (confirm('Clear all scope items?\n\nResources stay in their tabs and keep their costs, but they will all become Unassigned in the SOW Breakdown.')) {
-        setSowItems([]);
-        /* Drop the now-dangling task links so every row shows up as Unassigned
-           rather than pointing at a task that no longer exists. */
-        RES_TABS.forEach(t => t.set(p => p.map(r => r.taskId ? { ...r, taskId: '' } : r)));
-        setMisc(p => { const n = { ...p }; Object.keys(n).forEach(k => { if (Array.isArray(n[k])) n[k] = n[k].map(r => r.taskId ? { ...r, taskId: '' } : r); }); return n; });
-      }
-    }
+    onClick: clearAllSow
   }, "Clear All"))), sowItems.length === 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       textAlign: 'center',

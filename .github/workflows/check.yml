@@ -115,6 +115,9 @@ jobs:
 
       - name: A helper declared in render must not be rendered as a component
         run: node tools/test-inline-components.js src/App.js
+
+      - name: Scope of Work deletions are undoable
+        run: node tools/test-sow-undo.js src/App.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents

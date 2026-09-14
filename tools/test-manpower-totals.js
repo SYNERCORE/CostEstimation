@@ -122,6 +122,33 @@ ck('and now totals 307.27', peso(D.benefitRows[0].total) === 307.27, String(peso
 ck('which the CE charges too', peso(D.calcBen(withInc[0]).total) === 307.27,
   'screen and charge move together, because they are one function');
 
+console.log('\nthe incentive comes from the Masterlist, onto the row:');
+/* Three paths add a manpower row. The ML button and Sync Rates always copied
+   the incentive with the rate; typing the role into the box copied the rate
+   and nothing else -- which is why a row read P0 against a Masterlist that
+   says P200, and why the CE charged the P0. */
+const roleEdit = app.match(/list: 'rl' \+ r\.id,[\s\S]*?placeholder: "Role name\.\.\."/);
+ck('typing a role finds its Masterlist entry', !!roleEdit && /masterlist\.manpower\.find/.test(roleEdit[0]));
+ck('and takes the incentive with the rate',
+  !!roleEdit && /rate: f\.rate, perDiem: f\.perDiem !== undefined \? f\.perDiem : x\.perDiem/.test(roleEdit[0]),
+  'the rate alone was the whole bug');
+ck('matched case-insensitively, the way Sync Rates matches',
+  !!roleEdit && /m\.role\.toUpperCase\(\) === ro\.toUpperCase\(\)/.test(roleEdit[0]),
+  'an exact match missed a role typed in lower case');
+ck('the ML button still copies it', /perDiem: item\.perDiem \|\| 0/.test(app));
+ck('and so does Sync Rates',
+  /rate: f\.rate, perDiem: f\.perDiem !== undefined \? f\.perDiem : r\.perDiem/.test(app));
+ck('the figure is copied onto the row, not read from the list when costing',
+  /const perdiem = N\(r\.perDiem \|\| 0\) \* days \* pax;/.test(app),
+  'reading the list at cost time would let a Masterlist edit reprice a CE already sent out');
+ck('a row that disagrees with the Masterlist says so on the line',
+  /mlPerDiem !== null && mlPerDiem !== rowPerDiem/.test(app),
+  'a CE already on file keeps its own figure, so the difference has to be visible');
+ck('and the Masterlist figure is one click away', /onClick: \(\) => setIncentive\(mlPerDiem\)/.test(app));
+ck('a role absent from the Masterlist is not flagged as a disagreement',
+  /return m \? N\(m\.perDiem \|\| 0\) : null;/.test(app),
+  'no entry is not the same as an entry priced at zero');
+
 console.log('\nthe manpower total is the wage plus the benefits:');
 const mpSub = mp.reduce((s, r) => s + A.mpWage(r), 0);
 const ben = mp.reduce((s, r) => s + (r.role ? A.calcBen(r).total : 0), 0);

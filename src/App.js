@@ -9875,9 +9875,27 @@ tab === 'dashboard' && (() => {
         value: r.role,
         onChange: e => {
           const ro = e.target.value;
-          const f = masterlist.manpower.find(m => m.role === ro);
-          updRow(setMp, r.id, 'role', ro);
-          if (f) updRow(setMp, r.id, 'rate', f.rate);
+          /* The Masterlist is where a role's figures come from -- its day rate
+             AND its incentive. Only the rate was being copied, so a role typed
+             here arrived with no incentive at all: the C.7 line read P0.00
+             against a Masterlist that says P200, and the CE charged the P0.
+             The ML button and Sync Rates always copied both; this path was the
+             one that did not.
+
+             Matched case-insensitively, the way Sync Rates matches it, so a
+             role typed in lower case finds its entry too.
+
+             Copied onto the row rather than read from the list on the fly:
+             what a CE charges has to be settled when it is quoted, or editing
+             the Masterlist next month silently reprices every estimate already
+             sent out. Sync Rates is how a row is deliberately brought back up
+             to date. */
+          const f = masterlist.manpower.find(m => m.role && m.role.toUpperCase() === ro.toUpperCase());
+          setMp(p => p.map(x => x.id === r.id ? {
+            ...x,
+            role: ro,
+            ...(f ? {rate: f.rate, perDiem: f.perDiem !== undefined ? f.perDiem : x.perDiem} : {})
+          } : x));
         },
         placeholder: "Role name..."
       }), /*#__PURE__*/React.createElement("datalist", {
@@ -10194,6 +10212,14 @@ tab === 'dashboard' && (() => {
         const first = mine.length ? N(mine[0].perDiem || 0) : 0;
         return mine.every(x => N(x.perDiem || 0) === first) ? first : null;   /* null = mixed */
       })();
+      /* Null when the role is not in the Masterlist at all -- which is not the
+         same as a role the Masterlist prices at zero, and must not read as a
+         disagreement worth flagging. */
+      const mlPerDiem = (() => {
+        const m = (masterlist.manpower || []).find(x => x.role &&
+          x.role.trim().toUpperCase() === String(g.role).trim().toUpperCase());
+        return m ? N(m.perDiem || 0) : null;
+      })();
       return /*#__PURE__*/React.createElement("tr", {
         key: g.role,
         style: {background: rowIdx % 2 === 0 ? 'transparent' : alpha(SURF, '88')}
@@ -10212,12 +10238,25 @@ tab === 'dashboard' && (() => {
                 style: {...MONO, color: MT, fontSize: 11},
                 title: "This role carries different incentives on different shifts. Edit them on the shift rows above."
               }, "P" + ph(g.perdiem) + " *")
-            : /*#__PURE__*/React.createElement(NumBox, {
-                style: {...INP, ...MONO, width: 84, textAlign: 'right', fontSize: 11},
-                min: 0, value: rowPerDiem, placeholder: "0",
-                title: "Incentive or per-diem PER DAY, per person. It is charged as part of C.5 Benefits & Others. Picking the role from the Masterlist fills this in; typing it here sets it for this CE only.",
-                onCommit: setIncentive
-              })),
+            : /*#__PURE__*/React.createElement("div", {style: {display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end'}},
+                /* What the Masterlist says for this role, when the row does not
+                   say the same. A CE quoted last month keeps the figure it was
+                   quoted at -- the list must never reprice it on its own -- but
+                   the estimator has to be able to SEE that the two differ, and
+                   take the new one deliberately. Same idea as Sync Rates, for
+                   one figure on one line. */
+                mlPerDiem !== null && mlPerDiem !== rowPerDiem && /*#__PURE__*/React.createElement("button", {
+                  style: {...btn('info', true), fontSize: 9, padding: '1px 5px'},
+                  title: "The Masterlist has P" + ph(mlPerDiem) + " per day for " + g.role +
+                         ". Click to use it on this CE. Sync Rates does the same for the whole shift.",
+                  onClick: () => setIncentive(mlPerDiem)
+                }, "ML P" + ph(mlPerDiem)),
+                /*#__PURE__*/React.createElement(NumBox, {
+                  style: {...INP, ...MONO, width: 84, textAlign: 'right', fontSize: 11},
+                  min: 0, value: rowPerDiem, placeholder: "0",
+                  title: "Incentive or per-diem PER DAY, per person, charged as part of C.5 Benefits & Others. It comes from the Masterlist when the role is picked or typed, and Sync Rates brings it up to date. Typed here, it applies to this CE only.",
+                  onCommit: setIncentive
+                }))),
         cell(g.total, {color: ACC, fontWeight: 700, background: alpha(ACC, '0A')})
       );
     });

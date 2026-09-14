@@ -2363,6 +2363,9 @@ function App({
   };
 
   /* ---- Scope Builder (Project Info tab - multi-select) ---- */
+  /* Called, not rendered as a component: see ExpenseTable. A component
+     declared inside render is a new type every keystroke, and React rebuilds
+     its inputs from scratch -- losing the focus mid-word. */
   const ScopeBuilder = () => {
     const cats = ['All', ...[...new Set(sowLib.map(s => s.cat))].sort()];
     const filtered = sowLib.filter(s => {
@@ -2766,7 +2769,7 @@ function App({
           fontWeight: 600,
           fontSize: 12
         }
-      }, svc.title), /*#__PURE__*/React.createElement(CatBadge, {
+      }, svc.title), CatBadge({
         cat: svc.cat
       })), /*#__PURE__*/React.createElement("div", {
         style: {
@@ -4727,7 +4730,7 @@ function App({
       cursor: ['ceNum', 'deadline', 'status', 'grand'].includes(col) ? 'pointer' : 'default',
       userSelect: 'none'
     }
-  }, label, ['ceNum', 'deadline', 'status', 'grand'].includes(col) && /*#__PURE__*/React.createElement(SortIcon, {
+  }, label, ['ceNum', 'deadline', 'status', 'grand'].includes(col) && SortIcon({
     col: col
   }))), /*#__PURE__*/React.createElement("th", {
     style: {
@@ -5729,6 +5732,8 @@ function App({
         }
       }, "x"))))))));
     };
+    /* Called, not rendered as a component -- see ExpenseTable -- so the
+       site URL can be typed in one go. */
     const SpWizModal = () => showSpWiz && /*#__PURE__*/React.createElement("div", {
       style: {position:'fixed',inset:0,background:'#000a',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}
     }, /*#__PURE__*/React.createElement("div", {
@@ -6039,7 +6044,7 @@ function App({
         cancelEdit();
       }
     }, "Delete Service")));
-    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SpWizModal, null), /*#__PURE__*/React.createElement("div", {
+    return /*#__PURE__*/React.createElement("div", null, SpWizModal(), /*#__PURE__*/React.createElement("div", {
       style: {
         ...CS,
         borderColor: '#A78BFA44'
@@ -9103,7 +9108,7 @@ tab === 'dashboard' && (() => {
       if (f) handleDocUpload(f);
       e.target.value = '';
     }
-  })), /*#__PURE__*/React.createElement(ScopeBuilder, null), /*#__PURE__*/React.createElement("div", {
+  })), ScopeBuilder(), /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
       borderColor: alpha(ACC, '55')
@@ -9189,7 +9194,13 @@ tab === 'dashboard' && (() => {
       fontSize: 11
     }
   }, "Calling ", provInfo?.label || 'AI', "...")))), tab === 'manpower' && /*#__PURE__*/React.createElement("div", null, cfg.mobDemob && (() => {
-    /* Shared expense line-item table */
+    /* Shared expense line-item table.
+
+       NOT a component: declared inside render, its function identity is new
+       on every keystroke, so React threw the whole table away and built it
+       again -- taking the focused input with it. That is why a rate had to be
+       clicked once per character. It is called as a plain function instead,
+       so the inputs are part of this render's own tree and keep their focus. */
     const ExpenseTable = ({
       rows,
       setRows,
@@ -9290,48 +9301,45 @@ tab === 'dashboard' && (() => {
         value: mlItem.desc
       })))), /*#__PURE__*/React.createElement("td", {
         style: TDS
-      }, /*#__PURE__*/React.createElement("input", {
+      }, /*#__PURE__*/React.createElement(NumBox, {
         style: {
           ...INP,
           ...MONO,
           width: 52
         },
-        type: "number",
         min: 1,
         value: r.qty,
-        onChange: e => setRows(p => p.map(xr => xr.id === r.id ? {
+        onCommit: v => setRows(p => p.map(xr => xr.id === r.id ? {
           ...xr,
-          qty: e.target.value
+          qty: v
         } : xr))
       })), /*#__PURE__*/React.createElement("td", {
         style: TDS
-      }, /*#__PURE__*/React.createElement("input", {
+      }, /*#__PURE__*/React.createElement(NumBox, {
         style: {
           ...INP,
           ...MONO,
           width: 52
         },
-        type: "number",
         min: 1,
         value: r.days,
-        onChange: e => setRows(p => p.map(xr => xr.id === r.id ? {
+        onCommit: v => setRows(p => p.map(xr => xr.id === r.id ? {
           ...xr,
-          days: e.target.value
+          days: v
         } : xr))
       })), /*#__PURE__*/React.createElement("td", {
         style: TDS
-      }, /*#__PURE__*/React.createElement("input", {
+      }, /*#__PURE__*/React.createElement(NumBox, {
         style: {
           ...INP,
           ...MONO,
           width: 96
         },
-        type: "number",
         min: 0,
         value: r.rate,
-        onChange: e => setRows(p => p.map(xr => xr.id === r.id ? {
+        onCommit: v => setRows(p => p.map(xr => xr.id === r.id ? {
           ...xr,
-          rate: e.target.value
+          rate: v
         } : xr))
       }),
       /*#__PURE__*/React.createElement(RateHistory, {
@@ -9381,7 +9389,7 @@ tab === 'dashboard' && (() => {
         ...CS,
         borderColor: alpha(INFO, '44')
       }
-    }, secHead("Mobilization Expenses", INFO, "Add each charge as a separate line item", {size: 11, mb: 12}), /*#__PURE__*/React.createElement(ExpenseTable, {
+    }, secHead("Mobilization Expenses", INFO, "Add each charge as a separate line item", {size: 11, mb: 12}), ExpenseTable({
       rows: mobVehicles,
       setRows: setMobVehicles,
       idPfx: "mv",
@@ -9406,7 +9414,7 @@ tab === 'dashboard' && (() => {
         ...CS,
         borderColor: alpha(ACC, '44')
       }
-    }, secHead("Demobilization Expenses", ACC, "Add each charge as a separate line item", {size: 11, mb: 12}), /*#__PURE__*/React.createElement(ExpenseTable, {
+    }, secHead("Demobilization Expenses", ACC, "Add each charge as a separate line item", {size: 11, mb: 12}), ExpenseTable({
       rows: demobVehicles,
       setRows: setDemobVehicles,
       idPfx: "dv",

@@ -112,6 +112,9 @@ jobs:
         run: node tools/test-manpower-totals.js
       - name: Number boxes
         run: node tools/test-numbox.js
+
+      - name: A helper declared in render must not be rendered as a component
+        run: node tools/test-inline-components.js src/App.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents

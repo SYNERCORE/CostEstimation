@@ -75,7 +75,7 @@ ck('manpower', N(r.out.mp[0].rate) === 1100, JSON.stringify(r.out.mp[0]));
 ck('tools', N(r.out.tools[0].cost) === 6000);
 ck('materials', N(r.out.mats[0].cost) === 1900);
 ck('PPE', N(r.out.ppe[0].cost) === 95);
-ck('and per diem rides along with the rate', N(r.out.mp[0].perDiem) === 50);
+ck('and the incentive rides along with the rate', N(r.out.mp[0].perDiem) === 50);
 ck('matching ignores case and padding', N(r.out.mp[1].rate) === 700,
   '" helper " must find "HELPER"');
 

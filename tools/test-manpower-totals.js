@@ -142,9 +142,9 @@ ck('the figure is copied onto the row, not read from the list when costing',
   /const perdiem = N\(r\.perDiem \|\| 0\) \* days \* pax;/.test(app),
   'reading the list at cost time would let a Masterlist edit reprice a CE already sent out');
 ck('a row that disagrees with the Masterlist says so on the line',
-  /mlPerDiem !== null && mlPerDiem !== rowPerDiem/.test(app),
+  /mlIncentive !== null && mlIncentive !== rowIncentive/.test(app),
   'a CE already on file keeps its own figure, so the difference has to be visible');
-ck('and the Masterlist figure is one click away', /onClick: \(\) => setIncentive\(mlPerDiem\)/.test(app));
+ck('and the Masterlist figure is one click away', /onClick: \(\) => setIncentive\(mlIncentive\)/.test(app));
 ck('a role absent from the Masterlist is not flagged as a disagreement',
   /return m \? N\(m\.perDiem \|\| 0\) : null;/.test(app),
   'no entry is not the same as an entry priced at zero');

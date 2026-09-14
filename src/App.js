@@ -1019,6 +1019,10 @@ function App({
     const sss = rate * 0.25 * 0.75 * days * pax / 26;
     const hdmf = rate * 0.16 * days * pax / 26 * 2;
     const sil = rate * days * pax * 5 / 12 / 26 + pax * 30;
+    /* `perDiem` is the STORED name of the incentive -- on the row, in
+       IndexedDB and as shicPerDiem in SharePoint. Everything a user reads
+       says "Incentive"; the key keeps its old spelling so that no CE already
+       on file has to be migrated to be read back. */
     const perdiem = N(r.perDiem || 0) * days * pax;
     return {
       thirteenth,
@@ -2392,7 +2396,7 @@ function App({
       const m = (masterlist?.manpower || []).find(r => r.role.toUpperCase() === role.toUpperCase());
       return m ? m.rate : 0;
     };
-    const findPerDiem = role => {
+    const findIncentive = role => {
       const m = (masterlist?.manpower || []).find(r => r.role.toUpperCase() === role.toUpperCase());
       return m ? m.perDiem || 0 : 0;
     };
@@ -2506,7 +2510,7 @@ function App({
                 shift: 'regular_day',
                 rate: findRate(role),
                 otHours: 0,
-                perDiem: findPerDiem(role),
+                perDiem: findIncentive(role),
                 taskId: taskFor(svc, step)
               };
             }
@@ -10190,7 +10194,7 @@ tab === 'dashboard' && (() => {
 
        This block used to recompute all five benefits itself, and took the
        incentive from the MASTERLIST entry for the role rather than from the
-       row. So a role the list gives a P200 per-diem showed INCENTIVE P200 and
+       row. So a role the list gives a P200 incentive showed INCENTIVE P200 and
        a row total of P307.27, while C.5, the sub-total under this very table,
        the manpower total and the CE itself all charged P107.27. The screen
        was showing P200 that nothing was billing. The row is the source of
@@ -10203,11 +10207,11 @@ tab === 'dashboard' && (() => {
       }, "P", ph(v));
       /* Editing a merged line writes the rate to every shift entry for that
          role -- the line is one role, however many shifts it was split over,
-         and a per-diem that differed between them could not be shown here. */
+         and an incentive that differed between them could not be shown here. */
       const setIncentive = v => setMp(p => p.map(x =>
         String(x.role || '').trim().toUpperCase() === String(g.role).trim().toUpperCase()
           ? {...x, perDiem: v} : x));
-      const rowPerDiem = (() => {
+      const rowIncentive = (() => {
         const mine = mp.filter(x => String(x.role || '').trim().toUpperCase() === String(g.role).trim().toUpperCase());
         const first = mine.length ? N(mine[0].perDiem || 0) : 0;
         return mine.every(x => N(x.perDiem || 0) === first) ? first : null;   /* null = mixed */
@@ -10215,7 +10219,7 @@ tab === 'dashboard' && (() => {
       /* Null when the role is not in the Masterlist at all -- which is not the
          same as a role the Masterlist prices at zero, and must not read as a
          disagreement worth flagging. */
-      const mlPerDiem = (() => {
+      const mlIncentive = (() => {
         const m = (masterlist.manpower || []).find(x => x.role &&
           x.role.trim().toUpperCase() === String(g.role).trim().toUpperCase());
         return m ? N(m.perDiem || 0) : null;
@@ -10233,7 +10237,7 @@ tab === 'dashboard' && (() => {
         cell(g.monthlyRate, {color: MT}),
         cell(g.thirteenth), cell(g.sss), cell(g.hdmf), cell(g.sil),
         /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'right'}},
-          rowPerDiem === null
+          rowIncentive === null
             ? /*#__PURE__*/React.createElement("span", {
                 style: {...MONO, color: MT, fontSize: 11},
                 title: "This role carries different incentives on different shifts. Edit them on the shift rows above."
@@ -10245,16 +10249,16 @@ tab === 'dashboard' && (() => {
                    the estimator has to be able to SEE that the two differ, and
                    take the new one deliberately. Same idea as Sync Rates, for
                    one figure on one line. */
-                mlPerDiem !== null && mlPerDiem !== rowPerDiem && /*#__PURE__*/React.createElement("button", {
+                mlIncentive !== null && mlIncentive !== rowIncentive && /*#__PURE__*/React.createElement("button", {
                   style: {...btn('info', true), fontSize: 9, padding: '1px 5px'},
-                  title: "The Masterlist has P" + ph(mlPerDiem) + " per day for " + g.role +
+                  title: "The Masterlist has P" + ph(mlIncentive) + " per day for " + g.role +
                          ". Click to use it on this CE. Sync Rates does the same for the whole shift.",
-                  onClick: () => setIncentive(mlPerDiem)
-                }, "ML P" + ph(mlPerDiem)),
+                  onClick: () => setIncentive(mlIncentive)
+                }, "ML P" + ph(mlIncentive)),
                 /*#__PURE__*/React.createElement(NumBox, {
                   style: {...INP, ...MONO, width: 84, textAlign: 'right', fontSize: 11},
-                  min: 0, value: rowPerDiem, placeholder: "0",
-                  title: "Incentive or per-diem PER DAY, per person, charged as part of C.5 Benefits & Others. It comes from the Masterlist when the role is picked or typed, and Sync Rates brings it up to date. Typed here, it applies to this CE only.",
+                  min: 0, value: rowIncentive, placeholder: "0",
+                  title: "Incentive PER DAY, per person, charged as part of C.5 Benefits & Others. It comes from the Masterlist when the role is picked or typed, and Sync Rates brings it up to date. Typed here, it applies to this CE only.",
                   onCommit: setIncentive
                 }))),
         cell(g.total, {color: ACC, fontWeight: 700, background: alpha(ACC, '0A')})

@@ -114,8 +114,10 @@ ck('and the die grinder comes in at its workbook rate',
 console.log('\nthe masterlist SHOWS the figures it stores:');
 ck('there is a cell for each of the four, and for the kW rating',
   /\[\'unitPrice\', \'serviceLife\', \'projectsPerYear\', \'maintPerYear\', \'kw\'\]\.map\(k =>/.test(app));
+/* A NumBox, so a decimal survives being typed -- see the note on NumBox.
+   allowBlank is what keeps an unpriced tool unpriced instead of becoming 0. */
 ck('they are editable, not just displayed',
-  /onChange: e => updML\(r\.id, k, e\.target\.value === \'\'/.test(app));
+  /onCommit: v => updML\(r\.id, k, v\),\s*\n\s*allowBlank: true/.test(app));
 ck('an empty cell stays empty rather than becoming 0',
   /value: r\[k\] === undefined/.test(app) && /\? \'\' : r\[k\]/.test(app),
   'a zero reads as a real figure; blank means there is no basis to derive a tier from');

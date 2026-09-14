@@ -54,9 +54,17 @@ ck('AOT is the accumulated overtime, not the per-day figure', /N\(r\.otHours\) \
    tools/test-editable-multipliers.js. It still has to carry the shift
    multiplier on top, which is the thing this line exists to check. */
 ck('RATE OT carries the shift multiplier', /N\(r\.rate\) \/ 8 \* ceOtMult\(rr\) \* mult/.test(exp));
-ck('the regular subtotal does too', /N\(r\.pax\) \* N\(r\.days\) \* N\(r\.rate\) \* mult/.test(exp));
-ck('overtime is per day, as everywhere else', /\(N\(r\.otHours\) \/ 8\)/.test(exp),
-  'this is the seventh place that formula appears and it must match the other six');
+/* SUBTOTAL and TOTAL carried their own copy of the wage formula. They now take
+   both halves from mpWageParts -- the one the editor row, the per-shift
+   subtotal and the CE's own total are all built from -- so the sheet cannot
+   report a row the CE does not charge, whichever of them is edited next. */
+ck('the basic pay and the overtime come from mpWageParts',
+  /const \{reg: base, ot\} = mpWageParts\(r\);/.test(exp),
+  'its own copy of the formula is a seventh answer waiting to drift');
+ck('and the row total is their sum', /a\.money\(base \+ ot\)/.test(exp));
+ck('the sheet has no wage arithmetic of its own',
+  !/N\(r\.pax\) \* N\(r\.days\) \* N\(r\.rate\) \* mult/.test(exp) &&
+  !/\(N\(r\.otHours\) \/ 8\) \* N\(r\.rate\) \* ceOtMult/.test(exp));
 /* Tools carry a tier now, so the sheet cannot work its own total out: a row
    may be charged per project, per day or per hour. It asks toolRowCost, the
    same function the CE totals with, and prints the basis of the charge instead

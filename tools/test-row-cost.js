@@ -12,6 +12,10 @@ const grab = (re, what) => { const m = src.match(re); if (!m) { console.error('n
 const resDaysSrc = grab(/const resDays = r => [^\n]*;/, 'resDays');
 const calcBenSrc = grab(/const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen');
 const rowCostSrc = grab(/const rowCost = \(kind, r\) => \{[\s\S]*?\n  \};/, 'rowCost');
+/* rowCost prices a manpower row through mpWage -- the same wage figure the
+   per-shift subtotal and the C.1-C.4 subtotal are summed from. Lifted, not
+   restated, so a change to the wage formula reaches these assertions. */
+const mpWageSrc = grab(/const mpWageParts = r => \{[\s\S]*?\n  const mpWage = r => mpWageParts\(r\)\.total;/, 'mpWage');
 const groupSrc   = grab(/const sowTaskGroup = item => \{[\s\S]*?\n  \};/, 'sowTaskGroup');
 
 const N = v => parseFloat(v) || 0;
@@ -39,6 +43,7 @@ const make = body => new Function('N', 'SHIFTS', 'sowItems', 'rr', 'kwhRate', RA
 const api = make(`
   ${resDaysSrc}
   ${calcBenSrc}
+  ${mpWageSrc}
   ${rowCostSrc}
   ${groupSrc}
   return { rowCost, sowTaskGroup, calcBen, resDays };
@@ -110,11 +115,17 @@ check('no OT hours costs no OT', otCost(5) > 0 && api.rowCost('mp', { ...ot3, da
 const otNight = api.rowCost('mp', { ...ot3, shift: 'night' }) - api.rowCost('mp', { ...ot3, shift: 'night', otHours: 0 });
 check('the shift multiplier still applies to OT', Math.abs(otNight - 375 * 1.25) < 0.01, otNight);
 
-/* Overtime is costed in seven places -- the editor, the SOW breakdown, the
-   grand total, the CE comparison, the printed CE, the Excel export and the row
-   badge. Any one of them left on the old meaning would disagree with the other
-   six, and the disagreement would only show up as a number nobody could
-   reconcile. Every OT expression must carry a day factor. */
+/* Overtime used to be costed in seven separate places -- the editor, the SOW
+   breakdown, the grand total, the CE comparison, the printed CE, the Excel
+   export and the row badge -- each with its own copy of the formula. Any one
+   of them left on the old meaning disagreed with the other six, and the
+   disagreement only ever showed up as a number nobody could reconcile.
+
+   Three of the seven now take the figure from mpWageParts instead of carrying
+   their own arithmetic, which is why this census is smaller than it was. The
+   rule is unchanged for the ones that remain: every OT expression must carry
+   a day factor. Fewer is better here -- a copy that cannot drift is a copy
+   that cannot disagree -- so this asserts a floor, not an exact count. */
 console.log('\nevery OT formula in the codebase agrees:');
 const path2 = require('path');
 const otSites = [];
@@ -134,10 +145,20 @@ for (const [f, text] of sources) {
       otSites.push({ f, term: term.trim() });
   }
 }
-check('found every OT cost site', otSites.length >= 7, otSites.length);
+check('found every OT cost site', otSites.length >= 4, otSites.length);
 for (const s of otSites)
   check(s.f + ': ' + s.term.slice(-58), /days/.test(s.term),
     'this one still treats OT as a total for the whole engagement');
+/* The three that no longer appear above must be reading the shared one, not
+   have quietly lost their overtime -- which is exactly the fault that put a
+   P650 subtotal under a P1,107.03 row. */
+check('the printed CE takes its manpower totals from mpWage',
+  /S\(mpWage\(r\), 'tdnb'\)/.test(src) && /const sub = rows\.reduce\(\(s, r\) => s \+ mpWage\(r\), 0\);/.test(src),
+  'no OT term of its own means it must be calling the shared one');
+check('the detailed export takes both halves from mpWageParts',
+  /const \{reg: base, ot\} = mpWageParts\(r\);/.test(src));
+check('and the editor row does too',
+  /const \{reg: regAmt, ot: otAmt, total: tot\} = mpWageParts\(r\);/.test(src));
 
 console.log('\nblank starter row must be free (calcBen SIL adds pax*30):');
 /* mkMP() defaults pax:1, days:1, rate:0 -- with no role this is an empty row the

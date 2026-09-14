@@ -46,7 +46,9 @@ const grab = (start, end) => {
   if (b < 0) { console.error('no end marker after ' + start); process.exit(1); }
   return app.slice(a, b);
 };
-const rowCostSrc = grab('  const rowCost = (kind, r) => {', '\n  /* ── Highlighted costs');
+/* mpWage comes along because rowCost prices a manpower row through it. */
+const rowCostSrc = grab('  const mpWageParts = r => {', '  const mpSub = useMemo') +
+  grab('  const rowCost = (kind, r) => {', '\n  /* ── Highlighted costs');
 const sourcesBody = grab('const hlSources = useMemo(() => {', '}, [unitP, grand')
   .replace('const hlSources = useMemo(() => {', '');
 const resolvers = grab('  const hlKeys = r =>', '  const hlLabel = r =>');

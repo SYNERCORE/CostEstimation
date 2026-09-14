@@ -45,6 +45,64 @@ function ceNumKey(num) {
   return [Number(m[1]), Number(m[2]), ...(rest.match(/\d+/g) || []).map(Number)];
 }
 
+/* A number box you can actually type in.
+
+   These were plain controlled inputs that re-parsed the text on every
+   keystroke -- `value: r.days` against `parseInt(e.target.value) || 1` -- so
+   the box was rewritten as it was being typed:
+
+     - the "." in 4.5 was parsed away the instant it was typed, because
+       parseFloat('4.') is 4, so a decimal could not be entered at all;
+     - clearing the box to type a new figure snapped it straight back to its
+       minimum, because parseFloat('') is NaN and the `|| 1` caught it;
+     - a min of 1 pushed a half-typed number up before it was finished.
+
+   Which is why a figure had to be entered one character at a time, clicking
+   back into the box between each one.
+
+   The text typed is kept in a buffer while the box has focus and is only
+   parsed on the way out, so what is typed survives. The model still updates
+   on every keystroke from whatever parses so far, so the row total and the
+   subtotals move as you type -- the buffer changes what the box SHOWS, not
+   when the CE is costed. */
+/* `allowBlank` is for the fields where empty is a real answer rather than a
+   half-typed one: a tool with no unit price on file is not a tool that cost
+   nothing, and a service role with no days of its own runs the whole project.
+   Those commit '' instead of falling back to the minimum. */
+function NumBox({value, onCommit, min, max, step, intOnly, allowBlank, style, title, placeholder}) {
+  const [buf, setBuf] = React.useState(null);
+  const clamp = v => {
+    if (!isFinite(v)) return null;
+    if (min !== undefined && v < min) v = min;
+    if (max !== undefined && v > max) v = max;
+    return v;
+  };
+  const parse = raw => clamp(intOnly ? parseInt(raw, 10) : parseFloat(raw));
+  const shown = buf !== null ? buf
+    : (value === '' || value === null || value === undefined) ? '' : String(value);
+  return /*#__PURE__*/React.createElement("input", {
+    type: "number", min, max, step, style, title, placeholder,
+    value: shown,
+    onChange: e => {
+      const raw = e.target.value;
+      setBuf(raw);
+      /* An empty box is someone midway through replacing a figure, not a
+         request to set it to zero -- unless blank is itself an answer here. */
+      if (raw === '') { if (allowBlank) onCommit(''); return; }
+      const v = parse(raw);
+      if (v !== null) onCommit(v);
+    },
+    /* Leaving the box is when a half-typed figure has to become a number:
+       an empty one falls back to the minimum, "4." settles as 4. */
+    onBlur: e => {
+      setBuf(null);
+      const v = parse(e.target.value);
+      if (v !== null) { onCommit(v); return; }
+      onCommit(allowBlank ? '' : (min !== undefined ? min : 0));
+    }
+  });
+}
+
 /* ── A CE and its revisions ───────────────────────────────────────────────
    R01 of a CE is not another CE. Counted as one, a job revised twice was
    three rows in the list, three in the CE count, and its value three times
@@ -924,13 +982,26 @@ function App({
   window._shicToast = showToast;
   const prov = getProvider();
   const provInfo = PROVIDERS[prov];
-  const mpSub = useMemo(() => mp.reduce((s, r) => {
-    if (!r.role) return s; /* blank starter row is not a cost */
+  /* What one manpower row is paid in wages: the shift-adjusted day rate plus
+     its overtime, before benefits.
+
+     One definition, because there were two. The per-shift subtotal printed
+     under each shift computed only pax x days x rate x multiplier and left
+     the overtime out, so a row reading P1,107.03 sat above a subtotal of
+     P650.00 on the very same screen. Every wage figure now comes from here. */
+  /* Split, because the printed CE and the detailed export give the basic pay
+     and the overtime their own columns, and the editor prints "OT: P..." under
+     the row total. They each carried their own copy of this arithmetic to get
+     the two halves; now they take them from here. */
+  const mpWageParts = r => {
+    if (!r.role) return {reg: 0, ot: 0, total: 0}; /* blank starter row is not a cost */
     const mult = ceShiftMult(rr, r.shift);
     const reg = N(r.pax) * N(r.days) * N(r.rate) * mult;
     const ot = N(r.pax) * N(r.days) * (N(r.otHours || 0) / 8) * N(r.rate) * ceOtMult(rr) * mult;
-    return s + reg + ot;
-  }, 0), [mp]);
+    return {reg, ot, total: reg + ot};
+  };
+  const mpWage = r => mpWageParts(r).total;
+  const mpSub = useMemo(() => mp.reduce((s, r) => s + mpWage(r), 0), [mp, rr]);
   /* Benefits are computed on the BASIC day rate, never the shift-adjusted
      one. 13th-month pay, SSS, HDMF/PHIC and SIL/ECC are statutory and scale
      with the days worked, not with what the shift pays. A night, Sunday or
@@ -1042,10 +1113,9 @@ function App({
     if (kind === 'tools') return toolRowTotal(r, kwhRate);
     if (kind !== 'mp') return N(r.qty) * N(r.cost);
     if (!r.role) return 0; /* blank row: no role, no cost (calcBen SIL adds pax*30) */
-    const mult = ceShiftMult(rr, r.shift);
-    const reg = N(r.pax) * N(r.days) * N(r.rate) * mult;
-    const ot = N(r.pax) * N(r.days) * (N(r.otHours || 0) / 8) * N(r.rate) * ceOtMult(rr) * mult;
-    return reg + ot + calcBen(r).total;
+    /* Wage from mpWage, benefits from calcBen -- the same two the subtotals
+       are built from, rather than a third copy of the same arithmetic. */
+    return mpWage(r) + calcBen(r).total;
   };
   /* ── Highlighted costs ──────────────────────────────────────────────────
      Callouts of money that is ALREADY counted in the sections above (e.g. a
@@ -2207,7 +2277,9 @@ function App({
     }
 
     /* ---- BOL (manpower + benefits) -------------------------------------- */
-    const mpActive = mp.filter(r => N(r.rate) > 0 || N(r.pax) > 0);
+    /* A row with no role is not a hire: mpWage costs it at zero, so printing
+       it would put a line on the client's copy that the total does not carry. */
+    const mpActive = mp.filter(r => r.role && (N(r.rate) > 0 || N(r.pax) > 0));
     if (mpActive.length) {
       const bol = head('BILL OF LABOR');
       const shiftKeys = [...new Set(mpActive.map(r => r.shift || 'straight'))];
@@ -2215,14 +2287,13 @@ function App({
         const rows = mpActive.filter(r => (r.shift || 'straight') === sk);
         if (!rows.length) return;
         const sh = SHIFTS[sk], mult = ceShiftMult(rr, sk);
-        const sub = rows.reduce((s, r) => s + N(r.pax) * N(r.days) * N(r.rate) * mult
-                                            + N(r.pax) * N(r.days) * (N(r.otHours) / 8) * N(r.rate) * ceOtMult(rr) * mult, 0);
+        const sub = rows.reduce((s, r) => s + mpWage(r), 0);
         bol.push([S(sh?.label || sk.toUpperCase(), 'sec')]);
         bol.push(['ITEM', 'MANPOWER LOADING', 'QTY', 'UOM', 'DAYS', 'RATE/DAY', 'TOTAL'].map(h => S(h, 'th')));
         rows.forEach((r, i) => bol.push([
           S(i + 1, 'tdc'), S(r.role || '', 'td'), S(N(r.pax) || 1, 'tdc'), S('pax', 'tdc'), S(N(r.days) || 1, 'tdc'),
           S(N(r.rate), 'tdn'),
-          S(N(r.pax) * N(r.days) * N(r.rate) * mult + N(r.pax) * N(r.days) * (N(r.otHours) / 8) * N(r.rate) * ceOtMult(rr) * mult, 'tdnb')
+          S(mpWage(r), 'tdnb')
         ]));
         bol.push([S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('SUB TOTAL:', 'totlbl'), S(sub, 'tot')]);
         bol.push([]);
@@ -3438,16 +3509,15 @@ function App({
         placeholder: mlTab === 'manpower' ? 'Role / position' : 'Item description'
       })), /*#__PURE__*/React.createElement("td", {
         style: TDS
-      }, /*#__PURE__*/React.createElement("input", {
+      }, /*#__PURE__*/React.createElement(NumBox, {
         style: {
           ...INP,
           ...MONO,
           width: 92
         },
-        type: "number",
         min: 0,
         value: costVal,
-        onChange: e => updML(r.id, costKey, parseFloat(e.target.value) || 0)
+        onCommit: v => updML(r.id, costKey, v)
       }),
       /* What this item was actually charged at, beside the rate the list
          claims. Maintaining a masterlist without that is guesswork: the list
@@ -3459,16 +3529,15 @@ function App({
         onPick: v => updML(r.id, costKey, v)
       })), mlTab === 'manpower' && /*#__PURE__*/React.createElement("td", {
         style: TDS
-      }, /*#__PURE__*/React.createElement("input", {
+      }, /*#__PURE__*/React.createElement(NumBox, {
         style: {
           ...INP,
           ...MONO,
           width: 80
         },
-        type: "number",
         min: 0,
         value: r.perDiem || 0,
-        onChange: e => updML(r.id, 'perDiem', parseFloat(e.target.value) || 0),
+        onCommit: v => updML(r.id, 'perDiem', v),
         placeholder: "0"
       })), /*#__PURE__*/React.createElement("td", {
         style: TDS
@@ -3490,7 +3559,7 @@ function App({
             /*#__PURE__*/React.createElement("td", {
               key: k,
               style: TDS
-            }, /*#__PURE__*/React.createElement("input", {
+            }, /*#__PURE__*/React.createElement(NumBox, {
               style: {
                 ...INP,
                 ...MONO,
@@ -3510,7 +3579,8 @@ function App({
                 maintPerYear: 'Yearly maintenance, often 20% of unit price',
                 kw: 'Power rating in kilowatts — used to cost electricity on shopworks CEs'
               }[k],
-              onChange: e => updML(r.id, k, e.target.value === '' ? '' : (parseFloat(e.target.value) || 0))
+              onCommit: v => updML(r.id, k, v),
+              allowBlank: true
             })))
         : []),
       /*#__PURE__*/React.createElement("td", {
@@ -5600,24 +5670,23 @@ function App({
         value: m.role || m.desc
       })))), /*#__PURE__*/React.createElement("td", {
         style: TDS
-      }, /*#__PURE__*/React.createElement("input", {
+      }, /*#__PURE__*/React.createElement(NumBox, {
         style: {...INP, ...MONO, width: 52},
-        type: "number", min: 1,
+        min: 1, intOnly: true,
         value: r.qty || 1,
-        onChange: e => upd(r.id, 'qty', Math.max(1, parseInt(e.target.value) || 1)),
+        onCommit: v => upd(r.id, 'qty', v),
         title: "Quantity of this item per service application"
       })), /*#__PURE__*/React.createElement("td", {
         style: TDS
-      }, /*#__PURE__*/React.createElement("input", {
+      }, /*#__PURE__*/React.createElement(NumBox, {
         style: {
           ...INP,
           ...MONO,
           width: 90
         },
-        type: "number",
         min: 0,
         value: r.cost || 0,
-        onChange: e => upd(r.id, 'cost', parseFloat(e.target.value) || 0)
+        onCommit: v => upd(r.id, 'cost', v)
       })), /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, /*#__PURE__*/React.createElement("select", {
@@ -5629,12 +5698,12 @@ function App({
         onChange: e => upd(r.id, 'uom', e.target.value)
       }, uomOptionEls(r.uom || 'Day'))), type === 'mp' && /*#__PURE__*/React.createElement("td", {
         style: TDS
-      }, /*#__PURE__*/React.createElement("input", {
+      }, /*#__PURE__*/React.createElement(NumBox, {
         style: { ...INP, ...MONO, width: 62, fontSize: 10 },
-        type: "number", min: 0, value: r.days === undefined || r.days === null ? '' : r.days,
+        min: 0, allowBlank: true, value: r.days === undefined || r.days === null ? '' : r.days,
         placeholder: "full",
         title: "Days this role is needed for THIS step. Leave blank if they report from day 1 to completion — then the project's No. of Days is used, which is what every service did before this existed.",
-        onChange: e => upd(r.id, 'days', e.target.value === '' ? '' : Math.max(0, parseFloat(e.target.value) || 0))
+        onCommit: v => upd(r.id, 'days', v)
       })), steps && steps.length > 1 && /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, /*#__PURE__*/React.createElement("select", {
@@ -6908,8 +6977,7 @@ function App({
         a.head('ITEM', 'MANPOWER LOADING', 'QTY', 'UOM', 'DAYS', 'RATE/DAY', 'SUBTOTAL', 'AOT', 'RATE OT', 'TOTAL');
         let subA = 0, subB = 0;
         rows.forEach((r, i) => {
-          const base = N(r.pax) * N(r.days) * N(r.rate) * mult;
-          const ot = N(r.pax) * N(r.days) * (N(r.otHours) / 8) * N(r.rate) * ceOtMult(rr) * mult;
+          const {reg: base, ot} = mpWageParts(r);
           subA += base; subB += ot;
           a.row(i + 1, r.role || '', N(r.pax), 'pax', N(r.days), a.money(r.rate),
             a.money(base), N(r.otHours) * N(r.days), a.money(N(r.rate) / 8 * ceOtMult(rr) * mult), a.money(base + ot));
@@ -9438,7 +9506,9 @@ tab === 'dashboard' && (() => {
   }), "×"))), Object.entries(SHIFTS).map(([shiftKey, shiftInfo]) => {
     const rows = mp.filter(r => r.shift === shiftKey);
     const shiftMult = ceShiftMult(rr, shiftKey);
-    const shiftSub = rows.reduce((s, r) => s + N(r.pax) * N(r.days) * N(r.rate) * shiftMult, 0);
+    /* Overtime included -- see mpWage. Left out, this disagreed with the row
+       totals printed directly above it and with the C.1–C.4 subtotal below. */
+    const shiftSub = rows.reduce((s, r) => s + mpWage(r), 0);
     /* Head count = total PAX across rows that actually name a role. A blank
        starter row defaults to pax 1, so counting rows reported "1 worker" on an
        empty CE, and a row of 3 electricians only counted as one. */
@@ -9791,9 +9861,7 @@ tab === 'dashboard' && (() => {
       key: h,
       style: THS
     }, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map(r => {
-      const regAmt = N(r.pax) * N(r.days) * N(r.rate) * shiftMult;
-      const otAmt = N(r.pax) * N(r.days) * (N(r.otHours || 0) / 8) * N(r.rate) * ceOtMult(rr) * shiftMult;
-      const tot = regAmt + otAmt;
+      const {reg: regAmt, ot: otAmt, total: tot} = mpWageParts(r);
       return /*#__PURE__*/React.createElement("tr", {
         key: r.id
       }, /*#__PURE__*/React.createElement("td", {
@@ -9819,55 +9887,53 @@ tab === 'dashboard' && (() => {
         value: m.role
       })))), /*#__PURE__*/React.createElement("td", {
         style: TDS
-      }, /*#__PURE__*/React.createElement("input", {
+      }, /*#__PURE__*/React.createElement(NumBox, {
         style: {
           ...INP,
           ...MONO,
           width: 50
         },
-        type: "number",
         min: 1,
+        intOnly: true,
         value: r.pax,
-        onChange: e => updRow(setMp, r.id, 'pax', Math.max(1, parseInt(e.target.value) || 1))
+        onCommit: v => updRow(setMp, r.id, 'pax', v)
       })), /*#__PURE__*/React.createElement("td", {
         style: TDS
-      }, /*#__PURE__*/React.createElement("input", {
+      }, /*#__PURE__*/React.createElement(NumBox, {
         style: {
           ...INP,
           ...MONO,
           width: 50
         },
-        type: "number",
         min: 1,
+        intOnly: true,
         value: r.days,
-        onChange: e => updRow(setMp, r.id, 'days', Math.max(1, parseInt(e.target.value) || 1))
+        onCommit: v => updRow(setMp, r.id, 'days', v)
       })), /*#__PURE__*/React.createElement("td", {
         style: TDS
-      }, /*#__PURE__*/React.createElement("input", {
+      }, /*#__PURE__*/React.createElement(NumBox, {
         style: {
           ...INP,
           ...MONO,
           width: 58,
           borderColor: N(r.otHours) > 0 ? alpha(ACC, '88') : BDR
         },
-        type: "number",
         min: 0,
         step: 0.5,
         value: r.otHours || 0,
-        onChange: e => updRow(setMp, r.id, 'otHours', Math.max(0, parseFloat(e.target.value) || 0)),
+        onCommit: v => updRow(setMp, r.id, 'otHours', v),
         title: "Overtime hours PER DAY, charged at " + ceOtMult(rr) + "× the hourly rate (day rate / 8) for every day in the Days column. 3 hrs over 10 days = 30 OT hours."
       })), /*#__PURE__*/React.createElement("td", {
         style: TDS
-      }, /*#__PURE__*/React.createElement("input", {
+      }, /*#__PURE__*/React.createElement(NumBox, {
         style: {
           ...INP,
           ...MONO,
           width: 90
         },
-        type: "number",
         min: 0,
         value: r.rate,
-        onChange: e => updRow(setMp, r.id, 'rate', Math.max(0, parseFloat(e.target.value) || 0))
+        onCommit: v => updRow(setMp, r.id, 'rate', v)
       }),
       /*#__PURE__*/React.createElement(RateHistory, {
         kind: 'mp',
@@ -10101,155 +10167,59 @@ tab === 'dashboard' && (() => {
       color: ACC
     }
   }, "Total"))), /*#__PURE__*/React.createElement("tbody", null, (() => {
-    /* Group mp rows by role, merging same role across all shifts */
-    const grouped = {};
-    mp.forEach(r => {
-      const key = r.role.trim().toUpperCase();
-      const mult = ceShiftMult(rr, r.shift);
-      /* Basic rate: this row feeds the benefits columns only, and benefits do
-         not carry the shift premium. See calcBen. */
-      const rate = N(r.rate);
-      const pax = N(r.pax);
-      const days = N(r.days);
-      const mlItem = masterlist.manpower.find(m => m.role.toUpperCase() === key);
-      const perDiemRate = mlItem ? N(mlItem.perDiem || 0) : 0;
-      if (!grouped[key]) {
-        grouped[key] = {
-          role: r.role,
-          pax,
-          days,
-          rate,
-          perDiemRate,
-          entries: [{
-            rate,
-            pax,
-            days,
-            mult,
-            perDiemRate
-          }]
-        };
-      } else {
-        grouped[key].pax += pax;
-        grouped[key].days = Math.max(grouped[key].days, days);
-        /* Use weighted avg rate */
-        grouped[key].entries.push({
-          rate,
-          pax,
-          days,
-          mult,
-          perDiemRate
-        });
-      }
-    });
-    return Object.values(grouped).map((g, rowIdx) => {
-      /* Calculate benefits per entry then sum */
-      let thirteenth = 0,
-        sss = 0,
-        hdmf = 0,
-        sil = 0,
-        perdiem = 0,
-        totalMonthly = 0;
-      g.entries.forEach(e => {
-        thirteenth += e.rate / 12 * e.days * e.pax;
-        sss += e.rate * 0.25 * 0.75 * e.days * e.pax / 26;
-        hdmf += e.rate * 0.16 * e.days * e.pax / 26 * 2;
-        sil += e.rate * e.days * e.pax * 5 / 12 / 26 + e.pax * 30;
-        perdiem += e.perDiemRate * e.days * e.pax;
-        totalMonthly += e.rate * 26 * e.pax;
-      });
-      const rowTot = thirteenth + sss + hdmf + sil + perdiem;
-      const totalPax = g.entries.reduce((s, e) => s + e.pax, 0);
-      const maxDays = Math.max(...g.entries.map(e => e.days));
+    /* Straight off benefitRows -- the same rows the printed CE and both
+       exports use, computed by calcBen.
+
+       This block used to recompute all five benefits itself, and took the
+       incentive from the MASTERLIST entry for the role rather than from the
+       row. So a role the list gives a P200 per-diem showed INCENTIVE P200 and
+       a row total of P307.27, while C.5, the sub-total under this very table,
+       the manpower total and the CE itself all charged P107.27. The screen
+       was showing P200 that nothing was billing. The row is the source of
+       truth for cost everywhere else in this app, so it is here too -- and
+       the incentive is now editable on the row, below, rather than being
+       whatever the masterlist happens to say today. */
+    return benefitRows.map((g, rowIdx) => {
+      const cell = (v, extra) => /*#__PURE__*/React.createElement("td", {
+        style: {...TDS, textAlign: 'right', ...MONO, ...(extra || {})}
+      }, "P", ph(v));
+      /* Editing a merged line writes the rate to every shift entry for that
+         role -- the line is one role, however many shifts it was split over,
+         and a per-diem that differed between them could not be shown here. */
+      const setIncentive = v => setMp(p => p.map(x =>
+        String(x.role || '').trim().toUpperCase() === String(g.role).trim().toUpperCase()
+          ? {...x, perDiem: v} : x));
+      const rowPerDiem = (() => {
+        const mine = mp.filter(x => String(x.role || '').trim().toUpperCase() === String(g.role).trim().toUpperCase());
+        const first = mine.length ? N(mine[0].perDiem || 0) : 0;
+        return mine.every(x => N(x.perDiem || 0) === first) ? first : null;   /* null = mixed */
+      })();
       return /*#__PURE__*/React.createElement("tr", {
         key: g.role,
-        style: {
-          background: rowIdx % 2 === 0 ? 'transparent' : alpha(SURF, '88')
-        }
-      }, /*#__PURE__*/React.createElement("td", {
-        style: {
-          ...TDS,
-          textAlign: 'center',
-          color: MT,
-          fontSize: 10
-        }
-      }, rowIdx + 1), /*#__PURE__*/React.createElement("td", {
-        style: TDS
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontWeight: 600,
-          fontSize: 12
-        }
-      }, g.role || '--'), g.entries.length > 1 && /*#__PURE__*/React.createElement("div", {
-        style: {
-          color: MT,
-          fontSize: 9
-        }
-      }, g.entries.length, " shifts combined")), /*#__PURE__*/React.createElement("td", {
-        style: {
-          ...TDS,
-          textAlign: 'center',
-          ...MONO
-        }
-      }, totalPax), /*#__PURE__*/React.createElement("td", {
-        style: {
-          ...TDS,
-          textAlign: 'center',
-          color: MT
-        }
-      }, "pax"), /*#__PURE__*/React.createElement("td", {
-        style: {
-          ...TDS,
-          textAlign: 'center',
-          ...MONO
-        }
-      }, maxDays), /*#__PURE__*/React.createElement("td", {
-        style: {
-          ...TDS,
-          textAlign: 'right',
-          ...MONO,
-          color: MT
-        }
-      }, "P", ph(totalMonthly / totalPax)), /*#__PURE__*/React.createElement("td", {
-        style: {
-          ...TDS,
-          textAlign: 'right',
-          ...MONO
-        }
-      }, "P", ph(thirteenth)), /*#__PURE__*/React.createElement("td", {
-        style: {
-          ...TDS,
-          textAlign: 'right',
-          ...MONO
-        }
-      }, "P", ph(sss)), /*#__PURE__*/React.createElement("td", {
-        style: {
-          ...TDS,
-          textAlign: 'right',
-          ...MONO
-        }
-      }, "P", ph(hdmf)), /*#__PURE__*/React.createElement("td", {
-        style: {
-          ...TDS,
-          textAlign: 'right',
-          ...MONO
-        }
-      }, "P", ph(sil)), /*#__PURE__*/React.createElement("td", {
-        style: {
-          ...TDS,
-          textAlign: 'right',
-          ...MONO,
-          color: perdiem > 0 ? TX : MT
-        }
-      }, "P", ph(perdiem)), /*#__PURE__*/React.createElement("td", {
-        style: {
-          ...TDS,
-          textAlign: 'right',
-          ...MONO,
-          color: ACC,
-          fontWeight: 700,
-          background: alpha(ACC, '0A')
-        }
-      }, "P", ph(rowTot)));
+        style: {background: rowIdx % 2 === 0 ? 'transparent' : alpha(SURF, '88')}
+      },
+        /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'center', color: MT, fontSize: 10}}, rowIdx + 1),
+        /*#__PURE__*/React.createElement("td", {style: TDS},
+          /*#__PURE__*/React.createElement("div", {style: {fontWeight: 600, fontSize: 12}}, g.role || '--')),
+        /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'center', ...MONO}}, g.pax),
+        /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'center', color: MT}}, "pax"),
+        /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'center', ...MONO}}, g.days),
+        cell(g.monthlyRate, {color: MT}),
+        cell(g.thirteenth), cell(g.sss), cell(g.hdmf), cell(g.sil),
+        /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'right'}},
+          rowPerDiem === null
+            ? /*#__PURE__*/React.createElement("span", {
+                style: {...MONO, color: MT, fontSize: 11},
+                title: "This role carries different incentives on different shifts. Edit them on the shift rows above."
+              }, "P" + ph(g.perdiem) + " *")
+            : /*#__PURE__*/React.createElement(NumBox, {
+                style: {...INP, ...MONO, width: 84, textAlign: 'right', fontSize: 11},
+                min: 0, value: rowPerDiem, placeholder: "0",
+                title: "Incentive or per-diem PER DAY, per person. It is charged as part of C.5 Benefits & Others. Picking the role from the Masterlist fills this in; typing it here sets it for this CE only.",
+                onCommit: setIncentive
+              })),
+        cell(g.total, {color: ACC, fontWeight: 700, background: alpha(ACC, '0A')})
+      );
     });
   })()), /*#__PURE__*/React.createElement("tfoot", null, /*#__PURE__*/React.createElement("tr", {
     style: {
@@ -10273,7 +10243,10 @@ tab === 'dashboard' && (() => {
       fontWeight: 800,
       fontSize: 12
     }
-  }, "P", ph(ben)))))))), tab === 'tools' && /*#__PURE__*/React.createElement(ResTab, {
+    /* The sum of the rows above it, so this footer can never report a figure
+       the table it sits under does not add up to. Equal to `ben` -- the one
+       the CE is costed on -- and tools/test-manpower-totals.js keeps it so. */
+  }, "P", ph(benefitsT)))))))), tab === 'tools' && /*#__PURE__*/React.createElement(ResTab, {
     rows: tools,
     set: setTools,
     total: toolsT,
@@ -10429,16 +10402,15 @@ tab === 'dashboard' && (() => {
         value: mlItem.desc
       })))), /*#__PURE__*/React.createElement("td", {
         style: TDS
-      }, /*#__PURE__*/React.createElement("input", {
+      }, /*#__PURE__*/React.createElement(NumBox, {
         style: {
           ...INP,
           ...MONO,
           width: 58
         },
-        type: "number",
-        min: 0,
+        min: 1, intOnly: true,
         value: r.qty || 1,
-        onChange: e => updItem(r.id, 'qty', Math.max(1, parseInt(e.target.value) || 1))
+        onCommit: v => updItem(r.id, 'qty', v)
       })), /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, /*#__PURE__*/React.createElement("select", {
@@ -10450,16 +10422,15 @@ tab === 'dashboard' && (() => {
         onChange: e => updItem(r.id, 'uom', e.target.value)
       }, uomOptionEls(r.uom || 'Lot'))), /*#__PURE__*/React.createElement("td", {
         style: TDS
-      }, /*#__PURE__*/React.createElement("input", {
+      }, /*#__PURE__*/React.createElement(NumBox, {
         style: {
           ...INP,
           ...MONO,
           width: 96
         },
-        type: "number",
         min: 0,
         value: r.cost || 0,
-        onChange: e => updItem(r.id, 'cost', Math.max(0, parseFloat(e.target.value) || 0))
+        onCommit: v => updItem(r.id, 'cost', v)
       })), /*#__PURE__*/React.createElement("td", {
         style: {
           ...TDS,

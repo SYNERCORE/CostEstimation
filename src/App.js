@@ -1168,21 +1168,26 @@ function App({
       const key = String(r.role).trim().toUpperCase();
       const b = calcBen(r), pax = N(r.pax) || 1;
       const g = grouped[key] || (grouped[key] = {
-        role: r.role, pax: 0, paxSum: 0, days: 0, manDays: 0, daysVary: false, _d: null, shiftDays: [],
+        role: r.role, pax: 0, paxDay: 0, paxNight: 0, paxSum: 0, days: 0, manDays: 0, daysVary: false, _d: null, shiftDays: [],
         monthlyRate: 0,
         thirteenth: 0, sss: 0, hdmf: 0, sil: 0, perdiem: 0, total: 0
       });
-      /* HEADCOUNT is the most this role has on any ONE shift, not the sum
-         across shifts.
+      /* HEADCOUNT: the day crew plus the night crew.
 
-         A shift row is a day TYPE, not a different hire: one electrical
-         supervisor who works a regular day, a Sunday and a holiday is three
-         rows and one man. Summing them printed "3 pax" for one person -- and
-         with DAYS reading 1, a single supervisor's week looked like a crew of
-         three on a single day. The most anyone is on site at once is what
-         somebody reading a bill of manpower wants, and it is the figure the
-         man-days below divide into sensibly. */
-      g.pax = Math.max(g.pax, pax);
+         A shift row is a day TYPE, not automatically a different hire. The
+         same supervisor works the regular days, the Sundays and the holidays
+         -- three rows, one man -- so summing every row printed "3 pax" for one
+         person, and beside a DAYS of 1 that read as a crew of three on a
+         single day.
+
+         But nobody works a day shift and the night shift of the same day.
+         Day and night are different people, so those two DO add: one
+         supervisor on days and one on nights is two supervisors. Within each
+         of the two, the most on any one shift is the crew size. */
+      const _isNight = /_night$/.test(r.shift || 'regular_day');
+      if (_isNight) g.paxNight = Math.max(g.paxNight, pax);
+      else g.paxDay = Math.max(g.paxDay, pax);
+      g.pax = g.paxDay + g.paxNight;
       /* Man-days: pax x days, summed over the shifts. Was Math.max on days,
          which described a 2 pax x 10 day + 1 pax x 2 day role as 30 man-days
          rather than 22. QTY x DAYS on the printed line is this figure. */
@@ -10491,14 +10496,17 @@ tab === 'dashboard' && (() => {
         /*#__PURE__*/React.createElement("td", {style: TDS},
           /*#__PURE__*/React.createElement("div", {style: {fontWeight: 600, fontSize: 12}}, g.role || '--'),
           kids.length ? /*#__PURE__*/React.createElement("div", {style: {fontSize: 10, color: MT}},
-            "subtotal of " + kids.length + " shift entries") : null),
+            "subtotal of " + kids.length + " shift entries" +
+            (g.paxDay && g.paxNight ? "  ·  " + g.paxDay + " day + " + g.paxNight + " night" : "")) : null),
         /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'center', ...MONO}}, g.pax),
         /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'center', color: MT}}, "pax"),
         /*#__PURE__*/React.createElement("td", {
           style: {...TDS, textAlign: 'center', ...MONO},
           title: g.daysVary
-            ? 'One line for ' + g.shiftDays.length + ' shift rows. QTY is the most of this role on site at once; ' +
-              'QTY x DAYS is the ' + ph(g.manDays) + ' man-days the benefits are charged on. ' +
+            ? 'One line for ' + g.shiftDays.length + ' shift rows. QTY is ' + g.paxDay + ' on days + ' +
+              g.paxNight + ' on nights -- the same person works the regular, Sunday and holiday DAYS, but ' +
+              'nobody works a day and that night. QTY x DAYS is the ' + ph(g.manDays) +
+              ' man-days the benefits are charged on. ' +
               g.shiftDays.map(x => (SHIFTS[x.shift] || {label: x.shift}).label + ': ' + x.pax + ' x ' + x.days + 'd').join(', ')
             : undefined
         }, g.days, g.daysVary ? ' *' : ''),

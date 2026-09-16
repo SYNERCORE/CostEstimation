@@ -677,10 +677,46 @@ function App({
       } else setSyncStatus({sowlib:'local'});
     } catch (e) { console.warn('Scope library load failed:', e.message); setSyncStatus({sowlib:'error'}); }
   };
-  const saveSowLib = lib => {
+  /* Save the library, and come back with whatever somebody else put there
+     while this browser was holding its copy.
+
+     The library is read once, at startup. Editing one service used to write
+     the whole list back as the truth, so every service added by a colleague
+     since this tab was opened was deleted -- with a green tick in the sidebar,
+     because nothing looked at the result. Their services are now merged back
+     in and named in a toast, and a save that fails says so.
+
+     opts.deleted: ids this caller means to be gone. opts.replace: true only
+     for Import-replace and Reset Defaults, which really do mean "just this". */
+  const saveSowLib = (lib, opts) => {
     setSowLib(lib);
     cacheSowLib(lib);
-    if (USE_SP || getSiteURL()) dbSaveSowLib(lib).catch(()=>{});
+    if (!(USE_SP || getSiteURL())) return;
+    setSyncStatus({sowlib: 'saving'});
+    dbSaveSowLib(lib, opts).then(res => {
+      if (!res || !res.sp) {
+        setSyncStatus({sowlib: 'error'});
+        showToast('Scope Library saved on this device only — SharePoint refused it' +
+          (res && res.reason ? ': ' + res.reason : '.'), true);
+        return;
+      }
+      const adopted = res.adopted || [];
+      if (adopted.length) {
+        /* Theirs first: they are the ones the user has not seen yet. */
+        const merged = [...adopted, ...lib];
+        setSowLib(merged);
+        cacheSowLib(merged);
+        showToast(adopted.length + ' service' + (adopted.length === 1 ? '' : 's') +
+          ' added by someone else since you opened this page ' +
+          (adopted.length === 1 ? 'was' : 'were') + ' kept: ' +
+          adopted.slice(0, 3).map(s => s.title || '(untitled)').join(', ') +
+          (adopted.length > 3 ? ' and ' + (adopted.length - 3) + ' more' : '') + '.');
+      }
+      setSyncStatus({sowlib: 'synced', lastSyncAt: new Date().toISOString()});
+    }).catch(e => {
+      setSyncStatus({sowlib: 'error'});
+      showToast('Scope Library save failed: ' + (e && e.message ? e.message : e), true);
+    });
   };
   useEffect(() => {
     if (!(USE_SP || getSiteURL())) return;
@@ -698,6 +734,18 @@ function App({
   const [_editSvc, _setEditSvc] = useState(null);
   const [_editDraft, _setEditDraft] = useState(null);
   const [_resTab, _setResTab] = useState('mp');
+  /* Re-read the library when the tab is opened. It used to be read once, at
+     startup, so a service a colleague added this morning was invisible until
+     the page was reloaded -- and the tab is exactly where somebody goes to
+     look for it. Throttled, and never while a service is open in the editor,
+     which would swap the list out from under the draft. */
+  const sowLibReadAt = useRef(0);
+  useEffect(() => {
+    if (tab !== 'scopelib' || !(USE_SP || getSiteURL()) || _editSvc) return;
+    if (Date.now() - sowLibReadAt.current < 60000) return;
+    sowLibReadAt.current = Date.now();
+    loadSowLib();
+  }, [tab, _editSvc]);
   /* Merge a role or item shared by two services into one row. Off by default:
      a merged row can only be filed against one scope task, so the other task
      shows no cost for work it really does need -- and once a role carries its
@@ -5378,8 +5426,17 @@ function App({
       setSpWizBusy(true);
       setSpWizLog('Publishing scope library to SharePoint…');
       try {
-        const ok = await dbSaveSowLib(sowLib);
-        setSpWizLog(ok ? '✅ Published successfully! All users will see the updated library.' : '⚠️ Saved to local storage only (SP not connected).');
+        /* dbSaveSowLib answers with {sp, adopted, reason} now, not a boolean --
+           a truthy object would have reported every failure as a success. */
+        const res = await dbSaveSowLib(sowLib);
+        if (res && res.sp) {
+          const kept = (res.adopted || []).length;
+          if (kept) { const merged = [...res.adopted, ...sowLib]; setSowLib(merged); cacheSowLib(merged); }
+          setSpWizLog('✅ Published successfully! All users will see the updated library.' +
+            (kept ? ' ' + kept + ' service' + (kept === 1 ? '' : 's') + ' already on the site ' +
+              (kept === 1 ? 'was' : 'were') + ' kept and added to your copy.' : ''));
+        } else setSpWizLog('⚠️ Saved to local storage only' +
+          (res && res.reason ? ' — ' + res.reason : ' (SP not connected)') + '.');
       } catch(e) { setSpWizLog('❌ Error: ' + e.message); }
       setSpWizBusy(false);
     };
@@ -5512,7 +5569,9 @@ function App({
     };
     const delSvc = id => {
       if (!confirm('Delete this service?')) return;
-      saveSowLib(sowLib.filter(s => s.id !== id));
+      /* Named, so SharePoint removes this one and leaves alone anything else it
+         has that this browser has not seen yet. */
+      saveSowLib(sowLib.filter(s => s.id !== id), {deleted: [id]});
       showToast('Deleted.');
     };
     const addSvc = () => {
@@ -5543,23 +5602,26 @@ function App({
       const key = s => String(s.cat || '').toUpperCase().trim() + '|' + String(s.title || '').toUpperCase().trim();
       const seen = {};
       const kept = [];
-      let dropped = 0;
+      const droppedIds = [];
       /* Later wins: the newest import is the one worth keeping. */
       [...sowLib].reverse().forEach(s => {
         const k = key(s);
-        if (seen[k]) { dropped++; return; }
+        if (seen[k]) { droppedIds.push(s.id); return; }
         seen[k] = true;
         kept.unshift(s);
       });
+      const dropped = droppedIds.length;
       if (!dropped) { showToast('No duplicates — every service is listed once.'); return; }
       if (!confirm('Remove ' + dropped + ' duplicate service' + (dropped === 1 ? '' : 's') + '?\n\n' +
         kept.length + ' will remain. Where two services share a category and title, the more recently imported one is kept.')) return;
-      saveSowLib(kept);
+      saveSowLib(kept, {deleted: droppedIds});
       showToast('Removed ' + dropped + ' duplicate' + (dropped === 1 ? '' : 's') + ' — ' + kept.length + ' services remain.');
     };
     const resetLib = () => {
       if (!confirm('Reset to defaults? All custom changes will be lost.')) return;
-      saveSowLib(window.SOW_LIBRARY);
+      /* This list and nothing else -- the one caller besides Import-replace
+         that genuinely means to rewrite the whole library. */
+      saveSowLib(window.SOW_LIBRARY, {replace: true});
       showToast('Library reset to defaults.');
     };
     const allCats = [...new Set(sowLib.map(s => s.cat))].sort();
@@ -6262,7 +6324,7 @@ function App({
           } else if (rest > 0 && confirm('Replace the ENTIRE library with these ' + parsed.length + ' services?\n\n' +
                      rest + ' service' + (rest === 1 ? '' : 's') + ' not in this file will be DELETED, here and in SharePoint.\n\n' +
                      'Export a backup first if you are not sure.')) {
-            saveSowLib(parsed);
+            saveSowLib(parsed, {replace: true});
             showToast('Library replaced \u2014 ' + parsed.length + ' services.');
           }
         } catch (err) {

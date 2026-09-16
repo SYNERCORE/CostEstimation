@@ -767,7 +767,27 @@ if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Masterlist'),"Title eq 
    put 48 CEs into SharePoint as headers with no line items. */
 console.warn('dbSaveML:',e.message);return{sp:false,reason:e.message};}}
 return{sp:false,reason:'SharePoint is not configured'};}
-async function dbSaveSowLib(lib){
+/* Save the scope library.
+
+   opts.deleted  ids the caller deleted on purpose, this session. Only these
+                 are removed from SharePoint.
+   opts.replace  true for Import-replace and Reset Defaults, the two callers
+                 that really do mean "this list, and nothing else".
+
+   Returns {sp, adopted, reason}. `adopted` is every service SharePoint had
+   that the caller's list did not and did not delete -- another user's work,
+   which the caller must fold into its own copy and say so.
+
+   It used to make SharePoint MATCH the list it was handed, unconditionally.
+   That is right for a replace and wrong for everything else: the library is
+   loaded once at startup, so a browser that had been open since before a
+   colleague added three services deleted those three services the next time
+   its owner edited anything at all, silently. Deliberate deletion is now
+   named by the caller rather than inferred from absence. */
+async function dbSaveSowLib(lib,opts){
+  const o=opts||{};
+  const deleted=new Set((o.deleted||[]).map(String));
+  const replace=o.replace===true;
   if(USE_SP||getSiteURL()){
     try{
       /* Fetch current SP state first */
@@ -780,16 +800,12 @@ async function dbSaveSowLib(lib){
       /* Build local map: svc.id (string) → svc */
       const localMap={};
       lib.forEach(s=>localMap[String(s.id)]=s);
-      /* SharePoint is made to MATCH the library it was handed.
-
-         It used to merge, preserving any service SharePoint had and the caller
-         did not. Two things followed, and both were reported as bugs. Importing
-         a replacement library kept every old service alongside the new ones --
-         the import says it replaces the library, and once SharePoint was
-         connected that was simply untrue. And deleting a service did nothing:
-         it went locally, the merge put it straight back on the next save.
-
-         A service missing from `lib` is a service the caller means to be gone. */
+      /* What the site has that this caller does not, minus what it deleted. */
+      const adopted=[];
+      if(!replace){
+        for(const k of Object.keys(spMap))
+          if(localMap[k]===undefined&&!deleted.has(k))adopted.push(spMap[k].svc);
+      }
       for(const s of lib){
         const spId=(spMap[String(s.id)]||{}).spId;
         const data={Title:(s.cat||'')+(s.cat&&s.title?' | ':'')+s.title,shicData:JSON.stringify(s)};
@@ -804,17 +820,24 @@ async function dbSaveSowLib(lib){
         for(const r of existing){
           let id=null;
           try{const d=JSON.parse(r.shicData||'{}');id=d&&d.id!=null?String(d.id):null;}catch{}
-          if(id===null||localMap[id]===undefined)
-            await spDelete(spList('SowLib'),r.Id).catch(()=>{});
+          /* A row with no readable id names no service, so nothing can ask for
+             it back; it goes only when the caller is rewriting the whole list. */
+          const gone=id===null?replace:(replace?localMap[id]===undefined:deleted.has(id));
+          if(gone)await spDelete(spList('SowLib'),r.Id).catch(()=>{});
         }
       }
-      return true;
-    }catch(e){console.warn('dbSaveSowLib:',e.message);}
+      return {sp:true,adopted};
+    }catch(e){console.warn('dbSaveSowLib:',e.message);
+      /* Reported, not swallowed. A save that failed used to return false into
+         a .catch(()=>{}) while the sidebar kept its tick, so a library edited
+         all afternoon could exist in one browser and nowhere else. */
+      try{localStorage.setItem('sy3:sowlib',JSON.stringify(lib));}catch(_e){}
+      return {sp:false,adopted:[],reason:e.message};}
   }
   /* Raw key, no shic: prefix — App.js reads localStorage['sy3:sowlib'] directly.
      LS.set would write 'shic:sy3:sowlib', which nothing ever read. */
   try{localStorage.setItem('sy3:sowlib',JSON.stringify(lib));}catch(e){console.warn('sowlib not cached locally:',e&&e.message);}
-  return false;
+  return {sp:false,adopted:[],reason:'SharePoint is not configured'};
 }
 async function dbGetSowLib(){
   if(USE_SP||getSiteURL()){

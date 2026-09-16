@@ -746,6 +746,17 @@ function App({
     sowLibReadAt.current = Date.now();
     loadSowLib();
   }, [tab, _editSvc]);
+  /* And the same for the Masterlist, for the same reason -- it is one blob read
+     once at startup, so another user's new rate was invisible until a reload.
+     Not while a save is in flight, which would paint the pre-save copy back. */
+  const mlReadAt = useRef(0);
+  useEffect(() => {
+    if (tab !== 'masterlist' || !(USE_SP || getSiteURL())) return;
+    if (getSyncStatus().masterlist === 'saving') return;
+    if (Date.now() - mlReadAt.current < 60000) return;
+    mlReadAt.current = Date.now();
+    loadML();
+  }, [tab]);
   /* Merge a role or item shared by two services into one row. Off by default:
      a merged row can only be filed against one scope task, so the other task
      shows no cost for work it really does need -- and once a role carries its
@@ -997,7 +1008,10 @@ function App({
     }
     setHistBusy(false);
   };
-  const saveML = async _ml => {
+  /* opts.deleted {section:[ids]} and opts.replaceTabs [sections] say what this
+     caller means to REMOVE. Everything else the site holds is somebody else's
+     work and is merged back in -- see dbSaveML. */
+  const saveML = async (_ml, opts) => {
     /* Import, the tier calculator, Fill missing prices, Sync Rates and Reset
        Defaults all land here. */
     const ml = mlRound(_ml);
@@ -1005,7 +1019,19 @@ function App({
     try{window.shicMasterlist=ml;}catch(_e){}
     setSyncStatus({masterlist:'saving', dirty:true});
     try {
-      const res = await dbSaveML(ml);
+      const res = await dbSaveML(ml, opts);
+      /* What SharePoint had and this browser did not. Folded into the list on
+         screen, or the next save would offer to delete it all over again. */
+      if (res && res.sp && res.merged && res.adopted && Object.keys(res.adopted).length) {
+        const kept = mlRound(res.merged);
+        setMasterlist(kept);
+        try{window.shicMasterlist=kept;}catch(_e){}
+        try { LS.set('masterlist', kept); } catch (_e) {}
+        const n = Object.values(res.adopted).reduce((s, a) => s + a.length, 0);
+        const secs = Object.keys(res.adopted).join(', ');
+        showToast(n + ' ' + secs + ' item' + (n === 1 ? '' : 's') +
+          ' added by someone else since you opened this page ' + (n === 1 ? 'was' : 'were') + ' kept.');
+      }
       auditLog('masterlist_save', Object.keys(ml||{}).map(k=>k+':'+((ml[k]||[]).length)).join(' '), currentUser?.username);
       /* dbSaveML does not throw when SharePoint refuses -- the change is kept
          in this browser instead. Reporting that as "synced" is how a masterlist
@@ -3325,6 +3351,16 @@ function App({
         try { window.shicMasterlist = rounded; } catch (_e) {}
         try {
           const res = await dbSaveML(rounded);
+          /* The debounced typing path writes straight to db.js, so it has to
+             fold in anything a colleague added too -- see saveML. */
+          if (res && res.sp && res.merged && res.adopted && Object.keys(res.adopted).length) {
+            const kept = mlRound(res.merged);
+            setMasterlist(kept);
+            try { window.shicMasterlist = kept; } catch (_e) {}
+            const n = Object.values(res.adopted).reduce((s, a) => s + a.length, 0);
+            showToast(n + ' masterlist item' + (n === 1 ? '' : 's') + ' added by someone else ' +
+              (n === 1 ? 'was' : 'were') + ' kept.');
+          }
           if (res && res.sp === false) {
             setSyncStatus({ masterlist: 'error', dirty: true });
             showToast('Masterlist saved in this browser only — SharePoint refused it: ' + String(res.reason||'unknown').slice(0,100), true);
@@ -3383,10 +3419,12 @@ function App({
       setMlQuickAdd('');
       setTimeout(() => mlQuickAddRef.current?.focus(), 0);
     };
+    /* Named, so the site removes this one and keeps anything else it has
+       that this browser has not seen yet. */
     const delML = id => saveML({
       ...masterlist,
       [mlTab]: (masterlist[mlTab] || []).filter(r => r.id !== id)
-    });
+    }, {deleted: {[mlTab]: [id]}});
     const applyEscalation = () => {
       const pct = parseFloat(escPct);
       if (isNaN(pct) || pct === 0) { showToast('Enter a non-zero %', true); return; }
@@ -3463,13 +3501,15 @@ function App({
     }, /*#__PURE__*/React.createElement("button", {
       style: btn('def', true),
       onClick: () => {
+        /* This tab, rewritten whole -- one of the two callers that really
+           does mean "and nothing else in it". */
         saveML({
           ...masterlist,
           [mlTab]: DEFAULT_ML[mlTab].map(r => ({
             ...r,
             id: uid()
           }))
-        });
+        }, {replaceTabs: [mlTab]});
         showToast('Reset to defaults.');
       }
     }, "Reset Defaults"), /*#__PURE__*/React.createElement("button", {
@@ -3482,7 +3522,7 @@ function App({
           saveML({
             ...masterlist,
             [mlTab]: []
-          });
+          }, {replaceTabs: [mlTab]});
           showToast('Cleared ' + mlTab + ' list.');
         }
       }

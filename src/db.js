@@ -756,11 +756,62 @@ async function dbGetCeDefaults(){
   }
   try{const s=localStorage.getItem('shic:ce_defaults');return s?JSON.parse(s):[];}catch{return [];}
 }
-async function dbSaveML(data){/* Mirror locally FIRST, on both branches. The SharePoint branch used to
+/* The five masterlist sections, and how an item is recognised across two
+   browsers. An id is the real identity; a name is the fallback for rows that
+   came in from a workbook before ids were handed out, so the same role does
+   not come back as a second copy of itself. */
+const ML_SECS=['manpower','tools','materials','ppe','vehicles'];
+function _mlKey(it){
+  if(!it||typeof it!=='object')return null;
+  if(it.id!=null&&it.id!=='')return 'id:'+String(it.id);
+  const nm=String(it.role||it.desc||'').trim().toUpperCase();
+  return nm?'nm:'+String(it.cat||'').trim().toUpperCase()+'|'+nm:null;
+}
+/* Save the masterlist.
+
+   opts.deleted      {section: [ids]} the caller removed on purpose.
+   opts.replaceTabs  sections the caller is rewriting whole -- Clear List and
+                     Reset Defaults, which really do mean "this and nothing
+                     else in this tab".
+
+   Returns {sp, adopted, merged, reason}. The masterlist is ONE JSON blob in
+   ONE row, read at startup, and every save wrote the whole blob back. The
+   conflict guard noticed that the site was newer and then overwrote it
+   anyway, with a console.warn nobody sees -- so a rate a colleague changed
+   this morning was gone the moment anybody else saved. Items the site has
+   that the caller does not are merged back in and handed to the caller in
+   `adopted`, section by section. */
+async function dbSaveML(data,opts){
+/* Mirror locally FIRST, on both branches. The SharePoint branch used to
    `return` before ever reaching the LS.set below, so saving the masterlist
    while online left the offline cache stale forever. */
 LS.set('masterlist',data);LS.set('masterlist_savedAt',new Date().toISOString());
-if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Masterlist'),"Title eq 'config'",'Id,Modified');if(r.length){/* Conflict guard: if SP was updated more recently than our local copy, warn before overwriting */const spModified=new Date(r[0].Modified||0).getTime();const localSavedAt=new Date(LS.get('masterlist_savedAt')||0).getTime();if(spModified>localSavedAt+5000)console.warn('dbSaveML: SP masterlist was modified by another user at',r[0].Modified,'— overwriting with local version');await spPatch(spList('Masterlist'),r[0].Id,{shicData:JSON.stringify(data)});}else await spPost(spList('Masterlist'),{Title:'config',shicData:JSON.stringify(data)});return{sp:true};}catch(e){
+const o=opts||{};const _del=o.deleted||{};const _repl=new Set(o.replaceTabs||[]);
+if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Masterlist'),"Title eq 'config'",'Id,Modified,shicData');
+  let merged=data,adopted={},adoptedN=0;
+  if(r.length&&r[0].shicData){
+    let theirs=null;try{theirs=JSON.parse(r[0].shicData);}catch(_e){}
+    if(theirs&&typeof theirs==='object'){
+      merged={...data};
+      for(const sec of ML_SECS){
+        if(_repl.has(sec))continue;
+        const mine=Array.isArray(data[sec])?data[sec]:[];
+        const other=Array.isArray(theirs[sec])?theirs[sec]:[];
+        if(!other.length)continue;
+        const gone=new Set((_del[sec]||[]).map(String));
+        const have=new Set(mine.map(_mlKey).filter(Boolean));
+        const keep=other.filter(it=>{
+          const k=_mlKey(it);
+          if(!k)return false;
+          if(have.has(k))return false;
+          return !(it.id!=null&&gone.has(String(it.id)));
+        });
+        if(keep.length){adopted[sec]=keep;adoptedN+=keep.length;merged[sec]=[...keep,...mine];}
+      }
+    }
+  }
+  if(adoptedN){LS.set('masterlist',merged);}
+  if(r.length){/* Conflict guard: if SP was updated more recently than our local copy, warn before overwriting */const spModified=new Date(r[0].Modified||0).getTime();const localSavedAt=new Date(LS.get('masterlist_savedAt')||0).getTime();if(spModified>localSavedAt+5000)console.warn('dbSaveML: SP masterlist was modified by another user at',r[0].Modified,'— merged',adoptedN,'item(s) back in');await spPatch(spList('Masterlist'),r[0].Id,{shicData:JSON.stringify(merged)});}else await spPost(spList('Masterlist'),{Title:'config',shicData:JSON.stringify(merged)});return{sp:true,adopted,merged};}catch(e){
 /* Reported, not swallowed. This caught the SharePoint failure and returned as
    if it had worked, so saveML marked the masterlist "synced" and the sidebar
    showed a tick while every rate change sat in one browser. The same silence

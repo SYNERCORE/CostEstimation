@@ -118,6 +118,9 @@ jobs:
 
       - name: Scope of Work deletions are undoable
         run: node tools/test-sow-undo.js src/App.js
+
+      - name: Masterlist saves merge instead of overwriting
+        run: node tools/test-masterlist-merge.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents

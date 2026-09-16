@@ -50,12 +50,13 @@ console.log('\nand nothing changes it without persisting:');
    cell edit, which calls dbSaveML itself. Any other bare call is the bug this
    file exists for. */
 const bare = (ed.match(/setMasterlist\(/g) || []).length;
-/* Two now, both inside the debounced cell edit: one for the keystroke and one
-   for the rounded figure that is about to be stored. Everything else must
+/* Three now, all inside the debounced cell edit: the keystroke, the rounded
+   figure about to be stored, and the merged list that comes back when another
+   user had added something this browser did not have. Everything else must
    still go through saveML. */
-ck('no stray setMasterlist left in the editor', bare <= 2,
+ck('no stray setMasterlist left in the editor', bare <= 3,
   bare + ' call(s); only the debounced cell edit may set state directly, because it calls dbSaveML itself');
-ck('and both belong to it', (ed.match(/setMasterlist\(next\)|setMasterlist\(rounded\)/g) || []).length === bare,
+ck('and all of them belong to it', (ed.match(/setMasterlist\(next\)|setMasterlist\(rounded\)|setMasterlist\(kept\)/g) || []).length === bare,
   'a setMasterlist with any other argument is a change that never reaches storage');
 
 console.log('\nthe toast is not fired from inside a state updater:');

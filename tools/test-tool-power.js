@@ -161,8 +161,10 @@ ck('and the import workbook a column', /'Maintenance per Year', 'Power \(kW\)'\]
 ck('under the headings a shop sheet actually uses', /powerkw: 'kw', kw: 'kw'/.test(app));
 
 console.log('\nthe registry keeps it per tool, with no schema change:');
+/* `merged`, not `data`: a save now folds in whatever another user added
+   before writing. Still one blob, which is the point of this assertion. */
 ck('the masterlist is one JSON blob',
-  /shicData:JSON\.stringify\(data\)/.test(db),
+  /shicData:JSON\.stringify\(merged\)/.test(db),
   'a per-tool field rides in it, so no site has to be repaired to store kW');
 ck('and is read back whole', /JSON\.parse\(r\[0\]\.shicData\)/.test(db));
 ck('the tier calculator does not wipe it',

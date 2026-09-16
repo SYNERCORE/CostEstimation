@@ -50,7 +50,9 @@ ck('as does the audit entry', /' FAILED' : ''/.test(app),
    and returned as if it had worked, so the sidebar showed a synced tick while
    every rate change sat in one browser. */
 console.log('\nthe masterlist save says where it landed:');
-ck('dbSaveML reports success', /return\{sp:true\}/.test(db));
+/* It answers with what it merged as well now -- see
+   tools/test-masterlist-merge.js -- so the success shape carries three keys. */
+ck('dbSaveML reports success', /return\{sp:true,adopted,merged\}/.test(db));
 ck('and reports refusal with the reason', /return\{sp:false,reason:e\.message\}/.test(db));
 ck('an unconfigured site is not called a sync', /SharePoint is not configured/.test(db));
 ck('saveML surfaces it instead of ticking synced',

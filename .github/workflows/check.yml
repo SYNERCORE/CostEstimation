@@ -127,6 +127,9 @@ jobs:
 
       - name: A tiered tool carries what its price is derived from
         run: node tools/test-tier-source-travels.js
+
+      - name: Benefits days reconcile with the benefits
+        run: node tools/test-benefit-days.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents

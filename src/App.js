@@ -1168,11 +1168,23 @@ function App({
       const key = String(r.role).trim().toUpperCase();
       const b = calcBen(r), pax = N(r.pax) || 1;
       const g = grouped[key] || (grouped[key] = {
-        role: r.role, pax: 0, days: 0, monthlyRate: 0,
+        role: r.role, pax: 0, days: 0, manDays: 0, daysVary: false, _d: null, shiftDays: [],
+        monthlyRate: 0,
         thirteenth: 0, sss: 0, hdmf: 0, sil: 0, perdiem: 0, total: 0
       });
       g.pax += pax;
-      g.days = Math.max(g.days, N(r.days) || 1);
+      /* Man-days, not the longest shift.
+
+         This was Math.max, so a role worked 2 pax x 10 days on days and 1 pax
+         x 2 days on nights printed "3 pax, 10 days" -- 30 man-days -- beside
+         benefits that cover 22. The two figures on the line did not describe
+         the money beside them. Summing pax x days and dividing back out gives
+         a DAYS that multiplies with QTY to exactly what was charged; where
+         every shift ran the same length, which is most CEs, it is unchanged. */
+      g.manDays += pax * (N(r.days) || 1);
+      if (g._d === null) g._d = N(r.days) || 1;
+      else if (g._d !== (N(r.days) || 1)) g.daysVary = true;
+      g.shiftDays.push({shift: r.shift || 'regular_day', pax, days: N(r.days) || 1});
       g.monthlyRate += N(r.rate) * 26 * pax;
       ['thirteenth', 'sss', 'hdmf', 'sil', 'perdiem', 'total'].forEach(k => { g[k] += b[k]; });
     });
@@ -1182,7 +1194,11 @@ function App({
        a P650/day helper read as P33,800 a month at 2 pax, which is a cost, not
        a rate, and nothing else on the row is a cost. */
     return Object.values(grouped)
-      .map(g => ({...g, monthlyRate: g.pax ? g.monthlyRate / g.pax : 0}))
+      .map(g => ({...g,
+        monthlyRate: g.pax ? g.monthlyRate / g.pax : 0,
+        /* Rounded for the column, never for the arithmetic -- manDays is the
+           figure the benefits were actually computed over. */
+        days: g.pax ? Math.round(g.manDays / g.pax * 100) / 100 : 0}))
       .filter(x => x.total > 0);
   }, [mp]);
   const benefitsT = benefitRows.reduce((t, r) => t + r.total, 0);
@@ -10425,7 +10441,14 @@ tab === 'dashboard' && (() => {
           /*#__PURE__*/React.createElement("div", {style: {fontWeight: 600, fontSize: 12}}, g.role || '--')),
         /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'center', ...MONO}}, g.pax),
         /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'center', color: MT}}, "pax"),
-        /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'center', ...MONO}}, g.days),
+        /*#__PURE__*/React.createElement("td", {
+          style: {...TDS, textAlign: 'center', ...MONO},
+          title: g.daysVary
+            ? 'Averaged over the shifts this role works, so QTY x DAYS is the ' + ph(g.manDays) +
+              ' man-days the benefits are charged on: ' +
+              g.shiftDays.map(x => (SHIFTS[x.shift] || {label: x.shift}).label + ' ' + x.pax + ' x ' + x.days + 'd').join(', ')
+            : undefined
+        }, g.days, g.daysVary ? ' *' : ''),
         cell(g.monthlyRate, {color: MT}),
         cell(g.thirteenth), cell(g.sss), cell(g.hdmf), cell(g.sil),
         /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'right'}},

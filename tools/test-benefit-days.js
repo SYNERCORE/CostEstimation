@@ -92,5 +92,30 @@ ck('and says what QTY means on such a line',
 ck('rounded for the column, not for the arithmetic',
   /Math\.round\(g\.manDays \/ g\.pax \* 100\) \/ 100/.test(app));
 
+console.log('\neach shift is shown under the role that subtotals them:');
+g = rows([r('ELECTRICAL SUPERVISOR', 1, 1, 'regular_day'), r('ELECTRICAL SUPERVISOR', 1, 1, 'sunday'),
+          r('ELECTRICAL SUPERVISOR', 1, 1, 'holiday')])[0];
+ck('one entry per shift row', g.shiftDays.length === 3);
+ck('each carries its own benefits', g.shiftDays.every(x => x.total > 0 && x.sil > 0));
+ck('and they add up to the role line', near(g.shiftDays.reduce((t, x) => t + x.total, 0), g.total),
+  'a subtotal that does not total its own children is worse than no subtotal');
+ck('each carries its own monthly rate, per person', g.shiftDays.every(x => near(x.monthlyRate, 2500 * 26)));
+ck('the role line is drawn as a subtotal over them', /subtotal of " \+ kids\.length \+ " shift entries/.test(app));
+ck('the children are indented under it', /paddingLeft: 22/.test(app));
+ck('and only when there is more than one shift to break out',
+  /\(g\.shiftDays \|\| \[\]\)\.length > 1 \? g\.shiftDays\.map/.test(app),
+  'a role on one shift is already its own line; repeating it underneath says nothing');
+
+console.log('\nthe flat ECC is visible where it is charged:');
+/* P30 per person is added to SIL on EVERY shift entry, so a role on three day
+   types carries P90 for one man. Whether that is right is a costing decision,
+   not this file's -- what this file insists on is that it is not invisible. */
+ck('each shift entry carries its own P30',
+  near(g.shiftDays[0].sil - 2500 * 5 / 12 / 26, 30), g.shiftDays[0].sil);
+ck('so three day types carry P90 for one man',
+  near(g.sil - (3 * 2500 * 5 / 12 / 26), 90), g.sil);
+ck('and the line says so rather than burying it',
+  /P30 per person, charged once on each shift entry/.test(app));
+
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nbenefit days OK');
 process.exit(bad ? 1 : 0);

@@ -1190,7 +1190,13 @@ function App({
       g.paxSum += pax;
       if (g._d === null) g._d = N(r.days) || 1;
       else if (g._d !== (N(r.days) || 1)) g.daysVary = true;
-      g.shiftDays.push({shift: r.shift || 'regular_day', pax, days: N(r.days) || 1});
+      /* The shift entry itself, with its own benefits, so C.7 can show the
+         role as a subtotal over one line per shift rather than asking two
+         columns to summarise several different day types at once. */
+      g.shiftDays.push({shift: r.shift || 'regular_day', pax, days: N(r.days) || 1,
+        monthlyRate: N(r.rate) * 26, perDiem: N(r.perDiem || 0),
+        thirteenth: b.thirteenth, sss: b.sss, hdmf: b.hdmf, sil: b.sil,
+        perdiem: b.perdiem, total: b.total});
       g.monthlyRate += N(r.rate) * 26 * pax;
       ['thirteenth', 'sss', 'hdmf', 'sil', 'perdiem', 'total'].forEach(k => { g[k] += b[k]; });
     });
@@ -10444,13 +10450,48 @@ tab === 'dashboard' && (() => {
           x.role.trim().toUpperCase() === String(g.role).trim().toUpperCase());
         return m ? N(m.perDiem || 0) : null;
       })();
-      return /*#__PURE__*/React.createElement("tr", {
+      /* One line per shift, under the role that subtotals them.
+
+         A role split over a regular day, a Sunday and a holiday used to be a
+         single line, and two columns cannot honestly summarise three different
+         day types: the pax read as a crew, the days as one shift's length, and
+         the P30 ECC inside SIL & ECC -- charged once per shift entry -- was
+         invisible. The role line is now a SUBTOTAL, and each shift is shown
+         underneath with its own figures, exactly as calcBen computed them. */
+      const kids = (g.shiftDays || []).length > 1 ? g.shiftDays.map((x, i) =>
+        /*#__PURE__*/React.createElement("tr", {
+          key: g.role + ':' + x.shift + ':' + i,
+          style: {background: alpha(SURF, '55'), fontSize: 11}
+        },
+          /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'center', color: MT, fontSize: 10}},
+            (rowIdx + 1) + '.' + (i + 1)),
+          /*#__PURE__*/React.createElement("td", {style: {...TDS, paddingLeft: 22, color: MT}},
+            "↳ " + ((SHIFTS[x.shift] || {}).label || x.shift)),
+          /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'center', ...MONO, color: MT}}, x.pax),
+          /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'center', color: MT}}, "pax"),
+          /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'center', ...MONO, color: MT}}, x.days),
+          cell(x.monthlyRate, {color: MT}), cell(x.thirteenth, {color: MT}), cell(x.sss, {color: MT}),
+          cell(x.hdmf, {color: MT}),
+          /*#__PURE__*/React.createElement("td", {
+            style: {...TDS, textAlign: 'right', ...MONO, color: MT},
+            /* The flat ECC is charged once per shift entry, so a role on three
+               day types carries it three times. Said out loud on the line it
+               happens, rather than buried in a subtotal. */
+            title: 'SIL P' + ph(x.sil - x.pax * 30) + ' + ECC P' + ph(x.pax * 30) +
+                   ' (P30 per person, charged once on each shift entry)'
+          }, "P", ph(x.sil)),
+          cell(x.perdiem, {color: MT}),
+          cell(x.total, {color: MT})
+        )) : [];
+      const head = /*#__PURE__*/React.createElement("tr", {
         key: g.role,
         style: {background: rowIdx % 2 === 0 ? 'transparent' : alpha(SURF, '88')}
       },
         /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'center', color: MT, fontSize: 10}}, rowIdx + 1),
         /*#__PURE__*/React.createElement("td", {style: TDS},
-          /*#__PURE__*/React.createElement("div", {style: {fontWeight: 600, fontSize: 12}}, g.role || '--')),
+          /*#__PURE__*/React.createElement("div", {style: {fontWeight: 600, fontSize: 12}}, g.role || '--'),
+          kids.length ? /*#__PURE__*/React.createElement("div", {style: {fontSize: 10, color: MT}},
+            "subtotal of " + kids.length + " shift entries") : null),
         /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'center', ...MONO}}, g.pax),
         /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'center', color: MT}}, "pax"),
         /*#__PURE__*/React.createElement("td", {
@@ -10490,6 +10531,7 @@ tab === 'dashboard' && (() => {
                 }))),
         cell(g.total, {color: ACC, fontWeight: 700, background: alpha(ACC, '0A')})
       );
+      return kids.length ? [head, ...kids] : head;
     });
   })()), /*#__PURE__*/React.createElement("tfoot", null, /*#__PURE__*/React.createElement("tr", {
     style: {

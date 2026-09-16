@@ -1168,20 +1168,26 @@ function App({
       const key = String(r.role).trim().toUpperCase();
       const b = calcBen(r), pax = N(r.pax) || 1;
       const g = grouped[key] || (grouped[key] = {
-        role: r.role, pax: 0, days: 0, manDays: 0, daysVary: false, _d: null, shiftDays: [],
+        role: r.role, pax: 0, paxSum: 0, days: 0, manDays: 0, daysVary: false, _d: null, shiftDays: [],
         monthlyRate: 0,
         thirteenth: 0, sss: 0, hdmf: 0, sil: 0, perdiem: 0, total: 0
       });
-      g.pax += pax;
-      /* Man-days, not the longest shift.
+      /* HEADCOUNT is the most this role has on any ONE shift, not the sum
+         across shifts.
 
-         This was Math.max, so a role worked 2 pax x 10 days on days and 1 pax
-         x 2 days on nights printed "3 pax, 10 days" -- 30 man-days -- beside
-         benefits that cover 22. The two figures on the line did not describe
-         the money beside them. Summing pax x days and dividing back out gives
-         a DAYS that multiplies with QTY to exactly what was charged; where
-         every shift ran the same length, which is most CEs, it is unchanged. */
+         A shift row is a day TYPE, not a different hire: one electrical
+         supervisor who works a regular day, a Sunday and a holiday is three
+         rows and one man. Summing them printed "3 pax" for one person -- and
+         with DAYS reading 1, a single supervisor's week looked like a crew of
+         three on a single day. The most anyone is on site at once is what
+         somebody reading a bill of manpower wants, and it is the figure the
+         man-days below divide into sensibly. */
+      g.pax = Math.max(g.pax, pax);
+      /* Man-days: pax x days, summed over the shifts. Was Math.max on days,
+         which described a 2 pax x 10 day + 1 pax x 2 day role as 30 man-days
+         rather than 22. QTY x DAYS on the printed line is this figure. */
       g.manDays += pax * (N(r.days) || 1);
+      g.paxSum += pax;
       if (g._d === null) g._d = N(r.days) || 1;
       else if (g._d !== (N(r.days) || 1)) g.daysVary = true;
       g.shiftDays.push({shift: r.shift || 'regular_day', pax, days: N(r.days) || 1});
@@ -1195,10 +1201,16 @@ function App({
        a rate, and nothing else on the row is a cost. */
     return Object.values(grouped)
       .map(g => ({...g,
-        monthlyRate: g.pax ? g.monthlyRate / g.pax : 0,
+        /* paxSum, not the headcount: the weighting has to match how it was
+           accumulated, or a role hired at two rates averages wrong. */
+        monthlyRate: g.paxSum ? g.monthlyRate / g.paxSum : 0,
         /* Rounded for the column, never for the arithmetic -- manDays is the
            figure the benefits were actually computed over. */
-        days: g.pax ? Math.round(g.manDays / g.pax * 100) / 100 : 0}))
+        days: g.pax ? Math.round(g.manDays / g.pax * 100) / 100 : 0,
+        /* Flagged whenever the line rolls up more than one shift: DAYS is then
+           a total across day types rather than the length of any one of them,
+           and the tooltip is where that gets said. */
+        daysVary: g.shiftDays.length > 1}))
       .filter(x => x.total > 0);
   }, [mp]);
   const benefitsT = benefitRows.reduce((t, r) => t + r.total, 0);
@@ -10444,9 +10456,9 @@ tab === 'dashboard' && (() => {
         /*#__PURE__*/React.createElement("td", {
           style: {...TDS, textAlign: 'center', ...MONO},
           title: g.daysVary
-            ? 'Averaged over the shifts this role works, so QTY x DAYS is the ' + ph(g.manDays) +
-              ' man-days the benefits are charged on: ' +
-              g.shiftDays.map(x => (SHIFTS[x.shift] || {label: x.shift}).label + ' ' + x.pax + ' x ' + x.days + 'd').join(', ')
+            ? 'One line for ' + g.shiftDays.length + ' shift rows. QTY is the most of this role on site at once; ' +
+              'QTY x DAYS is the ' + ph(g.manDays) + ' man-days the benefits are charged on. ' +
+              g.shiftDays.map(x => (SHIFTS[x.shift] || {label: x.shift}).label + ': ' + x.pax + ' x ' + x.days + 'd').join(', ')
             : undefined
         }, g.days, g.daysVary ? ' *' : ''),
         cell(g.monthlyRate, {color: MT}),

@@ -282,7 +282,10 @@ check('and still pays the premium on the wage',
    multiplied by pax, so a P650/day helper at 2 pax read as P33,800 -- a cost,
    sitting in a column of rates. The pax weighting exists only so that a role
    hired at two different rates averages correctly while merging. */
-check('the monthly rate is per person, not per crew', /monthlyRate: g\.pax \? g\.monthlyRate \/ g\.pax : 0/.test(src),
+/* Divided by paxSum, not by g.pax: g.pax is the PEAK headcount on any one
+   shift now, and the sum was accumulated pax by pax. Dividing one by the other
+   would inflate the rate on a role split across shifts. */
+check('the monthly rate is per person, not per crew', /monthlyRate: g\.paxSum \? g\.monthlyRate \/ g\.paxSum : 0/.test(src),
   'P650/day is P16,900 a month whether one person works it or five');
 
 console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nall cost/grouping assertions passed');

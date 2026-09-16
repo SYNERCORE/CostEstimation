@@ -124,6 +124,9 @@ jobs:
 
       - name: Monitoring edits merge per field
         run: node tools/test-monitoring-merge.js
+
+      - name: A tiered tool carries what its price is derived from
+        run: node tools/test-tier-source-travels.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents

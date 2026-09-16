@@ -152,9 +152,11 @@ ck('the row total on screen includes it', /const rowTot = r => showDays \? toolR
 ck('and a non-tools tab is never given it', /rowPwr = r => showPower \?/.test(restab));
 
 console.log('\nthe kW rating comes from the Masterlist, then stays on the row:');
-ck('copied when the item is picked', /\.\.\.\(item\.kw \? \{kw: item\.kw\} : \{\}\)/.test(restab));
-ck('and when the description is matched', /\.\.\.\(f\.kw \? \{kw: f\.kw\} : \{\}\)/.test(restab));
-ck('Sync Rates brings it across', /'maintPerYear', 'kw'\]\.forEach/.test(restab));
+/* kW is one of the five figures that travel together now -- see
+   tools/test-tier-source-travels.js. One helper, not a spelling per path. */
+ck('copied when the item is picked', /\.\.\._srcFields\(item\)/.test(restab));
+ck('and when the description is matched', /\.\.\._srcFields\(f\)/.test(restab));
+ck('Sync Rates brings it across', /const _src = _srcFields\(f\);/.test(restab));
 ck('so does the tab-level re-price', /'maintPerYear', 'kw'\]\.forEach/.test(app));
 ck('the Masterlist has a cell for it', /'projectsPerYear', 'maintPerYear', 'kw'\]\.map\(k =>/.test(app));
 ck('and the import workbook a column', /'Maintenance per Year', 'Power \(kW\)'\]/.test(app));
@@ -172,13 +174,13 @@ ck('the tier calculator does not wipe it',
   'rebuilding the item instead of spreading it would drop every field the dialog does not know about');
 
 console.log('\nevery way a tool reaches a CE brings the rating with it:');
-ck('the Masterlist picker', /\.\.\.\(item\.kw \? \{kw: item\.kw\} : \{\}\)/.test(restab));
-ck('the SOW breakdown picker', /\.\.\.\(item && N\(item\.kw\) > 0 \? \{kw: N\(item\.kw\)\} : \{\}\)/.test(app),
+ck('the Masterlist picker', /\.\.\._srcFields\(item\)/.test(restab));
+ck('the SOW breakdown picker', /\.\.\.toolSrcFields\(item\)/.test(app),
   'a tool added against a task is the same machine as one added on the tab');
-ck('and a scope library entry', /\.\.\.\(findToolKw\(desc\) !== undefined \? \{kw: findToolKw\(desc\)\} : \{\}\)/.test(app),
+ck('and a scope library entry', /\.\.\.toolSrcFields\(findTool\(desc\)\)/.test(app),
   'a shopworks CE built from a saved scope would otherwise charge no power at all');
 ck('an unrated tool gets no kw key rather than a 0',
-  /N\(t\.kw\) > 0 \? N\(t\.kw\) : undefined/.test(app),
+  /item\[k\] !== undefined && item\[k\] !== '' && N\(item\[k\]\) > 0/.test(app),
   'a stored 0 reads as a tool that draws nothing, not one nobody has rated yet');
 
 console.log('\nit survives a save and a reload:');

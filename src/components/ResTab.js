@@ -26,9 +26,38 @@ const ResTab = ({
   /* Tools carry a tier; everything else is qty x cost. toolRowCost is the same
      function the grand total, the recompute and both exports use, so the row
      total on screen cannot disagree with the CE it adds up to. */
+  /* The figures a tier price is derived from, carried onto the row.
+
+     toolRowCost prices a row from the row itself -- no masterlist is consulted,
+     so a CE quoted last month cannot be repriced by an edit to the list today.
+     The row therefore has to ARRIVE with what it needs. Only kW was being
+     copied, so a Tier 1 row had no annual cost to divide between projects and
+     a Tier 3 row none to divide between hours: both fell back to the stored
+     daily rate, which is why T1 on a P1,000 tape showed P0.60 instead of
+     P36.67. Sync Rates copied them and the other two paths did not, so
+     re-syncing a row looked like it fixed a bug of its own. */
+  const _srcFields = it => {
+    const out = {};
+    if (!it) return out;
+    ['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear', 'kw'].forEach(k => {
+      if (it[k] !== undefined && it[k] !== '' && N(it[k]) > 0) out[k] = N(it[k]);
+    });
+    return out;
+  };
   const rowPwr = r => showPower ? toolPowerCost(r, kwhRate) : 0;
   const rowTot = r => showDays ? toolRowCost(r) + rowPwr(r) : N(r.qty) * N(r.cost);
   const tierOf = r => N(r.tier) || 2;
+  /* A Tier 1 or Tier 3 row with nothing to derive from is charged at the daily
+     rate instead -- never at zero, because charging nothing for a tool is not
+     the safer wrong answer. But it is not the price the tier names, so it says
+     so on the row rather than quietly reading as a very cheap tool. */
+  const tierUnderived = r => {
+    const t = tierOf(r);
+    if (!showDays || (t !== 1 && t !== 3)) return false;
+    const rates = toolTierRates(r);
+    if (!rates) return true;
+    return t === 1 && rates.tier1 === null;
+  };
   const [_rtNewId, _rtSetNewId] = useState(null);
   const _rtDescRef = useRef(null);
   useEffect(() => {
@@ -86,7 +115,7 @@ showPower && /*#__PURE__*/React.createElement("label", {
       uom: item.uom,
       cost: item.cost,
       /* Copied onto the row, not looked up later -- see the kW column. */
-      ...(item.kw ? {kw: item.kw} : {})
+      ..._srcFields(item)
     }])
   })
 }, "From Masterlist"), /*#__PURE__*/React.createElement("button", {
@@ -102,10 +131,7 @@ showPower && /*#__PURE__*/React.createElement("label", {
       /* The tier source figures come across with the rate. Without them a
          Tier 1 or Tier 3 row has nothing to derive from and quietly falls back
          to the daily rate. */
-      const _src = {};
-      ['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear', 'kw'].forEach(k => {
-        if (f[k] !== undefined) _src[k] = f[k];
-      });
+      const _src = _srcFields(f);
       return {...r, ..._src, cost: f.cost !== undefined ? f.cost : (f.rate !== undefined ? f.rate : r.cost)};
     }));
     showToast(updated ? `Updated ${updated} rate(s) from masterlist.` : 'No matching items found in masterlist.', !updated);
@@ -229,7 +255,9 @@ showPower && /*#__PURE__*/React.createElement("label", {
         ...(f ? {
           cost: f.cost,
           uom: f.uom,
-          ...(f.kw ? {kw: f.kw} : {})
+          /* Typing the name is the same as picking it, so it brings the same
+             figures with it. */
+          ..._srcFields(f)
         } : {})
       } : x));
     },
@@ -267,7 +295,12 @@ showPower && /*#__PURE__*/React.createElement("label", {
   }, [[1, 'T1'], [2, 'T2'], [3, 'T3']].map(([v, l]) => /*#__PURE__*/React.createElement("option", {
     key: v,
     value: v
-  }, l)))), showDays && /*#__PURE__*/React.createElement("td", {
+  }, l))), tierUnderived(r) && /*#__PURE__*/React.createElement("span", {
+    style: {color: ACC, fontSize: 11, marginLeft: 4, cursor: 'help'},
+    title: "This row has no unit price, service life or maintenance figure, so there is no annual cost to share out -- " +
+      (tierOf(r) === 1 ? "Tier 1 has nothing to divide between projects" : "Tier 3 has nothing to divide between hours") +
+      ". It is being charged at the daily rate instead. Fill those figures in on the Masterlist (Tier Pricing Calculator) and press Sync Rates."
+  }, "⚠")), showDays && /*#__PURE__*/React.createElement("td", {
     style: TDS
   }, /*#__PURE__*/React.createElement("input", {
     style: {

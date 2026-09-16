@@ -1318,7 +1318,26 @@ function App({
      what every pre-existing CE looks like. */
   /* kw only when the Masterlist entry has one -- writing 0 would read as a
      tool that draws nothing rather than one nobody has rated yet. */
-  const _mkResRow = (item, taskId) => ({ ...mkRes(), desc: item ? item.desc : '', uom: item ? item.uom : 'Lot', cost: item ? item.cost : 0, ...(item && N(item.kw) > 0 ? {kw: N(item.kw)} : {}), taskId: taskId || '' });
+  /* The four figures a tier price is derived from, plus the power rating.
+
+     A CE row is costed from ITSELF -- toolRowTotal is called with no masterlist
+     to consult, deliberately, so a CE quoted last month cannot be repriced by
+     an edit to the list today. That only works if the row arrives carrying
+     what it needs. It did not: a tool picked From Masterlist got desc, uom,
+     cost and kw, and nothing else. So Tier 1 had no annual cost to divide
+     between projects and Tier 3 had none to divide between hours, and both
+     fell back to the stored daily rate -- a per-project charge quoting one
+     day's hire, a per-hour charge quoting a twenty-fourth of it. Sync Rates
+     copied these figures and the picker did not, which is why re-syncing a
+     row appeared to "fix" it. */
+  const TOOL_SRC_KEYS = ['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear', 'kw'];
+  const toolSrcFields = item => {
+    const out = {};
+    if (!item) return out;
+    TOOL_SRC_KEYS.forEach(k => { if (item[k] !== undefined && item[k] !== '' && N(item[k]) > 0) out[k] = N(item[k]); });
+    return out;
+  };
+  const _mkResRow = (item, taskId) => ({ ...mkRes(), desc: item ? item.desc : '', uom: item ? item.uom : 'Lot', cost: item ? item.cost : 0, ...toolSrcFields(item), taskId: taskId || '' });
   const RES_TABS = [
     { key: 'mp', label: 'Manpower', set: setMp, rows: mp, qtyKey: 'pax', nameKey: 'role', costKey: 'rate', ml: 'manpower',
       mk: (item, taskId) => ({ ...mkMP(), role: item ? item.role : '', rate: item ? item.rate : 0, perDiem: item ? (item.perDiem || 0) : 0, taskId: taskId || '' }) },
@@ -2552,14 +2571,11 @@ function App({
       const t = findTool(desc);
       return t ? t.cost : 0;
     };
-    /* The kW rating travels with the cost. A tool brought in from a scope
-       library entry is the same machine as one picked from the Masterlist by
-       hand, and it has to arrive knowing what it draws -- otherwise a
-       shopworks CE built from a saved scope silently charges no power. */
-    const findToolKw = desc => {
-      const t = findTool(desc);
-      return t && N(t.kw) > 0 ? N(t.kw) : undefined;
-    };
+    /* The kW rating and the tier figures travel with the cost, through
+       toolSrcFields. A tool brought in from a scope library entry is the same
+       machine as one picked from the Masterlist by hand: it has to arrive
+       knowing what it draws and what it is worth, or a shopworks CE built from
+       a saved scope charges no power and a Tier 1 row charges a day's hire. */
     const findMatCost = desc => {
       const m = (masterlist?.materials || []).find(r => r.desc.toUpperCase() === desc.toUpperCase());
       return m ? m.cost : 0;
@@ -2668,7 +2684,10 @@ function App({
             const key = mkey(svc, step, desc);
             if (toolMap[key]) toolMap[key].qty += iq;
             else toolMap[key] = { id: uid(), desc, qty: iq, uom: 'Lot', cost: findToolCost(desc),
-              ...(findToolKw(desc) !== undefined ? {kw: findToolKw(desc)} : {}),
+              /* The tier figures travel with the cost, exactly as for a tool
+                 picked by hand -- a Tier 1 row built from a saved scope has
+                 nothing to derive from otherwise. */
+              ...toolSrcFields(findTool(desc)),
               taskId: taskFor(svc, step) };
           });
           /* Consumables: merge by description — add qty */

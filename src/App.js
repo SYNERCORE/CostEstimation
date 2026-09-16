@@ -624,10 +624,33 @@ function App({
     };
     try {
       localStorage.setItem(MON_KEY, JSON.stringify(n));
-      /* Save only the one changed CE entry, not the whole blob */
+      /* Save only the one changed CE entry, not the whole blob -- and within
+         that entry, only the fields this edit touched, so a colleague's
+         deadline is not written back as it stood when this page was opened. */
       const h = history.find(x => String(x.id) === String(ceId));
       const ceNum = h?.info?.ceNum || h?.ceNum || String(ceId);
-      dbSaveMonEntry(ceId, ceNum, n[ceId]).then(ok=>{ if(ok) setSyncStatus({lastSyncAt:new Date().toISOString(),sp:'connected',dirty:false}); }).catch(()=>{});
+      const changed = [field, ...Object.keys(extra)];
+      dbSaveMonEntry(ceId, ceNum, n[ceId], changed).then(res => {
+        if (res && res.ok) {
+          /* Show the row the site now holds: anything somebody else changed on
+             this CE came back in the merge. */
+          if (res.fields) setMonData(p => {
+            const m = {...p, [ceId]: res.fields};
+            try { localStorage.setItem(MON_KEY, JSON.stringify(m)); } catch (_e) {}
+            return m;
+          });
+          setSyncStatus({monitoring:'synced', lastSyncAt:new Date().toISOString(), sp:'connected', dirty:false});
+        } else {
+          /* It used to do nothing at all here, so a monitoring edit that
+             SharePoint refused looked exactly like one it accepted. */
+          setSyncStatus({monitoring:'error', dirty:true});
+          showToast('Monitoring change saved in this browser only — SharePoint refused it' +
+            (res && res.reason ? ': ' + String(res.reason).slice(0, 100) : '.'), true);
+        }
+      }).catch(e => {
+        setSyncStatus({monitoring:'error', dirty:true});
+        showToast('Monitoring save failed: ' + (e && e.message ? e.message : e), true);
+      });
     } catch {}
     return n;
   });
@@ -756,6 +779,17 @@ function App({
     if (Date.now() - mlReadAt.current < 60000) return;
     mlReadAt.current = Date.now();
     loadML();
+  }, [tab]);
+  /* And the monitoring table, where several people work on the same CEs and a
+     status set an hour ago is exactly what somebody opens this tab to see. The
+     CE list itself still comes from the Refresh button -- that is 800 rows. */
+  const monReadAt = useRef(0);
+  useEffect(() => {
+    if (tab !== 'history' || !(USE_SP || getSiteURL())) return;
+    if (getSyncStatus().monitoring === 'saving') return;
+    if (Date.now() - monReadAt.current < 60000) return;
+    monReadAt.current = Date.now();
+    loadMonData();
   }, [tab]);
   /* Merge a role or item shared by two services into one row. Off by default:
      a merged row can only be filed against one scope task, so the other task
@@ -3839,7 +3873,9 @@ function App({
       let spId = _monSpIdCache[ceId];
       if (!spId) {
         // Ensure monitoring record exists first
-        await dbSaveMonEntry(ceId, ceNum, monData[ceId] || {});
+        /* Only to get an item to attach to -- it must not overwrite what the
+           site holds for this CE. */
+        await dbSaveMonEntry(ceId, ceNum, monData[ceId] || {}, 'ensure');
         spId = _monSpIdCache[ceId];
       }
       if (!spId) throw new Error('Could not create monitoring record');

@@ -71,16 +71,60 @@ async function dbDeleteDraft(draftId){
 /* Cache of ceId → SP item Id to avoid repeated GET lookups */
 const _monSpIdCache = {};
 
-async function dbSaveMonEntry(ceId, ceNum, monFields){
+/* Merge two status trails into one. Both sides appended to a copy that was
+   read at startup, so concatenating would double every shared entry; an entry
+   is the same entry when it records the same status at the same moment. */
+function _monMergeLog(theirs,mine){
+  const out=[],seen={};
+  for(const h of [...(Array.isArray(theirs)?theirs:[]),...(Array.isArray(mine)?mine:[])]){
+    if(!h||typeof h!=='object')continue;
+    const k=String(h.status||'')+'|'+String(h.at||'')+'|'+String(h.by||'');
+    if(seen[k])continue;
+    seen[k]=1;out.push(h);
+  }
+  return out.sort((a,b)=>String(a.at||'').localeCompare(String(b.at||''))).slice(-60);
+}
+/* Save one CE's monitoring fields.
+
+   `changed` names the fields this edit actually touched. Monitoring is one SP
+   item per CE, so two people on two different CEs never collide -- but the
+   write used to carry this browser's WHOLE field object for the CE, built from
+   a copy read at startup. Two people on the SAME CE did collide: setting a
+   status at 10am wrote back the deadline as it stood at 8am, quietly undoing
+   whoever had changed it since. With `changed`, only those fields are taken
+   from this browser and the rest of the row is left as the site has it.
+
+   Without `changed` -- the import and migration paths -- the whole object is
+   written, which is what those callers mean. */
+async function dbSaveMonEntry(ceId, ceNum, monFields, changed){
   if(!(USE_SP||getSiteURL()))return false;
   try{
     const numId=Number(ceId);
     let spId=_monSpIdCache[ceId];
+    let theirs=null;
     if(!spId){
-      const r=await spGet(spList('Monitoring'),`shicCEId eq ${numId}`,'Id');
-      if(r.length){spId=r[0].Id;_monSpIdCache[ceId]=spId;}
+      const r=await spGet(spList('Monitoring'),`shicCEId eq ${numId}`,'Id,shicMonData');
+      if(r.length){spId=r[0].Id;_monSpIdCache[ceId]=spId;
+        try{theirs=r[0].shicMonData?JSON.parse(r[0].shicMonData):null;}catch(_e){}}
+    }else if(changed&&changed!=='ensure'&&changed.length){
+      /* The id was cached, so the row was never read this time round. Read it,
+         or the merge below has nothing to merge against. */
+      try{const r=await spGet(spList('Monitoring'),`shicCEId eq ${numId}`,'Id,shicMonData');
+        if(r.length){spId=r[0].Id;_monSpIdCache[ceId]=spId;
+          theirs=r[0].shicMonData?JSON.parse(r[0].shicMonData):null;}}catch(_e){}
     }
-    const payload={shicMonData:JSON.stringify(monFields)};
+    /* 'ensure' means the caller only needs the row to EXIST -- the attachment
+       upload needs an item id to attach to. If the site already has one, its
+       data is left exactly as it is rather than being replaced by whatever
+       this browser happens to hold. */
+    if(changed==='ensure'&&spId)return {ok:true,fields:theirs||monFields};
+    let toWrite=monFields;
+    if(changed&&changed!=='ensure'&&changed.length&&theirs&&typeof theirs==='object'){
+      toWrite={...theirs};
+      for(const k of changed)toWrite[k]=monFields[k];
+      if(changed.indexOf('statusLog')>=0)toWrite.statusLog=_monMergeLog(theirs.statusLog,monFields.statusLog);
+    }
+    const payload={shicMonData:JSON.stringify(toWrite)};
     if(spId){
       try{
         await spWithRetry(()=>spPatch(spList('Monitoring'),spId,payload));
@@ -96,8 +140,10 @@ async function dbSaveMonEntry(ceId, ceNum, monFields){
       const created=await spWithRetry(()=>spPost(spList('Monitoring'),{Title:ceNum||String(ceId),shicCEId:numId,...payload}));
       if(created&&created.Id)_monSpIdCache[ceId]=created.Id;
     }
-    return true;
-  }catch(e){console.warn('dbSaveMonEntry:',e.message);return false;}
+    /* What was actually written, so the caller can show the row the site now
+       holds rather than the one it hoped for. */
+    return {ok:true,fields:toWrite};
+  }catch(e){console.warn('dbSaveMonEntry:',e.message);return {ok:false,reason:e.message};}
 }
 
 /* Batch-save all entries (import / migration). histItems needed for ceNum lookup. */

@@ -121,6 +121,9 @@ jobs:
 
       - name: Masterlist saves merge instead of overwriting
         run: node tools/test-masterlist-merge.js
+
+      - name: Monitoring edits merge per field
+        run: node tools/test-monitoring-merge.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents

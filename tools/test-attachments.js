@@ -64,8 +64,11 @@ console.log('\nthey are stored on SharePoint, not in this browser:');
 ck('uploaded as a real list attachment',
   /spAddAttachment\(spList\('Monitoring'\), spId, file\.name, buf\)/.test(app));
 ck('against the CE\'s own monitoring item', /let spId = _monSpIdCache\[ceId\];/.test(app));
+/* 'ensure': create the item if there is none, and never overwrite one that
+   already exists -- this call wants somewhere to hang a file, not to publish
+   this browser's copy of the CE's monitoring fields. */
 ck('and the item is created first if it has none',
-  /await dbSaveMonEntry\(ceId, ceNum, monData\[ceId\] \|\| \{\}\)/.test(app),
+  /await dbSaveMonEntry\(ceId, ceNum, monData\[ceId\] \|\| \{\}, 'ensure'\)/.test(app),
   'no monitoring record means nowhere to hang the file');
 ck('nothing is kept in localStorage instead',
   !/LS\.set\('attach/.test(app) && !/localStorage.*attach/i.test(app),

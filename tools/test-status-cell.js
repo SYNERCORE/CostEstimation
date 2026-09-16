@@ -55,7 +55,13 @@ ck('fires on every status change, not a hand-picked list', /if \(field === 'stat
 ck('records when', /extra\.statusChangedAt = new Date\(\)\.toISOString\(\)/.test(upd));
 ck('records who', /extra\.statusChangedBy = currentUser/.test(upd));
 ck('but not for clearing the status back to blank', !/if \(field === 'status'\) \{/.test(upd));
-ck('and persists through the same one-entry save', /dbSaveMonEntry\(ceId, ceNum, n\[ceId\]\)/.test(upd));
+/* The save takes the list of fields this edit touched now, so only those are
+   written over the site's copy -- see tools/test-monitoring-merge.js. The
+   stamps count as part of the edit, which is what `extra` holds. */
+ck('and persists through the same one-entry save', /dbSaveMonEntry\(ceId, ceNum, n\[ceId\], changed\)/.test(upd));
+ck('naming the status stamps as part of the change',
+  /const changed = \[field, \.\.\.Object\.keys\(extra\)\];/.test(upd),
+  'left out, the trail would be written and then merged away');
 
 console.log(bad?'\n'+bad+' FAILURE(S)':'\nstatus cell OK');
 process.exit(bad?1:0);

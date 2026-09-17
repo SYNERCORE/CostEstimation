@@ -2491,10 +2491,6 @@ function App({
     });
     sum.push([]);
     sum.push([S('ITEM', 'th'), S('DESCRIPTION', 'th', 4), null, null, null, null, S('TOTAL COST', 'th')]);
-    if (cfg.mobDemob) {
-      sum.push([S('', 'tdc'), S('MOBILIZATION', 'td', 4), null, null, null, null, S(N(mobSubT), 'tdn')]);
-      sum.push([S('', 'tdc'), S('DEMOBILIZATION', 'td', 4), null, null, null, null, S(N(demobSubT), 'tdn')]);
-    }
     ceSections.filter(x => x.v > 0).forEach(x => {
       sum.push([S(x.letter, 'tdc'), S(x.printLabel, 'td', 4), null, null, null, null, S(N(x.v), 'tdn')]);
       /* Miscellaneous is a set of categories, not one line. The printed CE
@@ -6981,20 +6977,22 @@ function App({
      letter, and it does not print. Letters follow the sections that remain,
      so they always run A, B, C with nothing missing. */
   const ceSections = useMemo(() => {
+    /* Mobilization and demobilization lead, each on its own row, as the
+       client's CE lists them: A. MOBILIZATION, B. DEMOBILIZATION. */
     const defs = [
+      ...(cfg.mobDemob ? [['Mobilization Expenses', 'MOBILIZATION', mobSubT], ['Demobilization Expenses', 'DEMOBILIZATION', demobSubT]] : []),
       ['Manpower Cost', 'MANPOWER COST', mpTot],
       ['Tools & Equipment', 'TOOLS AND EQUIPMENTS', toolsT],
       ['Materials & Consumables', 'MATERIALS AND CONSUMABLES', matsT],
       ['PPE', 'PERSONAL PROTECTIVE EQUIPMENT', ppeT],
-      ['Miscellaneous', 'MISCELLANEOUS', miscT],
-      ...(cfg.mobDemob ? [['Mobilization / Demobilization', 'MOBILIZATION/DEMOBILIZATION', mobT]] : [])
+      ['Miscellaneous', 'MISCELLANEOUS', miscT]
     ];
     let i = 0;
     return defs.map(([label, printLabel, v]) => ({
       label, printLabel, v,
       letter: N(v) > 0 ? String.fromCharCode(65 + i++) + '.' : ''
     }));
-  }, [mpTot, toolsT, matsT, ppeT, miscT, mobT, cfg.mobDemob]);
+  }, [mpTot, toolsT, matsT, ppeT, miscT, mobSubT, demobSubT, cfg.mobDemob]);
   /* The Miscellaneous categories that actually carry a cost, lettered under
      the section's own letter. Shared by the printed CE and the workbook so the
      two cannot drift apart on the itemisation again. */
@@ -7023,7 +7021,7 @@ function App({
     'Mobilization / Demobilization': INFO
   };
   const summaryDot = label => SUMMARY_DOT[String(label).replace(/^[A-Z]\.\s+/, '')] || MT;
-  const summaryRows = [...(cfg.mobDemob ? [['Mobilization Expenses', mobSubT], ['Demobilization Expenses', demobSubT]] : []), ...ceSections.filter(x => x.printLabel !== 'MOBILIZATION/DEMOBILIZATION').map(x => [(x.letter ? x.letter + '  ' : '') + x.label, x.v])];
+  const summaryRows = [...ceSections.map(x => [(x.letter ? x.letter + '  ' : '') + x.label, x.v])];
   const handleGenerateCE = () => {
     const fmt = (n, d = 2) => 'P' + N(n).toLocaleString('en-PH', {
       minimumFractionDigits: d,

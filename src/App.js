@@ -7367,7 +7367,7 @@ function App({
       fontSize: 13
     },
     onClick: () => copyMenu && setCopyMenu(null)
-  }, /*#__PURE__*/React.createElement(StatusBar, { currentUser }), /*#__PURE__*/React.createElement(SignInBanner, null), /*#__PURE__*/React.createElement(SPDeniedBanner, null), /*#__PURE__*/React.createElement(SyncStatusBar, null),
+  }, /*#__PURE__*/React.createElement(StatusBar, { currentUser }), /*#__PURE__*/React.createElement(SPDeniedBanner, null), /*#__PURE__*/React.createElement(SyncStatusBar, null),
   bulkOn && isAdmin && /*#__PURE__*/React.createElement("div", {
     style: { background: alpha(ERR, '22'), borderBottom: `1px solid ${alpha(ERR, '55')}`, padding: '6px 16px',
              display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }
@@ -7977,7 +7977,7 @@ function App({
       setShowApiKey(true);
     },
     title: getApiKey() && provInfo ? provInfo.label + ' active' : 'No AI key - click to set'
-  }, getApiKey() && provInfo ? 'AI: ' + provInfo.badge : 'Set AI Key')), /*#__PURE__*/React.createElement("div", {
+  }, getApiKey() && provInfo ? 'AI: ' + provInfo.badge : 'Set AI Key'), /*#__PURE__*/React.createElement(SignInBanner, null)), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',

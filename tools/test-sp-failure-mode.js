@@ -91,6 +91,9 @@ function runSpGet(opts) {
   ck('a successful token clears the flag', /_spNeedsSignIn=false/.test(spCode));
   ck('the banner offers it in-app', /function SignInBanner/.test(rd('src/widgets.js')));
   ck('the banner is rendered', /React\.createElement\(SignInBanner, null\)/.test(rd('src/App.js')));
+  /* In the sticky top bar beside Set AI Key -- above it, it scrolled away. */
+  ck('and it sits in the top bar, where scrolling cannot hide it',
+    /'Set AI Key'\), \/\*#__PURE__\*\/React\.createElement\(SignInBanner, null\)\)/.test(rd('src/App.js')));
   ck('the login screen offers it too', /spSignIn\(\)/.test(login));
   ck('login blames the connection, not the account, when the list was unread',
     /userListIsStale\(\)/.test(login) && /_userListStale=true/.test(db),

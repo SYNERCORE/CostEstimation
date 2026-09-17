@@ -44,15 +44,12 @@ function SignInBanner() {
     return () => { window.removeEventListener('shic-auth-required', up); window.removeEventListener('shic-auth-ok', up); clearInterval(t); };
   }, []);
   if (!need) return null;
-  return React.createElement('div', {
-    style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-      padding: '8px 14px', background: '#F59E0B18', borderBottom: '1px solid #F59E0B44', color: 'var(--status-warning)', fontSize: 12 }
-  },
-    React.createElement('span', { style: { fontWeight: 700 } }, 'SharePoint session expired'),
-    React.createElement('span', { style: { color: MT } },
-      'Saved work is kept on this device and will upload once you sign in again.'),
-    React.createElement('button', {
-      style: { ...btn('acc', true), marginLeft: 'auto' }, disabled: busy,
+  /* A button in the top bar, not a banner above it. The banner sat over the
+     sticky header and scrolled away with the page, so an expired session was
+     easy to miss the moment anyone scrolled down to work. */
+  return React.createElement('button', {
+      title: 'SharePoint session expired. Saved work is kept on this device and will upload once you sign in again.',
+      style: { ...btn('acc', true), fontSize: 10, whiteSpace: 'nowrap' }, disabled: busy,
       onClick: async () => {
         setBusy(true);
         try {
@@ -64,8 +61,7 @@ function SignInBanner() {
         } catch (e) { if (window._shicToast) window._shicToast('Sign-in failed: ' + (e.message || e), true); }
         setBusy(false);
       }
-    }, busy ? 'Opening Microsoft sign-in…' : 'Sign in')
-  );
+    }, busy ? 'Opening Microsoft sign-in…' : '⚠ Sign in to Microsoft');
 }
 function SyncStatusBar() {
   const [sync, setSync] = React.useState(() => getSyncStatus());

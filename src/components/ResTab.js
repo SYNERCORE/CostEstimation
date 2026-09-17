@@ -229,14 +229,14 @@ showPower && /*#__PURE__*/React.createElement("label", {
     borderCollapse: 'collapse',
     fontSize: 12
   }
-}, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Description', 'Qty', ...(showDays ? ['Tier', 'Days', 'Hrs'] : []), ...(showPower ? ['kW', 'Run hrs', 'Power (P)'] : []), 'UOM', 'Unit Cost (P)', 'Row Total', ''].map(h => /*#__PURE__*/React.createElement("th", {
+}, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['#', 'Description', 'Qty', ...(showDays ? ['Tier', 'Days', 'Hrs'] : []), ...(showPower ? ['kW', 'Run hrs', 'Power (P)'] : []), 'UOM', 'Unit Cost (P)', 'Row Total', ''].map(h => /*#__PURE__*/React.createElement("th", {
   key: h,
   style: THS
-}, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map(r => {
+}, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map((r, _ix) => {
   const tot = rowTot(r);
   return /*#__PURE__*/React.createElement("tr", {
     key: r.id
-  }, /*#__PURE__*/React.createElement("td", {
+  }, /*#__PURE__*/React.createElement("td", { style: { ...TDS, ...MONO, color: MT, textAlign: 'center', width: 28 } }, _ix + 1), /*#__PURE__*/React.createElement("td", {
     style: TDS
   }, /*#__PURE__*/React.createElement("input", {
     style: {

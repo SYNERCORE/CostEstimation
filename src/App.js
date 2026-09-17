@@ -6828,7 +6828,10 @@ function App({
         alignItems: 'center',
         justifyContent: 'center'
       },
-      onClick: e => e.target === e.currentTarget && setPicker(null)
+      /* A click outside closes the picker only while nothing is ticked: losing a
+         long selection to a stray click meant picking every item again.
+         Cancel and X still close it. */
+      onClick: e => { if (e.target === e.currentTarget && !Object.keys(sel).length) setPicker(null); }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
         background: CARD,
@@ -9801,10 +9804,10 @@ tab === 'dashboard' && (() => {
             E("button", { style: btn('def', true), onClick: () => setRows(p => [...p, { id: uid(), kind: 'mp', desc: '', qty: 1, days: 1, rate: 0, otHours: 0 }]) }, "+ Add Manpower"))),
         rows.length === 0 ? E("div", { style: { textAlign: 'center', padding: '10px 0', color: MT, fontSize: 12, border: '1px dashed ' + BDR, borderRadius: 6 } }, "No manpower charged to this stage.") :
         E("div", { style: { overflowX: 'auto' } }, E("table", { style: { width: '100%', borderCollapse: 'collapse', fontSize: 12 } },
-          E("thead", null, E("tr", null, ['Manpower loading', 'Pax', 'Days', 'Rate/day (P)', 'OT hrs/day', 'Rate OT/hr', 'Total', ''].map(h => E("th", { key: h, style: THS }, h)))),
-          E("tbody", null, rows.map(r => {
+          E("thead", null, E("tr", null, ['#', 'Manpower loading', 'Pax', 'Days', 'Rate/day (P)', 'OT hrs/day', 'Rate OT/hr', 'Total', ''].map(h => E("th", { key: h, style: THS }, h)))),
+          E("tbody", null, rows.map((r, _ix) => {
             const tot = mobRowCost(r, rr);
-            return E("tr", { key: r.id },
+            return E("tr", { key: r.id }, /*#__PURE__*/React.createElement("td", { style: { ...TDS, ...MONO, color: MT, textAlign: 'center', width: 28 } }, _ix + 1), 
               r.auto ? E("td", { style: TDS }, E("span", { style: { fontSize: 12 } }, r.desc), E("span", { title: 'Linked to the SOW Breakdown crew', style: { marginLeft: 6, fontSize: 9, fontWeight: 700, color: OK, border: '1px solid ' + alpha(OK, '66'), borderRadius: 4, padding: '0 4px' } }, "SOW")) :
               E("td", { style: TDS },
                 E("input", { style: { ...INP, minWidth: 200 }, list: idPfx + r.id, value: r.desc, placeholder: "e.g. Supervisor, Welder...",
@@ -9883,14 +9886,14 @@ tab === 'dashboard' && (() => {
         borderCollapse: 'collapse',
         fontSize: 12
       }
-    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Description', 'Qty', 'Days', 'Rate (P)', 'Total', ''].map(h => /*#__PURE__*/React.createElement("th", {
+    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['#', 'Description', 'Qty', 'Days', 'Rate (P)', 'Total', ''].map(h => /*#__PURE__*/React.createElement("th", {
       key: h,
       style: THS
-    }, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map(r => {
+    }, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map((r, _ix) => {
       const tot = N(r.qty) * N(r.days) * N(r.rate);
       return /*#__PURE__*/React.createElement("tr", {
         key: r.id
-      }, /*#__PURE__*/React.createElement("td", {
+      }, /*#__PURE__*/React.createElement("td", { style: { ...TDS, ...MONO, color: MT, textAlign: 'center', width: 28 } }, _ix + 1), /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, /*#__PURE__*/React.createElement("input", {
         style: {
@@ -10497,14 +10500,14 @@ tab === 'dashboard' && (() => {
         borderCollapse: 'collapse',
         fontSize: 12
       }
-    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Role / Position', 'PAX', 'Days', 'OT Hrs/Day', 'Day Rate (P)'].concat((sowItems || []).length ? ['Scope Task'] : []).concat(['Row Total', '']).map(h => /*#__PURE__*/React.createElement("th", {
+    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['#', 'Role / Position', 'PAX', 'Days', 'OT Hrs/Day', 'Day Rate (P)'].concat((sowItems || []).length ? ['Scope Task'] : []).concat(['Row Total', '']).map(h => /*#__PURE__*/React.createElement("th", {
       key: h,
       style: THS
-    }, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map(r => {
+    }, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map((r, _ix) => {
       const {reg: regAmt, ot: otAmt, total: tot} = mpWageParts(r);
       return /*#__PURE__*/React.createElement("tr", {
         key: r.id
-      }, /*#__PURE__*/React.createElement("td", {
+      }, /*#__PURE__*/React.createElement("td", { style: { ...TDS, ...MONO, color: MT, textAlign: 'center', width: 28 } }, _ix + 1), /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, /*#__PURE__*/React.createElement("input", {
         style: {
@@ -10661,6 +10664,7 @@ tab === 'dashboard' && (() => {
     rows.length > 0 && /*#__PURE__*/React.createElement("tfoot", null, /*#__PURE__*/React.createElement("tr", {
       style: { borderTop: '2px solid ' + BDR }
     }, /*#__PURE__*/React.createElement("td", {
+      colSpan: 2,
       style: { ...TDS, textAlign: 'right', fontWeight: 700, fontSize: 11, color: MT }
     }, "SUB TOTAL:"), /*#__PURE__*/React.createElement("td", {
       style: { ...TDS, ...MONO, fontWeight: 700, color: shiftColor, paddingLeft: 12 }
@@ -11109,14 +11113,14 @@ tab === 'dashboard' && (() => {
         borderCollapse: 'collapse',
         fontSize: 12
       }
-    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Description', 'Qty', 'UOM', 'Unit Cost (P)', 'Total', ''].map(h => /*#__PURE__*/React.createElement("th", {
+    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['#', 'Description', 'Qty', 'UOM', 'Unit Cost (P)', 'Total', ''].map(h => /*#__PURE__*/React.createElement("th", {
       key: h,
       style: THS
-    }, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map(r => {
+    }, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map((r, _ix) => {
       const tot = N(r.qty) * N(r.cost);
       return /*#__PURE__*/React.createElement("tr", {
         key: r.id
-      }, /*#__PURE__*/React.createElement("td", {
+      }, /*#__PURE__*/React.createElement("td", { style: { ...TDS, ...MONO, color: MT, textAlign: 'center', width: 28 } }, _ix + 1), /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, /*#__PURE__*/React.createElement("input", {
         style: {

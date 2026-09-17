@@ -692,11 +692,15 @@ function App({
   };
   const loadSowLib = async () => {
     try {
-      const lib = await dbGetSowLib();
-      if (lib && lib.length) {
+      const got = await dbGetSowLib();
+      if (got && got.length) {
+        /* A service with no number yet gets one, and that is written back so
+           every browser shows the same SY3 number for it. */
+        const {lib, changed} = assignSvcCodes(got);
         setSowLib(lib);
         cacheSowLib(lib);
         setSyncStatus({sowlib:'synced', lastSyncAt: new Date().toISOString()});
+        if (changed.length) saveSowLib(lib);
       } else setSyncStatus({sowlib:'local'});
     } catch (e) { console.warn('Scope library load failed:', e.message); setSyncStatus({sowlib:'error'}); }
   };
@@ -3004,7 +3008,7 @@ function App({
           fontSize: 10,
           flexShrink: 0
         }
-      }, "SY3-", String(svc.id).padStart(2, '0')), /*#__PURE__*/React.createElement("span", {
+      }, svcCode(svc)), /*#__PURE__*/React.createElement("span", {
         style: {
           fontWeight: 600,
           fontSize: 12
@@ -5750,6 +5754,7 @@ function App({
     const addSvc = () => {
       const blank = {
         id: uid(),
+        code: sowLib.reduce((m, s) => Math.max(m, svcNum(s)), 0) + 1,
         cat: 'On-Site Services',
         title: 'New Service',
         scope: ['Describe the scope here.'],
@@ -6577,7 +6582,7 @@ function App({
             /*#__PURE__*/React.createElement("span", { style: { ...MONO, fontSize: 10, color: MT, minWidth: 54 } },
               /* The seeded services are numbered; one you just added has a uid,
                  and padStart printed all 36 characters of it across the row. */
-              "SY3-", /^\d+$/.test(String(svc.id)) ? String(svc.id).padStart(2, '0') : 'NEW'),
+              svcCode(svc)),
             /*#__PURE__*/React.createElement("div", { style: { minWidth: 200, flex: 1, cursor: 'pointer' }, onClick: toggle },
               /*#__PURE__*/React.createElement("div", { style: { fontWeight: 600, fontSize: 12 } },
                 svc.title || /*#__PURE__*/React.createElement("i", { style: { color: MT } }, "(untitled service)")),

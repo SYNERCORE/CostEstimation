@@ -101,7 +101,9 @@ ck('a new service goes to the top', /saveSowLib\(\[blank, \.\.\.sowLib\]\)/.test
 ck('the editor state survives an App re-render', /const \[editSvc, setEditSvc\] = \[_editSvc, _setEditSvc\]/.test(src),
   'held locally it was wiped on every remount, which is why the new service never opened');
 ck('the state actually lives on App', /const \[_editSvc, _setEditSvc\] = useState\(null\)/.test(src));
-ck('a uid-based id does not print in full', /'NEW'/.test(src), 'padStart on a uuid printed all 36 characters');
+/* It shows a real number now (svcCode, tools/test-svc-codes.js), not SY3-NEW. */
+ck('a uid-based id does not print in full', !/String\(svc\.id\)\.padStart/.test(src) && /svcCode\(svc\)/.test(src),
+  'padStart on a uuid printed all 36 characters');
 ck('rows can be moved between steps', /Move this item to another scope step/.test(src),
   'without it, resources inherited on step 1 could never be re-filed');
 

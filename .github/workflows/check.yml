@@ -132,6 +132,8 @@ jobs:
         run: node tools/test-benefit-days.js
       - name: Services summary adds back to the CE total
         run: node tools/test-services-summary.js
+      - name: Scope Library services show an SY3 number
+        run: node tools/test-svc-codes.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents

@@ -3,6 +3,43 @@ const ph = n => (n || 0).toLocaleString("en-PH", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2
 });
+/* ── Scope Library numbers ──────────────────────────────────────────────
+   The seeded services have numeric ids (1..69), and that id is what SY3-66
+   shows. A service added in the app gets a uid instead -- the id SharePoint
+   matches its row on, which must never change -- so it showed as SY3-NEW in
+   the library and as SY3-55929d9a-... in the builder. It now carries a
+   separate `code`: the next number after the highest in use. */
+function svcNum(s) {
+  if (!s) return 0;
+  if (/^\d+$/.test(String(s.id))) return Number(s.id);
+  return Number(s.code) > 0 ? Number(s.code) : 0;
+}
+function svcCode(s) {
+  const n = svcNum(s);
+  return 'SY3-' + (n ? String(n).padStart(2, '0') : 'NEW');
+}
+/* Numbers every service that has none, and renumbers one whose code another
+   service already uses (two people adding a service at the same moment).
+   Numeric ids are never touched. Returns the list, and the ids it changed. */
+function assignSvcCodes(lib) {
+  const list = Array.isArray(lib) ? lib : [];
+  const used = new Set();
+  list.forEach(s => { if (/^\d+$/.test(String(s.id))) used.add(Number(s.id)); });
+  const changed = [];
+  const out = list.map(s => ({...s}));
+  const need = [];
+  /* Oldest first -- new services go on at the top of the list -- so the
+     service added earlier keeps the lower number. */
+  for (let i = out.length - 1; i >= 0; i--) {
+    const s = out[i];
+    if (/^\d+$/.test(String(s.id))) continue;
+    const c = Number(s.code);
+    if (c > 0 && !used.has(c)) used.add(c); else need.push(s);
+  }
+  let next = used.size ? Math.max(...used) : 0;
+  need.forEach(s => { s.code = ++next; used.add(next); changed.push(s.id); });
+  return {lib: out, changed};
+}
 const uid = () => { try { return crypto.randomUUID(); } catch { return Date.now().toString(36) + Math.random().toString(36).slice(2); } };
 /* Escape a value for interpolation into generated HTML (the printed CE is built
    as an HTML string and written into a new window). Without this, a description

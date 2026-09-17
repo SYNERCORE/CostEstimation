@@ -272,6 +272,27 @@ function mobRowCost(r, rates) {
   if (r.kind !== 'mp') return base;
   return base + N(r.qty) * N(r.days) * (N(r.otHours) / 8) * N(r.rate) * ceOtMult(rates);
 }
+/* The project crew, one line per role, for mobilization / demobilization.
+   The same people move between scope tasks and shift types, so a role counts
+   the most pax on any one day-type row plus the most on any one night row --
+   the headcount rule Benefits & Others uses. Rate is the role's base day rate
+   (a regular-day row's if there is one), with no shift premium: travel and
+   induction are paid at the plain rate. Order is first appearance. */
+function consolidateCrew(mp) {
+  const out = [], by = {};
+  (Array.isArray(mp) ? mp : []).forEach(r => {
+    const role = String((r && r.role) || '').trim();
+    if (!role) return;
+    const key = role.toUpperCase();
+    const pax = N(r.pax) || 1;
+    const g = by[key] || (by[key] = (out.push({ role, day: 0, night: 0, rate: 0, _reg: false }), out[out.length - 1]));
+    if (/_night$/.test(r.shift || 'regular_day')) g.night = Math.max(g.night, pax);
+    else g.day = Math.max(g.day, pax);
+    const isReg = (r.shift || 'regular_day') === 'regular_day';
+    if ((isReg && !g._reg) || (!g._reg && !g.rate)) { g.rate = N(r.rate); if (isReg) g._reg = true; }
+  });
+  return out.map(g => ({ role: g.role, pax: g.day + g.night, rate: g.rate }));
+}
 function computeCEGrand(ce) {
   if (!ce) return 0;
   const cfg = (typeof CE_CFG !== 'undefined' && CE_CFG[ce.ceType]) || {};

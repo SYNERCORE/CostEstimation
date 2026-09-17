@@ -1263,6 +1263,28 @@ function App({
   }, 0), [misc, ceType]);
   const mobVehiclesT = useMemo(() => mobVehicles.reduce((s, r) => s + mobRowCost(r, rr), 0), [mobVehicles, rr]);
   const demobVehiclesT = useMemo(() => demobVehicles.reduce((s, r) => s + mobRowCost(r, rr), 0), [demobVehicles, rr]);
+  /* Mobilization / demobilization crew linked to the SOW Breakdown: rows marked
+     auto are rebuilt from the manpower whenever it changes -- role, pax and
+     rate follow the project; days and OT stay as the estimator set them.
+     Returns the same array when nothing changed, so the effect cannot loop. */
+  const syncCrewRows = (list, create) => {
+    const autos = list.filter(r => r.kind === 'mp' && r.auto);
+    if (!autos.length && !create) return list;
+    const prev = {};
+    autos.forEach(r => { prev[String(r.desc || '').trim().toUpperCase()] = r; });
+    const next = consolidateCrew(mp).map(c => {
+      const p = prev[c.role.toUpperCase()];
+      return { id: p ? p.id : uid(), kind: 'mp', auto: true, desc: c.role, qty: c.pax, rate: c.rate,
+        days: p ? p.days : 1, otHours: p ? p.otHours : 0 };
+    });
+    const sig = rs => JSON.stringify(rs.map(r => [r.id, r.desc, r.qty, r.rate, r.days, r.otHours]));
+    if (!create && sig(next) === sig(autos)) return list;
+    return [...next, ...list.filter(r => !(r.kind === 'mp' && r.auto))];
+  };
+  React.useEffect(() => {
+    setMobVehicles(p => syncCrewRows(p, false));
+    setDemobVehicles(p => syncCrewRows(p, false));
+  }, [mp]);
   const mobSubT = mobVehiclesT;
   const demobSubT = demobVehiclesT;
   const mobT = cfg.mobDemob ? mobSubT + demobSubT : 0;
@@ -2549,6 +2571,31 @@ function App({
     /* ---- BOL (manpower + benefits) -------------------------------------- */
     /* A row with no role is not a hire: mpWage costs it at zero, so printing
        it would put a line on the client's copy that the total does not carry. */
+    /* ---- MOB / DEMOB ------------------------------------------------------ */
+    const _mobList = rows => (rows || []).filter(r => String(r.desc || '').trim() || N(r.rate) > 0);
+    if (cfg.mobDemob && (_mobList(mobVehicles).length || _mobList(demobVehicles).length)) {
+      const s = head('MOBILIZATION / DEMOBILIZATION');
+      [['MOBILIZATION', mobVehicles, mobVehiclesT], ['DEMOBILIZATION', demobVehicles, demobVehiclesT]].forEach(([lbl, all, tot]) => {
+        const list = _mobList(all);
+        if (!list.length) return;
+        const crew = list.filter(r => r.kind === 'mp'), exp = list.filter(r => r.kind !== 'mp');
+        s.push([S(lbl, 'sec')]);
+        if (crew.length) {
+          s.push(['ITEM', 'MANPOWER LOADING', 'QTY', 'DAYS', 'OT HRS/DAY', 'RATE/DAY', 'TOTAL'].map(h => S(h, 'th')));
+          crew.forEach((r, i) => s.push([S(i + 1, 'tdc'), S(r.desc || '', 'td'), S(N(r.qty), 'tdc'), S(N(r.days) || 1, 'tdc'), S(N(r.otHours), 'tdc'), S(N(r.rate), 'tdn'), S(mobRowCost(r, rr), 'tdnb')]));
+          s.push([S('', 'totlbl'), S('SUB TOTAL:', 'totlbl'), S(crew.reduce((t, r) => t + N(r.qty), 0), 'tot'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S(crew.reduce((t, r) => t + mobRowCost(r, rr), 0), 'tot')]);
+        }
+        if (exp.length) {
+          s.push(['ITEM', 'DESCRIPTION', 'QTY', 'DAYS', '', 'RATE', 'TOTAL'].map(h => S(h, 'th')));
+          exp.forEach((r, i) => s.push([S(i + 1, 'tdc'), S(r.desc || '', 'td'), S(N(r.qty) || 1, 'tdc'), S(N(r.days) || 1, 'tdc'), S('', 'tdc'), S(N(r.rate), 'tdn'), S(mobRowCost(r, rr), 'tdnb')]));
+          s.push([S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('SUB TOTAL:', 'totlbl'), S(exp.reduce((t, r) => t + mobRowCost(r, rr), 0), 'tot')]);
+        }
+        s.push([S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S(lbl + ' TOTAL:', 'totlbl'), S(N(tot), 'tot')]);
+        s.push([]);
+      });
+      sheets.push({name: 'MOB-DEMOB', cols: COLS, rows: s});
+    }
+
     const mpActive = mp.filter(r => r.role && (N(r.rate) > 0 || N(r.pax) > 0));
     if (mpActive.length) {
       const bol = head('BILL OF LABOR');
@@ -2565,7 +2612,7 @@ function App({
           S(N(r.rate), 'tdn'),
           S(mpWage(r), 'tdnb')
         ]));
-        bol.push([S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('SUB TOTAL:', 'totlbl'), S(sub, 'tot')]);
+        bol.push([S('', 'totlbl'), S('SUB TOTAL:', 'totlbl'), S(rows.reduce((s, r) => s + N(r.pax), 0), 'tot'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S(sub, 'tot')]);
         bol.push([]);
       });
       if (benefitRows.length) {
@@ -7418,6 +7465,36 @@ function App({
     });
 
     /* ── Page 2: manpower loading, one block per shift ── */
+    /* ── Mobilization / demobilization, manpower then expenses, per stage ── */
+    const _mobL = rows => (rows || []).filter(r => String(r.desc || '').trim() || N(r.rate) > 0);
+    if (cfg.mobDemob && (_mobL(mobVehicles).length || _mobL(demobVehicles).length)) sheet('Mobilization', a => {
+      docHead(a, 'MOBILIZATION / DEMOBILIZATION', 11);
+      [['MOBILIZATION', mobVehicles, mobVehiclesT], ['DEMOBILIZATION', demobVehicles, demobVehiclesT]].forEach(([lbl, all, tot]) => {
+        const list = _mobL(all);
+        if (!list.length) return;
+        const crew = list.filter(r => r.kind === 'mp'), exp = list.filter(r => r.kind !== 'mp');
+        a.title(lbl, 11);
+        if (crew.length) {
+          a.head('ITEM', 'MANPOWER LOADING', 'QTY', 'UOM', 'NO. OF DAYS', 'RATE PER DAY', 'SUB-TOTAL A', 'OT HRS PER DAY', 'RATE OT/HR', 'SUB-TOTAL B', 'TOTAL');
+          crew.forEach((r, i) => {
+            const base = N(r.qty) * N(r.days) * N(r.rate), all2 = mobRowCost(r, rr);
+            a.row(i + 1, r.desc || '', N(r.qty), 'PAX/S', N(r.days), a.money(r.rate), a.money(base), N(r.otHours),
+              a.money(N(r.rate) / 8 * ceOtMult(rr)), a.money(all2 - base), a.money(all2));
+          });
+          a.total('', 'SUB TOTAL:', crew.reduce((t, r) => t + N(r.qty), 0), '', '', '', '', '', '', '', a.money(crew.reduce((t, r) => t + mobRowCost(r, rr), 0)));
+          a.blank();
+        }
+        if (exp.length) {
+          a.head('ITEM', 'DESCRIPTION', 'QTY', 'DAYS', 'RATE', 'TOTAL');
+          exp.forEach((r, i) => a.row(i + 1, r.desc || '', N(r.qty), N(r.days), a.money(r.rate), a.money(mobRowCost(r, rr))));
+          a.total('', 'SUB TOTAL:', '', '', '', a.money(exp.reduce((t, r) => t + mobRowCost(r, rr), 0)));
+          a.blank();
+        }
+        a.total('', lbl + ' TOTAL:', '', '', '', a.money(tot));
+        a.blank();
+      });
+    });
+
     const mpActive = mp.filter(r => r.role && (N(r.rate) > 0 || N(r.pax) > 0));
     if (mpActive.length) sheet('Manpower', a => {
       docHead(a, 'BILL OF MANPOWER LOADING', 10);
@@ -7433,7 +7510,7 @@ function App({
           a.row(i + 1, r.role || '', N(r.pax), 'pax', N(r.days), a.money(r.rate),
             a.money(base), N(r.otHours) * N(r.days), a.money(N(r.rate) / 8 * ceOtMult(rr) * mult), a.money(base + ot));
         });
-        a.total('', '', '', '', '', '', '', '', 'SUB TOTAL:', a.money(subA + subB));
+        a.total('', 'SUB TOTAL:', rows.reduce((t, r) => t + N(r.pax), 0), '', '', '', '', '', '', a.money(subA + subB));
         a.blank();
       });
       /* Benefits table, matching section C.7 on the printed form. */
@@ -9718,18 +9795,23 @@ tab === 'dashboard' && (() => {
       return E("div", { style: { marginBottom: 14 } },
         E("div", { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 } },
           E("span", { style: { fontSize: 11, fontWeight: 700, color: color || ACC, letterSpacing: .5 } }, "MANPOWER"),
-          E("button", { style: btn('def', true), onClick: () => setRows(p => [...p, { id: uid(), kind: 'mp', desc: '', qty: 1, days: 1, rate: 0, otHours: 0 }]) }, "+ Add Manpower")),
+          E("div", { style: { display: 'flex', gap: 6 } },
+            E("button", { style: btn('acc', true), title: 'One line per role from the Manpower in the SOW Breakdown -- the most pax on any day shift plus any night shift. It stays in sync as the crew changes; days and OT hours are yours to set.',
+              onClick: () => { if (!consolidateCrew(mp).length) { showToast('No manpower in the SOW Breakdown yet.', true); return; } setRows(p => syncCrewRows(p, true)); } }, rows.some(r => r.auto) ? "⟳ Re-sync crew from SOW" : "⟳ Crew from SOW Breakdown"),
+            E("button", { style: btn('def', true), onClick: () => setRows(p => [...p, { id: uid(), kind: 'mp', desc: '', qty: 1, days: 1, rate: 0, otHours: 0 }]) }, "+ Add Manpower"))),
         rows.length === 0 ? E("div", { style: { textAlign: 'center', padding: '10px 0', color: MT, fontSize: 12, border: '1px dashed ' + BDR, borderRadius: 6 } }, "No manpower charged to this stage.") :
         E("div", { style: { overflowX: 'auto' } }, E("table", { style: { width: '100%', borderCollapse: 'collapse', fontSize: 12 } },
           E("thead", null, E("tr", null, ['Manpower loading', 'Pax', 'Days', 'Rate/day (P)', 'OT hrs/day', 'Rate OT/hr', 'Total', ''].map(h => E("th", { key: h, style: THS }, h)))),
           E("tbody", null, rows.map(r => {
             const tot = mobRowCost(r, rr);
             return E("tr", { key: r.id },
+              r.auto ? E("td", { style: TDS }, E("span", { style: { fontSize: 12 } }, r.desc), E("span", { title: 'Linked to the SOW Breakdown crew', style: { marginLeft: 6, fontSize: 9, fontWeight: 700, color: OK, border: '1px solid ' + alpha(OK, '66'), borderRadius: 4, padding: '0 4px' } }, "SOW")) :
               E("td", { style: TDS },
                 E("input", { style: { ...INP, minWidth: 200 }, list: idPfx + r.id, value: r.desc, placeholder: "e.g. Supervisor, Welder...",
                   onChange: e => { const dv = e.target.value; const f = (masterlist.manpower || []).find(m => m.role === dv); upd(r.id, { desc: dv, ...(f ? { rate: f.rate } : {}) }); } }),
                 E("datalist", { id: idPfx + r.id }, (masterlist.manpower || []).map(m => E("option", { key: m.id || m.role, value: m.role })))),
-              num(r, 'qty', 52, 1), num(r, 'days', 52, 1), num(r, 'rate', 96, 0), num(r, 'otHours', 52, 0),
+              r.auto ? E("td", { style: { ...TDS, ...MONO, textAlign: 'center' } }, N(r.qty)) : num(r, 'qty', 52, 1), num(r, 'days', 52, 1),
+              r.auto ? E("td", { style: { ...TDS, ...MONO, textAlign: 'right' } }, "P", ph(r.rate)) : num(r, 'rate', 96, 0), num(r, 'otHours', 52, 0),
               E("td", { style: { ...TDS, ...MONO, color: MT, textAlign: 'right' } }, "P", ph(N(r.rate) / 8 * otM)),
               E("td", { style: { ...TDS, ...MONO, color: tot > 0 ? color || ACC : MT, fontWeight: 700, textAlign: 'right', minWidth: 100 } }, "P", ph(tot)),
               E("td", { style: TDS }, E("button", { onClick: () => setRows(p => p.filter(x => x.id !== r.id)), style: { background: 'none', border: 'none', color: ERR, cursor: 'pointer', fontSize: 15, padding: '1px 5px' } }, "x")));

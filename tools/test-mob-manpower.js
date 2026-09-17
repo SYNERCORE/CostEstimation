@@ -24,6 +24,28 @@ ck('OT is hours/day x rate/8 x the CE OT multiplier, per pax per day',
   Math.abs(f({kind: 'mp', qty: 1, days: 5, rate: 2500, otHours: 2.5}, {otMult: 1.3}) - 17578.125) < 0.001);
 ck('OT is ignored on an expense', f({qty: 1, days: 1, rate: 100, otHours: 8}, {}) === 100);
 
+console.log('\nthe crew from the SOW Breakdown:');
+const crew = new Function('N', grab(/function consolidateCrew\(mp\) \{[\s\S]*?\n\}/) + 'return consolidateCrew;')(N);
+const c = crew([
+  {role: 'Welder', pax: 4, rate: 1100, shift: 'regular_day', taskId: 't1'},
+  {role: 'Supervisor', pax: 1, rate: 2500, shift: 'regular_day', taskId: 't1'},
+  {role: 'WELDER', pax: 4, rate: 1100, shift: 'sunday_day', taskId: 't2'},
+  {role: 'Rigger', pax: 2, rate: 1300, shift: 'regular_night', taskId: 't2'},
+  {role: 'Supervisor', pax: 1, rate: 2500, shift: 'regular_night', taskId: 't2'},
+  {role: '', pax: 9, rate: 0}
+]);
+ck('one line per role, in first-appearance order', c.map(x => x.role).join() === 'Welder,Supervisor,Rigger', JSON.stringify(c));
+ck('the same role on two tasks counts the most on one, not the sum', c[0].pax === 4);
+ck('day and night crews add', c[1].pax === 2);
+ck('the rate is the base day rate', c[0].rate === 1100 && c[2].rate === 1300);
+ck('a blank role is not crew', c.length === 3);
+ck('linked rows follow the manpower when it changes', /setMobVehicles\(p => syncCrewRows\(p, false\)\);/.test(app) && /\}, \[mp\]\);/.test(app));
+ck('but keep the days and OT the estimator set', /days: p \? p\.days : 1, otHours: p \? p\.otHours : 0/.test(app));
+
+console.log('\nexports:');
+ck('the CE workbook has a MOB-DEMOB sheet', /sheets\.push\(\{name: 'MOB-DEMOB'/.test(app));
+ck('the plain workbook has a Mobilization sheet', /sheet\('Mobilization', a => \{/.test(app));
+
 console.log('\nwired through:');
 ck('the saved-CE recompute uses it', /const veh = rows => arr\(rows\)\.reduce\(\(s, r\) => s \+ mobRowCost\(r, _rates\), 0\);/.test(h));
 ck('the editor totals use it', /mobVehicles\.reduce\(\(s, r\) => s \+ mobRowCost\(r, rr\), 0\)/.test(app));

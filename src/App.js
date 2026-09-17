@@ -2096,7 +2096,10 @@ function App({
     }
     if (!confirmZeroCost('Save anyway?')) return;
     const dup = await dbFindCEByNum(ceNum).catch(() => null);
-    if (dup && !dup._imported) {
+    /* A logged request is built out and saved over under its own number. Only
+       that number: renaming the CE to someone else's number is still refused. */
+    const _fromRequest = !!(info.request && String(info.requestNum || '').toUpperCase() === ceNum);
+    if (dup && !dup._imported && !_fromRequest) {
       /* Bulk upload mode lets an admin load historical CEs whose numbers already
          exist. Saving then UPDATES that CE rather than adding a second one, so
          say which one is being replaced instead of failing silently. */
@@ -2117,7 +2120,9 @@ function App({
       auditLog('bulk_overwrite', ceNum + ' (was saved ' + _overwrote + ')', currentUser?.username);
     }
     try {
-      const _res = await spWithRetry(() => dbSaveHistory(mkEntry()));
+      const _entry = mkEntry();
+      if (_fromRequest) { _entry.info = {..._entry.info, request: false}; setInfo(p => ({...p, request: false})); }
+      const _res = await spWithRetry(() => dbSaveHistory(_entry));
       auditLog('save_ce', ceNum, currentUser?.username);
       /* Without this the next New CE in the same session is handed the
          number just used: ceNums is only fetched on load. */
@@ -3941,6 +3946,68 @@ function App({
   const MON_PAGE_SIZE = 20;
   const [editingRow, setEditingRow] = React.useState(null);
   const [attachPanel, setAttachPanel] = React.useState(null); // ceId or null
+  /* ── Requests ────────────────────────────────────────────────────────────
+     A request for estimation is logged the moment it arrives, before anyone
+     costs it: a CE number, the customer and job, the deadline, who it is
+     assigned to, and the documents that came with it. It is saved as an empty
+     CE flagged `request`, so it sits in Monitoring like any other CE, takes
+     attachments like any other CE, and opens with Load. The estimator then
+     builds the estimate and saves it over the request under the same number
+     -- the one save over an existing number that is allowed without Revise,
+     and only for the number the request was raised under. */
+  const [reqForm, setReqForm] = React.useState(null);
+  const [reqBusy, setReqBusy] = React.useState(false);
+  const [reqUsers, setReqUsers] = React.useState([]);
+  const [monMine, setMonMine] = React.useState(false);
+  const meNames = () => [currentUser?.name, currentUser?.username].map(x => String(x || '').trim().toUpperCase()).filter(Boolean);
+  const openRequest = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    setReqForm({ ceNum: nextCeNum(history, null, ceNums), ceType: 'onsite', client: '', description: '',
+      projType: 'Mechanical', dateRecv: today, deadline: '', assignee: '', remarks: '' });
+    dbGetUsers().then(u => setReqUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(() => {});
+  };
+  const submitRequest = async () => {
+    const f = reqForm || {};
+    const ceNum = String(f.ceNum || '').trim().toUpperCase();
+    if (!/^[A-Z0-9\-_\/\.]{2,30}$/.test(ceNum)) { showToast('CE Number must be 2–30 characters, letters/numbers/dashes only.', true); return; }
+    if (!String(f.client || '').trim()) { showToast('Customer is required.', true); return; }
+    if (!String(f.assignee || '').trim()) { showToast('Assign the request to an estimator.', true); return; }
+    setReqBusy(true);
+    try {
+      const dup = await dbFindCEByNum(ceNum).catch(() => null);
+      if (dup) {
+        showToast('CE Number "' + ceNum + '" is already taken. Next free: ' + nextCeNum(history, (ceNum.split('-CE-')[0] || null), [...ceNums, ceNum]), true);
+        setReqBusy(false); return;
+      }
+      const entry = {
+        ceType: f.ceType || 'onsite',
+        info: { ...BLANK_INFO, ceNum, date: f.dateRecv || BLANK_INFO.date, client: f.client.trim(),
+          description: String(f.description || '').trim(), projType: f.projType || BLANK_INFO.projType,
+          status: 'DRAFT', request: true, requestNum: ceNum },
+        mp: [], tools: [], mats: [], ppe: [], misc: {}, addlCosts: [], verifyNotes: {}, rates: {}, margin: 0,
+        scope: '', notes: [], sowItems: [], approvers: [], mobVehicles: [], demobVehicles: [],
+        grand: 0, unitP: 0, savedBy: currentUser.username, savedAt: new Date().toISOString(), docRef: null
+      };
+      const saved = await dbSaveHistory(entry);
+      if (!saved || saved.sp === false || saved.id == null) {
+        /* A request only this browser can see has not been assigned to anyone. */
+        showToast('Request NOT logged — SharePoint did not accept it' + (saved && saved.reason ? ': ' + String(saved.reason).slice(0, 80) : '') + '.', true);
+        setReqBusy(false); return;
+      }
+      const fields = { status: 'Pending', ceeName: f.assignee.trim(), customer: f.client.trim(),
+        jobTitle: String(f.description || '').trim(), designation: f.projType || '', dateRecv: f.dateRecv || '',
+        deadline: f.deadline || '', receivedBy: currentUser.name || currentUser.username || '', remarks: String(f.remarks || '').trim() };
+      const mres = await dbSaveMonEntry(saved.id, ceNum, fields, Object.keys(fields));
+      setMonData(p => ({ ...p, [saved.id]: (mres && mres.fields) || fields }));
+      setCeNums(p => p.indexOf(ceNum) < 0 ? [...p, ceNum] : p);
+      auditLog('log_request', ceNum + ' -> ' + fields.ceeName, currentUser?.username);
+      await loadHist();
+      setReqForm(null);
+      showToast('Request ' + ceNum + ' logged and assigned to ' + fields.ceeName + '. Attach the documents that came with it.');
+      openAttachPanel(saved.id);
+    } catch (e) { showToast('Could not log the request: ' + e.message, true); }
+    setReqBusy(false);
+  };
   /* The row whose status panel is open: pick a new status, and read the trail
      of who moved it and when. */
   const [statusPanel, setStatusPanel] = React.useState(null); // ceId or null
@@ -4083,6 +4150,7 @@ function App({
          discipline is a real thing to go looking for. */
       if (monDiscFilter !== 'all' && monDisc(e, m).trim().toUpperCase() !== monDiscFilter) return false;
       if (monCustFilter !== 'all' && monCust(e, m).trim().toUpperCase() !== monCustFilter) return false;
+      if (monMine && !meNames().includes(String(m.ceeName || m.preparedBy || e.savedBy || '').trim().toUpperCase())) return false;
       if (!monSearch) return true;
       const q = monSearch.toLowerCase();
       return (e.info?.ceNum || '').toLowerCase().includes(q) || (e.info?.client || '').toLowerCase().includes(q) || (e.info?.description || '').toLowerCase().includes(q) || (m.customer || '').toLowerCase().includes(q) || (m.receivedBy || '').toLowerCase().includes(q) || (m.remarks || '').toLowerCase().includes(q);
@@ -4165,7 +4233,7 @@ function App({
          SY3-CE-2026-10, and "aestillore" must sit with "Aestillore". */
       return String(va).localeCompare(String(vb), 'en', {numeric: true, sensitivity: 'base'}) * dir;
     });
-  }, [monRows, monData, monSearch, monStatusFilter, monTypeFilter, monDiscFilter, monCustFilter, monSortCol, monSortDir]);
+  }, [monRows, monData, monSearch, monStatusFilter, monTypeFilter, monDiscFilter, monCustFilter, monMine, monSortCol, monSortDir]);
   /* The rows actually drawn: one page of CEs, with the superseded revisions of
      any CE that has been expanded slotted in underneath it. Expanded after the
      page is cut, so a page is always the same 25 CEs whether or not anyone has
@@ -4790,6 +4858,11 @@ function App({
     custOptions.map(o => /*#__PURE__*/React.createElement("option", {key: o.key, value: o.key},
       (o.label || '(none)') + '  \u00b7 ' + o.n))
   ),
+  /*#__PURE__*/React.createElement("button", {
+    style: btn(monMine ? 'acc' : 'def', true),
+    title: "Only the CEs and requests whose Estimator is you",
+    onClick: () => { setMonMine(v => !v); setMonPage(0); }
+  }, "\uD83D\uDC64 Assigned to me"),
   (monSearch || monStatusFilter.size > 0 || monTypeFilter !== 'all' || monDiscFilter !== 'all' || monCustFilter !== 'all') && /*#__PURE__*/React.createElement("button", {
     style: {...btn('danger', true), fontSize:10},
     title: "Clear all filters",
@@ -4806,6 +4879,10 @@ function App({
     onClick: () => setShowStatusMgr(p => !p),
     title: "Manage status options"
   }, "\u2699 Status"), /*#__PURE__*/React.createElement("button", {
+    style: btn('ok', true),
+    title: "Log a request for estimation: CE number, customer, deadline, who it is assigned to, and its documents",
+    onClick: openRequest
+  }, "+ New Request"), /*#__PURE__*/React.createElement("button", {
     style: btn('def', true),
     onClick: () => {
       loadHist();
@@ -5136,6 +5213,10 @@ function App({
       title: 'Unsaved draft by ' + (e.savedByName || e.savedBy || 'someone') + ' — Load to pick it up',
       style: {marginLeft: 5, fontSize: 8, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 8, background: '#8B5CF622', color: 'var(--accent-violet)', border: '1px solid #8B5CF644'}
     }, 'UNSAVED'),
+    e.info?.request && !e._draft && /*#__PURE__*/React.createElement("span", {
+      title: 'Logged request, not costed yet — Load it to build the estimate, then Save under the same number',
+      style: {marginLeft: 5, fontSize: 8, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 8, background: alpha(OK, '22'), color: OK, border: '1px solid ' + alpha(OK, '44')}
+    }, 'REQUEST'),
     /* Superseded revisions are folded into the row that supersedes them. The
        chip says how many, so a CE with history is visible as such without
        having to take three rows to say it. */
@@ -8762,6 +8843,42 @@ statusPanel && (() => {
         ))),
     _shown.length && _shown[0]._legacy ? /*#__PURE__*/React.createElement("div", {style:{fontSize:10,color:MT,marginTop:8,lineHeight:1.5}},
       "Only the most recent change was kept before this version. Everything from here on is logged in full.") : null
+  ));
+})(),
+
+/* ── New Request Modal ── */
+reqForm && (() => {
+  const set = (k, v) => setReqForm(p => ({...p, [k]: v}));
+  const L = (label, el) => /*#__PURE__*/React.createElement("label", {style:{display:'flex',flexDirection:'column',gap:3,fontSize:11,color:MT}}, label, el);
+  const inp = (k, extra) => /*#__PURE__*/React.createElement("input", {style:INP, value:reqForm[k] || '', onChange:e=>set(k, e.target.value), ...(extra || {})});
+  return /*#__PURE__*/React.createElement("div", {
+    style:{position:'fixed',inset:0,background:'#000b',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center',padding:16},
+    onClick:()=>{ if (!reqBusy) setReqForm(null); }
+  }, /*#__PURE__*/React.createElement("div", {
+    style:{...CS, width:'min(560px,100%)', maxHeight:'90vh', overflow:'auto'}, onClick:e=>e.stopPropagation()
+  },
+    /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:14,marginBottom:4}}, "+ New Request"),
+    /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:11,marginBottom:12}},
+      "Logs the request in CE Monitoring and assigns it. Attachments open next. The estimator Loads it, builds the estimate, and Saves under the same number."),
+    /*#__PURE__*/React.createElement("div", {style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:10}},
+      L("CE Number *", inp('ceNum', {style:{...INP,...MONO}})),
+      L("Assigned to *", /*#__PURE__*/React.createElement(React.Fragment, null,
+        inp('assignee', {list:'req-users', placeholder:'Estimator'}),
+        /*#__PURE__*/React.createElement("datalist", {id:'req-users'}, reqUsers.map(u => /*#__PURE__*/React.createElement("option", {key:u.username, value:u.name || u.username}))))),
+      L("Customer *", inp('client', {placeholder:'e.g. SLTEC'})),
+      L("CE Type", /*#__PURE__*/React.createElement("select", {style:INP, value:reqForm.ceType, onChange:e=>set('ceType', e.target.value)},
+        Object.keys(CE_CFG).map(k => /*#__PURE__*/React.createElement("option", {key:k, value:k}, k === 'shopworks' ? 'ShopWorks' : k.charAt(0).toUpperCase() + k.slice(1))))),
+      L("Discipline", /*#__PURE__*/React.createElement("select", {style:INP, value:reqForm.projType, onChange:e=>set('projType', e.target.value)},
+        ['Electrical', 'Mechanical', 'Civil', 'General'].map(k => /*#__PURE__*/React.createElement("option", {key:k, value:k}, k)))),
+      L("Date received", inp('dateRecv', {type:'date'})),
+      L("Deadline", inp('deadline', {type:'date'}))
+    ),
+    /*#__PURE__*/React.createElement("div", {style:{marginTop:10}}, L("Job title", /*#__PURE__*/React.createElement("textarea", {style:{...INP,height:52,resize:'vertical'}, value:reqForm.description, placeholder:'What the client is asking for', onChange:e=>set('description', e.target.value)}))),
+    /*#__PURE__*/React.createElement("div", {style:{marginTop:10}}, L("Remarks", /*#__PURE__*/React.createElement("textarea", {style:{...INP,height:52,resize:'vertical'}, value:reqForm.remarks, placeholder:'Site visit needed, contact person, anything not to forget...', onChange:e=>set('remarks', e.target.value)}))),
+    /*#__PURE__*/React.createElement("div", {style:{display:'flex',gap:8,justifyContent:'flex-end',marginTop:14}},
+      /*#__PURE__*/React.createElement("button", {style:btn('def'), disabled:reqBusy, onClick:()=>setReqForm(null)}, "Cancel"),
+      /*#__PURE__*/React.createElement("button", {style:btn('acc'), disabled:reqBusy, onClick:submitRequest}, reqBusy ? "Logging…" : "Log request & attach files")
+    )
   ));
 })(),
 

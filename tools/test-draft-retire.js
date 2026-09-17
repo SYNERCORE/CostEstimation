@@ -99,7 +99,7 @@ const d = (id, ceNum) => ({draftId: id, savedBy: 'aestillore', info: {ceNum}});
 
   console.log('\nand a save that reached nobody says so:');
   ck('handleSave looks at what dbSaveHistory returned',
-    /const _res = await spWithRetry\(\(\) => dbSaveHistory\(mkEntry\(\)\)\)/.test(app),
+    /const _res = await spWithRetry\(\(\) => dbSaveHistory\(_entry\)\)/.test(app),
     'the return value was discarded, so a browser-only save toasted "Saved!"');
   ck('a browser-only save is reported as such',
     /if \(_res && _res\.sp === false\)/.test(app) && /Saved to THIS BROWSER only/.test(app));

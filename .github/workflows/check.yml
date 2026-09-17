@@ -134,6 +134,8 @@ jobs:
         run: node tools/test-services-summary.js
       - name: Scope Library services show an SY3 number
         run: node tools/test-svc-codes.js
+      - name: A request is logged, assigned, and built out under its number
+        run: node tools/test-ce-requests.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents

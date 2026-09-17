@@ -2621,7 +2621,7 @@ function App({
         benefitRows.forEach((r, i) => bol.push([
           S(i + 1, 'tdc'), S(r.role, 'td'), S(r.pax, 'tdc'),
           S(r.thirteenth, 'tdn'), S(r.sss, 'tdn'), S(r.hdmf + r.sil, 'tdn'), S(r.total, 'tdnb')]));
-        bol.push([S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('BENEFITS SUB TOTAL:', 'totlbl'), S(benefitsT, 'tot')]);
+        bol.push([S('', 'totlbl'), S('TOTAL MANPOWER:', 'totlbl'), S(benefitRows.reduce((t, r) => t + N(r.pax), 0), 'tot'), S('', 'totlbl'), S('', 'totlbl'), S('BENEFITS SUB TOTAL:', 'totlbl'), S(benefitsT, 'tot')]);
         bol.push([]);
       }
       bol.push([S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('TOTAL MANPOWER COST:', 'totlbl'), S(N(mpTot), 'tot')]);
@@ -7204,7 +7204,7 @@ function App({
       <div class="sec">C.7 &nbsp;BENEFITS AND OTHERS</div>
       <table><tr style="background:#eee"><th class="c">ITEM</th><th>MANPOWER LOADING</th><th class="c">QTY</th><th class="c">UOM</th><th class="c">TOTAL DAYS</th><th class="r">MONTHLY RATE</th><th class="r">13TH PAY</th><th class="r">SSS</th><th class="r">HDMF&amp;PHIC</th><th class="r">SIL&amp;ECC</th>${incOn?'<th class="r">INCENTIVE</th>':''}<th class="r">TOTAL</th></tr>
       ${benefitRows.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.role||'')}</td><td class="c">${esc(r.pax)}</td><td class="c">pax</td><td class="c">${esc(r.days)}</td><td class="r">${fmt(r.monthlyRate)}</td><td class="r">${fmt(r.thirteenth)}</td><td class="r">${fmt(r.sss)}</td><td class="r">${fmt(r.hdmf)}</td><td class="r">${fmt(r.sil)}</td>${incOn?`<td class="r">${fmt(r.perdiem)}</td>`:''}<td class="r b">${fmt(r.total)}</td></tr>`).join('')}
-      <tr class="tot"><td colspan="11" class="r b">BENEFITS &amp; OTHERS SUB TOTAL:</td><td class="r b">${fmt(benefitsT)}</td></tr>
+      <tr class="tot"><td colspan="2" class="r b">TOTAL MANPOWER:</td><td class="c b">${esc(benefitRows.reduce((t,r)=>t+N(r.pax),0))}</td><td colspan="${incOn?8:7}" class="r b">BENEFITS &amp; OTHERS SUB TOTAL:</td><td class="r b">${fmt(benefitsT)}</td></tr>
       <tr class="tot"><td colspan="11" class="r b">TOTAL MANPOWER COST (C.1-C.7):</td><td class="r b">${fmt(mpTot)}</td></tr></table></div>` : '';
 
     /* Tools &#8212; skip zero rows */
@@ -7523,7 +7523,7 @@ function App({
         a.head('ITEM', 'MANPOWER LOADING', 'QTY', 'UOM', 'TOTAL DAYS', 'MONTHLY RATE', '13TH PAY', 'SSS', 'HDMF & PHIC', 'SIL & ECC', ..._inc, 'TOTAL');
         benefitRows.forEach((r, i) => a.row(i + 1, r.role, r.pax, 'pax', r.days, a.money(r.monthlyRate),
           a.money(r.thirteenth), a.money(r.sss), a.money(r.hdmf), a.money(r.sil), ...(incOn ? [a.money(r.perdiem)] : []), a.money(r.total)));
-        a.total('', '', '', '', '', '', '', '', '', ...(incOn ? [''] : []), 'SUB TOTAL:', a.money(benefitsT));
+        a.total('', 'TOTAL MANPOWER:', benefitRows.reduce((t, r) => t + N(r.pax), 0), '', '', '', '', '', '', ...(incOn ? [''] : []), 'SUB TOTAL:', a.money(benefitsT));
       }
       a.blank();
       a.total('', 'MANPOWER COST TOTAL:', '', '', '', '', '', '', '', a.money(mpTot));
@@ -10972,7 +10972,13 @@ tab === 'dashboard' && (() => {
       fontWeight: 700
     }
   }, /*#__PURE__*/React.createElement("td", {
-    colSpan: incOn ? 11 : 10,
+    colSpan: 2,
+    style: { ...TDS, textAlign: 'right', color: ACC, fontSize: 11 }
+  }, "Total manpower:"), /*#__PURE__*/React.createElement("td", {
+    /* The headcount the rows above carry -- each role's day plus night crew. */
+    style: { ...TDS, ...MONO, color: ACC, textAlign: 'center' }
+  }, benefitRows.reduce((t, r) => t + N(r.pax), 0), " pax"), /*#__PURE__*/React.createElement("td", {
+    colSpan: incOn ? 8 : 7,
     style: {
       ...TDS,
       textAlign: 'right',

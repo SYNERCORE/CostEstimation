@@ -998,6 +998,18 @@ function App({
       } else setSyncStatus({masterlist:'local'});
     } catch (ex) { console.warn('Masterlist load failed:', ex.message); setSyncStatus({masterlist:'error', sp:'error'}); }
   };
+  /* A CE saved by someone else is still yours to see when its monitoring row
+     assigns it to you or says you received it -- the request flow depends on
+     it. Read through a ref: loadHist is called from closures older than the
+     latest monitoring data. */
+  const _monRef = React.useRef({});
+  _monRef.current = monData;
+  const mineToSee = id => {
+    const m = (_monRef.current || {})[id];
+    if (!m) return false;
+    const me = [currentUser?.name, currentUser?.username].map(x => String(x || '').trim().toUpperCase()).filter(Boolean);
+    return me.includes(String(m.ceeName || '').trim().toUpperCase()) || me.includes(String(m.receivedBy || '').trim().toUpperCase());
+  };
   const loadHist = async () => {
     setHistBusy(true);
     /* Paint the cached history immediately, then refresh from SharePoint in the
@@ -1005,7 +1017,7 @@ function App({
        on it made opening the app feel like it had hung. */
     try {
       const cached = LS.get('history') || [];
-      if (cached.length) setHistory(isAdmin ? cached : cached.filter(h => h.savedBy === currentUser.username));
+      if (cached.length) setHistory(isAdmin ? cached : cached.filter(h => h.savedBy === currentUser.username || mineToSee(h.id)));
     } catch (_e) {}
     try {
       const spAvail = !!(USE_SP || getSiteURL());
@@ -1013,7 +1025,7 @@ function App({
          says nothing about anyone's estimates, but it is what stops two
          people being handed the same number. */
       dbGetCeNumbers().then(ns => { if (ns && ns.length) setCeNums(ns); }).catch(() => {});
-      const h = await dbGetHistory(currentUser.username, isAdmin);
+      const h = await dbGetHistory(currentUser.username, isAdmin, isAdmin ? null : mineToSee);
       /* Keep LS in sync with SP so fallback is never stale. Only ever write a
          NON-empty result. The old code purged the cache whenever SharePoint
          returned zero rows, which was wrong twice over: a failed/trimmed query
@@ -1041,7 +1053,7 @@ function App({
       try {
         const cached = LS.get('history') || [];
         const u = currentUser.username;
-        setHistory(isAdmin ? cached : cached.filter(h => h.savedBy === u));
+        setHistory(isAdmin ? cached : cached.filter(h => h.savedBy === u || mineToSee(h.id)));
       } catch (_e) {}
     }
     setHistBusy(false);
@@ -4100,6 +4112,16 @@ function App({
      saved, and the row would be a duplicate of the real CE. Saving now retires
      its draft, so this only catches drafts left behind by someone else's save
      or by an older build. */
+  /* History usually lands before monitoring does, so an assigned request
+     is not known to be this user's until the monitoring rows arrive. Reload
+     once for each new set of such CEs. */
+  const _assignedKey = React.useRef('');
+  React.useEffect(() => {
+    if (isAdmin) return;
+    const have = new Set(history.map(h => String(h.id)));
+    const missing = Object.keys(monData || {}).filter(id => !have.has(String(id)) && mineToSee(id)).sort().join(',');
+    if (missing && missing !== _assignedKey.current) { _assignedKey.current = missing; loadHist(); }
+  }, [monData, history, isAdmin]);
   const monRows = useMemo(() => {
     const saved = new Set(history.map(h => String(h.info?.ceNum || h.ceNum || '').trim().toUpperCase()).filter(Boolean));
     const draftRows = (sharedDrafts || [])

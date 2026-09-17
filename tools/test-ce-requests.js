@@ -39,6 +39,14 @@ ck('"Assigned to me" filters on the Estimator column',
   has(/if \(monMine && !meNames\(\)\.includes\(String\(m\.ceeName \|\| m\.preparedBy \|\| e\.savedBy \|\| ''\)/));
 ck('and the list recomputes when it is toggled', has(/monCustFilter, monMine, monSortCol, monSortDir\]\);/));
 
+console.log('\nthe estimator can actually see it:');
+const db = fs.readFileSync('src/db.js', 'utf8');
+ck('a non-admin history keeps CEs assigned to or received by them, not only their own saves',
+  /h\.savedBy===username\|\|\(keep&&keep\(h\.id\)\)/.test(db) && has(/dbGetHistory\(currentUser\.username, isAdmin, isAdmin \? null : mineToSee\)/));
+ck('mineToSee reads the Estimator and Received By columns',
+  has(/me\.includes\(String\(m\.ceeName \|\| ''\)\.trim\(\)\.toUpperCase\(\)\) \|\| me\.includes\(String\(m\.receivedBy/));
+ck('history reloads when monitoring reveals an assigned CE it lacks', has(/if \(missing && missing !== _assignedKey\.current\)/));
+
 console.log('\nreassigning from the row:');
 ck('each row has an Assign action', has(/onClick: \(\) => \{ if \(!e\._draft\) openAssign\(e\); \}\n    \}, '👤 Assign'\)/));
 ck('it offers the user list', has(/list: 'assign-users'/));

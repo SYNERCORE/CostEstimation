@@ -454,7 +454,8 @@ async function dbFindCEByNum(ceNum){
   }catch(_){}
   return null;
 }
-async function dbGetHistory(username,isAdmin){if(USE_SP||getSiteURL()){try{const f=isAdmin?"":`shicSavedBy eq '${username}'`;const r=await spGet(spList('CEs'),f,'Id,Title,shicType,shicClient,shicDesc,shicTotal,shicSavedBy,shicSavedAt');return r.map(h=>({id:h.Id,ceNum:h.Title,ceType:h.shicType,client:h.shicClient||'',grand:h.shicTotal||0,savedBy:h.shicSavedBy||'',savedAt:h.shicSavedAt||h.Created,info:{ceNum:h.Title,client:h.shicClient||'',description:h.shicDesc||''}}));}catch(e){console.warn('dbGetHistory:',e.message);}}const all=LS.get('history')||[];return isAdmin?all:all.filter(h=>h.savedBy===username);}
+/* keep(id): a CE someone else saved that is still this user's to see -- a request assigned to them or received by them. Without it a non-admin only ever got their own saves, so an assigned request never reached the estimator. */
+async function dbGetHistory(username,isAdmin,keep){if(USE_SP||getSiteURL()){try{const f=(isAdmin||keep)?"":`shicSavedBy eq '${username}'`;const r=await spGet(spList('CEs'),f,'Id,Title,shicType,shicClient,shicDesc,shicTotal,shicSavedBy,shicSavedAt');return r.map(h=>({id:h.Id,ceNum:h.Title,ceType:h.shicType,client:h.shicClient||'',grand:h.shicTotal||0,savedBy:h.shicSavedBy||'',savedAt:h.shicSavedAt||h.Created,info:{ceNum:h.Title,client:h.shicClient||'',description:h.shicDesc||''}})).filter(h=>isAdmin||h.savedBy===username||(keep&&keep(h.id)));}catch(e){console.warn('dbGetHistory:',e.message);}}const all=LS.get('history')||[];return isAdmin?all:all.filter(h=>h.savedBy===username||(keep&&keep(h.id)));}
 /* A consolidated crew row carries `shares` -- what each scope task originally
    asked for -- so the SOW Breakdown can split the merged cost back across the
    tasks the crew actually serves. Every other row field has its own column, but

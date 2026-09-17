@@ -7128,7 +7128,7 @@ function App({
     </table>`;
 
     /* Manpower &#8212; skip zero-rate rows */
-    const mpActive = mp.filter(r=>N(r.rate)>0||N(r.pax)>0);
+    const mpActive = mp.filter(r=>N(r.rate)>0||String(r.role||'').trim());
     const shiftKeys = [...new Set(mpActive.map(r=>r.shift||'straight'))];
     const shiftRows = shiftKeys.map(sk=>{
       const rows=mpActive.filter(r=>(r.shift||'straight')===sk);
@@ -7142,7 +7142,7 @@ function App({
       this column by RATE OT. otHours is now per day, so the total is what
       belongs here -- printing the per-day figure would understate the row
       against its own TOTAL column. */''}<td class="c">${esc(N(r.otHours)*N(r.days)||0)}</td><td class="r">${fmt(N(r.rate)/8*_otM*mult)}</td><td class="r b">${fmt(N(r.pax)*N(r.days)*N(r.rate)*mult+N(r.pax)*N(r.days)*(N(r.otHours)/8)*N(r.rate)*_otM*mult)}</td></tr>`).join('')}
-      <tr class="tot"><td colspan="9" class="r b">SUB TOTAL:</td><td class="r b">${fmt(subA+subB)}</td></tr></table>`;
+      <tr class="tot"><td colspan="2" class="r b">SUB TOTAL:</td><td class="c b">${esc(rows.reduce((s,r)=>s+N(r.pax),0))}</td><td colspan="6"></td><td class="r b">${fmt(subA+subB)}</td></tr></table>`;
     }).join('');
 
     /* Benefits &#8212; the same rows the Manpower tab shows */
@@ -7202,7 +7202,19 @@ function App({
        The document header prints once for the run rather than per section --
        each bill still carries its own black title bar. */
     const mpPage=mpActive.length?`<div class="blk"><div class="sec">MANPOWER COST</div>${shiftRows}<div class="tot" style="text-align:right;padding:3px 4px;font-weight:bold">TOTAL MANPOWER COST: ${fmt(mpTot)}</div></div>`:'';
-    const bills=[mpPage,benPage,toolsPage,matsPage,ppePage,miscPage].filter(Boolean).join('');
+    /* Mobilization and demobilization -- costed into the total but never
+       printed, so the client saw a charge with no line saying what it was. */
+    const mobRows=(rows)=>(rows||[]).filter(r=>String(r.desc||'').trim()||N(r.rate)>0);
+    const mobTable=(label,rows,tot)=>rows.length?`<div class="sub">${label}</div>
+      <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:35px">QTY</th><th class="c" style="width:36px">DAYS</th><th class="r" style="width:80px">RATE</th><th class="r" style="width:80px">TOTAL</th></tr>
+      ${rows.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.days||1)}</td><td class="r">${fmt(r.rate||0)}</td><td class="r b">${fmt(N(r.qty)*N(r.days)*N(r.rate))}</td></tr>`).join('')}
+      <tr class="tot"><td colspan="5" class="r b">SUB TOTAL:</td><td class="r b">${fmt(tot)}</td></tr></table>`:'';
+    const _mobR=mobRows(mobVehicles),_demobR=mobRows(demobVehicles);
+    const mobPage=(_mobR.length||_demobR.length)?`<div class="blk">
+      <div class="sec">MOBILIZATION / DEMOBILIZATION</div>
+      ${mobTable('MOBILIZATION',_mobR,mobVehiclesT)}${mobTable('DEMOBILIZATION',_demobR,demobVehiclesT)}
+      <div class="tot" style="text-align:right;padding:3px 4px;font-weight:bold">MOBILIZATION / DEMOBILIZATION TOTAL: ${fmt(mobVehiclesT+demobVehiclesT)}</div></div>`:'';
+    const bills=[mpPage,benPage,toolsPage,matsPage,ppePage,miscPage,mobPage].filter(Boolean).join('');
     const billsPage=bills?`<div class="page page-break">${docHdr('BILL OF QUANTITIES')}${bills}</div>`:'';
 
     const sowPage=sowItems.length?`<div class="page page-break">${docHdr('SCOPE OF WORK')}<div style="font-size:8pt;line-height:1.6">${(()=>{let mc=0,sc=0;return sowItems.map(it=>{if(it.type==='main'){mc++;sc=0;return`<div style="margin-top:4px"><b>${mc}. ${esc(it.text)}</b></div>`;}else{sc++;return`<div style="margin-left:14px">${mc}.${sc} ${esc(it.text)}</div>`;}}).join('');})()}</div></div>`:'';

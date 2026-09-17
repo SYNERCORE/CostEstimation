@@ -3959,6 +3959,25 @@ function App({
   const [reqBusy, setReqBusy] = React.useState(false);
   const [reqUsers, setReqUsers] = React.useState([]);
   const [monMine, setMonMine] = React.useState(false);
+  /* Reassigning from the row: {id, ceNum, from, to} while the picker is open. */
+  const [assignPanel, setAssignPanel] = React.useState(null);
+  const openAssign = e => {
+    const m = monOf(e);
+    const cur = m.ceeName || m.preparedBy || e.savedBy || '';
+    setAssignPanel({ id: e.id, ceNum: e.info?.ceNum || e.ceNum || '', from: cur, to: cur });
+    dbGetUsers().then(u => setReqUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(() => {});
+  };
+  const saveAssign = () => {
+    const a = assignPanel || {};
+    const to = String(a.to || '').trim();
+    if (!to) { showToast('Pick the estimator to assign it to.', true); return; }
+    if (to !== String(a.from || '').trim()) {
+      updateMon(a.id, 'ceeName', to);
+      auditLog('reassign_ce', a.ceNum + ': ' + (a.from || '(none)') + ' -> ' + to, currentUser?.username);
+      showToast(a.ceNum + ' assigned to ' + to + '.');
+    }
+    setAssignPanel(null);
+  };
   const meNames = () => [currentUser?.name, currentUser?.username].map(x => String(x || '').trim().toUpperCase()).filter(Boolean);
   const openRequest = () => {
     const today = new Date().toISOString().slice(0, 10);
@@ -5441,6 +5460,11 @@ function App({
       title: e._draft ? 'A draft is always Draft — save the CE to start tracking it' : 'Update status and view its history',
       onClick: () => { if (!e._draft) setStatusPanel(statusPanel === e.id ? null : e.id); }
     }, '⚑ Status'), /*#__PURE__*/React.createElement("button", {
+      disabled: !!e._draft,
+      style: {...btn(assignPanel && assignPanel.id === e.id ? 'acc' : 'def', true), fontSize: 10, padding: '2px 8px', opacity: e._draft ? .4 : 1, cursor: e._draft ? 'not-allowed' : 'pointer'},
+      title: e._draft ? 'Save the CE first — a draft has no monitoring record to assign' : 'Reassign this CE to another estimator',
+      onClick: () => { if (!e._draft) openAssign(e); }
+    }, '👤 Assign'), /*#__PURE__*/React.createElement("button", {
       disabled: !!e._draft,
       style: {...btn(editingRow === e.id ? 'ok' : 'def', true), fontSize: 10, padding: '2px 8px', opacity: e._draft ? .4 : 1, cursor: e._draft ? 'not-allowed' : 'pointer'},
       title: e._draft ? 'Save the CE first — a draft has no monitoring record to hold a deadline' : 'Edit monitoring fields',
@@ -8765,6 +8789,26 @@ tab === 'history' && HistPanel(),   /* invoked, not rendered — see its declara
    control on every one of 900 rows and still had nowhere to show the history:
    statusChangedAt only ever held the most recent change, so the previous one
    was overwritten the moment the next landed. */
+assignPanel && /*#__PURE__*/React.createElement("div", {
+  style:{position:'fixed',inset:0,background:'#000b',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center',padding:16},
+  onClick:()=>setAssignPanel(null)
+}, /*#__PURE__*/React.createElement("div", {
+  style:{...CS, width:'min(420px,100%)'}, onClick:ev=>ev.stopPropagation()
+},
+  /*#__PURE__*/React.createElement("b", {style:{fontSize:14}}, "👤 Assign"),
+  /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,margin:'4px 0 12px',...MONO}}, assignPanel.ceNum),
+  /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,marginBottom:10}}, "Currently: ", /*#__PURE__*/React.createElement("b", {style:{color:TX}}, assignPanel.from || '—')),
+  /*#__PURE__*/React.createElement("input", {
+    autoFocus: true, list: 'assign-users', style: INP, value: assignPanel.to, placeholder: 'Estimator',
+    onChange: ev => { const v = ev.target.value; setAssignPanel(p => ({...p, to: v})); },
+    onKeyDown: ev => { if (ev.key === 'Enter') saveAssign(); }
+  }),
+  /*#__PURE__*/React.createElement("datalist", {id:'assign-users'}, reqUsers.map(u => /*#__PURE__*/React.createElement("option", {key:u.username, value:u.name || u.username}))),
+  /*#__PURE__*/React.createElement("div", {style:{fontSize:10,color:MT,marginTop:6}}, "Pick from the list so \"Assigned to me\" finds it for them."),
+  /*#__PURE__*/React.createElement("div", {style:{display:'flex',gap:8,justifyContent:'flex-end',marginTop:14}},
+    /*#__PURE__*/React.createElement("button", {style:btn('def'), onClick:()=>setAssignPanel(null)}, "Cancel"),
+    /*#__PURE__*/React.createElement("button", {style:btn('acc'), onClick:saveAssign}, "Assign"))
+)),
 statusPanel && (() => {
   const _e = sortedHistory.find(x => x.id === statusPanel);
   const _m = _e ? monOf(_e) : {};

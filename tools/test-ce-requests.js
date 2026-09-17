@@ -39,6 +39,13 @@ ck('"Assigned to me" filters on the Estimator column',
   has(/if \(monMine && !meNames\(\)\.includes\(String\(m\.ceeName \|\| m\.preparedBy \|\| e\.savedBy \|\| ''\)/));
 ck('and the list recomputes when it is toggled', has(/monCustFilter, monMine, monSortCol, monSortDir\]\);/));
 
+console.log('\nreassigning from the row:');
+ck('each row has an Assign action', has(/onClick: \(\) => \{ if \(!e\._draft\) openAssign\(e\); \}\n    \}, '👤 Assign'\)/));
+ck('it offers the user list', has(/list: 'assign-users'/));
+ck('it writes the Estimator column through the normal monitoring save', has(/updateMon\(a\.id, 'ceeName', to\);/));
+ck('and the change is audited', has(/auditLog\('reassign_ce'/));
+ck('an unchanged pick writes nothing', has(/if \(to !== String\(a\.from \|\| ''\)\.trim\(\)\) \{/));
+
 console.log('\nbuilding it out:');
 ck('saving over the request is allowed only under the number it was raised as',
   has(/const _fromRequest = !!\(info\.request && String\(info\.requestNum \|\| ''\)\.toUpperCase\(\) === ceNum\);/));

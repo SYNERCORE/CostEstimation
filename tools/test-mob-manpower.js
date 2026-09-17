@@ -42,6 +42,28 @@ ck('a blank role is not crew', c.length === 3);
 ck('linked rows follow the manpower when it changes', /setMobVehicles\(p => syncCrewRows\(p, false\)\);/.test(app) && /\}, \[mp\]\);/.test(app));
 ck('but keep the days and OT the estimator set', /days: p \? p\.days : 1, otHours: p \? p\.otHours : 0/.test(app));
 
+console.log('\nfood allowance by category:');
+const meal = new Function('N', grab(/const MEAL_CATS = [^\n]*/) + grab(/function mealCatGuess\(role\) \{[\s\S]*?\n\}/) +
+  grab(/function consolidateCrew\(mp\) \{[\s\S]*?\n\}/) + grab(/function mealGroups\(mp, cats\) \{[\s\S]*?\n\}/) +
+  grab(/function miscRowCost\(r\) \{[\s\S]*?\n\}/) + 'return {mealCatGuess, mealGroups, miscRowCost};')(N);
+ck('a project manager is PM', meal.mealCatGuess('Project Manager') === 'PM');
+ck('admin, document controller, driver and tool keeper are admin',
+  ['ADMIN', 'DOCUMENT CONTROLLER', 'Driver', 'TOOL KEEPER'].every(r => meal.mealCatGuess(r) === 'ADMIN'));
+ck('everyone else is skilled manpower', meal.mealCatGuess('Welder') === 'SKILLED' && meal.mealCatGuess('Supervisor') === 'SKILLED');
+const mg = meal.mealGroups([
+  {role: 'Project Manager', pax: 1, days: 45, shift: 'regular_day'},
+  {role: 'Welder', pax: 8, days: 40, shift: 'regular_day'},
+  {role: 'Welder', pax: 8, days: 5, shift: 'sunday_day'},
+  {role: 'Rigger', pax: 2, days: 45, shift: 'regular_day'},
+  {role: 'Admin', pax: 1, days: 45, shift: 'regular_day'}
+], {RIGGER: 'ADMIN'});
+ck('pax per category is the consolidated crew', mg.PM.pax === 1 && mg.SKILLED.pax === 8 && mg.ADMIN.pax === 3, JSON.stringify(mg));
+ck('days are man-days over pax -- the shifts duration', mg.SKILLED.days === 45 && mg.ADMIN.days === 45);
+ck('the CE can move a role to another category', mg.ADMIN.pax === 3);
+ck('a Miscellaneous line with days is qty x cost x days', meal.miscRowCost({qty: 21, cost: 320, days: 45}) === 302400);
+ck('and without days it costs what it always did', meal.miscRowCost({qty: 2, cost: 500}) === 1000);
+ck('mob / demob and accommodation meal lines stay in sync', /setMobVehicles\(p => syncMealRows\(p, false, 'rate', false\)\)/.test(app) && /syncMealRows\(a, false, 'cost', true\)/.test(app));
+
 console.log('\nexports:');
 ck('the CE workbook has a MOB-DEMOB sheet', /sheets\.push\(\{name: 'MOB-DEMOB'/.test(app));
 ck('the plain workbook has a Mobilization sheet', /sheet\('Mobilization', a => \{/.test(app));

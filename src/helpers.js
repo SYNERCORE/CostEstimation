@@ -236,6 +236,12 @@ function toolPowerCost(row, kwhRate) {
    that shows a row total -- the editor, the printed CE, both exports and the
    grand total -- goes through this one function, so none of them can disagree
    about whether power was counted. */
+/* A Miscellaneous line: qty x unit cost x days. Days is optional -- every
+   row written before it existed has none and costs qty x cost, as before. */
+function miscRowCost(r) {
+  if (!r) return 0;
+  return N(r.qty) * N(r.cost) * (N(r.days) || 1);
+}
 function toolRowTotal(row, kwhRate, src) {
   return toolRowCost(row, src) + toolPowerCost(row, kwhRate);
 }
@@ -293,6 +299,33 @@ function consolidateCrew(mp) {
   });
   return out.map(g => ({ role: g.role, pax: g.day + g.night, rate: g.rate }));
 }
+/* Food allowance is paid at three rates -- project manager, admin staff and
+   skilled manpower. A role's category is the CE's own choice (info.mealCats)
+   and otherwise a guess from its name. */
+const MEAL_CATS = [['PM', 'MEAL ALLOWANCE (PM)'], ['ADMIN', 'MEAL ALLOWANCE (ADMIN)'], ['SKILLED', 'MEAL ALLOWANCE (SKILLED MANPOWER)']];
+function mealCatGuess(role) {
+  const r = String(role || '').toUpperCase();
+  if (/PROJECT\s*MANAGER|\bPM\b/.test(r)) return 'PM';
+  if (/ADMIN|DOCUMENT|DOC\.?\s*CON|TIME\s*KEEP|DRIVER|TOOL\s*KEEP|WAREHOUSE|STORE\s*KEEP|SECRETARY|CLERK|PURCHAS|ACCOUNT|LIAISON|HR\b/.test(r)) return 'ADMIN';
+  return 'SKILLED';
+}
+/* Headcount and duration per category, from the manpower. Pax is the
+   consolidated crew (most on a day shift + most on a night shift, per role);
+   days is man-days / pax, the same DAYS rule Benefits & Others uses, so a
+   category on site 45 days reads 45 however the shifts split them. */
+function mealGroups(mp, cats) {
+  const map = cats || {};
+  const catOf = role => map[String(role || '').trim().toUpperCase()] || mealCatGuess(role);
+  const g = {};
+  MEAL_CATS.forEach(([k]) => { g[k] = { pax: 0, manDays: 0, days: 0 }; });
+  consolidateCrew(mp).forEach(c => { g[catOf(c.role)].pax += c.pax; });
+  (Array.isArray(mp) ? mp : []).forEach(r => {
+    if (!String((r && r.role) || '').trim()) return;
+    g[catOf(r.role)].manDays += (N(r.pax) || 1) * (N(r.days) || 1);
+  });
+  Object.keys(g).forEach(k => { g[k].days = g[k].pax ? Math.round(g[k].manDays / g[k].pax * 100) / 100 : 0; });
+  return g;
+}
 function computeCEGrand(ce) {
   if (!ce) return 0;
   const cfg = (typeof CE_CFG !== 'undefined' && CE_CFG[ce.ceType]) || {};
@@ -309,7 +342,7 @@ function computeCEGrand(ce) {
   const ppeT = arr(ce.ppe).reduce((s, r) => s + N(r.qty) * N(r.cost), 0);
   const miscT = Object.keys(ce.misc || {}).reduce((s, k) => {
     if (k.charAt(0) === '_') return s; /* _addlCosts / _margin are not costs */
-    return s + arr((ce.misc || {})[k]).reduce((t, r) => t + N(r.qty) * N(r.cost), 0);
+    return s + arr((ce.misc || {})[k]).reduce((t, r) => t + miscRowCost(r), 0);
   }, 0);
   const veh = rows => arr(rows).reduce((s, r) => s + mobRowCost(r, _rates), 0);
   const mobT = cfg.mobDemob ? veh(ce.mobVehicles) + veh(ce.demobVehicles) : 0;

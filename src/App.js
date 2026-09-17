@@ -1259,7 +1259,7 @@ function App({
   const ppeT = useMemo(() => ppe.reduce((s, r) => s + N(r.qty) * N(r.cost), 0), [ppe]);
   const miscT = useMemo(() => (MISC_DEF[ceType] || MISC_DEF['onsite']).reduce((s, [k]) => {
     const arr = Array.isArray(misc[k]) ? misc[k] : [];
-    return s + arr.reduce((t, r) => t + N(r.qty) * N(r.cost), 0);
+    return s + arr.reduce((t, r) => t + miscRowCost(r), 0);
   }, 0), [misc, ceType]);
   const mobVehiclesT = useMemo(() => mobVehicles.reduce((s, r) => s + mobRowCost(r, rr), 0), [mobVehicles, rr]);
   const demobVehiclesT = useMemo(() => demobVehicles.reduce((s, r) => s + mobRowCost(r, rr), 0), [demobVehicles, rr]);
@@ -1285,6 +1285,43 @@ function App({
     setMobVehicles(p => syncCrewRows(p, false));
     setDemobVehicles(p => syncCrewRows(p, false));
   }, [mp]);
+  /* Food allowance, one line per category, counted from the crew. In
+     mobilization / demobilization it covers the travel days only (days are the
+     estimator's, default 1); in Accommodation it covers the stay, so days come
+     from the shifts. The unit rate comes from the Masterlist item of the same
+     name, or stays as typed if there is none. rateKey: 'rate' on the mob lists,
+     'cost' on Miscellaneous. */
+  const mealRate = label => {
+    const m = ((masterlist && masterlist.vehicles) || []).find(v => String(v.desc || '').trim().toUpperCase() === label);
+    return m ? N(m.rate || m.cost) : 0;
+  };
+  const syncMealRows = (list, create, rateKey, stayDays) => {
+    const autos = list.filter(r => r.kind === 'meal' && r.auto);
+    if (!autos.length && !create) return list;
+    const prev = {};
+    autos.forEach(r => { prev[String(r.desc || '').toUpperCase()] = r; });
+    const g = mealGroups(mp, info.mealCats);
+    const next = MEAL_CATS.filter(([k]) => g[k].pax > 0).map(([k, label]) => {
+      const p = prev[label];
+      return { id: p ? p.id : uid(), kind: 'meal', auto: true, desc: label, qty: g[k].pax, uom: 'PAX',
+        days: stayDays ? g[k].days : (p ? p.days : 1),
+        /* Priced from the Masterlist once, when the line is first made; after
+           that it is the CE's own figure (a CE never silently reprices). */
+        [rateKey]: p ? N(p[rateKey]) : mealRate(label) };
+    });
+    const sig = rs => JSON.stringify(rs.map(r => [r.id, r.desc, r.qty, r.days, r[rateKey]]));
+    if (!create && sig(next) === sig(autos)) return list;
+    return [...list.filter(r => !(r.kind === 'meal' && r.auto)), ...next];
+  };
+  React.useEffect(() => {
+    setMobVehicles(p => syncMealRows(p, false, 'rate', false));
+    setDemobVehicles(p => syncMealRows(p, false, 'rate', false));
+    setMisc(p => {
+      const a = Array.isArray(p.accommodation) ? p.accommodation : [];
+      const n = syncMealRows(a, false, 'cost', true);
+      return n === a ? p : { ...p, accommodation: n };
+    });
+  }, [mp, info.mealCats]);
   const mobSubT = mobVehiclesT;
   const demobSubT = demobVehiclesT;
   const mobT = cfg.mobDemob ? mobSubT + demobSubT : 0;
@@ -1303,6 +1340,7 @@ function App({
        from the masterlist when it was added, so a later masterlist change
        cannot silently re-price a CE that has already been quoted. */
     if (kind === 'tools') return toolRowTotal(r, kwhRate);
+    if (kind === 'misc') return miscRowCost(r);
     if (kind !== 'mp') return N(r.qty) * N(r.cost);
     if (!r.role) return 0; /* blank row: no role, no cost (calcBen SIL adds pax*30) */
     /* Wage from mpWage, benefits from calcBen -- the same two the subtotals
@@ -1354,10 +1392,10 @@ function App({
     (MISC_DEF[ceType] || MISC_DEF['onsite']).forEach(([key, lbl]) => {
       const nm = lbl.replace(/^[A-Z]\.\d+\s*/, '');
       const arr = Array.isArray(misc[key]) ? misc[key] : [];
-      o.push({ k: 'miscCat:' + key, g: 'Misc Categories', l: nm, v: arr.reduce((s, r) => s + N(r.qty) * N(r.cost), 0) });
+      o.push({ k: 'miscCat:' + key, g: 'Misc Categories', l: nm, v: arr.reduce((s, r) => s + miscRowCost(r), 0) });
       arr.forEach((r, i) => {
         if (!r.desc) return;
-        o.push({ k: 'miscRow:' + key + ':' + (r.id || i), g: 'Line Items · Miscellaneous', l: nm + ' → ' + r.desc, v: N(r.qty) * N(r.cost) });
+        o.push({ k: 'miscRow:' + key + ':' + (r.id || i), g: 'Line Items · Miscellaneous', l: nm + ' → ' + r.desc, v: miscRowCost(r) });
       });
     });
     return o;
@@ -2660,10 +2698,10 @@ function App({
       const s = head('MISCELLANEOUS');
       cats.forEach(cat => {
         s.push([S(cat.letter + '  ' + cat.label, 'sec')]);
-        s.push(['ITEM', 'DESCRIPTION', 'QTY', 'UOM', '', 'UNIT PRICE', 'TOTAL'].map(h => S(h, 'th')));
+        s.push(['ITEM', 'DESCRIPTION', 'QTY', 'UOM', 'NO. OF DAYS', 'UNIT PRICE', 'TOTAL'].map(h => S(h, 'th')));
         cat.rows.forEach((r, i) => s.push([
-          S(i + 1, 'tdc'), S(r.desc || '', 'td'), S(N(r.qty) || 1, 'tdc'), S(r.uom || 'Lot', 'tdc'), S('', 'tdc'),
-          S(N(r.cost), 'tdn'), S(N(r.qty) * N(r.cost), 'tdnb')]));
+          S(i + 1, 'tdc'), S(r.desc || '', 'td'), S(N(r.qty) || 1, 'tdc'), S(r.uom || 'Lot', 'tdc'), S(N(r.days) || 1, 'tdc'),
+          S(N(r.cost), 'tdn'), S(miscRowCost(r), 'tdnb')]));
         s.push([S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('SUB TOTAL:', 'totlbl'), S(N(cat.v), 'tot')]);
         s.push([]);
       });
@@ -5694,7 +5732,7 @@ function App({
       const toolT = (ce.tools||[]).reduce((s,r)=>s+N(r.qty)*resDays(r)*N(r.cost),0);
       const matT = (ce.mats||[]).reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
       const ppeT = (ce.ppe||[]).reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
-      const miscT = Object.values(ce.misc||{}).flat().reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
+      const miscT = Object.values(ce.misc||{}).flat().reduce((s,r)=>s+miscRowCost(r),0);
       const grand = mpT+toolT+matT+ppeT+miscT;
       return {mpT,toolT,matT,ppeT,miscT,grand};
     };
@@ -7059,7 +7097,7 @@ function App({
          no longer match anything; the section's real letter is prefixed below. */
       label: String(l).replace(/^[A-Z]\.\d+\s*/, ''),
       rows: (Array.isArray(misc[k]) ? misc[k] : []).filter(r => r && (r.desc || N(r.cost) > 0)),
-      v: (Array.isArray(misc[k]) ? misc[k] : []).reduce((t, r) => t + N(r.qty) * N(r.cost), 0)
+      v: (Array.isArray(misc[k]) ? misc[k] : []).reduce((t, r) => t + miscRowCost(r), 0)
     })).filter(x => x.v > 0).map((x, j) => ({...x, letter: parent.replace('.', '') + '.' + (j + 1)}));
   }, [ceSections, ceType, misc]);
   /* One colour per cost group, matched to the tab each is costed on, so the
@@ -7240,9 +7278,9 @@ function App({
     const miscPage=miscItems.length?`<div class="blk">
       <div class="sec">MISCELLANEOUS</div>
       ${miscItems.map(cat=>`<div class="sub">${cat.letter}&nbsp;&nbsp;${esc(cat.label)}</div>
-      <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:35px">QTY</th><th class="c" style="width:35px">UOM</th><th class="r" style="width:80px">UNIT PRICE</th><th class="r" style="width:80px">TOTAL</th></tr>
-      ${cat.rows.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.uom||'Lot')}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(N(r.qty)*N(r.cost))}</td></tr>`).join('')}
-      <tr class="tot"><td colspan="5" class="r b">SUB TOTAL:</td><td class="r b">${fmt(cat.v)}</td></tr></table>`).join('')}
+      <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:35px">QTY</th><th class="c" style="width:35px">UOM</th><th class="c" style="width:36px">NO. OF DAYS</th><th class="r" style="width:80px">UNIT PRICE</th><th class="r" style="width:80px">TOTAL</th></tr>
+      ${cat.rows.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.uom||'Lot')}</td><td class="c">${esc(N(r.days)||1)}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(miscRowCost(r))}</td></tr>`).join('')}
+      <tr class="tot"><td colspan="6" class="r b">SUB TOTAL:</td><td class="r b">${fmt(cat.v)}</td></tr></table>`).join('')}
       <div class="tot" style="text-align:right;padding:3px 4px;font-weight:bold">MISCELLANEOUS TOTAL: ${fmt(miscT)}</div></div>` : '';
 
     /* The summary and the scope of work each get a sheet of their own; the
@@ -7557,17 +7595,17 @@ function App({
     const miscCatsX = (MISC_DEF[ceType] || MISC_DEF.onsite);
     const miscAny = miscCatsX.some(([k]) => (Array.isArray(misc[k]) ? misc[k] : []).some(r => r.desc));
     if (miscAny) sheet('Miscellaneous', a => {
-      docHead(a, 'MISCELLANEOUS', 6);
+      docHead(a, 'MISCELLANEOUS', 7);
       miscCatsX.forEach(([k, label]) => {
         const rows = (Array.isArray(misc[k]) ? misc[k] : []).filter(r => r.desc);
         if (!rows.length) return;
-        a.title(label, 6);
-        a.head('ITEM', 'DESCRIPTION', 'QTY', 'UOM', 'UNIT PRICE', 'TOTAL');
-        rows.forEach((r, i) => a.row(i + 1, r.desc, N(r.qty), r.uom || 'Lot', a.money(r.cost), a.money(N(r.qty) * N(r.cost))));
-        a.total('', 'SUB TOTAL:', '', '', '', a.money(rows.reduce((s2, r) => s2 + N(r.qty) * N(r.cost), 0)));
+        a.title(label, 7);
+        a.head('ITEM', 'DESCRIPTION', 'QTY', 'UOM', 'NO. OF DAYS', 'UNIT PRICE', 'TOTAL');
+        rows.forEach((r, i) => a.row(i + 1, r.desc, N(r.qty), r.uom || 'Lot', N(r.days) || 1, a.money(r.cost), a.money(miscRowCost(r))));
+        a.total('', 'SUB TOTAL:', '', '', '', '', a.money(rows.reduce((s2, r) => s2 + miscRowCost(r), 0)));
         a.blank();
       });
-      a.row('', 'MISCELLANEOUS TOTAL:', '', '', '', a.money(miscT));
+      a.row('', 'MISCELLANEOUS TOTAL:', '', '', '', '', a.money(miscT));
     });
 
     /* ── Scope of work, numbered as the CE prints it ── */
@@ -9800,7 +9838,7 @@ tab === 'dashboard' && (() => {
           E("span", { style: { fontSize: 11, fontWeight: 700, color: color || ACC, letterSpacing: .5 } }, "MANPOWER"),
           E("div", { style: { display: 'flex', gap: 6 } },
             E("button", { style: btn('acc', true), title: 'One line per role from the Manpower in the SOW Breakdown -- the most pax on any day shift plus any night shift. It stays in sync as the crew changes; days and OT hours are yours to set.',
-              onClick: () => { if (!consolidateCrew(mp).length) { showToast('No manpower in the SOW Breakdown yet.', true); return; } setRows(p => syncCrewRows(p, true)); } }, rows.some(r => r.auto) ? "⟳ Re-sync crew from SOW" : "⟳ Crew from SOW Breakdown"),
+              onClick: () => { if (!consolidateCrew(mp).length) { showToast('No manpower in the SOW Breakdown yet.', true); return; } setRows(p => syncMealRows(syncCrewRows(p, true), true, 'rate', false)); } }, rows.some(r => r.auto) ? "⟳ Re-sync crew from SOW" : "⟳ Crew from SOW Breakdown"),
             E("button", { style: btn('def', true), onClick: () => setRows(p => [...p, { id: uid(), kind: 'mp', desc: '', qty: 1, days: 1, rate: 0, otHours: 0 }]) }, "+ Add Manpower"))),
         rows.length === 0 ? E("div", { style: { textAlign: 'center', padding: '10px 0', color: MT, fontSize: 12, border: '1px dashed ' + BDR, borderRadius: 6 } }, "No manpower charged to this stage.") :
         E("div", { style: { overflowX: 'auto' } }, E("table", { style: { width: '100%', borderCollapse: 'collapse', fontSize: 12 } },
@@ -9819,6 +9857,16 @@ tab === 'dashboard' && (() => {
               E("td", { style: { ...TDS, ...MONO, color: tot > 0 ? color || ACC : MT, fontWeight: 700, textAlign: 'right', minWidth: 100 } }, "P", ph(tot)),
               E("td", { style: TDS }, E("button", { onClick: () => setRows(p => p.filter(x => x.id !== r.id)), style: { background: 'none', border: 'none', color: ERR, cursor: 'pointer', fontSize: 15, padding: '1px 5px' } }, "x")));
           }))),
+          idPfx === 'mm' && rows.some(r => r.auto) && E("div", { style: { marginTop: 10, fontSize: 11, color: MT, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' } },
+            E("span", { title: 'Which food allowance rate each role is paid. Used by the meal lines here, in Demobilization and in Accommodation.' }, "Food allowance category:"),
+            consolidateCrew(mp).map(c => {
+              const key = c.role.toUpperCase();
+              const cur = (info.mealCats || {})[key] || mealCatGuess(c.role);
+              return E("label", { key, style: { display: 'inline-flex', gap: 4, alignItems: 'center', border: '1px solid ' + BDR, borderRadius: 5, padding: '1px 4px' } }, c.role,
+                E("select", { style: { ...INP, width: 'auto', fontSize: 10, padding: '1px 2px' }, value: cur,
+                  onChange: e => { const v = e.target.value; setInfo(p => ({ ...p, mealCats: { ...(p.mealCats || {}), [key]: v } })); } },
+                  E("option", { value: 'PM' }, "PM"), E("option", { value: 'ADMIN' }, "Admin"), E("option", { value: 'SKILLED' }, "Skilled")));
+            })),
           E("div", { style: { textAlign: 'right', marginTop: 8, paddingTop: 8, borderTop: '1px solid ' + BDR, color: color || ACC, fontWeight: 700, fontSize: 12 } },
             "Sub total: ", E("span", { style: MONO }, rows.reduce((s, r) => s + N(r.qty), 0) + " pax · P" + ph(rows.reduce((s, r) => s + mobRowCost(r, rr), 0))))));
     };
@@ -11034,7 +11082,7 @@ tab === 'dashboard' && (() => {
     masterlist, showToast, setPicker
   }), tab === 'misc' && /*#__PURE__*/React.createElement("div", null, (MISC_DEF[ceType] || MISC_DEF.onsite).map(([miscKey, label]) => {
     const rows = Array.isArray(misc[miscKey]) ? misc[miscKey] : [];
-    const catTotal = rows.reduce((s, r) => s + N(r.qty) * N(r.cost), 0);
+    const catTotal = rows.reduce((s, r) => s + miscRowCost(r), 0);
     const addItem = () => setMisc(p => ({
       ...p,
       [miscKey]: [...(Array.isArray(p[miscKey]) ? p[miscKey] : []), mkMiscRow()]
@@ -11097,7 +11145,11 @@ tab === 'dashboard' && (() => {
           }]
         }))
       })
-    }, "From Masterlist"), /*#__PURE__*/React.createElement("button", {
+    }, "From Masterlist"), miscKey === 'accommodation' && /*#__PURE__*/React.createElement("button", {
+      style: btn('acc', true),
+      title: 'Meal allowance per category (PM, admin, skilled manpower): pax from the crew, days from the shifts. Stays in sync with the Manpower.',
+      onClick: () => { if (!consolidateCrew(mp).length) { showToast('No manpower yet.', true); return; } setMisc(p => ({ ...p, accommodation: syncMealRows(Array.isArray(p.accommodation) ? p.accommodation : [], true, 'cost', true) })); }
+    }, "🍽 Food allowance from crew"), /*#__PURE__*/React.createElement("button", {
       style: btn('def', true),
       onClick: addItem
     }, "+ Add"))), rows.length === 0 && /*#__PURE__*/React.createElement("div", {
@@ -11119,16 +11171,16 @@ tab === 'dashboard' && (() => {
         borderCollapse: 'collapse',
         fontSize: 12
       }
-    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['#', 'Description', 'Qty', 'UOM', 'Unit Cost (P)', 'Total', ''].map(h => /*#__PURE__*/React.createElement("th", {
+    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['#', 'Description', 'Qty', 'UOM', 'Days', 'Unit Cost (P)', 'Total', ''].map(h => /*#__PURE__*/React.createElement("th", {
       key: h,
       style: THS
     }, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map((r, _ix) => {
-      const tot = N(r.qty) * N(r.cost);
+      const tot = miscRowCost(r);
       return /*#__PURE__*/React.createElement("tr", {
         key: r.id
       }, /*#__PURE__*/React.createElement("td", { style: { ...TDS, ...MONO, color: MT, textAlign: 'center', width: 28 } }, _ix + 1), /*#__PURE__*/React.createElement("td", {
         style: TDS
-      }, /*#__PURE__*/React.createElement("input", {
+      }, r.auto && /*#__PURE__*/React.createElement("span", { title: 'Counted from the crew -- follows the Manpower', style: { float: 'right', marginTop: 6, fontSize: 9, fontWeight: 700, color: OK, border: '1px solid ' + alpha(OK, '66'), borderRadius: 4, padding: '0 4px' } }, "CREW"), /*#__PURE__*/React.createElement("input", {
         style: {
           ...INP,
           minWidth: 195
@@ -11171,6 +11223,13 @@ tab === 'dashboard' && (() => {
         value: r.uom || 'Lot',
         onChange: e => updItem(r.id, 'uom', e.target.value)
       }, uomOptionEls(r.uom || 'Lot'))), /*#__PURE__*/React.createElement("td", {
+        style: TDS
+      }, /*#__PURE__*/React.createElement(NumBox, {
+        style: { ...INP, ...MONO, width: 58 },
+        min: 1,
+        value: r.days || 1,
+        onCommit: v => updItem(r.id, 'days', v)
+      })), /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, /*#__PURE__*/React.createElement(NumBox, {
         style: {

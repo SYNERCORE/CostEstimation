@@ -1474,6 +1474,35 @@ function App({
      sub-task (or a main task with no subs) the roll-up is just its own. */
   const taskCostRollup = item => sowTaskGroup(item).reduce((s, id) => s + taskCost(id), 0);
   const taskResCountRollup = item => sowTaskGroup(item).reduce((s, id) => s + taskResCount(id), 0);
+  /* ── Services summary ────────────────────────────────────────────────────
+     Some clients want the total restated by service -- SAND BLASTING WORKS,
+     WELDING WORKS... -- under the cost summary. A main scope item names the
+     service it belongs to (`group`); its sub-items come with it. Several
+     items may share one group, and the lines print in the order their first
+     item appears in the scope.
+
+     "Other misc. to the project" is whatever the named services do not
+     carry: unlinked rows, mob/demob, anything costed to an ungrouped item.
+     It is the remainder of the grand total rather than a sum of its own, so
+     the services always add back to the cost total. The one way that can
+     fail is a remainder below zero, which would mean a row was counted into
+     two services -- that is reported, and the block does not print. */
+  const servicesSummary = (() => {
+    const lines = [];
+    (sowItems || []).forEach(it => {
+      if (it.type !== 'main') return;
+      const g = String(it.group || '').trim();
+      if (!g) return;
+      const key = g.toUpperCase();
+      let l = lines.find(x => x.key === key);
+      if (!l) lines.push(l = { key, label: g, v: 0, items: [] });
+      l.v += taskCostRollup(it);
+      l.items.push(it.id);
+    });
+    const named = lines.reduce((t, l) => t + l.v, 0);
+    const other = grand - named;
+    return { lines, other, total: grand, ok: other > -0.005, on: !!info.showServices && lines.length > 0 };
+  })();
   const sowUnassignedCount = (() => {
     const valid = new Set((sowItems || []).map(s => s.id));
     const bad = r => !r.taskId || !valid.has(r.taskId);
@@ -2451,6 +2480,13 @@ function App({
       sum.push([]);
       sum.push([S('HIGHLIGHTED COSTS (already included above)', 'sec')]);
       hlRows.forEach(r => sum.push([S('', 'tdc'), S(hlLabel(r).toUpperCase(), 'td', 4), null, null, null, null, S(N(hlAmt(r)), 'tdn')]));
+    }
+    if (servicesSummary.on && servicesSummary.ok) {
+      sum.push([]);
+      sum.push([S('SERVICES', 'sec')]);
+      servicesSummary.lines.forEach(l => sum.push([S('', 'tdc'), S(l.label.toUpperCase() + ':', 'td', 4), null, null, null, null, S(N(l.v), 'tdn')]));
+      if (Math.abs(servicesSummary.other) >= 0.005) sum.push([S('', 'tdc'), S('OTHER MISC. TO THE PROJECT:', 'td', 4), null, null, null, null, S(N(servicesSummary.other), 'tdn')]);
+      sum.push([S('', 'totlbl'), S('SERVICES TOTAL AMOUNT:', 'totlbl', 4), null, null, null, null, S(N(servicesSummary.total), 'tot')]);
     }
     const sowNotes = (sowItems || []).filter(x => String(x.note || '').trim());
     const noteLines = [...notes.map(n => String(n.text || '')),
@@ -6932,6 +6968,10 @@ function App({
       ${showUnitP ? `<tr class="tot"><td colspan="2" class="b r">UNIT PRICE (qty ${N(info.qty)||1}):</td><td class="r b">${fmt(unitP)}</td></tr>` : ''}
       ${margin !== 0 ? `<tr class="tot" style="background:#e8f5e9"><td colspan="2" class="b r">SELLING PRICE (${margin > 0 ? '+' : ''}${margin}% margin):</td><td class="r b">${fmt(grand*(1+margin/100))}</td></tr>` : ''}
       ${hlRows.length ? hlRows.map(r=>`<tr class="tot"><td colspan="2" class="b r">${esc(hlLabel(r).toUpperCase())}:</td><td class="r b">${fmt(hlAmt(r))}</td></tr>`).join('') : ''}
+      ${servicesSummary.on && servicesSummary.ok ? `<tr><td colspan="3" class="c b" style="background:#ddd">SERVICES</td></tr>
+      ${servicesSummary.lines.map(l=>`<tr><td colspan="2" class="b r">${esc(l.label.toUpperCase())}:</td><td class="r">${fmt(l.v)}</td></tr>`).join('')}
+      ${Math.abs(servicesSummary.other) >= 0.005 ? `<tr><td colspan="2" class="b r">OTHER MISC. TO THE PROJECT:</td><td class="r">${fmt(servicesSummary.other)}</td></tr>` : ''}
+      <tr class="tot"><td colspan="2" class="b r" style="font-size:9pt">SERVICES TOTAL AMOUNT:</td><td class="r b" style="font-size:9pt">${fmt(servicesSummary.total)}</td></tr>` : ''}
     </table>`;
 
     /* Breakdown notes written on the SOW Breakdown tab print with the CE notes,
@@ -7191,6 +7231,13 @@ function App({
       if (showUnitP) a.total('', 'UNIT PRICE (qty ' + (N(info.qty) || 1) + '):', a.money(unitP));
       if (margin !== 0) a.total('', 'SELLING PRICE (' + (margin > 0 ? '+' : '') + margin + '% margin):', a.money(grand * (1 + margin / 100)));
       hlRows.forEach(r => a.total('', String(hlLabel(r)).toUpperCase() + ':', a.money(hlAmt(r))));
+      if (servicesSummary.on && servicesSummary.ok) {
+        a.blank();
+        a.title('SERVICES', 3);
+        servicesSummary.lines.forEach(l => a.row('', l.label.toUpperCase() + ':', a.money(l.v)));
+        if (Math.abs(servicesSummary.other) >= 0.005) a.row('', 'OTHER MISC. TO THE PROJECT:', a.money(servicesSummary.other));
+        a.total('', 'SERVICES TOTAL AMOUNT:', a.money(servicesSummary.total));
+      }
       /* Notes, including the breakdown notes, exactly as the CE prints them. */
       const sowNotes = (sowItems || []).filter(x => String(x.note || '').trim());
       if (notes.length || sowNotes.length) {
@@ -8472,6 +8519,10 @@ tab === 'sowbreak' && (() => {
       /*#__PURE__*/React.createElement("button", { style: btn('acc', true), onClick: () => setTab('sow') }, "Go to Scope of Work")
     ),
 
+    /* Groups already typed on this CE, offered back so one service is not
+       spelled three ways and printed as three lines. */
+    /*#__PURE__*/React.createElement("datalist", { id: 'svc-groups' },
+      [...new Set((sowItems || []).map(x => String(x.group || '').trim()).filter(Boolean))].map(g => /*#__PURE__*/React.createElement("option", { key: g, value: g }))),
     /* One card per scope task */
     (sowItems || []).map(it => {
       const n = taskResCount(it.id);
@@ -8497,6 +8548,16 @@ tab === 'sowbreak' && (() => {
             style: { fontWeight: it.type === 'main' ? 700 : 400, fontSize: it.type === 'main' ? 12 : 11.5, cursor: 'pointer' },
             onClick: () => setSbCollapsed(p => ({ ...p, [it.id]: open }))
           }, it.text || /*#__PURE__*/React.createElement("i", { style: { color: MT } }, "(untitled task)")),
+          /* The service this item is restated under on the CE's services
+             summary. Main items only: a sub-item goes where its parent goes. */
+          it.type === 'main' && /*#__PURE__*/React.createElement("input", {
+            list: 'svc-groups',
+            style: { ...INP, width: 170, fontSize: 10.5, padding: '2px 6px' },
+            value: it.group || '',
+            placeholder: "Service group…",
+            title: "Service group for the Services summary on the CE (e.g. WELDING WORKS). Items with the same group print as one line; sub-items follow their main item.",
+            onChange: e => { const v = e.target.value; setSowItems(p => p.map(x => x.id === it.id ? { ...x, group: v } : x)); }
+          }),
           /*#__PURE__*/React.createElement("span", { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 } },
             /* Collapsed cards hide the note, so flag that one exists. */
             String(it.note || '').trim() && /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: INFO }, title: String(it.note).trim() }, "📝"),
@@ -10909,6 +10970,33 @@ tab === 'dashboard' && (() => {
         /*#__PURE__*/React.createElement("b", {style:{color:grand<aiSuggest.grand*0.8?ERR:grand>aiSuggest.grand*1.2?ERR:OK}}, "₱"+ph(grand)),
         grand>0&&(grand<aiSuggest.grand*0.8||grand>aiSuggest.grand*1.2)?" — outside typical range ⚠":" — within typical range ✓"),
       /*#__PURE__*/React.createElement("button", {style:{...btn('def',true),fontSize:9,marginTop:6},onClick:()=>setAiSuggest(null)}, "✕ Dismiss")
+    )),
+  /* Services summary card -- per CE on/off, with the lines it will print */
+  /*#__PURE__*/React.createElement("div", {style:{...CS, marginBottom:10}},
+    /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',gap:8,marginBottom:4,flexWrap:'wrap'}},
+      /*#__PURE__*/React.createElement("label", {style:{display:'flex',alignItems:'center',gap:6,fontWeight:700,fontSize:12,cursor:'pointer'}},
+        /*#__PURE__*/React.createElement("input", {type:'checkbox', checked:!!info.showServices, onChange:e=>{const v=e.target.checked; setInfo(p=>({...p, showServices:v}));}}),
+        "Services summary on this CE"),
+      /*#__PURE__*/React.createElement("span", {style:{color:MT,fontSize:11}}, "— restate the total by service (Sand Blasting Works, Welding Works...) under the cost summary")
+    ),
+    /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:10,marginBottom:6,fontStyle:'italic'}},
+      "Name each main scope item's service group on the SOW Breakdown tab. Whatever no group carries prints as Other misc. to the project, so the services always add up to the Grand Total."),
+    info.showServices && (servicesSummary.lines.length === 0
+      ? /*#__PURE__*/React.createElement("div", {style:{color:ACC,fontSize:11}}, "No scope item has a service group yet, so nothing will print. ",
+          /*#__PURE__*/React.createElement("button", {style:{...btn('def',true),fontSize:10}, onClick:()=>setTab('sowbreak')}, "Go to SOW Breakdown"))
+      : /*#__PURE__*/React.createElement("table", {style:{width:'100%',borderCollapse:'collapse',fontSize:12}},
+          !servicesSummary.ok && /*#__PURE__*/React.createElement("caption", {style:{captionSide:'bottom',color:ERR,fontSize:11,textAlign:'left',paddingTop:4}},
+            "The services add up to more than the Grand Total, so a cost is being counted under two services. The block will not print until that is fixed."),
+          /*#__PURE__*/React.createElement("tbody", null,
+            servicesSummary.lines.map(l => /*#__PURE__*/React.createElement("tr", {key:l.key},
+              /*#__PURE__*/React.createElement("td", {style:{padding:'2px 4px'}}, l.label.toUpperCase(), /*#__PURE__*/React.createElement("span", {style:{color:MT,fontSize:10}}, "  (scope " + l.items.map(id => sowLabels[id] || '').join(', ') + ")")),
+              /*#__PURE__*/React.createElement("td", {style:{...MONO,textAlign:'right',padding:'2px 4px'}}, "₱" + ph(l.v)))),
+            /*#__PURE__*/React.createElement("tr", null,
+              /*#__PURE__*/React.createElement("td", {style:{padding:'2px 4px',color:MT}}, "OTHER MISC. TO THE PROJECT"),
+              /*#__PURE__*/React.createElement("td", {style:{...MONO,textAlign:'right',padding:'2px 4px',color:servicesSummary.ok?TX:ERR}}, "₱" + ph(servicesSummary.other))),
+            /*#__PURE__*/React.createElement("tr", {style:{borderTop:'1px solid ' + BDR,fontWeight:700}},
+              /*#__PURE__*/React.createElement("td", {style:{padding:'2px 4px'}}, "SERVICES TOTAL AMOUNT"),
+              /*#__PURE__*/React.createElement("td", {style:{...MONO,textAlign:'right',padding:'2px 4px'}}, "₱" + ph(servicesSummary.total)))))
     )),
   /* Highlighted Costs card — callouts of costs already counted in the CE */
   /*#__PURE__*/React.createElement("div", {style:{...CS, borderColor:'#F59E0B44', marginBottom:10}},

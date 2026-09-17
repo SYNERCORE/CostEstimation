@@ -166,6 +166,12 @@ function ceKwhRate(rates) {
 /* Power is charged on shopworks only, and the CE type is what says so -- not
    the presence of a kW figure on a row. The same welding machine on an onsite
    job runs on the client's supply, so its power is not ours to bill. */
+/* Whether this CE type pays the per-day Incentive. On unless the type says
+   otherwise, so a CE with no type prices as it always did. */
+function ceIncentiveOn(ceType) {
+  const c = (typeof CE_CFG !== 'undefined' && CE_CFG[ceType]) || {};
+  return c.incentive !== false;
+}
 function cePowerOn(ceType) {
   const c = (typeof CE_CFG !== 'undefined' && CE_CFG[ceType]) || {};
   return !!c.power;
@@ -193,7 +199,7 @@ function toolRowTotal(row, kwhRate, src) {
 function ceResDays(r) {
   return (r.days === undefined || r.days === null || r.days === '') ? 1 : (parseFloat(r.days) || 0);
 }
-function ceMpRowCost(r, rates) {
+function ceMpRowCost(r, rates, ceType) {
   if (!r || !r.role) return 0;
   /* Omitted, this resolves to the statutory defaults, so every caller that
      has not been given the CE's own rates still prices as it always did. */
@@ -208,7 +214,7 @@ function ceMpRowCost(r, rates) {
   const sss = rate * 0.25 * 0.75 * days * pax / 26;
   const hdmf = rate * 0.16 * days * pax / 26 * 2;
   const sil = rate * days * pax * 5 / 12 / 26 + pax * 30;
-  const perdiem = N(r.perDiem || 0) * days * pax;
+  const perdiem = ceIncentiveOn(ceType) ? N(r.perDiem || 0) * days * pax : 0;
   return reg + ot + thirteenth + sss + hdmf + sil + perdiem;
 }
 function computeCEGrand(ce) {
@@ -218,7 +224,7 @@ function computeCEGrand(ce) {
   /* The CE's own multipliers, so a recompute reproduces what it was quoted
      at rather than what today's rules would charge. */
   const _rates = ceRates(ce);
-  const mpT = arr(ce.mp).reduce((s, r) => s + ceMpRowCost(r, _rates), 0);
+  const mpT = arr(ce.mp).reduce((s, r) => s + ceMpRowCost(r, _rates, ce.ceType), 0);
   /* Through toolRowCost, so a tiered CE recomputes to what the editor shows.
      A row naming no tier is Tier 2, which is exactly the old expression. */
   const _kwh = cePowerOn(ce.ceType) ? ceKwhRate(_rates) : 0;

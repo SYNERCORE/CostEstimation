@@ -31,7 +31,7 @@ const RATES = grab(helpersSrc,
 const helper = new Function('N', 'SHIFTS', 'CE_CFG',
   RATES + '\n' +
   grab(helpersSrc, /function ceResDays\(r\) \{[\s\S]*?\n\}/, 'ceResDays') + '\n' + TIERS + '\n' +
-  grab(helpersSrc, /function ceMpRowCost\(r, rates\) \{[\s\S]*?\n\}/, 'ceMpRowCost') + '\n' +
+  grab(helpersSrc, /function ceMpRowCost\(r, rates, ceType\) \{[\s\S]*?\n\}/, 'ceMpRowCost') + '\n' +
   grab(helpersSrc, /function computeCEGrand\(ce\) \{[\s\S]*?\n\}/, 'computeCEGrand') + '\n' +
   'return { computeCEGrand, ceResDays, ceMpRowCost };'
 )(N, SHIFTS, CE_CFG);
@@ -43,6 +43,7 @@ const editor = new Function('N', 'SHIFTS', 'rr', 'kwhRate',
   RATES + '\n' +
   grab(helpersSrc, /function ceResDays\(r\) \{[\s\S]*?\n\}/, 'ceResDays') + '\n' + TIERS + '\n' +
   grab(appSrc, /const resDays = r => [^\n]*;/, 'resDays') + '\n' +
+  'const incOn = true;\n' +
   grab(appSrc, /const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen') + '\n' +
   /* The wage half of a manpower row, which rowCost now calls rather than
      carrying its own copy of. */

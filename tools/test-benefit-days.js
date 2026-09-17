@@ -40,14 +40,14 @@ const near = (a, b) => Math.abs(a - b) < 0.005;
 const grab = (re, what) => { const m = app.match(re); if (!m) { console.error('not found in src/App.js: ' + what); process.exit(1); } return m[0]; };
 
 /* The real calcBen and the real merge, lifted out of the component. */
-const body = grab(/const benefitRows = useMemo\(\(\) => \{[\s\S]*?\n  \}, \[mp\]\);/, 'benefitRows')
+const body = grab(/const benefitRows = useMemo\(\(\) => \{[\s\S]*?\n  \}, \[mp, incOn\]\);/, 'benefitRows')
   .replace(/^\s*const benefitRows = useMemo\(\(\) => \{/, '')
-  .replace(/\n\s*\}, \[mp\]\);$/, '');
-const make = new Function('N', 'mp',
+  .replace(/\n\s*\}, \[mp, incOn\]\);$/, '');
+const make = new Function('N', 'mp', 'incOn',
   grab(/const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen') + '\n' + body
 );
 const N = v => parseFloat(v) || 0;
-const rows = mp => make(N, mp);
+const rows = (mp, inc) => make(N, mp, inc !== false);
 
 /* The real shift keys -- regular_day, regular_night, sunday_day,
    sunday_night, holiday_day, holiday_night. The _night suffix is what
@@ -141,6 +141,15 @@ ck('so three day types carry P90 for one man',
   near(g.sil - (3 * 2500 * 5 / 12 / 26), 90), g.sil);
 ck('and the line says so rather than burying it',
   /P30 per person, charged once on each shift entry/.test(app));
+
+console.log('\nshop works pays no incentive:');
+const inc = [{role: 'WELDER', pax: 2, days: 10, rate: 900, perDiem: 200, shift: 'regular_day'}];
+ck('onsite charges it', near(rows(inc)[0].perdiem, 4000), rows(inc)[0].perdiem);
+ck('shop works does not', rows(inc, false)[0].perdiem === 0);
+ck('and the line total drops by exactly that', near(rows(inc)[0].total - rows(inc, false)[0].total, 4000));
+ck('shop works is configured off', /incentive: false/.test(fs.readFileSync(path.join(__dirname, '..', 'src', 'config.js'), 'utf8')));
+ck('the saved-CE recompute agrees', /const perdiem = ceIncentiveOn\(ceType\) \?/.test(fs.readFileSync(path.join(__dirname, '..', 'src', 'helpers.js'), 'utf8')));
+ck('and the column is not shown for it', /incOn && cell\(x\.perdiem/.test(app) && /\$\{incOn\?'<th class="r">INCENTIVE<\/th>':''\}/.test(app));
 
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nbenefit days OK');
 process.exit(bad ? 1 : 0);

@@ -1119,6 +1119,7 @@ function App({
 
      The premium still applies to the wage itself -- mpSub above multiplies by
      it. Only the benefits base drops it. */
+  const incOn = ceIncentiveOn(ceType);
   const calcBen = r => {
     const pax = N(r.pax),
       days = N(r.days),
@@ -1131,7 +1132,9 @@ function App({
        IndexedDB and as shicPerDiem in SharePoint. Everything a user reads
        says "Incentive"; the key keeps its old spelling so that no CE already
        on file has to be migrated to be read back. */
-    const perdiem = N(r.perDiem || 0) * days * pax;
+    /* Not on shop work (CE_CFG.shopworks.incentive). The figure stays on the
+       row, so switching the CE back to onsite brings it back as it was. */
+    const perdiem = incOn ? N(r.perDiem || 0) * days * pax : 0;
     return {
       thirteenth,
       sss,
@@ -1223,7 +1226,7 @@ function App({
            and the tooltip is where that gets said. */
         daysVary: g.shiftDays.length > 1}))
       .filter(x => x.total > 0);
-  }, [mp]);
+  }, [mp, incOn]);
   const benefitsT = benefitRows.reduce((t, r) => t + r.total, 0);
   /* Tools & Equipment can be charged per day (crane, welding machine, ...).
      `days` is optional and defaults to 1, so any row that never sets it costs
@@ -5498,7 +5501,7 @@ function App({
       /* That CE's multipliers, not the open one's: comparing two estimates
          must price each at what it was quoted at. */
       const _r = ceRates(ce);
-      const mpT = (ce.mp||[]).reduce((s,r)=>s+N(r.pax)*N(r.days)*N(r.rate)*ceShiftMult(_r,r.shift)+N(r.pax)*N(r.days)*N(r.otHours)*(N(r.rate)/8)*ceOtMult(_r)+N(r.pax)*N(r.days)*N(r.perDiem),0);
+      const mpT = (ce.mp||[]).reduce((s,r)=>s+N(r.pax)*N(r.days)*N(r.rate)*ceShiftMult(_r,r.shift)+N(r.pax)*N(r.days)*N(r.otHours)*(N(r.rate)/8)*ceOtMult(_r)+(ceIncentiveOn(ce.ceType)?N(r.pax)*N(r.days)*N(r.perDiem):0),0);
       const toolT = (ce.tools||[]).reduce((s,r)=>s+N(r.qty)*resDays(r)*N(r.cost),0);
       const matT = (ce.mats||[]).reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
       const ppeT = (ce.ppe||[]).reduce((s,r)=>s+N(r.qty)*N(r.cost),0);
@@ -7004,8 +7007,8 @@ function App({
     /* Benefits &#8212; the same rows the Manpower tab shows */
     const benPage=benefitRows.length?`<div class="blk">
       <div class="sec">C.7 &nbsp;BENEFITS AND OTHERS</div>
-      <table><tr style="background:#eee"><th class="c">ITEM</th><th>MANPOWER LOADING</th><th class="c">QTY</th><th class="c">UOM</th><th class="c">TOTAL DAYS</th><th class="r">MONTHLY RATE</th><th class="r">13TH PAY</th><th class="r">SSS</th><th class="r">HDMF&amp;PHIC</th><th class="r">SIL&amp;ECC</th><th class="r">INCENTIVE</th><th class="r">TOTAL</th></tr>
-      ${benefitRows.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.role||'')}</td><td class="c">${esc(r.pax)}</td><td class="c">pax</td><td class="c">${esc(r.days)}</td><td class="r">${fmt(r.monthlyRate)}</td><td class="r">${fmt(r.thirteenth)}</td><td class="r">${fmt(r.sss)}</td><td class="r">${fmt(r.hdmf)}</td><td class="r">${fmt(r.sil)}</td><td class="r">${fmt(r.perdiem)}</td><td class="r b">${fmt(r.total)}</td></tr>`).join('')}
+      <table><tr style="background:#eee"><th class="c">ITEM</th><th>MANPOWER LOADING</th><th class="c">QTY</th><th class="c">UOM</th><th class="c">TOTAL DAYS</th><th class="r">MONTHLY RATE</th><th class="r">13TH PAY</th><th class="r">SSS</th><th class="r">HDMF&amp;PHIC</th><th class="r">SIL&amp;ECC</th>${incOn?'<th class="r">INCENTIVE</th>':''}<th class="r">TOTAL</th></tr>
+      ${benefitRows.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.role||'')}</td><td class="c">${esc(r.pax)}</td><td class="c">pax</td><td class="c">${esc(r.days)}</td><td class="r">${fmt(r.monthlyRate)}</td><td class="r">${fmt(r.thirteenth)}</td><td class="r">${fmt(r.sss)}</td><td class="r">${fmt(r.hdmf)}</td><td class="r">${fmt(r.sil)}</td>${incOn?`<td class="r">${fmt(r.perdiem)}</td>`:''}<td class="r b">${fmt(r.total)}</td></tr>`).join('')}
       <tr class="tot"><td colspan="11" class="r b">BENEFITS &amp; OTHERS SUB TOTAL:</td><td class="r b">${fmt(benefitsT)}</td></tr>
       <tr class="tot"><td colspan="11" class="r b">TOTAL MANPOWER COST (C.1-C.7):</td><td class="r b">${fmt(mpTot)}</td></tr></table></div>` : '';
 
@@ -7275,10 +7278,11 @@ function App({
       /* Benefits table, matching section C.7 on the printed form. */
       if (benefitRows.length) {
         a.title('BENEFITS AND OTHERS', 12);
-        a.head('ITEM', 'MANPOWER LOADING', 'QTY', 'UOM', 'TOTAL DAYS', 'MONTHLY RATE', '13TH PAY', 'SSS', 'HDMF & PHIC', 'SIL & ECC', 'INCENTIVE', 'TOTAL');
+        const _inc = incOn ? ['INCENTIVE'] : [];
+        a.head('ITEM', 'MANPOWER LOADING', 'QTY', 'UOM', 'TOTAL DAYS', 'MONTHLY RATE', '13TH PAY', 'SSS', 'HDMF & PHIC', 'SIL & ECC', ..._inc, 'TOTAL');
         benefitRows.forEach((r, i) => a.row(i + 1, r.role, r.pax, 'pax', r.days, a.money(r.monthlyRate),
-          a.money(r.thirteenth), a.money(r.sss), a.money(r.hdmf), a.money(r.sil), a.money(r.perdiem), a.money(r.total)));
-        a.total('', '', '', '', '', '', '', '', '', '', 'SUB TOTAL:', a.money(benefitsT));
+          a.money(r.thirteenth), a.money(r.sss), a.money(r.hdmf), a.money(r.sil), ...(incOn ? [a.money(r.perdiem)] : []), a.money(r.total)));
+        a.total('', '', '', '', '', '', '', '', '', ...(incOn ? [''] : []), 'SUB TOTAL:', a.money(benefitsT));
       }
       a.blank();
       a.total('', 'MANPOWER COST TOTAL:', '', '', '', '', '', '', '', a.money(mpTot));
@@ -10466,7 +10470,7 @@ tab === 'dashboard' && (() => {
       textAlign: 'right',
       width: 90
     }
-  }, "SIL & ECC"), /*#__PURE__*/React.createElement("th", {
+  }, "SIL & ECC"), incOn && /*#__PURE__*/React.createElement("th", {
     style: {
       ...THS,
       textAlign: 'right',
@@ -10546,7 +10550,7 @@ tab === 'dashboard' && (() => {
             title: 'SIL P' + ph(x.sil - x.pax * 30) + ' + ECC P' + ph(x.pax * 30) +
                    ' (P30 per person, charged once on each shift entry)'
           }, "P", ph(x.sil)),
-          cell(x.perdiem, {color: MT}),
+          incOn && cell(x.perdiem, {color: MT}),
           cell(x.total, {color: MT})
         )) : [];
       const head = /*#__PURE__*/React.createElement("tr", {
@@ -10573,7 +10577,7 @@ tab === 'dashboard' && (() => {
         }, g.days, g.daysVary ? ' *' : ''),
         cell(g.monthlyRate, {color: MT}),
         cell(g.thirteenth), cell(g.sss), cell(g.hdmf), cell(g.sil),
-        /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'right'}},
+        incOn && /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'right'}},
           rowIncentive === null
             ? /*#__PURE__*/React.createElement("span", {
                 style: {...MONO, color: MT, fontSize: 11},
@@ -10609,7 +10613,7 @@ tab === 'dashboard' && (() => {
       fontWeight: 700
     }
   }, /*#__PURE__*/React.createElement("td", {
-    colSpan: 11,
+    colSpan: incOn ? 11 : 10,
     style: {
       ...TDS,
       textAlign: 'right',

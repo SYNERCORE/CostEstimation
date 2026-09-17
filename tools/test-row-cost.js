@@ -38,7 +38,7 @@ const RATES = helpersSrc.match(
 /* kwhRate is the tariff rowCost charges tool power at. Zero here, which is
    what every non-shopworks CE carries -- so the assertions below are the
    rental-only figures they have always been. */
-const make = body => new Function('N', 'SHIFTS', 'sowItems', 'rr', 'kwhRate', RATES + NLC + TIERS + NLC + body);
+const make = body => new Function('N', 'SHIFTS', 'sowItems', 'rr', 'kwhRate', RATES + NLC + TIERS + NLC + 'const incOn = true;' + NLC + body);
 
 const api = make(`
   ${resDaysSrc}
@@ -271,7 +271,7 @@ const helpers = require('fs').readFileSync('src/helpers.js', 'utf8');
 /* ceMpRowCost takes the CE's own multipliers now. tools/test-editable-multipliers.js
    asserts numerically that a CE carrying none prices exactly as it did when
    they were constants. */
-const rowCost = (helpers.match(/function ceMpRowCost\(r, rates\) \{[\s\S]*?\n\}/) || [''])[0];
+const rowCost = (helpers.match(/function ceMpRowCost\(r, rates, ceType\) \{[\s\S]*?\n\}/) || [''])[0];
 check('the recompute path agrees with the editor', /rate = N\(r\.rate\);/.test(rowCost),
   'a CE reopened later would total differently from the one that was saved');
 check('and still pays the premium on the wage',

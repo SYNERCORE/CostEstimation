@@ -48,7 +48,7 @@ const grab = (re, what) => {
 };
 const mpWageSrc = grab(/const mpWageParts = r => \{[\s\S]*?\n  const mpWage = r => mpWageParts\(r\)\.total;/, 'mpWage');
 const calcBenSrc = grab(/const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen');
-const benRowsSrc = grab(/const benefitRows = useMemo\(\(\) => \{[\s\S]*?\n  \}, \[mp\]\);/, 'benefitRows');
+const benRowsSrc = grab(/const benefitRows = useMemo\(\(\) => \{[\s\S]*?\n  \}, \[mp, incOn\]\);/, 'benefitRows');
 const shiftSubSrc = grab(/const shiftSub = rows\.reduce\([^\n]*\);/, 'shiftSub');
 
 const sandbox = vm.createContext({console, useMemo: f => f()});
@@ -60,7 +60,7 @@ const mp = [{id: 'a', role: 'AUTOCAD OPERATOR', pax: 1, days: 1, rate: 650,
 const masterlist = {manpower: [{role: 'AUTOCAD OPERATOR', rate: 650, perDiem: 200}]};
 
 const build = extra => {
-  const s = Object.assign(vm.createContext({console, useMemo: f => f(), mp: extra || mp, masterlist,
+  const s = Object.assign(vm.createContext({console, useMemo: f => f(), mp: extra || mp, masterlist, incOn: true,
     rr: sandbox.ceRates({rates: {}})}), {});
   vm.runInContext(fs.readFileSync('src/config.js', 'utf8') + '\n' + helpers, s);
   vm.runInContext(mpWageSrc + '\n' + calcBenSrc + '\n' + benRowsSrc +
@@ -139,7 +139,7 @@ ck('the ML button still copies it', /perDiem: item\.perDiem \|\| 0/.test(app));
 ck('and so does Sync Rates',
   /rate: f\.rate, perDiem: f\.perDiem !== undefined \? f\.perDiem : r\.perDiem/.test(app));
 ck('the figure is copied onto the row, not read from the list when costing',
-  /const perdiem = N\(r\.perDiem \|\| 0\) \* days \* pax;/.test(app),
+  /const perdiem = incOn \? N\(r\.perDiem \|\| 0\) \* days \* pax : 0;/.test(app),
   'reading the list at cost time would let a Masterlist edit reprice a CE already sent out');
 ck('a row that disagrees with the Masterlist says so on the line',
   /mlIncentive !== null && mlIncentive !== rowIncentive/.test(app),

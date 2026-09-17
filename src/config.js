@@ -36,6 +36,9 @@ const CE_CFG = {
     mobDemob: true,
     docNo: "SHIC-F-TSG-025",
     hasConc: false,
+    /* Shop work is done in our own shop, not away on site, so there is no
+       site incentive to pay: the Incentive is not charged, and not shown. */
+    incentive: false,
     /* Shop work runs on the shop's own supply, so the electricity a tool draws
        is a cost we carry and bill. Onsite and supply run on the client's
        power, which is not ours to charge for. */

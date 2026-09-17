@@ -10656,7 +10656,22 @@ tab === 'dashboard' && (() => {
           padding: '1px 5px'
         }
       }, "x")));
-    })))), shiftSub > 0 && rows.length > 0 && /*#__PURE__*/React.createElement("div", {
+    })), /* SUB TOTAL for the shift, as the printed CE shows it: headcount under
+       PAX, cost under Row Total. */
+    rows.length > 0 && /*#__PURE__*/React.createElement("tfoot", null, /*#__PURE__*/React.createElement("tr", {
+      style: { borderTop: '2px solid ' + BDR }
+    }, /*#__PURE__*/React.createElement("td", {
+      style: { ...TDS, textAlign: 'right', fontWeight: 700, fontSize: 11, color: MT }
+    }, "SUB TOTAL:"), /*#__PURE__*/React.createElement("td", {
+      style: { ...TDS, ...MONO, fontWeight: 700, color: shiftColor, paddingLeft: 12 }
+    }, rows.reduce((t, r) => t + (String(r.role || '').trim() ? N(r.pax) : 0), 0), " pax"), /*#__PURE__*/React.createElement("td", {
+      colSpan: (sowItems || []).length ? 4 : 3,
+      style: TDS
+    }), /*#__PURE__*/React.createElement("td", {
+      style: { ...TDS, ...MONO, fontWeight: 700, color: shiftColor, textAlign: 'right' }
+    }, "₱", ph(shiftSub)), /*#__PURE__*/React.createElement("td", {
+      style: TDS
+    }))))), shiftSub > 0 && rows.length > 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         textAlign: 'right',
         marginTop: 8,

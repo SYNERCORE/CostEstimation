@@ -138,6 +138,8 @@ jobs:
         run: node tools/test-ce-requests.js
       - name: Shared CE sequence
         run: node tools/test-ce-seq-shared.js
+      - name: Mobilization manpower
+        run: node tools/test-mob-manpower.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents

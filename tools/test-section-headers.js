@@ -72,7 +72,7 @@ for (const t of ['Copy to shift:', 'Status Options'])
 
 console.log('\nthe asides from the mockups are there:');
 ck('the expense tables say how to add a charge',
-  (app.match(/"Add each charge as a separate line item"/g) || []).length === 2);
+  (app.match(/"Manpower and each charge as separate line items"/g) || []).length === 2);
 ck('and C.7 names its basis', /Standard Philippine mandated formula/.test(app));
 
 console.log('\ncards carry the spec chrome (DESIGN.md §3):');

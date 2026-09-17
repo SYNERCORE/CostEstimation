@@ -1261,8 +1261,8 @@ function App({
     const arr = Array.isArray(misc[k]) ? misc[k] : [];
     return s + arr.reduce((t, r) => t + N(r.qty) * N(r.cost), 0);
   }, 0), [misc, ceType]);
-  const mobVehiclesT = useMemo(() => mobVehicles.reduce((s, r) => s + N(r.qty) * N(r.days) * N(r.rate), 0), [mobVehicles]);
-  const demobVehiclesT = useMemo(() => demobVehicles.reduce((s, r) => s + N(r.qty) * N(r.days) * N(r.rate), 0), [demobVehicles]);
+  const mobVehiclesT = useMemo(() => mobVehicles.reduce((s, r) => s + mobRowCost(r, rr), 0), [mobVehicles, rr]);
+  const demobVehiclesT = useMemo(() => demobVehicles.reduce((s, r) => s + mobRowCost(r, rr), 0), [demobVehicles, rr]);
   const mobSubT = mobVehiclesT;
   const demobSubT = demobVehiclesT;
   const mobT = cfg.mobDemob ? mobSubT + demobSubT : 0;
@@ -1317,7 +1317,7 @@ function App({
         (rows || []).forEach((r, i) => {
           if (!r.desc) return;
           o.push({ k: 'row:' + kk + ':' + (r.id || i), g: 'Line Items · ' + nm, l: r.desc,
-                   v: N(r.qty) * N(r.days) * N(r.rate) });
+                   v: mobRowCost(r, rr) });
         });
       });
     }
@@ -7203,10 +7203,14 @@ function App({
     /* Mobilization and demobilization -- costed into the total but never
        printed, so the client saw a charge with no line saying what it was. */
     const mobRows=(rows)=>(rows||[]).filter(r=>String(r.desc||'').trim()||N(r.rate)>0);
-    const mobTable=(label,rows,tot)=>rows.length?`<div class="sub">${label}</div>
+    const _otMm=ceOtMult(rr);
+    const mobMpTable=(rows)=>{const m=rows.filter(r=>r.kind==='mp');return m.length?`<table><tr style="background:#eee"><th class="c" style="width:28px">ITEM</th><th>MANPOWER LOADING</th><th class="c" style="width:28px">QTY</th><th class="c" style="width:32px">UOM</th><th class="c" style="width:36px">NO. OF DAYS</th><th class="r" style="width:60px">RATE PER DAY</th><th class="r" style="width:66px">SUB-TOTAL A</th><th class="c" style="width:36px">OT HRS PER DAY</th><th class="r" style="width:55px">RATE OT/HR</th><th class="r" style="width:62px">SUB-TOTAL B</th><th class="r" style="width:70px">TOTAL</th></tr>
+      ${m.map((r,i)=>{const a=N(r.qty)*N(r.days)*N(r.rate),b=mobRowCost(r,rr)-a;return`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">PAX/S</td><td class="c">${esc(r.days||1)}</td><td class="r">${fmt(r.rate||0)}</td><td class="r">${fmt(a)}</td><td class="c">${esc(N(r.otHours))}</td><td class="r">${fmt(N(r.rate)/8*_otMm)}</td><td class="r">${fmt(b)}</td><td class="r b">${fmt(a+b)}</td></tr>`;}).join('')}
+      <tr class="tot"><td colspan="2" class="r b">SUB TOTAL:</td><td class="c b">${esc(m.reduce((s,r)=>s+N(r.qty),0))}</td><td colspan="7"></td><td class="r b">${fmt(m.reduce((s,r)=>s+mobRowCost(r,rr),0))}</td></tr></table>`:'';};
+    const mobTable=(label,all,tot)=>{const rows=all.filter(r=>r.kind!=='mp');return all.length?`<div class="sub">${label}</div>${mobMpTable(all)}${rows.length?`
       <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:35px">QTY</th><th class="c" style="width:36px">DAYS</th><th class="r" style="width:80px">RATE</th><th class="r" style="width:80px">TOTAL</th></tr>
       ${rows.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.days||1)}</td><td class="r">${fmt(r.rate||0)}</td><td class="r b">${fmt(N(r.qty)*N(r.days)*N(r.rate))}</td></tr>`).join('')}
-      <tr class="tot"><td colspan="5" class="r b">SUB TOTAL:</td><td class="r b">${fmt(tot)}</td></tr></table>`:'';
+      <tr class="tot"><td colspan="5" class="r b">SUB TOTAL:</td><td class="r b">${fmt(rows.reduce((s,r)=>s+mobRowCost(r,rr),0))}</td></tr></table>`:''}<div class="tot" style="text-align:right;padding:3px 4px;font-weight:bold">${label} TOTAL: ${fmt(tot)}</div>`:'';};
     const _mobR=mobRows(mobVehicles),_demobR=mobRows(demobVehicles);
     const mobPage=(_mobR.length||_demobR.length)?`<div class="blk">
       <div class="sec">MOBILIZATION / DEMOBILIZATION</div>
@@ -9696,6 +9700,37 @@ tab === 'dashboard' && (() => {
        again -- taking the focused input with it. That is why a rate had to be
        clicked once per character. It is called as a plain function instead,
        so the inputs are part of this render's own tree and keep their focus. */
+    /* Manpower charged to mobilization / demobilization: travel days, the
+       crew's first-day induction. Lives in the same list as the expenses,
+       marked kind 'mp'; the expense table below filters these out. */
+    const MobMpTable = ({ rows: all, setRows, idPfx, color }) => {
+      const rows = all.filter(r => r.kind === 'mp');
+      const otM = ceOtMult(rr);
+      const upd = (id, patch) => setRows(p => p.map(x => x.id === id ? { ...x, ...patch } : x));
+      const E = React.createElement;
+      const num = (r, k, w, min) => E("td", { style: TDS }, E(NumBox, { style: { ...INP, ...MONO, width: w }, min, value: r[k], onCommit: v => upd(r.id, { [k]: v }) }));
+      return E("div", { style: { marginBottom: 14 } },
+        E("div", { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 } },
+          E("span", { style: { fontSize: 11, fontWeight: 700, color: color || ACC, letterSpacing: .5 } }, "MANPOWER"),
+          E("button", { style: btn('def', true), onClick: () => setRows(p => [...p, { id: uid(), kind: 'mp', desc: '', qty: 1, days: 1, rate: 0, otHours: 0 }]) }, "+ Add Manpower")),
+        rows.length === 0 ? E("div", { style: { textAlign: 'center', padding: '10px 0', color: MT, fontSize: 12, border: '1px dashed ' + BDR, borderRadius: 6 } }, "No manpower charged to this stage.") :
+        E("div", { style: { overflowX: 'auto' } }, E("table", { style: { width: '100%', borderCollapse: 'collapse', fontSize: 12 } },
+          E("thead", null, E("tr", null, ['Manpower loading', 'Pax', 'Days', 'Rate/day (P)', 'OT hrs/day', 'Rate OT/hr', 'Total', ''].map(h => E("th", { key: h, style: THS }, h)))),
+          E("tbody", null, rows.map(r => {
+            const tot = mobRowCost(r, rr);
+            return E("tr", { key: r.id },
+              E("td", { style: TDS },
+                E("input", { style: { ...INP, minWidth: 200 }, list: idPfx + r.id, value: r.desc, placeholder: "e.g. Supervisor, Welder...",
+                  onChange: e => { const dv = e.target.value; const f = (masterlist.manpower || []).find(m => m.role === dv); upd(r.id, { desc: dv, ...(f ? { rate: f.rate } : {}) }); } }),
+                E("datalist", { id: idPfx + r.id }, (masterlist.manpower || []).map(m => E("option", { key: m.id || m.role, value: m.role })))),
+              num(r, 'qty', 52, 1), num(r, 'days', 52, 1), num(r, 'rate', 96, 0), num(r, 'otHours', 52, 0),
+              E("td", { style: { ...TDS, ...MONO, color: MT, textAlign: 'right' } }, "P", ph(N(r.rate) / 8 * otM)),
+              E("td", { style: { ...TDS, ...MONO, color: tot > 0 ? color || ACC : MT, fontWeight: 700, textAlign: 'right', minWidth: 100 } }, "P", ph(tot)),
+              E("td", { style: TDS }, E("button", { onClick: () => setRows(p => p.filter(x => x.id !== r.id)), style: { background: 'none', border: 'none', color: ERR, cursor: 'pointer', fontSize: 15, padding: '1px 5px' } }, "x")));
+          }))),
+          E("div", { style: { textAlign: 'right', marginTop: 8, paddingTop: 8, borderTop: '1px solid ' + BDR, color: color || ACC, fontWeight: 700, fontSize: 12 } },
+            "Sub total: ", E("span", { style: MONO }, rows.reduce((s, r) => s + N(r.qty), 0) + " pax · P" + ph(rows.reduce((s, r) => s + mobRowCost(r, rr), 0))))));
+    };
     const ExpenseTable = ({
       rows,
       setRows,
@@ -9884,8 +9919,13 @@ tab === 'dashboard' && (() => {
         ...CS,
         borderColor: alpha(INFO, '44')
       }
-    }, secHead("Mobilization Expenses", INFO, "Add each charge as a separate line item", {size: 11, mb: 12}), ExpenseTable({
+    }, secHead("Mobilization Expenses", INFO, "Manpower and each charge as separate line items", {size: 11, mb: 12}), MobMpTable({
       rows: mobVehicles,
+      setRows: setMobVehicles,
+      idPfx: "mm",
+      color: INFO
+    }), ExpenseTable({
+      rows: mobVehicles.filter(r => r.kind !== 'mp'),
       setRows: setMobVehicles,
       idPfx: "mv",
       color: INFO
@@ -9909,8 +9949,13 @@ tab === 'dashboard' && (() => {
         ...CS,
         borderColor: alpha(ACC, '44')
       }
-    }, secHead("Demobilization Expenses", ACC, "Add each charge as a separate line item", {size: 11, mb: 12}), ExpenseTable({
+    }, secHead("Demobilization Expenses", ACC, "Manpower and each charge as separate line items", {size: 11, mb: 12}), MobMpTable({
       rows: demobVehicles,
+      setRows: setDemobVehicles,
+      idPfx: "dm",
+      color: ACC
+    }), ExpenseTable({
+      rows: demobVehicles.filter(r => r.kind !== 'mp'),
       setRows: setDemobVehicles,
       idPfx: "dv",
       color: ACC

@@ -261,6 +261,17 @@ function ceMpRowCost(r, rates, ceType) {
   const perdiem = ceIncentiveOn(ceType) ? N(r.perDiem || 0) * days * pax : 0;
   return reg + ot + thirteenth + sss + hdmf + sil + perdiem;
 }
+/* A mobilization / demobilization line. Two kinds share one list (so they
+   ride the existing shicMob / shicDemob JSON columns with no migration):
+   an expense -- qty x days x rate -- and a manpower row (kind 'mp'), costed
+   like the Manpower tab's regular day shift: pax x days x rate, plus overtime
+   hours per day at the CE's OT multiplier. desc holds the role. */
+function mobRowCost(r, rates) {
+  if (!r) return 0;
+  const base = N(r.qty) * N(r.days) * N(r.rate);
+  if (r.kind !== 'mp') return base;
+  return base + N(r.qty) * N(r.days) * (N(r.otHours) / 8) * N(r.rate) * ceOtMult(rates);
+}
 function computeCEGrand(ce) {
   if (!ce) return 0;
   const cfg = (typeof CE_CFG !== 'undefined' && CE_CFG[ce.ceType]) || {};
@@ -279,7 +290,7 @@ function computeCEGrand(ce) {
     if (k.charAt(0) === '_') return s; /* _addlCosts / _margin are not costs */
     return s + arr((ce.misc || {})[k]).reduce((t, r) => t + N(r.qty) * N(r.cost), 0);
   }, 0);
-  const veh = rows => arr(rows).reduce((s, r) => s + N(r.qty) * N(r.days) * N(r.rate), 0);
+  const veh = rows => arr(rows).reduce((s, r) => s + mobRowCost(r, _rates), 0);
   const mobT = cfg.mobDemob ? veh(ce.mobVehicles) + veh(ce.demobVehicles) : 0;
   return mobT + mpT + toolsT + matsT + ppeT + miscT;
 }

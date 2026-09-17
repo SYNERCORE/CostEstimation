@@ -32,6 +32,7 @@ const helper = new Function('N', 'SHIFTS', 'CE_CFG',
   RATES + '\n' +
   grab(helpersSrc, /function ceResDays\(r\) \{[\s\S]*?\n\}/, 'ceResDays') + '\n' + TIERS + '\n' +
   grab(helpersSrc, /function ceMpRowCost\(r, rates, ceType\) \{[\s\S]*?\n\}/, 'ceMpRowCost') + '\n' +
+  grab(helpersSrc, /function mobRowCost\(r, rates\) \{[\s\S]*?\n\}/, 'mobRowCost') + '\n' +
   grab(helpersSrc, /function computeCEGrand\(ce\) \{[\s\S]*?\n\}/, 'computeCEGrand') + '\n' +
   'return { computeCEGrand, ceResDays, ceMpRowCost };'
 )(N, SHIFTS, CE_CFG);

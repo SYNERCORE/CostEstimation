@@ -2684,6 +2684,12 @@ function App({
       const m = (masterlist?.materials || []).find(r => r.desc.toUpperCase() === desc.toUpperCase());
       return m ? m.cost : 0;
     };
+    /* The item's own unit from the Masterlist. Every row built from a scope
+       used to arrive as Lot (Pcs for PPE) whatever the item was sold in. */
+    const findUom = (list, desc, dflt) => {
+      const m = (masterlist?.[list] || []).find(r => String(r.desc || '').toUpperCase() === String(desc || '').toUpperCase());
+      return (m && String(m.uom || '').trim()) || dflt;
+    };
     const findPpeCost = desc => {
       const p = (masterlist?.ppe || []).find(r => r.desc.toUpperCase() === desc.toUpperCase());
       return p ? p.cost : 0;
@@ -2787,7 +2793,7 @@ function App({
             if (!desc) return;
             const key = mkey(svc, step, desc);
             if (toolMap[key]) toolMap[key].qty += iq;
-            else toolMap[key] = { id: uid(), desc, qty: iq, uom: 'Lot', cost: findToolCost(desc),
+            else toolMap[key] = { id: uid(), desc, qty: iq, uom: findUom('tools', desc, (raw && raw.uom) || 'Lot'), cost: findToolCost(desc),
               /* The tier figures travel with the cost, exactly as for a tool
                  picked by hand -- a Tier 1 row built from a saved scope has
                  nothing to derive from otherwise. */
@@ -2800,7 +2806,7 @@ function App({
             if (!desc) return;
             const key = mkey(svc, step, desc);
             if (matMap[key]) matMap[key].qty += iq;
-            else matMap[key] = { id: uid(), desc, qty: iq, uom: 'Lot', cost: findMatCost(desc), taskId: taskFor(svc, step) };
+            else matMap[key] = { id: uid(), desc, qty: iq, uom: findUom('materials', desc, (raw && raw.uom) || 'Lot'), cost: findMatCost(desc), taskId: taskFor(svc, step) };
           });
           /* PPE: merge by description — add qty */
           (svc.ppe || []).forEach(raw => {
@@ -2808,7 +2814,7 @@ function App({
             if (!desc) return;
             const key = mkey(svc, step, desc);
             if (ppeMap[key]) ppeMap[key].qty += iq;
-            else ppeMap[key] = { id: uid(), desc, qty: iq, uom: 'Pcs', cost: findPpeCost(desc), taskId: taskFor(svc, step) };
+            else ppeMap[key] = { id: uid(), desc, qty: iq, uom: findUom('ppe', desc, (raw && raw.uom) || 'Pcs'), cost: findPpeCost(desc), taskId: taskFor(svc, step) };
           });
           /* Miscellaneous: keyed by category as well as name, because the same
              description means different things under Transportation and Admin. */

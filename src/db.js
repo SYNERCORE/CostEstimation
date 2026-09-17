@@ -432,6 +432,23 @@ async function dbGetCeNumbers(){
   try{ return (LS.get('history')||[]).map(h=>String((h.info&&h.info.ceNum)||h.ceNum||'')).filter(Boolean); }
   catch(_e){ return []; }
 }
+/* Another company's CE already holding this sequence number (SHIC vs SY3).
+   The same prefix is not a clash here -- that is the CE itself or its
+   revision, which dbFindCEByNum and Revise already handle. */
+async function dbFindCESeqClash(ceNum,known){
+  const me=ceSeqOf(ceNum);if(!me)return null;
+  const other=t=>{const s=ceSeqOf(t);return !!s&&s.seq===me.seq&&s.prefix!==me.prefix;};
+  if(USE_SP||getSiteURL()){
+    try{
+      const tail='-CE-'+me.seq;
+      const r=await spGet(spList('CEs'),"substringof('"+tail+"',Title)",'Id,Title,shicSavedBy,shicSavedAt');
+      const hit=(r||[]).find(x=>other(x.Title));
+      if(hit)return{id:hit.Id,ceNum:hit.Title,savedBy:hit.shicSavedBy||'',savedAt:hit.shicSavedAt||''};
+    }catch(e){console.warn('dbFindCESeqClash:',e.message);}
+  }
+  const loc=[...(known||[]),...(LS.get('history')||[]).map(h=>(h.info&&h.info.ceNum)||h.ceNum)].find(other);
+  return loc?{ceNum:loc,savedBy:'',savedAt:''}:null;
+}
 async function dbFindCEByNum(ceNum){
   const t=String(ceNum||'').trim();
   if(!t)return null;

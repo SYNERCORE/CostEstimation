@@ -136,6 +136,8 @@ jobs:
         run: node tools/test-svc-codes.js
       - name: A request is logged, assigned, and built out under its number
         run: node tools/test-ce-requests.js
+      - name: Shared CE sequence
+        run: node tools/test-ce-seq-shared.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents

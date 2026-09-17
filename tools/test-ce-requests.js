@@ -21,7 +21,7 @@ console.log('logging a request:');
 ck('Monitoring has a + New Request button', has(/onClick: openRequest\n  \}, "\+ New Request"\)/));
 ck('it suggests the next free CE number', has(/ceNum: nextCeNum\(history, null, ceNums\)/));
 ck('customer and assignee are required', has(/Customer is required\./) && has(/Assign the request to an estimator\./));
-ck('a number already in use is refused', has(/const dup = await dbFindCEByNum\(ceNum\)\.catch\(\(\) => null\);\n      if \(dup\) \{/));
+ck('a number already in use is refused', has(/const dup = \(await dbFindCEByNum\(ceNum\)\.catch\(\(\) => null\)\) \|\| \(await dbFindCESeqClash\(ceNum, ceNums\)\.catch\(\(\) => null\)\);\n      if \(dup\) \{/));
 ck('it is saved as an empty CE flagged as a request, under its own number',
   has(/status: 'DRAFT', request: true, requestNum: ceNum/));
 ck('only a SharePoint save counts -- a request nobody else can see is not assigned',

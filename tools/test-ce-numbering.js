@@ -24,7 +24,7 @@ const app = fs.readFileSync('src/App.js', 'utf8');
 let bad = 0;
 const ck = (n, c, x) => { if (c) console.log('  PASS  ' + n); else { console.log('  FAIL  ' + n + (x ? '  -> ' + x : '')); bad++; } };
 
-const src = ['nextCeNum', 'nextCeNumForCompany']
+const src = ['ceSeqOf', 'nextCeNum', 'nextCeNumForCompany']
   .map(f => (help.match(new RegExp('function ' + f + '\\([\\s\\S]*?\\n\\}')) || [''])[0]).join('\n');
 if (!/function nextCeNum/.test(src)) { console.error('nextCeNum not found'); process.exit(1); }
 
@@ -49,13 +49,12 @@ ck('with it, the next one is genuinely free',
   N(mine, 'SHIC', everyone) === 'SHIC-CE-2026-0005',
   N(mine, 'SHIC', everyone));
 
-console.log('\nprefixes are separate sequences, and stay that way:');
-ck('SY3 is not advanced by a SHIC number',
-  N([], 'SY3', everyone) === 'SY3-CE-2026-0001', N([], 'SY3', everyone));
-ck('and the two can share a sequence number legitimately',
-  N([], 'SY3', ['SY3-CE-2026-0003']) === 'SY3-CE-2026-0004' &&
-  N([], 'SHIC', ['SHIC-CE-2026-0003']) === 'SHIC-CE-2026-0004',
-  'SY3-CE-2026-0004 and SHIC-CE-2026-0004 are different CEs, not a duplicate');
+console.log('\nSHIC and SY3 share one sequence:');
+ck('SY3 is advanced by a SHIC number',
+  N([], 'SY3', everyone) === 'SY3-CE-2026-0005', N([], 'SY3', everyone));
+ck('and SHIC by a SY3 number',
+  N([], 'SHIC', ['SY3-CE-2026-0003']) === 'SHIC-CE-2026-0004',
+  'SY3-CE-2026-0003 and SHIC-CE-2026-0003 would be the same number twice');
 ck('the company helper passes the list through',
   C([], { cePrefix: 'SY3' }, ['SY3-CE-2026-0009']) === 'SY3-CE-2026-0010');
 ck('and falls back to SHIC with no company', C([], null, []) === 'SHIC-CE-2026-0001');

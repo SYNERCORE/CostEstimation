@@ -2111,6 +2111,15 @@ function App({
     /* A logged request is built out and saved over under its own number. Only
        that number: renaming the CE to someone else's number is still refused. */
     const _fromRequest = !!(info.request && String(info.requestNum || '').toUpperCase() === ceNum);
+    /* One sequence across companies: SY3-CE-2026-1131 may not exist beside
+       SHIC-CE-2026-1131. Refused in bulk mode too -- that overwrites the same
+       number, never another company's. */
+    const _clash = await dbFindCESeqClash(ceNum, ceNums).catch(() => null);
+    if (_clash) {
+      showToast('CE Number ' + ceNum + ' is already used as ' + _clash.ceNum + (_clash.savedBy ? ' by ' + _clash.savedBy : '') +
+        '. SHIC and SY3 share one sequence. Next free: ' + nextCeNum(history, (ceNum.split('-CE-')[0] || null), [...ceNums, ceNum]), true);
+      return;
+    }
     if (dup && !dup._imported && !_fromRequest) {
       /* Bulk upload mode lets an admin load historical CEs whose numbers already
          exist. Saving then UPDATES that CE rather than adding a second one, so
@@ -4005,7 +4014,7 @@ function App({
     if (!String(f.assignee || '').trim()) { showToast('Assign the request to an estimator.', true); return; }
     setReqBusy(true);
     try {
-      const dup = await dbFindCEByNum(ceNum).catch(() => null);
+      const dup = (await dbFindCEByNum(ceNum).catch(() => null)) || (await dbFindCESeqClash(ceNum, ceNums).catch(() => null));
       if (dup) {
         showToast('CE Number "' + ceNum + '" is already taken. Next free: ' + nextCeNum(history, (ceNum.split('-CE-')[0] || null), [...ceNums, ceNum]), true);
         setReqBusy(false); return;

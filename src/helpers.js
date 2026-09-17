@@ -56,16 +56,23 @@ const esc = v => String(v == null ? '' : v)
    the same prefix, and neither finds out until one of them has finished the
    estimate and the save is refused. `known` is every CE number in use, from
    dbGetCeNumbers, and it is what makes the answer right. */
+/* The sequence part of a CE number, prefix and revision stripped:
+   "SY3-CE-2026-1131-R1" -> {prefix:"SY3", seq:"2026-1131"}. SHIC and SY3 share
+   ONE sequence, so SHIC-CE-2026-1131 and SY3-CE-2026-1131 are the same number. */
+function ceSeqOf(ceNum) {
+  const m = String(ceNum || '').trim().toUpperCase().replace(/-R\d+$/i, '').match(/^([A-Z0-9]+)-CE-(\d{4})-(\d+)$/);
+  return m ? {prefix: m[1], seq: m[2] + '-' + String(parseInt(m[3], 10)).padStart(4, '0')} : null;
+}
 function nextCeNum(history, cePrefix, known) {
   const yr = new Date().getFullYear();
   const pfx = ((cePrefix || 'SHIC') + '-CE-' + yr + '-').toUpperCase();
   let max = 0;
+  /* Counted across every prefix -- one sequence for all companies. A revision
+     shares its parent's number, so -R1 never reserves it twice. */
   const consider = n => {
-    /* A revision shares its parent's number -- SHIC-CE-2026-0004-R1 must not
-       reserve 0004 twice, nor push the next number past it. */
-    const t = String(n || '').toUpperCase().replace(/-R\d+$/i, '');
-    if (!t.startsWith(pfx)) return;
-    const num = parseInt(t.slice(pfx.length)) || 0;
+    const s = ceSeqOf(n);
+    if (!s || s.seq.slice(0, 4) !== String(yr)) return;
+    const num = parseInt(s.seq.slice(5), 10) || 0;
     if (num > max) max = num;
   };
   (history || []).forEach(h => consider((h.info && h.info.ceNum) || h.ceNum));

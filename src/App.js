@@ -7214,7 +7214,7 @@ function App({
       <div class="sec">MOBILIZATION / DEMOBILIZATION</div>
       ${mobTable('MOBILIZATION',_mobR,mobVehiclesT)}${mobTable('DEMOBILIZATION',_demobR,demobVehiclesT)}
       <div class="tot" style="text-align:right;padding:3px 4px;font-weight:bold">MOBILIZATION / DEMOBILIZATION TOTAL: ${fmt(mobVehiclesT+demobVehiclesT)}</div></div>`:'';
-    const bills=[mpPage,benPage,toolsPage,matsPage,ppePage,miscPage,mobPage].filter(Boolean).join('');
+    const bills=[mobPage,mpPage,benPage,toolsPage,matsPage,ppePage,miscPage].filter(Boolean).join('');
     const billsPage=bills?`<div class="page page-break">${docHdr('BILL OF QUANTITIES')}${bills}</div>`:'';
 
     const sowPage=sowItems.length?`<div class="page page-break">${docHdr('SCOPE OF WORK')}<div style="font-size:8pt;line-height:1.6">${(()=>{let mc=0,sc=0;return sowItems.map(it=>{if(it.type==='main'){mc++;sc=0;return`<div style="margin-top:4px"><b>${mc}. ${esc(it.text)}</b></div>`;}else{sc++;return`<div style="margin-left:14px">${mc}.${sc} ${esc(it.text)}</div>`;}}).join('');})()}</div></div>`:'';

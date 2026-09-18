@@ -7202,7 +7202,7 @@ function App({
     const allCos = getCompanies();
     const coInfo = allCos.find(c => String(c.id) === String(info.companyId)) || allCos[0] || {};
     const pageStyle = `
-      @page{size:A4 portrait;margin:8mm 10mm}
+      @page{size:A4 portrait;margin:8mm 0.25in}
       *{box-sizing:border-box}
       body{font-family:Arial,sans-serif;font-size:8pt;color:#000;margin:0;padding:0}
       table{width:100%;border-collapse:collapse}

@@ -1104,6 +1104,30 @@ function App({
       showToast('Masterlist save failed: ' + e.message, true);
     }
   };
+  /* Rows from Tools, Materials or PPE that the Masterlist does not have yet,
+     added to it from the CE -- description, unit and unit cost, plus a tool's
+     tier source figures -- under the next code in that section. The category
+     is 'General' until someone files it on the Masterlist. */
+  const addRowsToML = (tab, list) => {
+    const cur = masterlist[tab] || [];
+    const have = new Set(cur.map(m => String(m.desc || '').trim().toUpperCase()));
+    const pfx = 'SHIC-' + ({ tools: 'TL', materials: 'MT', ppe: 'PP' }[tab] || 'XX') + '-';
+    let n = Math.max(0, ...cur.map(m => { const x = String(m.code || '').match(/-(\d+)$/); return x ? parseInt(x[1], 10) : 0; }));
+    const add = [];
+    (list || []).forEach(r => {
+      const d = String(r.desc || '').trim(), k = d.toUpperCase();
+      if (!d || have.has(k)) return;
+      have.add(k);
+      const src = {};
+      ['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear', 'kw'].forEach(f => { if (N(r[f]) > 0) src[f] = N(r[f]); });
+      add.push({ id: uid(), code: pfx + String(++n).padStart(3, '0'), category: 'General', desc: d, uom: r.uom || 'Lot', cost: N(r.cost), ...(tab === 'tools' ? src : {}) });
+    });
+    if (!add.length) { showToast('Already on the Masterlist.'); return; }
+    if (!confirm('Add ' + add.length + ' item(s) to the shared Masterlist?\n\n' + add.map(a => a.desc + ' — ' + a.uom + ' @ P' + a.cost).join('\n') + '\n\nEveryone will see them. Set their category on the Masterlist later.')) return;
+    saveML({ ...masterlist, [tab]: [...add, ...cur] });
+    auditLog('masterlist_add_from_ce', tab + ': ' + add.map(a => a.desc).join(', '), currentUser?.username);
+    showToast(add.length + ' item(s) added to the Masterlist (' + tab + '), category General.');
+  };
   const showToast = (msg, err = false) => {
     setToast(msg);
     setToastErr(err);
@@ -11179,6 +11203,7 @@ tab === 'dashboard' && (() => {
     total: toolsT,
     label: "Tools & Equipment (BOTE)",
     mlType: "tools",
+    addToML: list => addRowsToML('tools', list),
     showDays: true,
     /* Lives on info, so it rides to SharePoint inside shicInfo with no column
        of its own and comes back with the CE. */
@@ -11201,6 +11226,7 @@ tab === 'dashboard' && (() => {
     total: matsT,
     label: "Materials & Consumables (BOCM)",
     mlType: "materials",
+    addToML: list => addRowsToML('materials', list),
     masterlist, showToast, setPicker
   }), tab === 'ppe' && /*#__PURE__*/React.createElement(ResTab, {
     rows: ppe,
@@ -11208,6 +11234,7 @@ tab === 'dashboard' && (() => {
     total: ppeT,
     label: "Personal Protective Equipment (PPE)",
     mlType: "ppe",
+    addToML: list => addRowsToML('ppe', list),
     masterlist, showToast, setPicker
   }), tab === 'misc' && /*#__PURE__*/React.createElement("div", null, (MISC_DEF[ceType] || MISC_DEF.onsite).map(([miscKey, label]) => {
     const rows = Array.isArray(misc[miscKey]) ? misc[miscKey] : [];

@@ -18,8 +18,16 @@ const ResTab = ({
      a shop that sets the rate to 0 still needs somewhere to type the kW. */
   showPower,
   kwhRate,
-  setKwhRate
+  setKwhRate,
+  /* Puts rows the Masterlist does not have yet into it, so an item met for the
+     first time on a CE is there for the next one. */
+  addToML
 }) => {
+  const _mlHas = r => {
+    const d = String(r.desc || '').trim().toUpperCase();
+    return !d || (masterlist[mlType] || []).some(m => String(m.desc || '').trim().toUpperCase() === d);
+  };
+  const _newRows = addToML ? rows.filter(r => !_mlHas(r)) : [];
   /* Days is optional per row and defaults to 1, so a row that never sets it
      costs exactly qty x cost -- existing CEs are unaffected. */
   const rowDays = r => (r.days === undefined || r.days === '' || r.days === null) ? 1 : (N(r.days) || 0);
@@ -148,7 +156,11 @@ showPower && /*#__PURE__*/React.createElement("label", {
     if (n) set(p => p.map(r => { const m = find(r); return m && m.uom && m.uom !== r.uom ? {...r, uom: m.uom} : r; }));
     showToast(n ? n + ' unit(s) updated from the Masterlist.' : 'Units already match the Masterlist.');
   }
-}, "↺ Sync UOM"), showDays && /*#__PURE__*/React.createElement("span", {
+}, "↺ Sync UOM"), _newRows.length > 0 && /*#__PURE__*/React.createElement("button", {
+  style: btn('acc', true),
+  title: 'Add every row not yet on the Masterlist, with its unit and unit cost: ' + _newRows.map(r => r.desc).join(', '),
+  onClick: () => addToML(_newRows)
+}, "\uff0b Masterlist (" + _newRows.length + ")"), showDays && /*#__PURE__*/React.createElement("span", {
   style: {display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, color: MT}
 }, "New rows:", /*#__PURE__*/React.createElement("select", {
   style: {...INP, width: 168, fontSize: 10, padding: '2px 4px'},
@@ -276,7 +288,11 @@ showPower && /*#__PURE__*/React.createElement("label", {
     placeholder: "Item description..."
   }), /*#__PURE__*/React.createElement("datalist", {id: 'dl_' + mlType + '_' + r.id},
     (masterlist[mlType] || []).map(x => /*#__PURE__*/React.createElement("option", {key: x.id, value: x.desc}))
-  )), /*#__PURE__*/React.createElement("td", {
+  ), addToML && !_mlHas(r) && /*#__PURE__*/React.createElement("button", {
+    style: { background: 'none', border: 'none', padding: '2px 0 0', cursor: 'pointer', fontSize: 10, color: 'var(--brand-accent)', display: 'block' },
+    title: 'Not on the Masterlist yet. Adds it with this unit and unit cost.',
+    onClick: () => addToML([r])
+  }, "\uff0b Add to Masterlist")), /*#__PURE__*/React.createElement("td", {
     style: TDS
   }, /*#__PURE__*/React.createElement("input", {
     style: {
@@ -421,7 +437,7 @@ showPower && /*#__PURE__*/React.createElement("label", {
   }, /*#__PURE__*/React.createElement("select", {
     style: {
       ...INP,
-      width: 74
+      width: 104
     },
     value: r.uom,
     onChange: e => set(p => p.map(x => x.id === r.id ? {

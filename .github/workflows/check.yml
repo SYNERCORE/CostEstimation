@@ -142,6 +142,8 @@ jobs:
         run: node tools/test-mob-manpower.js
       - name: CE save and load round trip
         run: node tools/test-ce-roundtrip.js
+      - name: ECC once per person per month
+        run: node tools/test-ecc-monthly.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents
@@ -198,6 +200,8 @@ jobs:
         run: node tools/test-preflight.js src/App.js
       - name: A CE keeps every field through SharePoint and back
         run: node tools/test-ce-roundtrip.js
+      - name: ECC once per person per month
+        run: node tools/test-ecc-monthly.js
       - name: Detailed Excel export mirrors the printed CE
         run: node tools/test-xlsx-export.js src/App.js
       - name: Every host the app calls is allowed by the CSP

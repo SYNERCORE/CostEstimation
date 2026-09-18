@@ -101,7 +101,7 @@ ck('a multiplier off the company standard is marked', /shiftMult !== stdRates\(\
 console.log('\nit is carried, restored and noticed:');
 ck('saved on the CE', (app.match(/rates: \{\.\.\.rates\}/g) || []).length === 2);
 ck('restored on load', /setRates\(d\.rates \|\| \{\}\)/.test(app));
-ck('and on a resumed draft', /setRates\(d\.rates \? \{\.\.\.d\.rates\} : \{\}\)/.test(app));
+ck('and when a saved CE is opened', /: d\.rates \? \{\.\.\.d\.rates\} : \{\}\);/.test(app));
 ck('in the unsaved-work signature', /verifyNotes, rates\]/.test(app),
   'left out, an edited multiplier would never trigger an autosave');
 ck('resolved once per render', /const rr = useMemo\(\(\) => ceRates\(\{rates\}\), \[rates\]\)/.test(app));

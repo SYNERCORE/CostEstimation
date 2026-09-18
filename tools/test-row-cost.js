@@ -10,7 +10,7 @@ const src = fs.readFileSync(process.argv[2], 'utf8');
 const grab = (re, what) => { const m = src.match(re); if (!m) { console.error('not found in source: ' + what); process.exit(1); } return m[0]; };
 
 const resDaysSrc = grab(/const resDays = r => [^\n]*;/, 'resDays');
-const calcBenSrc = grab(/const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen');
+const calcBenSrc = grab(/const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen').replace(/^/, 'const eccMap = new Map();');
 const rowCostSrc = grab(/const rowCost = \(kind, r\) => \{[\s\S]*?\n  \};/, 'rowCost');
 /* rowCost prices a manpower row through mpWage -- the same wage figure the
    per-shift subtotal and the C.1-C.4 subtotal are summed from. Lifted, not
@@ -259,7 +259,7 @@ check('and a shared row says so', /shared crew across/.test(src));
  * keep their multiplier. Only the benefits base drops it.
  */
 console.log('\nbenefits ride on the basic rate, not the shift premium:');
-const ben = grab(/const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen');
+const ben = grab(/const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen').replace(/^/, 'const eccMap = new Map();');
 check('the benefits base is the plain day rate', /rate = N\(r\.rate\);/.test(ben),
   'a night differential does not raise anyone’s SSS contribution');
 check('and carries no shift multiplier at all', !/mult/.test(ben),

@@ -1143,6 +1143,8 @@ function App({
      The premium still applies to the wage itself -- mpSub above multiplies by
      it. Only the benefits base drops it. */
   const incOn = ceIncentiveOn(ceType);
+  /* Each row's share of the ECC under this CE's rule (see eccByRow). */
+  const eccMap = useMemo(() => eccByRow(mp, rr), [mp, rr]);
   const calcBen = r => {
     const pax = N(r.pax),
       days = N(r.days),
@@ -1150,7 +1152,8 @@ function App({
     const thirteenth = rate / 12 * days * pax;
     const sss = rate * 0.25 * 0.75 * days * pax / 26;
     const hdmf = rate * 0.16 * days * pax / 26 * 2;
-    const sil = rate * days * pax * 5 / 12 / 26 + pax * 30;
+    const ecc = eccMap.has(r) ? eccMap.get(r) : pax * 30;
+    const sil = rate * days * pax * 5 / 12 / 26 + ecc;
     /* `perDiem` is the STORED name of the incentive -- on the row, in
        IndexedDB and as shicPerDiem in SharePoint. Everything a user reads
        says "Incentive"; the key keeps its old spelling so that no CE already
@@ -1163,6 +1166,7 @@ function App({
       sss,
       hdmf,
       sil,
+      ecc,
       perdiem,
       total: thirteenth + sss + hdmf + sil + perdiem
     };
@@ -1226,10 +1230,10 @@ function App({
          columns to summarise several different day types at once. */
       g.shiftDays.push({shift: r.shift || 'regular_day', pax, days: N(r.days) || 1,
         monthlyRate: N(r.rate) * 26, perDiem: N(r.perDiem || 0),
-        thirteenth: b.thirteenth, sss: b.sss, hdmf: b.hdmf, sil: b.sil,
+        thirteenth: b.thirteenth, sss: b.sss, hdmf: b.hdmf, sil: b.sil, ecc: b.ecc,
         perdiem: b.perdiem, total: b.total});
       g.monthlyRate += N(r.rate) * 26 * pax;
-      ['thirteenth', 'sss', 'hdmf', 'sil', 'perdiem', 'total'].forEach(k => { g[k] += b[k]; });
+      ['thirteenth', 'sss', 'hdmf', 'sil', 'ecc', 'perdiem', 'total'].forEach(k => { g[k] = (g[k] || 0) + b[k]; });
     });
     /* Monthly rate is a rate: what ONE person earns in a 26-day month. It is
        weighted by pax while merging only so that roles hired at different
@@ -2445,7 +2449,12 @@ function App({
     setSowItems(_sow);
     if (d.approvers) setApprovers(JSON.parse(JSON.stringify(d.approvers)));
     setVerifyNotes(d.verifyNotes ? {...d.verifyNotes} : {});
-    setRates(d.rates ? {...d.rates} : {});
+    /* A logged request being built out, or a clone, is a NEW quote: it starts
+       on the company standard and today's ECC rule. Anything else -- opening a
+       saved CE, or revising one -- keeps what it was quoted at. */
+    setRates(d.info && d.info.request ? {...stampRates(), ...(d.rates || {}), eccRule: 'month'}
+      : e && e._newQuote ? {...(d.rates || {}), eccRule: 'month'}
+      : d.rates ? {...d.rates} : {});
     /* This content came from the CE, not from a preset, so the effect above
        must not treat it as replaceable. */
     _defaultsSig.current = '';
@@ -2477,7 +2486,7 @@ function App({
   };
   const handleClone = (e) => {
     const d = e.data || e;
-    handleLoad({...d, info: {...(d.info || {}), ceNum: nextCeNum(history, null, ceNums), date: new Date().toISOString().slice(0,10)}});
+    handleLoad({...d, _newQuote: true, info: {...(d.info || {}), ceNum: nextCeNum(history, null, ceNums), date: new Date().toISOString().slice(0,10)}});
     showToast('Cloned — assigned new CE number.');
   };
   const handleRevise = (e) => {
@@ -11074,8 +11083,8 @@ tab === 'dashboard' && (() => {
             /* The flat ECC is charged once per shift entry, so a role on three
                day types carries it three times. Said out loud on the line it
                happens, rather than buried in a subtotal. */
-            title: 'SIL P' + ph(x.sil - x.pax * 30) + ' + ECC P' + ph(x.pax * 30) +
-                   ' (P30 per person, charged once on each shift entry)'
+            title: 'SIL P' + ph(x.sil - x.ecc) + ' + ECC P' + ph(x.ecc) +
+                   (rr.eccRule === 'month' ? ' (this shift\u2019s share of P30 per person per month)' : ' (P30 per person, charged once on each shift entry -- the rule this CE was quoted on)')
           }, "P", ph(x.sil)),
           incOn && cell(x.perdiem, {color: MT}),
           cell(x.total, {color: MT})

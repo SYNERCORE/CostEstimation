@@ -44,7 +44,7 @@ const body = grab(/const benefitRows = useMemo\(\(\) => \{[\s\S]*?\n  \}, \[mp, 
   .replace(/^\s*const benefitRows = useMemo\(\(\) => \{/, '')
   .replace(/\n\s*\}, \[mp, incOn\]\);$/, '');
 const make = new Function('N', 'mp', 'incOn',
-  grab(/const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen') + '\n' + body
+  grab(/const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen').replace(/^/, 'const eccMap = new Map();') + '\n' + body
 );
 const N = v => parseFloat(v) || 0;
 const rows = (mp, inc) => make(N, mp, inc !== false);

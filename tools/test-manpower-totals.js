@@ -47,7 +47,7 @@ const grab = (re, what) => {
   return m[0];
 };
 const mpWageSrc = grab(/const mpWageParts = r => \{[\s\S]*?\n  const mpWage = r => mpWageParts\(r\)\.total;/, 'mpWage');
-const calcBenSrc = grab(/const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen');
+const calcBenSrc = grab(/const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen').replace(/^/, 'const eccMap = new Map();');
 const benRowsSrc = grab(/const benefitRows = useMemo\(\(\) => \{[\s\S]*?\n  \}, \[mp, incOn\]\);/, 'benefitRows');
 const shiftSubSrc = grab(/const shiftSub = rows\.reduce\([^\n]*\);/, 'shiftSub');
 

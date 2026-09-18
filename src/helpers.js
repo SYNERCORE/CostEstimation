@@ -187,6 +187,9 @@ function ceRates(src) {
   const kwh = parseFloat(raw.kwhRate);
   return {
     shiftMults,
+    /* How the P30 ECC is charged -- see eccByRow. A CE with no rule was quoted
+       on 'row' and keeps it; new CEs are stamped 'month'. */
+    eccRule: raw.eccRule === 'month' ? 'month' : 'row',
     otMult: (isFinite(ot) && ot > 0) ? ot : OT_MULT_DEFAULT,
     kwhRate: (isFinite(kwh) && kwh >= 0) ? kwh : KWH_RATE_DEFAULT
   };
@@ -215,7 +218,7 @@ function stdRates() {
 }
 function stampRates() {
   const s = stdRates();
-  return { shiftMults: { ...s.shiftMults }, otMult: s.otMult };
+  return { shiftMults: { ...s.shiftMults }, otMult: s.otMult, eccRule: 'month' };
 }
 /* Loading gives every row and scope task a fresh id. Three things point at
    those ids and have to follow them:
@@ -248,6 +251,45 @@ function ceIdRemapper(sowItems) {
     ...(Array.isArray(r.srcs) ? { srcs: r.srcs.map(key) } : {})
   }));
   return { sow, rt, fixAddl };
+}
+/* The P30 ECC, per manpower row.
+
+   'row' (every CE quoted before build 189): P30 x pax on EVERY row. One man on
+   a regular day, a Sunday and a holiday is three rows, so three ECCs -- while
+   the same man on one row for 20 days paid one.
+
+   'month': P30 per person per month. Per role, the crew is the most on any day
+   shift plus the most on any night shift (the Benefits headcount), the days
+   are its man-days over that crew, and a month is 26 working days -- the month
+   the SIL and daily rates already use -- rounded up, at least one. The role's
+   ECC is spread over its rows by man-days, so each row still carries its own
+   share and every total that adds rows up is unchanged in shape. */
+const ECC_MONTHLY = 30;
+const ECC_MONTH_DAYS = 26;
+function eccByRow(mp, rates) {
+  const m = new Map();
+  const list = (Array.isArray(mp) ? mp : []).filter(r => r && r.role);
+  if (!(rates && rates.eccRule === 'month')) {
+    list.forEach(r => m.set(r, N(r.pax) * ECC_MONTHLY));
+    return m;
+  }
+  const g = {};
+  list.forEach(r => {
+    const k = String(r.role).trim().toUpperCase();
+    const x = g[k] || (g[k] = { day: 0, night: 0, md: 0, rows: [] });
+    const pax = N(r.pax) || 1;
+    if (/_night$/.test(r.shift || 'regular_day')) x.night = Math.max(x.night, pax);
+    else x.day = Math.max(x.day, pax);
+    x.md += pax * (N(r.days) || 1);
+    x.rows.push(r);
+  });
+  Object.keys(g).forEach(k => {
+    const x = g[k], crew = x.day + x.night;
+    const months = Math.max(1, Math.ceil((crew ? x.md / crew : 0) / ECC_MONTH_DAYS - 1e-9));
+    const tot = ECC_MONTHLY * crew * months;
+    x.rows.forEach(r => m.set(r, x.md ? tot * (N(r.pax) || 1) * (N(r.days) || 1) / x.md : tot / x.rows.length));
+  });
+  return m;
 }
 function ceKwhRate(rates) {
   const v = rates && parseFloat(rates.kwhRate);
@@ -315,7 +357,10 @@ function ceMpRowCost(r, rates, ceType) {
   const thirteenth = rate / 12 * days * pax;
   const sss = rate * 0.25 * 0.75 * days * pax / 26;
   const hdmf = rate * 0.16 * days * pax / 26 * 2;
-  const sil = rate * days * pax * 5 / 12 / 26 + pax * 30;
+  /* This row's ECC share rides on the rates as _ecc (from eccByRow, keyed by
+     row). Without it, the old per-row P30. */
+  const ecc = rates && rates._ecc && rates._ecc.has(r) ? rates._ecc.get(r) : pax * 30;
+  const sil = rate * days * pax * 5 / 12 / 26 + ecc;
   const perdiem = ceIncentiveOn(ceType) ? N(r.perDiem || 0) * days * pax : 0;
   return reg + ot + thirteenth + sss + hdmf + sil + perdiem;
 }
@@ -396,7 +441,8 @@ function computeCEGrand(ce) {
   /* The CE's own multipliers, so a recompute reproduces what it was quoted
      at rather than what today's rules would charge. */
   const _rates = ceRates(ce);
-  const mpT = arr(ce.mp).reduce((s, r) => s + ceMpRowCost(r, _rates, ce.ceType), 0);
+  const _mpRates = { ..._rates, _ecc: eccByRow(arr(ce.mp), _rates) };
+  const mpT = arr(ce.mp).reduce((s, r) => s + ceMpRowCost(r, _mpRates, ce.ceType), 0);
   /* Through toolRowCost, so a tiered CE recomputes to what the editor shows.
      A row naming no tier is Tier 2, which is exactly the old expression. */
   const _kwh = cePowerOn(ce.ceType) ? ceKwhRate(_rates) : 0;

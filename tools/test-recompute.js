@@ -45,7 +45,7 @@ const editor = new Function('N', 'SHIFTS', 'rr', 'kwhRate',
   grab(helpersSrc, /function ceResDays\(r\) \{[\s\S]*?\n\}/, 'ceResDays') + '\n' + TIERS + '\n' +
   grab(appSrc, /const resDays = r => [^\n]*;/, 'resDays') + '\n' +
   'const incOn = true;\n' +
-  grab(appSrc, /const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen') + '\n' +
+  grab(appSrc, /const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen').replace(/^/, 'const eccMap = new Map();') + '\n' +
   /* The wage half of a manpower row, which rowCost now calls rather than
      carrying its own copy of. */
   grab(appSrc, /const mpWageParts = r => \{[\s\S]*?\n  const mpWage = r => mpWageParts\(r\)\.total;/, 'mpWage') + '\n' +

@@ -7550,7 +7550,7 @@ function App({
        so no call site has to describe its own formatting twice. */
     const sheet = (name, build) => {
       const rows = [], merges = [];
-      let inTable = false;
+      let inTable = false, width = 0;
       const cell = (c, bodyStyle) => {
         if (c === undefined || c === null) return null;
         if (typeof c === 'object' && 'v' in c) return { v: c.v, s: c.n ? (bodyStyle ? 'tdn' : 'valn') : bodyStyle || 'val' };
@@ -7568,14 +7568,31 @@ function App({
         /* A table header. Opens the bordered run beneath it. */
         head: (...cells) => {
           inTable = true;
+          width = cells.length;
           rows.push(cells.map(c => ({ v: c === undefined ? '' : c, s: 'th' })));
         },
-        /* A total or sub-total line. Closes the run. */
+        /* A total or sub-total line. Closes the run.
+
+           Laid out as the printed CE lays it: the amount under the table's
+           last column and the label right-aligned against it. Call sites wrote
+           fewer cells than their table had columns, which put the Materials
+           and PPE totals under UNIT PRICE. */
         total: (...cells) => {
           inTable = false;
-          rows.push(cells.map(c => (c && typeof c === 'object' && 'v' in c)
-            ? { v: c.v, s: 'tot' }
-            : { v: c === undefined ? '' : c, s: 'totlbl' }));
+          const isAmt = c => c && typeof c === 'object' && 'v' in c;
+          const out = cells.slice();
+          if (out.length < width && isAmt(out[out.length - 1]))
+            out.splice(out.length - 1, 0, ...Array(width - out.length).fill(''));
+          const row = out.map(c => isAmt(c) ? { v: c.v, s: 'tot' } : { v: c === undefined ? '' : c, s: 'totlbl' });
+          /* A label followed only by blanks spans them, so it reads beside the amount. */
+          const last = row.length - 1;
+          let li = last - 1;
+          while (li > 0 && row[li].v === '') li--;
+          if (li > 0 && li < last - 1 && typeof row[li].v === 'string' && isAmt(out[last])) {
+            row[li].span = last - 1 - li;
+            for (let k = li + 1; k < last; k++) row[k] = { v: '', s: 'totlbl' };
+          }
+          rows.push(row);
         },
         blank: () => { inTable = false; rows.push([]); },
         /* A full-width heading over `span` columns, like the black bars on the
@@ -7751,7 +7768,7 @@ function App({
         a.total('', 'SUB TOTAL:', '', '', '', '', a.money(rows.reduce((s2, r) => s2 + miscRowCost(r), 0)));
         a.blank();
       });
-      a.row('', 'MISCELLANEOUS TOTAL:', '', '', '', '', a.money(miscT));
+      a.total('', 'MISCELLANEOUS TOTAL:', '', '', '', '', a.money(miscT));
     });
 
     /* ── Scope of work, numbered as the CE prints it ── */

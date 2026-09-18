@@ -146,6 +146,8 @@ jobs:
         run: node tools/test-ecc-monthly.js
       - name: Sync UOM
         run: node tools/test-sync-uom.js
+      - name: Export totals line up
+        run: node tools/test-export-totals.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents
@@ -206,6 +208,8 @@ jobs:
         run: node tools/test-ecc-monthly.js
       - name: Sync UOM
         run: node tools/test-sync-uom.js
+      - name: Export totals line up
+        run: node tools/test-export-totals.js
       - name: Detailed Excel export mirrors the printed CE
         run: node tools/test-xlsx-export.js src/App.js
       - name: Every host the app calls is allowed by the CSP

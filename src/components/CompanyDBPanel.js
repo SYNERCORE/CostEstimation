@@ -111,6 +111,17 @@
               React.createElement('span',{style:{fontSize:11,color:MT}},'Company name color')
             )
           ),
+          React.createElement('div',null,
+            React.createElement('label',{style:LBL},'Header Bar Color'),
+            React.createElement('div',{style:{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}},
+              React.createElement('input',{type:'color',value:ceBrand(draft).bar,onChange:e=>setDraft(p=>({...p,barColor:e.target.value})),style:{width:40,height:32,border:'none',borderRadius:4,cursor:'pointer'}}),
+              /* A preview of the bar as the CE prints it, text colour included. */
+              React.createElement('span',{style:{background:ceBrand(draft).bar,color:ceBrand(draft).text,fontWeight:700,fontSize:10,padding:'4px 10px',borderRadius:3}},'BILL OF MANPOWER LOADING'),
+              draft.barColor?React.createElement('button',{style:btn('def',true),title:'Back to the default: green for SY3, orange for Synercore, black otherwise',onClick:()=>setDraft(p=>{const n={...p};delete n.barColor;return n;})},'Auto')
+                :React.createElement('span',{style:{fontSize:10,color:MT}},'Auto')
+            ),
+            React.createElement('div',{style:{fontSize:10,color:MT,marginTop:3}},'Title bars on the printed CE and Excel. Text turns black or white to stay readable.')
+          ),
           React.createElement('div',{style:{gridColumn:'1/-1'}},
             React.createElement('label',{style:LBL},'Company Logo'),
             React.createElement('div',{style:{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}},

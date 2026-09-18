@@ -291,12 +291,14 @@ function eccByRow(mp, rates) {
   });
   return m;
 }
-/* The colour of the title bars on the printed CE and the Excel exports:
-   green for SY3, orange for Synercore, black for any other company. The text
-   on the bar is black or white, whichever reads better on that colour. */
+/* The colour of the title bars on the printed CE and the Excel exports. Set
+   per company in Admin -> Companies (Header Bar Color); left on Auto it is
+   green for SY3, orange for Synercore, black for any other. The text on the
+   bar is black or white, whichever reads better on that colour. */
 function ceBrand(co) {
   const n = String((co && co.name) || '') + ' ' + String((co && co.sub) || '');
-  const bar = /SY3/i.test(n) ? '#1E7B34' : /SYNERCORE/i.test(n) ? '#F07F12' : '#000000';
+  const own = /^#[0-9a-f]{6}$/i.test(String((co && co.barColor) || '')) ? co.barColor.toUpperCase() : '';
+  const bar = own || (/SY3/i.test(n) ? '#1E7B34' : /SYNERCORE/i.test(n) ? '#F07F12' : '#000000');
   const lin = h => { const c = parseInt(h, 16) / 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
   const L = 0.2126 * lin(bar.slice(1, 3)) + 0.7152 * lin(bar.slice(3, 5)) + 0.0722 * lin(bar.slice(5, 7));
   return { bar, text: L > 0.179 ? '#000000' : '#FFFFFF' };

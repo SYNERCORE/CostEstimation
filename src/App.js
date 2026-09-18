@@ -2828,7 +2828,8 @@ function App({
       sheets.push({name: 'MISC.', cols: COLS, rows: s});
     }
 
-    SHICXlsx.download((info.ceNum || 'CE') + '_' + ceType + '.xlsx', sheets);
+    const _xb = ceBrand(getCompanies().find(c => String(c.id) === String(info.companyId)) || getCompanies()[0] || {});
+    SHICXlsx.download((info.ceNum || 'CE') + '_' + ceType + '.xlsx', sheets, { bar: _xb.bar, barText: _xb.text });
     showToast('Excel exported — ' + sheets.length + ' sheets.');
   };
 
@@ -7270,6 +7271,7 @@ function App({
     });
     const allCos = getCompanies();
     const coInfo = allCos.find(c => String(c.id) === String(info.companyId)) || allCos[0] || {};
+    const _br = ceBrand(coInfo);
     const pageStyle = `
       @page{size:A4 portrait;margin:8mm 0.25in}
       *{box-sizing:border-box}
@@ -7281,7 +7283,7 @@ function App({
       .page-break{page-break-before:always;padding-top:0}
       .blk{page-break-inside:avoid;margin-bottom:5px}
       h2{font-size:10pt;text-align:center;margin:2px 0;font-weight:bold}
-      .sec{background:#222;color:#fff;font-weight:bold;text-align:center;padding:3px;font-size:8pt}
+      .sec{background:${_br.bar};color:${_br.text};font-weight:bold;text-align:center;padding:3px;font-size:8pt}
       .sub{background:#eee;font-weight:bold;font-size:7.5pt;padding:2px 4px}
       .r{text-align:right} .c{text-align:center} .b{font-weight:bold}
       .tot{background:#f5f5f5;font-weight:bold}
@@ -7309,7 +7311,7 @@ function App({
         <tr><td style="border:none">Revision No.:</td><td style="border:none">${esc(co.revNo)}</td></tr>
         <tr><td style="border:none">Revision Date:</td><td style="border:none">${esc(co.revDate)}</td></tr></table>
       </td></tr>
-      <tr><td colspan="3" style="text-align:center;background:#000;color:#fff;font-weight:bold;font-size:9pt;padding:3px;border:1px solid #000">${title}</td></tr>
+      <tr><td colspan="3" style="text-align:center;background:${_br.bar};color:${_br.text};font-weight:bold;font-size:9pt;padding:3px;border:1px solid #000">${title}</td></tr>
       <tr><td colspan="3" style="border:none;text-align:right;font-size:7.5pt;padding:1px 4px"><b>CE No.:</b>&nbsp;${esc(info.ceNum || '')}&nbsp;&nbsp;<b>CE TYPE:</b>&nbsp;${ceType.toUpperCase()}&nbsp;&nbsp;<b>DATE:</b>&nbsp;${esc(info.date||'')}</td></tr>
     </table>`;
 
@@ -7336,7 +7338,7 @@ function App({
     }));
 
     const costTable = `<table style="margin-bottom:5px">
-      <tr style="background:#333;color:#fff"><th class="c" style="width:40px">ITEM</th><th>DESCRIPTION</th><th class="r" style="width:110px">TOTAL COST</th></tr>
+      <tr style="background:${_br.bar};color:${_br.text}"><th class="c" style="width:40px">ITEM</th><th>DESCRIPTION</th><th class="r" style="width:110px">TOTAL COST</th></tr>
       ${costRows.map(r=>`<tr>
         <td class="c b">${r.letter}</td>
         <td class="b">${r.label}</td>
@@ -7781,7 +7783,7 @@ function App({
       });
     });
 
-    SHICXlsx.download((info.ceNum || 'CE') + '_' + (info.client || 'export').replace(/[^a-z0-9]/gi, '_') + '.xlsx', sheets);
+    SHICXlsx.download((info.ceNum || 'CE') + '_' + (info.client || 'export').replace(/[^a-z0-9]/gi, '_') + '.xlsx', sheets, { bar: ceBrand(coI).bar, barText: ceBrand(coI).text });
     showToast('Exported to Excel — one sheet per page of the CE.');
   };
   const [showDraftBanner, setShowDraftBanner] = React.useState(() => hasDraft());

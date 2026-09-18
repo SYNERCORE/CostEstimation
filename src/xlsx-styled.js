@@ -188,7 +188,12 @@
   }
 
   /* ---- build ------------------------------------------------------------- */
-  function build(sheets) {
+  function build(sheets, opts) {
+    /* opts.bar / opts.barText recolour the title bars (secbar), '#RRGGBB'. */
+    var argb = function (h) { return 'FF' + String(h).replace('#', '').toUpperCase(); };
+    var styles = STYLES_XML;
+    if (opts && opts.bar) styles = styles.replace('<fgColor rgb="FF000000"/>', '<fgColor rgb="' + argb(opts.bar) + '"/>');
+    if (opts && opts.barText) styles = styles.replace('<color rgb="FFFFFFFF"/>', '<color rgb="' + argb(opts.barText) + '"/>');
     /* Sheet names are limited to 31 characters and cannot contain : \ / ? * [ ]
        -- Excel treats a violation as a corrupt file, not a bad name. */
     var used = {};
@@ -230,7 +235,7 @@
         }).join('') +
         '<Relationship Id="rId' + (sheets.length + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
         '</Relationships>'},
-      {name: 'xl/styles.xml', data: STYLES_XML}
+      {name: 'xl/styles.xml', data: styles}
     ];
     sheets.forEach(function (s, i) {
       files.push({name: 'xl/worksheets/sheet' + (i + 1) + '.xml', data: sheetXml(s)});
@@ -238,8 +243,8 @@
     return zip(files);
   }
 
-  function download(filename, sheets) {
-    var url = URL.createObjectURL(build(sheets));
+  function download(filename, sheets, opts) {
+    var url = URL.createObjectURL(build(sheets, opts));
     var a = document.createElement('a');
     a.href = url;
     a.download = filename;

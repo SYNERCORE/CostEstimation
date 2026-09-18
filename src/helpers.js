@@ -203,6 +203,20 @@ function ceOtMult(rates) {
   const v = rates && parseFloat(rates.otMult);
   return (isFinite(v) && v > 0) ? v : OT_MULT_DEFAULT;
 }
+/* The company standard: what a NEW CE is stamped with. Set by an admin in
+   Admin -> Shift Multipliers when a ruling changes, shared through
+   SharePoint and mirrored here. SHIFTS and OT_MULT_DEFAULT stay what an
+   unstamped CE -- every CE written before the standard existed -- resolves
+   to, so changing the standard never reprices a saved estimate. */
+function stdRates() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem('shic:shift_rates') || 'null'); } catch (_) {}
+  return ceRates({ rates: (s && typeof s === 'object') ? s : {} });
+}
+function stampRates() {
+  const s = stdRates();
+  return { shiftMults: { ...s.shiftMults }, otMult: s.otMult };
+}
 function ceKwhRate(rates) {
   const v = rates && parseFloat(rates.kwhRate);
   return (isFinite(v) && v >= 0) ? v : KWH_RATE_DEFAULT;

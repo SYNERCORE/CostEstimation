@@ -820,6 +820,33 @@ async function dbGetCeDefaults(){
   }
   try{const s=localStorage.getItem('shic:ce_defaults');return s?JSON.parse(s):[];}catch{return [];}
 }
+/* The company's standard shift and OT multipliers. Another row in the
+   Companies list, like ce_defaults, so it needs no new list. */
+const SHIFT_RATES_KEY = 'shift_rates';
+async function dbSaveShiftRates(obj){
+  try{localStorage.setItem('shic:shift_rates',JSON.stringify(obj));}catch{}
+  if(USE_SP||getSiteURL()){
+    try{
+      const r=await spGet(spList('Companies'),"Title eq '"+SHIFT_RATES_KEY+"'",'Id');
+      if(r.length)await spPatch(spList('Companies'),r[0].Id,{shicData:JSON.stringify(obj)});
+      else await spPost(spList('Companies'),{Title:SHIFT_RATES_KEY,shicData:JSON.stringify(obj)});
+      return true;
+    }catch(e){console.warn('dbSaveShiftRates:',e.message);}
+  }
+  return false;
+}
+async function dbGetShiftRates(){
+  if(USE_SP||getSiteURL()){
+    try{
+      const r=await spGet(spList('Companies'),"Title eq '"+SHIFT_RATES_KEY+"'",'Id,shicData');
+      if(r.length&&r[0].shicData){
+        const v=JSON.parse(r[0].shicData);
+        if(v&&typeof v==='object'){try{localStorage.setItem('shic:shift_rates',JSON.stringify(v));}catch{}return v;}
+      }
+    }catch(e){console.warn('dbGetShiftRates:',e.message);}
+  }
+  try{const s=localStorage.getItem('shic:shift_rates');return s?JSON.parse(s):null;}catch{return null;}
+}
 /* The five masterlist sections, and how an item is recognised across two
    browsers. An id is the real identity; a name is the fallback for rows that
    came in from a workbook before ids were handed out, so the same role does

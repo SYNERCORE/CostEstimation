@@ -457,7 +457,9 @@ function App({
   /* The multipliers this CE is priced at. Empty means "the statutory
      defaults", which is what every CE written before this carries -- so
      nothing already saved reprices. */
-  const [rates, setRates] = useState({});
+  /* A blank CE starts on the company standard (Admin -> Shift Multipliers). */
+  const _initRates = React.useRef(null);
+  const [rates, setRates] = useState(() => (_initRates.current = stampRates()));
   /* Resolved once per render and handed to every cost site, so the editor,
      the totals, the print and the exports cannot disagree about what a night
      shift costs. */
@@ -897,6 +899,9 @@ function App({
          history rather than only when the Saved Drafts panel is opened. */
       loadSharedDrafts();
       dbGetCeDefaults().then(d => setCeDefaults(Array.isArray(d) ? d : [])).catch(e => console.warn('CE defaults:', e.message));
+      /* The standard may have changed since this browser last saw it. Only the
+         untouched blank CE picks the fresh one up. */
+      dbGetShiftRates().then(() => setRates(p => p === _initRates.current ? (_initRates.current = stampRates()) : p)).catch(e => console.warn('Shift rates:', e.message));
       /* Move the CE archive out of localStorage. Deliberately AFTER loadHist so
          reconciliation can reuse a warm SharePoint result, and fire-and-forget
          so it can never delay the UI. It defers itself when offline. */
@@ -2545,6 +2550,8 @@ function App({
     setMobVehicles([]);
     setDemobVehicles([]);
     setScope('');
+    setRates(stampRates());
+    setVerifyNotes({});
     applyCeDefaults(ceType, BLANK_INFO.projType, true);
     setAddlCosts([]);
     setMargin(0);
@@ -10258,12 +10265,12 @@ tab === 'dashboard' && (() => {
     defaultValue: ceOtMult(rr),
     type: "number", min: "0", step: "0.05",
     title: "What an overtime hour costs, as a multiple of the hourly rate (day rate / 8). Default "
-      + OT_MULT_DEFAULT + "×. It compounds with the shift multiplier, so a night OT hour is "
+      + stdRates().otMult + "×. It compounds with the shift multiplier, so a night OT hour is "
       + (ceOtMult(rr) * ceShiftMult(rr, 'regular_night')).toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
       + "× the hourly rate.",
     style: {
       ...INP, ...MONO, width: 54, padding: '2px 4px', fontSize: 10, fontWeight: 700,
-      textAlign: 'right', color: ceOtMult(rr) === OT_MULT_DEFAULT ? TX : ACC
+      textAlign: 'right', color: ceOtMult(rr) === stdRates().otMult ? TX : ACC
     },
     onBlur: ev => {
       const v = parseFloat(ev.target.value);
@@ -10376,8 +10383,8 @@ tab === 'dashboard' && (() => {
       key: 'sm' + shiftKey + shiftMult,
       defaultValue: shiftMult,
       type: "number", min: "0", step: "0.05",
-      title: "Multiplier for this shift on this CE. Default " + shiftInfo.mult + "\u00d7."
-        + (shiftMult !== shiftInfo.mult ? " Changed from the default." : ""),
+      title: "Multiplier for this shift on this CE. Company standard " + stdRates().shiftMults[shiftKey] + "\u00d7."
+        + (shiftMult !== stdRates().shiftMults[shiftKey] ? " Differs from the standard." : ""),
       style: {
         ...INP, ...MONO, width: 42, padding: 0, border: 'none', background: 'transparent',
         color: 'inherit', fontSize: 10, fontWeight: 700, textAlign: 'right'
@@ -10394,8 +10401,8 @@ tab === 'dashboard' && (() => {
         });
       }
     }), "\u00d7",
-    shiftMult !== shiftInfo.mult && /*#__PURE__*/React.createElement("span", {
-      title: "Default is " + shiftInfo.mult + "\u00d7",
+    shiftMult !== stdRates().shiftMults[shiftKey] && /*#__PURE__*/React.createElement("span", {
+      title: "Company standard is " + stdRates().shiftMults[shiftKey] + "\u00d7",
       style: {marginLeft: 3, opacity: .75}
     }, "\u25cf"),
     rows.length > 0 ? " Multiplier" : ""),

@@ -95,7 +95,7 @@ ck('setting a value back to its default removes it',
   /if \(!isFinite\(v\) \|\| v <= 0 \|\| v === shiftInfo\.mult\) delete m\[shiftKey\]/.test(app),
   'storing a copy of the default would freeze this CE against a future change to it');
 ck('and the same for OT', /if \(!isFinite\(v\) \|\| v <= 0 \|\| v === OT_MULT_DEFAULT\) delete n\.otMult/.test(app));
-ck('a changed multiplier is marked', /shiftMult !== shiftInfo\.mult &&/.test(app),
+ck('a multiplier off the company standard is marked', /shiftMult !== stdRates\(\)\.shiftMults\[shiftKey\] &&/.test(app),
   'a rate nobody can see has been changed is how a CE goes out mispriced');
 
 console.log('\nit is carried, restored and noticed:');
@@ -117,6 +117,14 @@ console.log('\nand the captions read the live values:');
 ck('the sidebar', /"Night ." \+ ceShiftMult\(rr, 'regular_night'\)/.test(raw));
 ck('the OT tooltip', /charged at " \+ ceOtMult\(rr\)/.test(raw),
   'a fixed caption goes on claiming 1.25x the moment somebody edits it');
+
+console.log('\nthe company standard (Admin -> Shift Multipliers):');
+ck('a new CE is stamped with the standard', /setRates\(stampRates\(\)\);/.test(app) && /useState\(\(\) => \(_initRates\.current = stampRates\(\)\)\)/.test(app));
+ck('a loaded CE keeps its own multipliers', /setRates\(d\.rates \|\| \{\}\);/.test(app));
+ck('an unstamped CE still resolves to the original statutory figures', /shiftMults\[k\] = \(isFinite\(v\) && v > 0\) \? v : SHIFTS\[k\]\.mult;/.test(help));
+ck('the standard is shared through SharePoint', /async function dbSaveShiftRates/.test(fs.readFileSync('src/db.js', 'utf8')));
+ck('the admin panel is wired in', /React\.createElement\(ShiftRatesPanel, null\)/.test(fs.readFileSync('src/components/AdminPanel.js', 'utf8')) &&
+  /ShiftRatesPanel\.js\?v=/.test(fs.readFileSync('index.html', 'utf8')));
 
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\neditable multipliers OK');
 process.exit(bad ? 1 : 0);

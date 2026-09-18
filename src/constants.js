@@ -168,6 +168,15 @@ const UOM_GROUPS = [
   ['Weight',    ['g', 'Kg', 'Ton', 'lb']],
   ['Time',      ['Hour', 'Shift', 'Day', 'Week', 'Month', 'Man-day', 'Trip']]
 ];
+/* Every unit is written one way: first letter capital, the rest small --
+   "PIECE", "piece" and "Piece" are one unit, and a column of them in three
+   styles reads as three. Applied to the list, to every UOM control, and to the
+   CE's rows as they arrive (see the effect in App.js). */
+function uomCase(u) {
+  const s = String(u == null ? '' : u).trim();
+  return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '';
+}
+UOM_GROUPS.forEach(g => { g[1] = g[1].map(uomCase); });
 const UOM_OPTIONS = UOM_GROUPS.reduce((all, g) => all.concat(g[1]), []);
 
 /* Renders the grouped <option>s for a select.
@@ -179,8 +188,8 @@ const UOM_OPTIONS = UOM_GROUPS.reduce((all, g) => all.concat(g[1]), []);
    unrecognised value is therefore kept and offered at the top rather than
    quietly dropped. */
 function uomOptionEls(current) {
-  const cur = String(current == null ? '' : current).trim();
-  const known = cur && UOM_OPTIONS.some(u => u.toLowerCase() === cur.toLowerCase());
+  const cur = uomCase(current);
+  const known = cur && UOM_OPTIONS.includes(cur);
   const groups = UOM_GROUPS.map(g => React.createElement('optgroup', { key: g[0], label: g[0] },
     g[1].map(u => React.createElement('option', { key: u, value: u }, u))));
   if (cur && !known) {

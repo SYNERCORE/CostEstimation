@@ -421,7 +421,20 @@ function App({
   const [mobVehicles, setMobVehicles] = useState([]);
   /* Copy from Mobilization picker: null when closed, else the ids ticked. */
   const [mobCopy, setMobCopy] = useState(null);
+  /* Units written one way on every line, however they arrived -- Masterlist,
+     import, Scope Library, typed or an older saved CE. See uomCase. */
+  const _uomFix = l => Array.isArray(l) && l.some(r => r && r.uom && r.uom !== uomCase(r.uom))
+    ? l.map(r => r && r.uom ? {...r, uom: uomCase(r.uom)} : r) : null;
   const [demobVehicles, setDemobVehicles] = useState([]);
+  React.useEffect(() => {
+    const t = _uomFix(tools); if (t) setTools(t);
+    const m = _uomFix(mats); if (m) setMats(m);
+    const p = _uomFix(ppe); if (p) setPpe(p);
+    const mv = _uomFix(mobVehicles); if (mv) setMobVehicles(mv);
+    const dv = _uomFix(demobVehicles); if (dv) setDemobVehicles(dv);
+    const mk = Object.keys(misc || {}).filter(k => _uomFix(misc[k]));
+    if (mk.length) setMisc(q => { const n = {...q}; mk.forEach(k => { n[k] = _uomFix(q[k]) || q[k]; }); return n; });
+  }, [tools, mats, ppe, misc, mobVehicles, demobVehicles]);
   const [scope, setScope] = useState('');
   const [notes, setNotes] = useState([]); /* [{id,seq,text}] */
   /* Presets configured in the Users tab: notes and signatories per CE type and
@@ -1071,7 +1084,9 @@ function App({
   const saveML = async (_ml, opts) => {
     /* Import, the tier calculator, Fill missing prices, Sync Rates and Reset
        Defaults all land here. */
-    const ml = mlRound(_ml);
+    const _mlU = {};
+    Object.keys(_ml || {}).forEach(k => { _mlU[k] = Array.isArray(_ml[k]) ? _ml[k].map(r => r && r.uom ? {...r, uom: uomCase(r.uom)} : r) : _ml[k]; });
+    const ml = mlRound(_mlU);
     setMasterlist(ml);
     try{window.shicMasterlist=ml;}catch(_e){}
     setSyncStatus({masterlist:'saving', dirty:true});
@@ -4039,7 +4054,7 @@ function App({
           ...INP,
           width: 68
         },
-        value: r.uom || 'Day',
+        value: uomCase(r.uom || 'Day'),
         onChange: e => updML(r.id, 'uom', e.target.value)
       }, uomOptionEls(r.uom || 'Day'))),
       /* Which meal allowance rate the role is paid: blank = guessed from the
@@ -6327,7 +6342,7 @@ function App({
           ...INP,
           width: 68
         },
-        value: r.uom || 'Day',
+        value: uomCase(r.uom || 'Day'),
         onChange: e => upd(r.id, 'uom', e.target.value)
       }, uomOptionEls(r.uom || 'Day'))), type === 'mp' && /*#__PURE__*/React.createElement("td", {
         style: TDS
@@ -11384,7 +11399,7 @@ tab === 'dashboard' && (() => {
           ...INP,
           width: 72
         },
-        value: r.uom || 'Lot',
+        value: uomCase(r.uom || 'Lot'),
         onChange: e => updItem(r.id, 'uom', e.target.value)
       }, uomOptionEls(r.uom || 'Lot'))), /*#__PURE__*/React.createElement("td", {
         style: TDS

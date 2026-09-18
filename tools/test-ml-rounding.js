@@ -75,7 +75,7 @@ ck('and a junk masterlist does not throw', round(null) === null && round(undefin
 console.log('\nit runs on every path a price can arrive by:');
 ck('loading a stored list', /return mlRound\(out\);/.test(app),
   'a list already stored ragged is tidied by opening it, not only by editing every row');
-ck('import, calculator, fill and sync', /const ml = mlRound\(_ml\);/.test(app));
+ck('import, calculator, fill and sync', /const ml = mlRound\(_mlU\);/.test(app));
 ck('and a hand-typed cell', /const rounded = mlRound\(next\);/.test(app));
 ck('but not mid-keystroke', !/onChange: e => updML\(r\.id, costKey, mlRound/.test(app),
   'rounding what somebody is halfway through typing rewrites the field under the cursor');

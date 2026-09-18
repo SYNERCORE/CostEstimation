@@ -439,7 +439,7 @@ showPower && /*#__PURE__*/React.createElement("label", {
       ...INP,
       width: 104
     },
-    value: r.uom,
+    value: uomCase(r.uom),
     onChange: e => set(p => p.map(x => x.id === r.id ? {
       ...x,
       uom: e.target.value

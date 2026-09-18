@@ -48,18 +48,18 @@ const ALL = ctx._all, els = ctx._els;
 
 console.log('The units people actually asked for are present:');
 for (const u of ['Can', 'Gallon', 'Pail', 'Drum', 'Bag', 'Sack', 'Bottle', 'Tube', 'Cartridge'])
-  ck(u + ' is available', ALL.includes(u));
+  ck(u + ' is available', ALL.some(x => x.toLowerCase() === u.toLowerCase()));
 
 console.log('\nAnd the rest of the trade units:');
 for (const u of ['Ton', 'lb', 'g', 'sq.m', 'sq.ft', 'cu.m', 'Ft', 'Inch', 'mm', 'cm', 'Km',
                  'Sheet', 'Plate', 'Bar', 'Rod', 'Length', 'Coil', 'Spool', 'Bundle',
                  'Dozen', 'Ream', 'Assy', 'Kit', 'Hour', 'Man-day', 'Trip', 'Shift'])
-  ck(u + ' is available', ALL.includes(u));
+  ck(u + ' is available', ALL.some(x => x.toLowerCase() === u.toLowerCase()));
 
 console.log('\nNothing that used to work has been dropped:');
 /* The twelve that every one of the old copies carried. */
 for (const u of ['Day', 'Lot', 'Pcs', 'Set', 'Unit', 'M', 'Kg', 'L', 'Box', 'Pack', 'Roll', 'Pair'])
-  ck(u + ' still offered', ALL.includes(u), 'existing CEs use this');
+  ck(u + ' still offered', ALL.some(x => x.toLowerCase() === u.toLowerCase()), 'existing CEs use this');
 
 console.log('\nList hygiene:');
 ck('no duplicates', new Set(ALL.map(u => u.toLowerCase())).size === ALL.length,
@@ -82,7 +82,8 @@ console.log('\nAn unrecognised value from a saved CE or an import is preserved:'
 const odd = els('SET/S');
 ck('it is offered', odd.length === ctx._groups.length + 1, odd.length);
 ck('and offered first, where it is visible', odd[0].label === 'From this record');
-ck('with the original text intact', odd[0].children[0].value === 'SET/S');
+ck('in the one house style, first letter capital', odd[0].children[0].value === 'Set/s');
+ck('every listed unit is written that way', ALL.every(u => u === u.charAt(0).toUpperCase() + u.slice(1).toLowerCase()));
 ck('a known value adds no extra group', els('Kg').length === ctx._groups.length);
 ck('matching is case-insensitive, so "kg" is not duplicated', els('kg').length === ctx._groups.length,
   'a case difference would look like an unknown unit');

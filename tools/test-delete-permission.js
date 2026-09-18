@@ -46,8 +46,11 @@ ck('the call site passes it', /dbDeleteHistory\(e\.id, currentUser\.role\)/.test
 
 console.log('\na draft is still the user\'s own to discard:');
 ck('drafts are deleted through deleteDraft, not the CE path',
-  /if \(e\._draft\) \{ await deleteDraft\(e\._draft\.draftId\); return; \}/.test(app),
+  /if \(e\._draft\) \{ await deleteDraft\(e\._draft\.draftId, e\._draft, true\); return; \}/.test(app),
   'it never reaches dbDeleteHistory, so no role is needed');
+ck('someone else\'s draft needs an admin, checked in deleteDraft itself',
+  /if \(!own && !isAdmin\) \{ showToast\('Only ' \+/.test(app));
+ck('and Resume Work asks before deleting', /if \(!asked && !confirm\('Delete this draft'/.test(app));
 
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\ndelete permission OK');
 process.exit(bad ? 1 : 0);

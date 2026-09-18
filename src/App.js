@@ -2109,7 +2109,15 @@ function App({
   };
 
   /* \u2500\u2500 Delete a shared draft \u2500\u2500 */
-  const deleteDraft = async draftId => {
+  /* Only the draft's owner or an admin may delete it, and only after saying
+     so: a draft is somebody's unsaved work, and it cannot be brought back.
+     The saved CE and its CE Monitoring row are never touched. */
+  const deleteDraft = async (draftId, draft, asked) => {
+    const d = draft || (sharedDrafts || []).find(x => x.draftId === draftId) || {};
+    const own = !d.savedBy || d.savedBy === currentUser.username;
+    if (!own && !isAdmin) { showToast('Only ' + (d.savedByName || d.savedBy) + ' or an admin can delete this draft.', true); return; }
+    if (!asked && !confirm('Delete this draft' + (d.info && d.info.ceNum ? ' of ' + d.info.ceNum : '') + (own ? '' : ' by ' + (d.savedByName || d.savedBy)) + '?\n\n' +
+      'Changes not yet saved will be lost for good. The saved CE and its CE Monitoring entry are not affected.')) return;
     try {
       await dbDeleteDraft(draftId);
     } catch (e) {}
@@ -5757,7 +5765,7 @@ function App({
         setConfirmDel(null);
         /* A draft row has no history entry behind it; deleting one has to go
            to the drafts list or the row comes back on the next refresh. */
-        if (e._draft) { await deleteDraft(e._draft.draftId); return; }
+        if (e._draft) { await deleteDraft(e._draft.draftId, e._draft, true); return; }
         const ceNum = e.info?.ceNum || e.ceNum || String(e.id);
         const snapshot = [...history];
         setHistory(prev => prev.filter(h => h.id !== e.id));

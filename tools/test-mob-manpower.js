@@ -84,6 +84,9 @@ ck('mob / demob meals count who travels, accommodation counts the crew',
 ck('the masterlist template has a Food Allowance column', /'UOM', 'Food Allowance'\]/.test(app) && /'uom', 'mealCat'\]/.test(app));
 ck('and the import reads it', /foodallowance: 'mealCat'/.test(app) && /item\.mealCat = /.test(app));
 
+ck('Sync meal rates moves every meal line to the Masterlist rate, on request only',
+  /const syncMealRates = \(\) => \{/.test(app) && (app.match(/onClick: syncMealRates/g) || []).length === 2);
+
 console.log('\nexports:');
 ck('the CE workbook has a MOB-DEMOB sheet', /sheets\.push\(\{name: 'MOB-DEMOB'/.test(app));
 ck('the plain workbook has a Mobilization sheet', /sheet\('Mobilization', a => \{/.test(app));

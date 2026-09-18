@@ -1334,6 +1334,32 @@ function App({
     if (!create && sig(next) === sig(autos)) return list;
     return [...list.filter(r => !(r.kind === 'meal' && r.auto)), ...next];
   };
+  /* The one deliberate way a meal line takes a new masterlist rate: the
+     estimator asks for it. Every meal line on this CE -- mobilization,
+     demobilization, accommodation -- moves to the current Masterlist rate for
+     its category; a category with no Masterlist item keeps its own. */
+  const syncMealRates = () => {
+    let n = 0;
+    const missing = new Set();
+    /* Counted on the current state first, so the toast says what happened. */
+    [[mobVehicles, 'rate'], [demobVehicles, 'rate'], [misc.accommodation || [], 'cost']].forEach(([l, k]) => l.forEach(r => {
+      if (r.kind !== 'meal') return;
+      const v = mealRate(String(r.desc || '').trim().toUpperCase());
+      if (!v) missing.add(r.desc); else if (N(r[k]) !== v) n++;
+    }));
+    const fix = (list, key) => (list || []).map(r => {
+      if (r.kind !== 'meal') return r;
+      const v = mealRate(String(r.desc || '').trim().toUpperCase());
+      return v && N(r[key]) !== v ? { ...r, [key]: v } : r;
+    });
+    if (n) {
+      setMobVehicles(p => fix(p, 'rate'));
+      setDemobVehicles(p => fix(p, 'rate'));
+      setMisc(p => ({ ...p, accommodation: fix(p.accommodation, 'cost') }));
+    }
+    showToast((n ? n + ' meal line(s) updated to the Masterlist rate.' : 'Meal lines already match the Masterlist.') +
+      (missing.size ? ' Not in the Masterlist: ' + [...missing].join(', ') + '.' : ''), !n && missing.size > 0);
+  };
   React.useEffect(() => {
     setMobVehicles(p => syncMealRows(p, false, 'rate', false));
     setDemobVehicles(p => syncMealRows(p, false, 'rate', false));
@@ -3967,7 +3993,7 @@ function App({
       mlTab === 'manpower' && /*#__PURE__*/React.createElement("td", {
         style: TDS
       }, /*#__PURE__*/React.createElement("select", {
-        style: { ...INP, width: 104, ...(r.mealCat ? {} : { color: MT }) },
+        style: { ...INP, width: 150, ...(r.mealCat ? {} : { color: MT }) },
         value: r.mealCat || '',
         title: r.mealCat ? '' : 'Not set -- counted as ' + ({PM: 'PM', ADMIN: 'Admin', SKILLED: 'Skilled'})[mealCatGuess(r.role)] + ' from the role name',
         onChange: e => updML(r.id, 'mealCat', e.target.value)
@@ -9890,6 +9916,7 @@ tab === 'dashboard' && (() => {
           E("div", { style: { display: 'flex', gap: 6 } },
             E("button", { style: btn('acc', true), title: 'One line per role from the Manpower in the SOW Breakdown -- the most pax on any day shift plus any night shift. It stays in sync as the crew changes; days and OT hours are yours to set.',
               onClick: () => { if (!consolidateCrew(mp).length) { showToast('No manpower in the SOW Breakdown yet.', true); return; } setRows(p => syncMealRows(syncCrewRows(p, true), true, 'rate', false)); } }, rows.some(r => r.auto) ? "⟳ Re-sync crew from SOW" : "⟳ Crew from SOW Breakdown"),
+            all.some(r => r.kind === 'meal') && E("button", { style: btn('info', true), title: 'Set every meal allowance line on this CE (mobilization, demobilization, accommodation) to the current Masterlist rate', onClick: syncMealRates }, "↺ Sync meal rates"),
             E("button", { style: btn('def', true), onClick: () => setRows(p => [...p, { id: uid(), kind: 'mp', desc: '', qty: 1, days: 1, rate: 0, otHours: 0 }]) }, "+ Add Manpower"))),
         rows.length === 0 ? E("div", { style: { textAlign: 'center', padding: '10px 0', color: MT, fontSize: 12, border: '1px dashed ' + BDR, borderRadius: 6 } }, "No manpower charged to this stage.") :
         E("div", { style: { overflowX: 'auto' } }, E("table", { style: { width: '100%', borderCollapse: 'collapse', fontSize: 12 } },
@@ -11194,7 +11221,11 @@ tab === 'dashboard' && (() => {
       style: btn('acc', true),
       title: 'Meal allowance per category (PM, admin, skilled manpower): pax from the crew, days from the shifts. Stays in sync with the Manpower.',
       onClick: () => { if (!consolidateCrew(mp).length) { showToast('No manpower yet.', true); return; } setMisc(p => ({ ...p, accommodation: syncMealRows(Array.isArray(p.accommodation) ? p.accommodation : [], true, 'cost', true) })); }
-    }, "🍽 Food allowance from crew"), /*#__PURE__*/React.createElement("button", {
+    }, "🍽 Food allowance from crew"), miscKey === 'accommodation' && rows.some(r => r.kind === 'meal') && /*#__PURE__*/React.createElement("button", {
+      style: btn('info', true),
+      title: 'Set every meal allowance line on this CE (mobilization, demobilization, accommodation) to the current Masterlist rate',
+      onClick: syncMealRates
+    }, "↺ Sync meal rates"), /*#__PURE__*/React.createElement("button", {
       style: btn('def', true),
       onClick: addItem
     }, "+ Add"))), rows.length === 0 && /*#__PURE__*/React.createElement("div", {

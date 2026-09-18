@@ -43,7 +43,7 @@ const ctx = {
   }
 };
 vm.createContext(ctx);
-vm.runInContext(src + '\nglobalThis._groups=UOM_GROUPS;globalThis._all=UOM_OPTIONS;globalThis._els=uomOptionEls;', ctx);
+vm.runInContext(src + '\nglobalThis._groups=UOM_GROUPS;globalThis._all=UOM_OPTIONS;globalThis._els=uomOptionEls;globalThis._case=uomCase;', ctx);
 const ALL = ctx._all, els = ctx._els;
 
 console.log('The units people actually asked for are present:');
@@ -83,7 +83,8 @@ const odd = els('SET/S');
 ck('it is offered', odd.length === ctx._groups.length + 1, odd.length);
 ck('and offered first, where it is visible', odd[0].label === 'From this record');
 ck('in the one house style, first letter capital', odd[0].children[0].value === 'Set/s');
-ck('every listed unit is written that way', ALL.every(u => u === u.charAt(0).toUpperCase() + u.slice(1).toLowerCase()));
+ck('standard abbreviations keep their spelling', ['ML', 'mm', 'SQ.M', 'kg', 'l.m.', 'cu.m', 'LB'].map(ctx._case).join() === 'mL,mm,sq.m,Kg,L.M.,cu.m,lb', ['ML', 'mm', 'SQ.M', 'kg', 'l.m.', 'cu.m', 'LB'].map(ctx._case).join());
+ck('any other unit gets a capital first letter only', ['PIECE', 'kilo', 'KG/S'].map(ctx._case).join() === 'Piece,Kilo,Kg/s');
 ck('a known value adds no extra group', els('Kg').length === ctx._groups.length);
 ck('matching is case-insensitive, so "kg" is not duplicated', els('kg').length === ctx._groups.length,
   'a case difference would look like an unknown unit');

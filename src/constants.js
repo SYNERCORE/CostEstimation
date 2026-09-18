@@ -168,15 +168,19 @@ const UOM_GROUPS = [
   ['Weight',    ['g', 'Kg', 'Ton', 'lb']],
   ['Time',      ['Hour', 'Shift', 'Day', 'Week', 'Month', 'Man-day', 'Trip']]
 ];
-/* Every unit is written one way: first letter capital, the rest small --
-   "PIECE", "piece" and "Piece" are one unit, and a column of them in three
-   styles reads as three. Applied to the list, to every UOM control, and to the
-   CE's rows as they arrive (see the effect in App.js). */
+/* Every unit is written one way, so "PIECE", "piece" and "Piece" do not read
+   as three units. A unit on the list above keeps the list's spelling -- the
+   standard abbreviations mm, mL, sq.m, Kg, L.M. are written the way they are
+   meant to be. Anything else gets its first letter capital and the rest
+   small. Applied to every UOM control and to the CE's rows as they arrive
+   (see the effect in App.js). */
+const _UOM_CANON = {};
+UOM_GROUPS.forEach(g => g[1].forEach(u => { _UOM_CANON[u.toLowerCase()] = u; }));
 function uomCase(u) {
   const s = String(u == null ? '' : u).trim();
-  return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '';
+  if (!s) return '';
+  return _UOM_CANON[s.toLowerCase()] || s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 }
-UOM_GROUPS.forEach(g => { g[1] = g[1].map(uomCase); });
 const UOM_OPTIONS = UOM_GROUPS.reduce((all, g) => all.concat(g[1]), []);
 
 /* Renders the grouped <option>s for a select.

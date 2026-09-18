@@ -7575,8 +7575,8 @@ function App({
 
            Laid out as the printed CE lays it: the amount under the table's
            last column and the label right-aligned against it. Call sites wrote
-           fewer cells than their table had columns, which put the Materials
-           and PPE totals under UNIT PRICE. */
+           fewer cells than their table had columns, which put the Shopworks
+           tools total and the manpower cost total a column short. */
         total: (...cells) => {
           inTable = false;
           const isAmt = c => c && typeof c === 'object' && 'v' in c;

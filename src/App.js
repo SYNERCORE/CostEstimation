@@ -10849,7 +10849,10 @@ tab === 'dashboard' && (() => {
     }, /*#__PURE__*/React.createElement("td", {
       colSpan: 2,
       style: { ...TDS, textAlign: 'right', fontWeight: 700, fontSize: 11, color: MT }
-    }, "SUB TOTAL:"), /*#__PURE__*/React.createElement("td", {
+    }, "SUB TOTAL ", /*#__PURE__*/React.createElement("span", {
+      title: "This shift's multiplier on this CE -- already applied to the total",
+      style: { ...MONO, color: shiftColor }
+    }, "(\u00d7" + shiftMult + ")"), ":"), /*#__PURE__*/React.createElement("td", {
       style: { ...TDS, ...MONO, fontWeight: 700, color: shiftColor, paddingLeft: 12 }
     }, rows.reduce((t, r) => t + (String(r.role || '').trim() ? N(r.pax) : 0), 0), " pax"), /*#__PURE__*/React.createElement("td", {
       colSpan: (sowItems || []).length ? 4 : 3,
@@ -10858,25 +10861,7 @@ tab === 'dashboard' && (() => {
       style: { ...TDS, ...MONO, fontWeight: 700, color: shiftColor, textAlign: 'right' }
     }, "₱", ph(shiftSub)), /*#__PURE__*/React.createElement("td", {
       style: TDS
-    }))))), shiftSub > 0 && rows.length > 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        textAlign: 'right',
-        marginTop: 8,
-        paddingTop: 8,
-        borderTop: `1px solid ${BDR}`
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        color: MT,
-        fontSize: 11
-      }
-    }, "Subtotal (", shiftMult, "× Multiplier applied): "), /*#__PURE__*/React.createElement("span", {
-      style: {
-        ...MONO,
-        color: shiftColor,
-        fontWeight: 700
-      }
-    }, "₱", ph(shiftSub)))));
+    })))))));
   }), /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,

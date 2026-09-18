@@ -57,7 +57,8 @@ ck('the peso sign is the peso sign', /"\\u20b1", ph\(shiftSub\)/.test(app) || /"
 console.log('\nthe pill says what the number means:');
 ck('it names the multiplier when the shift is in use',
   /rows\.length > 0 \? " Multiplier" : ""/.test(live));
-ck('and the footer agrees with it', /Multiplier applied\): /.test(app));
+ck('and the SUB TOTAL row names it', /"SUB TOTAL ", [\s\S]{0,200}?"\(\\u00d7" \+ shiftMult \+ "\)"/.test(app));
+ck('the old duplicate subtotal line is gone', !/Multiplier applied\): /.test(app));
 
 console.log('\na shift carrying people is ringed, not only tinted:');
 ck('there is a ring', /boxShadow: rows\.length > 0/.test(live));

@@ -419,6 +419,8 @@ function App({
     ...BLANK_MISC
   });
   const [mobVehicles, setMobVehicles] = useState([]);
+  /* Copy from Mobilization picker: null when closed, else the ids ticked. */
+  const [mobCopy, setMobCopy] = useState(null);
   const [demobVehicles, setDemobVehicles] = useState([]);
   const [scope, setScope] = useState('');
   const [notes, setNotes] = useState([]); /* [{id,seq,text}] */
@@ -10179,7 +10181,45 @@ tab === 'dashboard' && (() => {
       setRows: setDemobVehicles,
       idPfx: "dm",
       color: ACC
-    }), ExpenseTable({
+    }), (() => {
+      /* Most demobilization charges repeat the mobilization ones. Food
+         allowance and the crew linked to the SOW are left out: both are
+         counted from the Manpower on their own. "(MOB)" becomes "(DEMOB)". */
+      const src = mobVehicles.filter(r => r.kind !== 'meal' && !(r.kind === 'mp' && r.auto));
+      if (!src.length) return null;
+      const ren = d => String(d || '').replace(/\(MOB\)/gi, '(DEMOB)').replace(/\bMOBILIZATION\b/gi, 'DEMOBILIZATION');
+      const have = new Set(demobVehicles.map(r => String(r.desc || '').trim().toUpperCase()));
+      const dup = r => have.has(ren(r.desc).trim().toUpperCase());
+      if (!mobCopy) return /*#__PURE__*/React.createElement("div", { style: { display: 'flex', justifyContent: 'flex-end', margin: '4px 0 10px' } },
+        /*#__PURE__*/React.createElement("button", {
+          style: btn('info', true),
+          title: 'Copy some or all mobilization items here. Food allowance and the SOW crew are not copied -- they come from the Manpower.',
+          onClick: () => setMobCopy(new Set(src.filter(r => !dup(r)).map(r => r.id)))
+        }, "\u29c9 Copy from Mobilization"));
+      const all = src.every(r => mobCopy.has(r.id));
+      return /*#__PURE__*/React.createElement("div", { style: { border: '1px solid ' + alpha(ACC, '44'), borderRadius: 8, padding: 10, margin: '4px 0 12px', background: alpha(ACC, '08') } },
+        /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 } },
+          /*#__PURE__*/React.createElement("b", { style: { fontSize: 12, color: ACC } }, "Copy from Mobilization"),
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: MT } }, "Food allowance and the SOW crew are counted from the Manpower, so they are not listed."),
+          /*#__PURE__*/React.createElement("button", { style: { ...btn('def', true), marginLeft: 'auto', fontSize: 10, padding: '2px 8px' },
+            onClick: () => setMobCopy(all ? new Set() : new Set(src.map(r => r.id))) }, all ? "None" : "All")),
+        src.map((r, i) => /*#__PURE__*/React.createElement("label", { key: r.id, style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, padding: '2px 0', cursor: 'pointer' } },
+          /*#__PURE__*/React.createElement("input", { type: 'checkbox', checked: mobCopy.has(r.id),
+            onChange: () => setMobCopy(p => { const n = new Set(p); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; }) }),
+          /*#__PURE__*/React.createElement("span", { style: { color: MT, width: 18 } }, i + 1),
+          /*#__PURE__*/React.createElement("span", { style: { flex: 1 } }, ren(r.desc) || '(no description)', r.kind === 'mp' ? ' \u00b7 manpower' : ''),
+          dup(r) && /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: ACC } }, "already in demob"),
+          /*#__PURE__*/React.createElement("span", { style: { ...MONO, color: MT } }, N(r.qty) + " \u00d7 " + (N(r.days) || 1) + "d \u00d7 " + ph(N(r.rate))))),
+        /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 8 } },
+          /*#__PURE__*/React.createElement("button", { style: btn('def', true), onClick: () => setMobCopy(null) }, "Cancel"),
+          /*#__PURE__*/React.createElement("button", { style: btn('acc', true), disabled: !mobCopy.size,
+            onClick: () => {
+              const pick = src.filter(r => mobCopy.has(r.id)).map(r => ({ ...r, id: uid(), desc: ren(r.desc) }));
+              setDemobVehicles(p => [...p, ...pick]);
+              setMobCopy(null);
+              showToast(pick.length + ' item(s) copied to Demobilization.');
+            } }, "Copy " + mobCopy.size + " item(s)")));
+    })(), ExpenseTable({
       rows: demobVehicles.filter(r => r.kind !== 'mp'),
       setRows: setDemobVehicles,
       idPfx: "dv",

@@ -88,6 +88,10 @@ ck('and the import reads it', /foodallowance: 'mealCat'/.test(app) && /item\.mea
 ck('Sync meal rates moves every meal line to the Masterlist rate, on request only',
   /const syncMealRates = \(\) => \{/.test(app) && (app.match(/onClick: syncMealRates/g) || []).length === 2);
 
+console.log('\ncopy from mobilization:');
+ck('food allowance and the SOW crew are not offered', /const src = mobVehicles\.filter\(r => r\.kind !== 'meal' && !\(r\.kind === 'mp' && r\.auto\)\);/.test(app));
+ck('copies get new ids and (MOB) becomes (DEMOB)', /\.map\(r => \(\{ \.\.\.r, id: uid\(\), desc: ren\(r\.desc\) \}\)\)/.test(app) && /replace\(\/\\\(MOB\\\)\/gi, '\(DEMOB\)'\)/.test(app));
+
 console.log('\nexports:');
 ck('the CE workbook has a MOB-DEMOB sheet', /sheets\.push\(\{name: 'MOB-DEMOB'/.test(app));
 ck('the plain workbook has a Mobilization sheet', /sheet\('Mobilization', a => \{/.test(app));

@@ -1884,6 +1884,9 @@ function App({
       notes: [...notes],
       sowItems: [...sowItems],
       approvers: [...approvers],
+      /* Drawn signatures, keyed like the signatories. Saved with the CE so a
+         signed estimate reopens signed. */
+      signatures: {...signatures},
       mobVehicles: [...mobVehicles],
       demobVehicles: [...demobVehicles],
       grand,
@@ -1916,7 +1919,7 @@ function App({
     const _mats=(d.mats||[]).map(_R.rt('mats'));setMats(_mats);try{window.shicCurrentMats=_mats;}catch(_e){}
     setPpe((d.ppe || []).map(_R.rt('ppe')));
     /* A drawn signature belongs to the CE it was drawn on. */
-    setSignatures({});
+    setSignatures(d.signatures && typeof d.signatures === 'object' ? {...d.signatures} : {});
     const rawMisc = d.misc || {};
     const migratedMisc = {};
     MISC_DEF[d.ceType || 'onsite']?.forEach(([k]) => {
@@ -2021,6 +2024,9 @@ function App({
       notes: [...notes],
       sowItems: [...sowItems],
       approvers: [...approvers],
+      /* Drawn signatures, keyed like the signatories. Saved with the CE so a
+         signed estimate reopens signed. */
+      signatures: {...signatures},
       mobVehicles: [...mobVehicles],
       demobVehicles: [...demobVehicles],
       scope,
@@ -2419,7 +2425,7 @@ function App({
     const _mats=(d.mats||[]).map(_R.rt('mats'));setMats(_mats);try{window.shicCurrentMats=_mats;}catch(_e){}
     setPpe((d.ppe || []).map(_R.rt('ppe')));
     /* A drawn signature belongs to the CE it was drawn on. */
-    setSignatures({});
+    setSignatures(d.signatures && typeof d.signatures === 'object' ? {...d.signatures} : {});
     /* migrate old numeric misc to arrays */
     const rawMisc = d.misc || {};
     const migratedMisc = {};

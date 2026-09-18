@@ -159,7 +159,7 @@ ck('it is tolerated on an unrepaired site', /'shicSrc'/.test(
 ck('Repair creates it as a multi-line column', /\[3,'shicSrc'\]/.test(reg),
   'type 2 is capped at 255 characters');
 ck('_docRef travels in the shicMisc blob', /_docRef:\(e\.docRef\|\|null\)/.test(dbSrc));
-ck('and is destructured out on load', /_rates,_docRef,(?:_rowKeys,)?\.\.\.rest\}=m/.test(dbSrc));
+ck('and is destructured out on load', /_rates,_docRef,(?:_rowKeys,)?(?:_signatures,)?...rest\}=m/.test(dbSrc));
 
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\npersistence OK');
 process.exit(bad ? 1 : 0);

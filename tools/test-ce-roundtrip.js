@@ -51,7 +51,7 @@ const e = {
   misc: { accommodation: [{ id: 'c1', desc: 'MEAL ALLOWANCE (SKILLED MANPOWER)', qty: 3, cost: 320, days: 1.33, kind: 'meal', parts: [{ label: 'A', qty: 2, days: 1 }] }] },
   addlCosts: [{ id: 'a1', label: 'Welding', srcs: ['row:mp:m1', 'row:tools:x1', 'miscRow:accommodation:c1'] }, { id: 'a2', label: 'Grand', src: 'grand' }],
   verifyNotes: { k: 'n' }, rates: { shiftMults: { regular_night: 1.3 }, otMult: 1.3 }, margin: 12, scope: 'Do it',
-  notes: [{ id: 'n1', seq: 1, text: 'Note' }], approvers: [{ role: 'Prepared By', name: 'X' }],
+  notes: [{ id: 'n1', seq: 1, text: 'Note' }], approvers: [{ role: 'Prepared By', name: 'X' }], signatures: { 0: 'data:image/png;base64,AAA' },
   mobVehicles: [{ id: 'v1', desc: 'TRUCK (MOB)', qty: 1, days: 1, rate: 120000 }, { id: 'v2', kind: 'mp', auto: true, desc: 'Welder', qty: 4, days: 1, rate: 1100, paxSet: true }],
   demobVehicles: [{ id: 'v3', desc: 'TRUCK (DEMOB)', qty: 1, days: 1, rate: 120000 }]
 };
@@ -61,7 +61,7 @@ ck('the save writes the row keys into the header', /_rowKeys:_rowKeysOf\(e\)/.te
 const hdr = {
   Id: 7, Title: e.info.ceNum, shicType: e.ceType, shicClient: e.info.client, shicDesc: e.info.description, shicScope: e.scope,
   shicNotes: JSON.stringify(e.notes), shicApprovers: JSON.stringify(e.approvers), shicMob: JSON.stringify(e.mobVehicles), shicDemob: JSON.stringify(e.demobVehicles),
-  shicMisc: JSON.stringify({ ...e.misc, _addlCosts: e.addlCosts, _margin: e.margin, _verifyNotes: e.verifyNotes, _rates: e.rates, _docRef: null, _rowKeys: lib._rowKeysOf(e) }),
+  shicMisc: JSON.stringify({ ...e.misc, _addlCosts: e.addlCosts, _margin: e.margin, _verifyNotes: e.verifyNotes, _rates: e.rates, _docRef: null, _rowKeys: lib._rowKeysOf(e), _signatures: e.signatures }),
   shicSOW: JSON.stringify(e.sowItems), shicInfo: JSON.stringify(e.info)
 };
 let id = 100;
@@ -81,7 +81,9 @@ ck('every manpower field survives', JSON.stringify(d.mp.map(({ id, ...r }) => r)
 ck('tools, materials and PPE come back in order with their ids', [...d.tools, ...d.mats, ...d.ppe].map(r => r.id).join() === 'x1,x2,y1,z1');
 ck('a tool keeps its tier and its Tier 1 source figures', d.tools[0].tier === 1 && d.tools[0].unitPrice === 50000 && d.tools[0].serviceLife === 5);
 ck('misc rows keep days, kind and sub-items', JSON.stringify(d.misc) === JSON.stringify(e.misc));
-ck('the row keys do not come back as a misc category', !('_rowKeys' in d.misc));
+ck('the row keys and signatures do not come back as a misc category', !('_rowKeys' in d.misc) && !('_signatures' in d.misc));
+ck('drawn signatures come back with the CE', JSON.stringify(d.signatures) === JSON.stringify(e.signatures));
+ck('the save writes them', /_signatures:\(e\.signatures\|\|\{\}\)/.test(db));
 ck('mob / demob, rates, margin, notes, scope, info', JSON.stringify([d.mobVehicles, d.demobVehicles, d.rates, d.margin, d.notes, d.scope, d.info.qty, d.info.toolTier]) ===
   JSON.stringify([e.mobVehicles, e.demobVehicles, e.rates, e.margin, e.notes, e.scope, e.info.qty, e.info.toolTier]));
 
@@ -100,7 +102,10 @@ ck('a callout linked to line items still finds them',
 ck('a callout on a total is left alone', add[1].src === 'grand');
 ck('both loaders use the remapper', (app.match(/const _R = ceIdRemapper\(d\.sowItems\);/g) || []).length === 2 &&
   (app.match(/setAddlCosts\(_R\.fixAddl\(d\.addlCosts\)\);/g) || []).length === 2);
-ck('signatures do not carry over to another CE', (app.match(/setSignatures\(\{\}\);/g) || []).length === 3);
+ck('a saved or drafted CE carries its signatures', (app.match(/signatures: \{\.\.\.signatures\}/g) || []).length === 2);
+ck('opening a CE shows its own signatures; New CE clears them',
+  (app.match(/setSignatures\(d\.signatures && typeof d\.signatures === 'object'/g) || []).length === 2 &&
+  /setVerifyNotes\(\{\}\);\s*setSignatures\(\{\}\);/.test(app));
 
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nCE round trip OK');
 process.exit(bad ? 1 : 0);

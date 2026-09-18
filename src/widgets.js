@@ -79,8 +79,18 @@ function SyncStatusBar() {
     return mins < 1 ? 'just now' : mins < 60 ? mins + 'm ago' : Math.round(mins/60) + 'h ago';
   })() : 'never';
 
-  const entityColor = s => s === 'synced' ? OK : s === 'error' ? ERR : s === 'saving' ? 'var(--status-warning)' : BDR;
-  const entityIcon  = s => s === 'synced' ? '✓' : s === 'error' ? '✗' : s === 'saving' ? '↻' : '○';
+  /* Every state is spelled out and drawn at full strength. Anything not
+     synced used to be the border colour at 40% opacity -- unreadable, and
+     'local' (this device only) looked the same as 'not loaded yet'. */
+  const WARN = 'var(--status-warning)';
+  const STATES = {
+    synced:  {c: OK,   i: '✓', t: '',                  tip: 'In step with SharePoint.'},
+    saving:  {c: WARN, i: '↻', t: ' syncing…',         tip: 'Talking to SharePoint now.'},
+    local:   {c: WARN, i: '⚠', t: ' — this device only', tip: 'SharePoint did not return it, so you are seeing the copy saved in this browser. Others may see something different. Press ⟳ to retry.'},
+    error:   {c: ERR,  i: '✗', t: ' — sync failed',     tip: 'SharePoint refused or could not be reached. Press ⟳ to retry.'},
+    unknown: {c: MT,   i: '○', t: ' — not loaded',      tip: 'Not fetched yet in this session.'}
+  };
+  const st = s => STATES[s] || STATES.unknown;
 
   const entities = [
     {key:'masterlist', label:'Masterlist'},
@@ -108,13 +118,13 @@ function SyncStatusBar() {
 
     /* per-entity pills */
     ...entities.map(({key, label}) => {
-      const s = sync[key] || 'unknown';
-      const c = entityColor(s);
+      const x = st(sync[key] || 'unknown');
       return React.createElement('span', {
         key,
-        title: label + ': ' + s,
-        style:{display:'flex',alignItems:'center',gap:3,color:c,opacity: s==='unknown'?0.4:1}
-      }, entityIcon(s), ' ', label);
+        title: label + ': ' + x.tip,
+        style:{display:'flex',alignItems:'center',gap:3,color:x.c,fontWeight:x.t?700:400,
+               ...(x.t ? {padding:'1px 6px',borderRadius:8,background:alpha(x.c, '1A'),border:'1px solid '+alpha(x.c, '55')} : {})}
+      }, x.i, ' ', label, x.t);
     }),
 
     /* divider */

@@ -203,7 +203,7 @@ ck('saved in the misc blob', /_rates:\(e\.rates\|\|\{\}\)/.test(db),
   'no new column, so no site has to be repaired for it');
 ck('read back out', /rates:\(\(\)=>\{const m=h\.shicMisc\?JSON\.parse\(h\.shicMisc\):\{\};return m\._rates\|\|\{\};\}\)\(\)/.test(db));
 ck('and stripped so it is not a cost group',
-  /const\{_addlCosts,_margin,_verifyNotes,_rates,_docRef,(?:_rowKeys,)?\.\.\.rest\}=m/.test(db));
+  /const\{_addlCosts,_margin,_verifyNotes,_rates,_docRef,(?:_rowKeys,)?(?:_signatures,)?...rest\}=m/.test(db));
 
 console.log('\nthe tariff edit writes only what differs:');
 ck('setting it back to the default removes it',

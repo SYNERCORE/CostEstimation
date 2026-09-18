@@ -60,6 +60,18 @@ const mg = meal.mealGroups([
 ck('pax per category is the consolidated crew', mg.PM.pax === 1 && mg.SKILLED.pax === 8 && mg.ADMIN.pax === 3, JSON.stringify(mg));
 ck('days are man-days over pax -- the shifts duration', mg.SKILLED.days === 45 && mg.ADMIN.days === 45);
 ck('the CE can move a role to another category', mg.ADMIN.pax === 3);
+/* The reported case: AutoCAD 2 pax x 1 regular day + 1 pax x 1 Sunday, and an
+   Instrumentation Tech 1 x 1. Crew 3, 4 pax-days. 3 x 1.33 x 320 = 1,276.80
+   was wrong; 4 x 320 = 1,280 is right. */
+const rc = meal.mealGroups([
+  {role: 'AUTOCAD OPERATOR', pax: 2, days: 1, shift: 'regular_day'},
+  {role: 'AUTOCAD OPERATOR', pax: 1, days: 1, shift: 'sunday_day'},
+  {role: 'Instrumentation Tech', pax: 1, days: 1, shift: 'regular_day'}
+], {}).SKILLED;
+ck('a crew line keeps its sub-items, one per role and shift', rc.parts.length === 3, JSON.stringify(rc.parts));
+ck('and is charged on them, not on the rounded days',
+  meal.miscRowCost({qty: rc.pax, days: rc.days, cost: 320, parts: rc.parts}) === 1280,
+  meal.miscRowCost({qty: rc.pax, days: rc.days, cost: 320, parts: rc.parts}));
 ck('a Miscellaneous line with days is qty x cost x days', meal.miscRowCost({qty: 21, cost: 320, days: 45}) === 302400);
 ck('and without days it costs what it always did', meal.miscRowCost({qty: 2, cost: 500}) === 1000);
 ck('mob / demob and accommodation meal lines stay in sync', /setMobVehicles\(p => syncMealRows\(p, false, 'rate', false\)\)/.test(app) && /syncMealRows\(a, false, 'cost', true\)/.test(app));

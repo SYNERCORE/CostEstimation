@@ -1325,11 +1325,12 @@ function App({
       const p = prev[label];
       return { id: p ? p.id : uid(), kind: 'meal', auto: true, desc: label, qty: g[k].pax, uom: 'PAX',
         days: stayDays ? g[k].days : (p ? p.days : 1),
+        ...(stayDays ? { parts: g[k].parts } : {}),
         /* Priced from the Masterlist once, when the line is first made; after
            that it is the CE's own figure (a CE never silently reprices). */
         [rateKey]: p ? N(p[rateKey]) : mealRate(label) };
     });
-    const sig = rs => JSON.stringify(rs.map(r => [r.id, r.desc, r.qty, r.days, r[rateKey]]));
+    const sig = rs => JSON.stringify(rs.map(r => [r.id, r.desc, r.qty, r.days, r[rateKey], r.parts || null]));
     if (!create && sig(next) === sig(autos)) return list;
     return [...list.filter(r => !(r.kind === 'meal' && r.auto)), ...next];
   };
@@ -2719,9 +2720,12 @@ function App({
       cats.forEach(cat => {
         s.push([S(cat.letter + '  ' + cat.label, 'sec')]);
         s.push(['ITEM', 'DESCRIPTION', 'QTY', 'UOM', 'NO. OF DAYS', 'UNIT PRICE', 'TOTAL'].map(h => S(h, 'th')));
-        cat.rows.forEach((r, i) => s.push([
+        cat.rows.forEach((r, i) => {
+          s.push([
           S(i + 1, 'tdc'), S(r.desc || '', 'td'), S(N(r.qty) || 1, 'tdc'), S(r.uom || 'Lot', 'tdc'), S(N(r.days) || 1, 'tdc'),
-          S(N(r.cost), 'tdn'), S(miscRowCost(r), 'tdnb')]));
+          S(N(r.cost), 'tdn'), S(miscRowCost(r), 'tdnb')]);
+          (Array.isArray(r.parts) ? r.parts : []).forEach(p => s.push([S('', 'tdc'), S('    - ' + p.label, 'td'), S(N(p.qty), 'tdc'), S('', 'tdc'), S(N(p.days), 'tdc'), S('', 'tdn'), S(N(r.cost) * N(p.qty) * N(p.days), 'tdn')]));
+        });
         s.push([S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('SUB TOTAL:', 'totlbl'), S(N(cat.v), 'tot')]);
         s.push([]);
       });
@@ -7323,7 +7327,7 @@ function App({
       <div class="sec">MISCELLANEOUS</div>
       ${miscItems.map(cat=>`<div class="sub">${cat.letter}&nbsp;&nbsp;${esc(cat.label)}</div>
       <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:35px">QTY</th><th class="c" style="width:35px">UOM</th><th class="c" style="width:36px">NO. OF DAYS</th><th class="r" style="width:80px">UNIT PRICE</th><th class="r" style="width:80px">TOTAL</th></tr>
-      ${cat.rows.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.uom||'Lot')}</td><td class="c">${esc(N(r.days)||1)}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(miscRowCost(r))}</td></tr>`).join('')}
+      ${cat.rows.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.uom||'Lot')}</td><td class="c">${esc(N(r.days)||1)}</td><td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(miscRowCost(r))}</td></tr>${(Array.isArray(r.parts)?r.parts:[]).map(p=>`<tr style="font-size:7pt;color:#555"><td></td><td style="padding-left:14px">&#8211; ${esc(p.label)}</td><td class="c">${esc(N(p.qty))}</td><td></td><td class="c">${esc(N(p.days))}</td><td></td><td class="r">${fmt(N(r.cost)*N(p.qty)*N(p.days))}</td></tr>`).join('')}`).join('')}
       <tr class="tot"><td colspan="6" class="r b">SUB TOTAL:</td><td class="r b">${fmt(cat.v)}</td></tr></table>`).join('')}
       <div class="tot" style="text-align:right;padding:3px 4px;font-weight:bold">MISCELLANEOUS TOTAL: ${fmt(miscT)}</div></div>` : '';
 
@@ -7645,7 +7649,10 @@ function App({
         if (!rows.length) return;
         a.title(label, 7);
         a.head('ITEM', 'DESCRIPTION', 'QTY', 'UOM', 'NO. OF DAYS', 'UNIT PRICE', 'TOTAL');
-        rows.forEach((r, i) => a.row(i + 1, r.desc, N(r.qty), r.uom || 'Lot', N(r.days) || 1, a.money(r.cost), a.money(miscRowCost(r))));
+        rows.forEach((r, i) => {
+          a.row(i + 1, r.desc, N(r.qty), r.uom || 'Lot', N(r.days) || 1, a.money(r.cost), a.money(miscRowCost(r)));
+          (Array.isArray(r.parts) ? r.parts : []).forEach(p => a.row('', '    - ' + p.label, N(p.qty), '', N(p.days), '', a.money(N(r.cost) * N(p.qty) * N(p.days))));
+        });
         a.total('', 'SUB TOTAL:', '', '', '', '', a.money(rows.reduce((s2, r) => s2 + miscRowCost(r), 0)));
         a.blank();
       });
@@ -11235,14 +11242,18 @@ tab === 'dashboard' && (() => {
           }
         },
         placeholder: "Item description..."
-      }), /*#__PURE__*/React.createElement("datalist", {
+      }), Array.isArray(r.parts) && r.parts.length > 0 && /*#__PURE__*/React.createElement("div", {
+        style: { marginTop: 4, fontSize: 10, color: MT, lineHeight: 1.5 }
+      }, r.parts.map((p, j) => /*#__PURE__*/React.createElement("div", { key: j, style: { display: 'flex', gap: 8 } },
+        /*#__PURE__*/React.createElement("span", { style: { flex: 1, paddingLeft: 10 } }, "\u2013 " + p.label),
+        /*#__PURE__*/React.createElement("span", { style: MONO }, N(p.qty) + " pax \u00d7 " + N(p.days) + (N(p.days) === 1 ? " day" : " days"))))), /*#__PURE__*/React.createElement("datalist", {
         id: 'mc' + miscKey + r.id
       }, (masterlist.vehicles || []).map(mlItem => /*#__PURE__*/React.createElement("option", {
         key: mlItem.id,
         value: mlItem.desc
       })))), /*#__PURE__*/React.createElement("td", {
         style: TDS
-      }, /*#__PURE__*/React.createElement(NumBox, {
+      }, Array.isArray(r.parts) && r.parts.length ? /*#__PURE__*/React.createElement("span", { style: { ...MONO, paddingLeft: 8 }, title: 'The crew in this category -- counted from the Manpower' }, N(r.qty)) : /*#__PURE__*/React.createElement(NumBox, {
         style: {
           ...INP,
           ...MONO,
@@ -11262,7 +11273,7 @@ tab === 'dashboard' && (() => {
         onChange: e => updItem(r.id, 'uom', e.target.value)
       }, uomOptionEls(r.uom || 'Lot'))), /*#__PURE__*/React.createElement("td", {
         style: TDS
-      }, /*#__PURE__*/React.createElement(NumBox, {
+      }, Array.isArray(r.parts) && r.parts.length ? /*#__PURE__*/React.createElement("span", { style: { ...MONO, paddingLeft: 8 }, title: 'Pax-days / crew, like DAYS on Benefits & Others. The total is charged on the sub-items below the description, not on this rounded figure.' }, N(r.days), " *") : /*#__PURE__*/React.createElement(NumBox, {
         style: { ...INP, ...MONO, width: 58 },
         min: 1,
         value: r.days || 1,

@@ -240,6 +240,12 @@ function toolPowerCost(row, kwhRate) {
    row written before it existed has none and costs qty x cost, as before. */
 function miscRowCost(r) {
   if (!r) return 0;
+  /* A line built from the crew carries its sub-items -- one per role and
+     shift, as Benefits & Others lists them -- and is charged on those:
+     unit cost x the pax-days each one actually works. QTY and DAYS on the
+     line itself are the summary (crew, and pax-days / crew), which rounds. */
+  if (Array.isArray(r.parts) && r.parts.length)
+    return N(r.cost) * r.parts.reduce((t, p) => t + N(p.qty) * (N(p.days) || 1), 0);
   return N(r.qty) * N(r.cost) * (N(r.days) || 1);
 }
 function toolRowTotal(row, kwhRate, src) {
@@ -323,7 +329,18 @@ function mealGroups(mp, cats) {
     if (!String((r && r.role) || '').trim()) return;
     g[catOf(r.role)].manDays += (N(r.pax) || 1) * (N(r.days) || 1);
   });
-  Object.keys(g).forEach(k => { g[k].days = g[k].pax ? Math.round(g[k].manDays / g[k].pax * 100) / 100 : 0; });
+  Object.keys(g).forEach(k => { g[k].days = g[k].pax ? Math.round(g[k].manDays / g[k].pax * 100) / 100 : 0; g[k].parts = []; });
+  /* Sub-items: role x shift, same role and shift merged. */
+  (Array.isArray(mp) ? mp : []).forEach(r => {
+    const role = String((r && r.role) || '').trim();
+    if (!role) return;
+    const sk = r.shift || 'regular_day';
+    const label = role + ' \u00b7 ' + ((typeof SHIFTS !== 'undefined' && SHIFTS[sk] && SHIFTS[sk].label) || sk);
+    const parts = g[catOf(role)].parts;
+    const hit = parts.find(p => p.label === label && N(p.days) === (N(r.days) || 1));
+    if (hit) hit.qty += N(r.pax) || 1;
+    else parts.push({ label, qty: N(r.pax) || 1, days: N(r.days) || 1 });
+  });
   return g;
 }
 function computeCEGrand(ce) {

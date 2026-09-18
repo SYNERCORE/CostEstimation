@@ -1276,7 +1276,10 @@ function App({
       const p = prev[c.role.toUpperCase()];
       /* An edited pax (paxSet) is the estimator's -- fewer may travel than
          work -- and a re-sync leaves it alone. */
-      return { id: p ? p.id : uid(), kind: 'mp', auto: true, desc: c.role, qty: p && p.paxSet ? p.qty : c.pax, paxSet: !!(p && p.paxSet), rate: c.rate,
+      return { id: p ? p.id : uid(), kind: 'mp', auto: true, desc: c.role, qty: p && p.paxSet ? p.qty : c.pax, paxSet: !!(p && p.paxSet),
+        /* A typed rate (rateSet) is kept the same way -- travel days may be paid
+           at a different rate than the work. */
+        rate: p && p.rateSet ? p.rate : c.rate, rateSet: !!(p && p.rateSet),
         days: p ? p.days : 1, otHours: p ? p.otHours : 0 };
     });
     const sig = rs => JSON.stringify(rs.map(r => [r.id, r.desc, r.qty, r.rate, r.days, r.otHours]));
@@ -9934,7 +9937,11 @@ tab === 'dashboard' && (() => {
                 onCommit: v => upd(r.id, { qty: v, paxSet: true }) }),
                 r.paxSet && E("button", { title: 'Follow the SOW Breakdown crew again', style: { background: 'none', border: 'none', color: MT, cursor: 'pointer', fontSize: 11 },
                   onClick: () => { const c = consolidateCrew(mp).find(x => x.role.toUpperCase() === String(r.desc || '').toUpperCase()); upd(r.id, { paxSet: false, qty: c ? c.pax : r.qty }); } }, "↺")) : num(r, 'qty', 52, 1), num(r, 'days', 52, 1),
-              r.auto ? E("td", { style: { ...TDS, ...MONO, textAlign: 'right' } }, "P", ph(r.rate)) : num(r, 'rate', 96, 0), num(r, 'otHours', 52, 0),
+              r.auto ? E("td", { style: TDS }, E(NumBox, { style: { ...INP, ...MONO, width: 96, ...(r.rateSet ? { borderColor: ACC } : {}) }, min: 0, value: r.rate,
+                title: r.rateSet ? 'Set by hand -- the Manpower day rate is no longer applied. Clear it to follow the Manpower again.' : 'From the Manpower day rate. Type to override.',
+                onCommit: v => upd(r.id, { rate: v, rateSet: true }) }),
+                r.rateSet && E("button", { title: 'Follow the Manpower day rate again', style: { background: 'none', border: 'none', color: MT, cursor: 'pointer', fontSize: 11 },
+                  onClick: () => { const c = consolidateCrew(mp).find(x => x.role.toUpperCase() === String(r.desc || '').toUpperCase()); upd(r.id, { rateSet: false, rate: c ? c.rate : r.rate }); } }, "↺")) : num(r, 'rate', 96, 0), num(r, 'otHours', 52, 0),
               E("td", { style: { ...TDS, ...MONO, color: MT, textAlign: 'right' } }, "P", ph(N(r.rate) / 8 * otM)),
               E("td", { style: { ...TDS, ...MONO, color: tot > 0 ? color || ACC : MT, fontWeight: 700, textAlign: 'right', minWidth: 100 } }, "P", ph(tot)),
               E("td", { style: TDS }, E("button", { onClick: () => setRows(p => p.filter(x => x.id !== r.id)), style: { background: 'none', border: 'none', color: ERR, cursor: 'pointer', fontSize: 15, padding: '1px 5px' } }, "x")));

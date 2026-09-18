@@ -77,6 +77,7 @@ ck('and without days it costs what it always did', meal.miscRowCost({qty: 2, cos
 ck('mob / demob and accommodation meal lines stay in sync', /setMobVehicles\(p => syncMealRows\(p, false, 'rate', false\)\)/.test(app) && /syncMealRows\(a, false, 'cost', true\)/.test(app));
 
 ck('a typed pax on a linked crew row survives a re-sync', /qty: p && p\.paxSet \? p\.qty : c\.pax/.test(app));
+ck('and so does a typed rate', /rate: p && p\.rateSet \? p\.rate : c\.rate/.test(app));
 ck('categories come from the Manpower masterlist', /if \(r && r\.role && r\.mealCat\) m\[/.test(app) && /updML\(r\.id, 'mealCat', e\.target\.value\)/.test(app));
 ck('mob / demob meals count who travels, accommodation counts the crew',
   /const g = stayDays \? mealGroups\(mp, mealCatMap\) :/.test(app));

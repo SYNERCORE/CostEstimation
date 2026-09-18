@@ -1274,7 +1274,9 @@ function App({
     autos.forEach(r => { prev[String(r.desc || '').trim().toUpperCase()] = r; });
     const next = consolidateCrew(mp).map(c => {
       const p = prev[c.role.toUpperCase()];
-      return { id: p ? p.id : uid(), kind: 'mp', auto: true, desc: c.role, qty: c.pax, rate: c.rate,
+      /* An edited pax (paxSet) is the estimator's -- fewer may travel than
+         work -- and a re-sync leaves it alone. */
+      return { id: p ? p.id : uid(), kind: 'mp', auto: true, desc: c.role, qty: p && p.paxSet ? p.qty : c.pax, paxSet: !!(p && p.paxSet), rate: c.rate,
         days: p ? p.days : 1, otHours: p ? p.otHours : 0 };
     });
     const sig = rs => JSON.stringify(rs.map(r => [r.id, r.desc, r.qty, r.rate, r.days, r.otHours]));
@@ -1295,12 +1297,30 @@ function App({
     const m = ((masterlist && masterlist.vehicles) || []).find(v => String(v.desc || '').trim().toUpperCase() === label);
     return m ? N(m.rate || m.cost) : 0;
   };
+  /* Each role's food allowance category, from the Manpower masterlist (a role
+     the list does not categorise falls back to a guess from its name). */
+  const mealCatMap = useMemo(() => {
+    const m = {};
+    ((masterlist && masterlist.manpower) || []).forEach(r => { if (r && r.role && r.mealCat) m[String(r.role).trim().toUpperCase()] = r.mealCat; });
+    return m;
+  }, [masterlist]);
   const syncMealRows = (list, create, rateKey, stayDays) => {
     const autos = list.filter(r => r.kind === 'meal' && r.auto);
     if (!autos.length && !create) return list;
     const prev = {};
     autos.forEach(r => { prev[String(r.desc || '').toUpperCase()] = r; });
-    const g = mealGroups(mp, info.mealCats);
+    /* Accommodation counts the whole crew over the stay. Mobilization and
+       demobilization count who actually travels -- the crew lines in that
+       list, with any pax typed over them. */
+    const g = stayDays ? mealGroups(mp, mealCatMap) : (() => {
+      const o = {};
+      MEAL_CATS.forEach(([k]) => { o[k] = { pax: 0 }; });
+      list.filter(r => r.kind === 'mp' && String(r.desc || '').trim()).forEach(r => {
+        const k = mealCatMap[String(r.desc).trim().toUpperCase()] || mealCatGuess(r.desc);
+        o[k].pax += N(r.qty);
+      });
+      return o;
+    })();
     const next = MEAL_CATS.filter(([k]) => g[k].pax > 0).map(([k, label]) => {
       const p = prev[label];
       return { id: p ? p.id : uid(), kind: 'meal', auto: true, desc: label, qty: g[k].pax, uom: 'PAX',
@@ -1321,7 +1341,7 @@ function App({
       const n = syncMealRows(a, false, 'cost', true);
       return n === a ? p : { ...p, accommodation: n };
     });
-  }, [mp, info.mealCats]);
+  }, [mp, mealCatMap, mobVehicles, demobVehicles]);
   const mobSubT = mobVehiclesT;
   const demobSubT = demobVehiclesT;
   const mobT = cfg.mobDemob ? mobSubT + demobSubT : 0;
@@ -3837,7 +3857,7 @@ function App({
         borderCollapse: 'collapse',
         fontSize: 12
       }
-    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, [...ls, ''].map(h => /*#__PURE__*/React.createElement("th", {
+    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, [...ls, ...(mlTab === 'manpower' ? ['Food Allowance'] : []), ''].map(h => /*#__PURE__*/React.createElement("th", {
       key: h,
       style: THS
     }, h)))), /*#__PURE__*/React.createElement("tbody", null, filtered.slice(mlPage * ML_PAGE_SIZE, (mlPage + 1) * ML_PAGE_SIZE).map(r => {
@@ -3927,6 +3947,19 @@ function App({
         value: r.uom || 'Day',
         onChange: e => updML(r.id, 'uom', e.target.value)
       }, uomOptionEls(r.uom || 'Day'))),
+      /* Which meal allowance rate the role is paid: blank = guessed from the
+         name. Mobilization, demobilization and accommodation count by it. */
+      mlTab === 'manpower' && /*#__PURE__*/React.createElement("td", {
+        style: TDS
+      }, /*#__PURE__*/React.createElement("select", {
+        style: { ...INP, width: 104, ...(r.mealCat ? {} : { color: MT }) },
+        value: r.mealCat || '',
+        title: r.mealCat ? '' : 'Not set -- counted as ' + ({PM: 'PM', ADMIN: 'Admin', SKILLED: 'Skilled'})[mealCatGuess(r.role)] + ' from the role name',
+        onChange: e => updML(r.id, 'mealCat', e.target.value)
+      }, /*#__PURE__*/React.createElement("option", { value: '' }, "Auto (" + ({PM: 'PM', ADMIN: 'Admin', SKILLED: 'Skilled'})[mealCatGuess(r.role)] + ")"),
+        /*#__PURE__*/React.createElement("option", { value: 'PM' }, "PM"),
+        /*#__PURE__*/React.createElement("option", { value: 'ADMIN' }, "Admin"),
+        /*#__PURE__*/React.createElement("option", { value: 'SKILLED' }, "Skilled manpower"))),
       /* The four figures a tier price is derived from. They had column headings
          and no cells, so a value entered in the calculator was stored and then
          appeared nowhere -- which reads as the calculator having failed.
@@ -9851,22 +9884,16 @@ tab === 'dashboard' && (() => {
                 E("input", { style: { ...INP, minWidth: 200 }, list: idPfx + r.id, value: r.desc, placeholder: "e.g. Supervisor, Welder...",
                   onChange: e => { const dv = e.target.value; const f = (masterlist.manpower || []).find(m => m.role === dv); upd(r.id, { desc: dv, ...(f ? { rate: f.rate } : {}) }); } }),
                 E("datalist", { id: idPfx + r.id }, (masterlist.manpower || []).map(m => E("option", { key: m.id || m.role, value: m.role })))),
-              r.auto ? E("td", { style: { ...TDS, ...MONO, textAlign: 'center' } }, N(r.qty)) : num(r, 'qty', 52, 1), num(r, 'days', 52, 1),
+              r.auto ? E("td", { style: TDS }, E(NumBox, { style: { ...INP, ...MONO, width: 52, ...(r.paxSet ? { borderColor: ACC } : {}) }, min: 0, value: r.qty,
+                title: r.paxSet ? 'Set by hand -- the crew count is no longer applied. Clear it to follow the SOW Breakdown again.' : 'From the SOW Breakdown crew. Type to override.',
+                onCommit: v => upd(r.id, { qty: v, paxSet: true }) }),
+                r.paxSet && E("button", { title: 'Follow the SOW Breakdown crew again', style: { background: 'none', border: 'none', color: MT, cursor: 'pointer', fontSize: 11 },
+                  onClick: () => { const c = consolidateCrew(mp).find(x => x.role.toUpperCase() === String(r.desc || '').toUpperCase()); upd(r.id, { paxSet: false, qty: c ? c.pax : r.qty }); } }, "↺")) : num(r, 'qty', 52, 1), num(r, 'days', 52, 1),
               r.auto ? E("td", { style: { ...TDS, ...MONO, textAlign: 'right' } }, "P", ph(r.rate)) : num(r, 'rate', 96, 0), num(r, 'otHours', 52, 0),
               E("td", { style: { ...TDS, ...MONO, color: MT, textAlign: 'right' } }, "P", ph(N(r.rate) / 8 * otM)),
               E("td", { style: { ...TDS, ...MONO, color: tot > 0 ? color || ACC : MT, fontWeight: 700, textAlign: 'right', minWidth: 100 } }, "P", ph(tot)),
               E("td", { style: TDS }, E("button", { onClick: () => setRows(p => p.filter(x => x.id !== r.id)), style: { background: 'none', border: 'none', color: ERR, cursor: 'pointer', fontSize: 15, padding: '1px 5px' } }, "x")));
           }))),
-          idPfx === 'mm' && rows.some(r => r.auto) && E("div", { style: { marginTop: 10, fontSize: 11, color: MT, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' } },
-            E("span", { title: 'Which food allowance rate each role is paid. Used by the meal lines here, in Demobilization and in Accommodation.' }, "Food allowance category:"),
-            consolidateCrew(mp).map(c => {
-              const key = c.role.toUpperCase();
-              const cur = (info.mealCats || {})[key] || mealCatGuess(c.role);
-              return E("label", { key, style: { display: 'inline-flex', gap: 4, alignItems: 'center', border: '1px solid ' + BDR, borderRadius: 5, padding: '1px 4px' } }, c.role,
-                E("select", { style: { ...INP, width: 'auto', fontSize: 10, padding: '1px 2px' }, value: cur,
-                  onChange: e => { const v = e.target.value; setInfo(p => ({ ...p, mealCats: { ...(p.mealCats || {}), [key]: v } })); } },
-                  E("option", { value: 'PM' }, "PM"), E("option", { value: 'ADMIN' }, "Admin"), E("option", { value: 'SKILLED' }, "Skilled")));
-            })),
           E("div", { style: { textAlign: 'right', marginTop: 8, paddingTop: 8, borderTop: '1px solid ' + BDR, color: color || ACC, fontWeight: 700, fontSize: 12 } },
             "Sub total: ", E("span", { style: MONO }, rows.reduce((s, r) => s + N(r.qty), 0) + " pax · P" + ph(rows.reduce((s, r) => s + mobRowCost(r, rr), 0))))));
     };

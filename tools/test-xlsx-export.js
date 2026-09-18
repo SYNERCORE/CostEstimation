@@ -44,7 +44,7 @@ console.log('\nUsing the same headings the printed form uses:');
 for (const h of ['BILL OF TOOLS AND EQUIPMENT', 'BILL OF MATERIALS AND CONSUMABLES',
                  'PERSONAL PROTECTIVE EQUIPMENTS', 'SCOPE OF WORK', 'BENEFITS AND OTHERS'])
   ck('"' + h + '"', exp.includes(h), 'the workbook should read like the CE');
-ck('and the same manpower columns', /'ITEM', 'MANPOWER LOADING', 'QTY', 'UOM', 'DAYS', 'RATE\/DAY', 'SUBTOTAL', 'AOT', 'RATE OT', 'TOTAL'/.test(exp));
+ck('and the same manpower columns', /'ITEM', 'MANPOWER LOADING', 'QTY', 'UOM', 'DAYS', 'RATE\/DAY', 'SUBTOTAL', 'OT HRS\/DAY', 'AOT', 'RATE OT', 'TOTAL'/.test(exp));
 ck('and the same resource columns', /'ITEM', 'DESCRIPTION', 'QTY', 'UOM'[\s\S]{0,60}'UNIT PRICE', 'TOTAL'/.test(exp));
 
 console.log('\nThe figures agree with the printed CE:');

@@ -7372,12 +7372,12 @@ function App({
       const subA=rows.reduce((s,r)=>s+N(r.pax)*N(r.days)*N(r.rate)*mult,0);
       const subB=rows.reduce((s,r)=>s+N(r.pax)*N(r.days)*(N(r.otHours)/8)*N(r.rate)*_otM*mult,0);
       return`<div class="sub">${info2?.label||sk.toUpperCase()}</div>
-      <table><tr style="background:#eee"><th class="c" style="width:28px">ITEM</th><th>MANPOWER LOADING</th><th class="c" style="width:28px">QTY</th><th class="c" style="width:30px">UOM</th><th class="c" style="width:36px">DAYS</th><th class="r" style="width:60px">RATE/DAY</th><th class="r" style="width:70px">SUBTOTAL</th><th class="c" style="width:30px">AOT</th><th class="r" style="width:55px">RATE OT</th><th class="r" style="width:70px">TOTAL</th></tr>
+      <table><tr style="background:#eee"><th class="c" style="width:28px">ITEM</th><th>MANPOWER LOADING</th><th class="c" style="width:28px">QTY</th><th class="c" style="width:30px">UOM</th><th class="c" style="width:36px">DAYS</th><th class="r" style="width:60px">RATE/DAY</th><th class="r" style="width:70px">SUBTOTAL</th><th class="c" style="width:34px">OT HRS/DAY</th><th class="c" style="width:30px">AOT</th><th class="r" style="width:55px">RATE OT</th><th class="r" style="width:70px">TOTAL</th></tr>
       ${rows.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.role||'')}</td><td class="c">${esc(r.pax||1)}</td><td class="c">pax</td><td class="c">${esc(r.days||1)}</td><td class="r">${fmt(r.rate)}</td><td class="r">${fmt(N(r.pax)*N(r.days)*N(r.rate)*mult)}</td>${/* AOT is the ACCUMULATED overtime on the printed form: the reader multiplies
       this column by RATE OT. otHours is now per day, so the total is what
       belongs here -- printing the per-day figure would understate the row
-      against its own TOTAL column. */''}<td class="c">${esc(N(r.otHours)*N(r.days)||0)}</td><td class="r">${fmt(N(r.rate)/8*_otM*mult)}</td><td class="r b">${fmt(N(r.pax)*N(r.days)*N(r.rate)*mult+N(r.pax)*N(r.days)*(N(r.otHours)/8)*N(r.rate)*_otM*mult)}</td></tr>`).join('')}
-      <tr class="tot"><td colspan="2" class="r b">SUB TOTAL:</td><td class="c b">${esc(rows.reduce((s,r)=>s+N(r.pax),0))}</td><td colspan="6"></td><td class="r b">${fmt(subA+subB)}</td></tr></table>`;
+      against its own TOTAL column. */''}<td class="c">${esc(N(r.otHours)||0)}</td><td class="c">${esc(N(r.otHours)*N(r.days)||0)}</td><td class="r">${fmt(N(r.rate)/8*_otM*mult)}</td><td class="r b">${fmt(N(r.pax)*N(r.days)*N(r.rate)*mult+N(r.pax)*N(r.days)*(N(r.otHours)/8)*N(r.rate)*_otM*mult)}</td></tr>`).join('')}
+      <tr class="tot"><td colspan="2" class="r b">SUB TOTAL:</td><td class="c b">${esc(rows.reduce((s,r)=>s+N(r.pax),0))}</td><td colspan="7"></td><td class="r b">${fmt(subA+subB)}</td></tr></table>`;
     }).join('');
 
     /* Benefits &#8212; the same rows the Manpower tab shows */
@@ -7698,18 +7698,18 @@ function App({
 
     const mpActive = mp.filter(r => r.role && (N(r.rate) > 0 || N(r.pax) > 0));
     if (mpActive.length) sheet('Manpower', a => {
-      docHead(a, 'BILL OF MANPOWER LOADING', 10);
+      docHead(a, 'BILL OF MANPOWER LOADING', 11);
       [...new Set(mpActive.map(r => r.shift || 'regular_day'))].forEach(sk => {
         const rows = mpActive.filter(r => (r.shift || 'regular_day') === sk);
         const mult = ceShiftMult(rr, sk);
-        a.title(shiftLabel(sk), 10);
-        a.head('ITEM', 'MANPOWER LOADING', 'QTY', 'UOM', 'DAYS', 'RATE/DAY', 'SUBTOTAL', 'AOT', 'RATE OT', 'TOTAL');
+        a.title(shiftLabel(sk), 11);
+        a.head('ITEM', 'MANPOWER LOADING', 'QTY', 'UOM', 'DAYS', 'RATE/DAY', 'SUBTOTAL', 'OT HRS/DAY', 'AOT', 'RATE OT', 'TOTAL');
         let subA = 0, subB = 0;
         rows.forEach((r, i) => {
           const {reg: base, ot} = mpWageParts(r);
           subA += base; subB += ot;
           a.row(i + 1, r.role || '', N(r.pax), 'pax', N(r.days), a.money(r.rate),
-            a.money(base), N(r.otHours) * N(r.days), a.money(N(r.rate) / 8 * ceOtMult(rr) * mult), a.money(base + ot));
+            a.money(base), N(r.otHours), N(r.otHours) * N(r.days), a.money(N(r.rate) / 8 * ceOtMult(rr) * mult), a.money(base + ot));
         });
         a.total('', 'SUB TOTAL:', rows.reduce((t, r) => t + N(r.pax), 0), '', '', '', '', '', '', a.money(subA + subB));
         a.blank();

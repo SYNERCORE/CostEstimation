@@ -140,6 +140,8 @@ jobs:
         run: node tools/test-ce-seq-shared.js
       - name: Mobilization manpower
         run: node tools/test-mob-manpower.js
+      - name: CE save and load round trip
+        run: node tools/test-ce-roundtrip.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents

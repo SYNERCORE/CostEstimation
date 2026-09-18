@@ -1909,17 +1909,18 @@ function App({
     /* Loading regenerates every row id, scope tasks included. Remap each
        resource row's taskId through the same mapping, or every SOW Breakdown
        assignment would silently orphan on load. */
-    const _sowMap = {};
-    const _sow = (d.sowItems || []).map(s => { const nid = uid(); _sowMap[s.id] = nid; return { ...s, id: nid }; });
-    const _rt = r => ({ ...r, id: uid(), taskId: (r.taskId && _sowMap[r.taskId]) || '' });
-    const _mp=(d.mp||[]).map(_rt);setMp(_mp);try{window.shicCurrentMp=_mp;}catch(_e){}
-    const _tools=(d.tools||[]).map(_rt);setTools(_tools);try{window.shicCurrentTools=_tools;}catch(_e){}
-    const _mats=(d.mats||[]).map(_rt);setMats(_mats);try{window.shicCurrentMats=_mats;}catch(_e){}
-    setPpe((d.ppe || []).map(_rt));
+    const _R = ceIdRemapper(d.sowItems);
+    const _sow = _R.sow;
+    const _mp=(d.mp||[]).map(_R.rt('mp'));setMp(_mp);try{window.shicCurrentMp=_mp;}catch(_e){}
+    const _tools=(d.tools||[]).map(_R.rt('tools'));setTools(_tools);try{window.shicCurrentTools=_tools;}catch(_e){}
+    const _mats=(d.mats||[]).map(_R.rt('mats'));setMats(_mats);try{window.shicCurrentMats=_mats;}catch(_e){}
+    setPpe((d.ppe || []).map(_R.rt('ppe')));
+    /* A drawn signature belongs to the CE it was drawn on. */
+    setSignatures({});
     const rawMisc = d.misc || {};
     const migratedMisc = {};
     MISC_DEF[d.ceType || 'onsite']?.forEach(([k]) => {
-      migratedMisc[k] = Array.isArray(rawMisc[k]) ? rawMisc[k].map(_rt) : N(rawMisc[k]) > 0 ? [{
+      migratedMisc[k] = Array.isArray(rawMisc[k]) ? rawMisc[k].map(_R.rt('misc')) : N(rawMisc[k]) > 0 ? [{
         id: uid(),
         desc: 'Lump sum',
         qty: 1,
@@ -1950,7 +1951,7 @@ function App({
       id: uid()
     })));
     setScope(d.scope || '');
-    setAddlCosts((d.addlCosts || []).map(r => ({...r, id: r.id || uid()})));
+    setAddlCosts(_R.fixAddl(d.addlCosts));
     setMargin(d.margin || 0);
     setTab('info');
   };
@@ -2411,18 +2412,19 @@ function App({
     /* Loading regenerates every row id, scope tasks included. Remap each
        resource row's taskId through the same mapping, or every SOW Breakdown
        assignment would silently orphan on load. */
-    const _sowMap = {};
-    const _sow = (d.sowItems || []).map(s => { const nid = uid(); _sowMap[s.id] = nid; return { ...s, id: nid }; });
-    const _rt = r => ({ ...r, id: uid(), taskId: (r.taskId && _sowMap[r.taskId]) || '' });
-    const _mp=(d.mp||[]).map(_rt);setMp(_mp);try{window.shicCurrentMp=_mp;}catch(_e){}
-    const _tools=(d.tools||[]).map(_rt);setTools(_tools);try{window.shicCurrentTools=_tools;}catch(_e){}
-    const _mats=(d.mats||[]).map(_rt);setMats(_mats);try{window.shicCurrentMats=_mats;}catch(_e){}
-    setPpe((d.ppe || []).map(_rt));
+    const _R = ceIdRemapper(d.sowItems);
+    const _sow = _R.sow;
+    const _mp=(d.mp||[]).map(_R.rt('mp'));setMp(_mp);try{window.shicCurrentMp=_mp;}catch(_e){}
+    const _tools=(d.tools||[]).map(_R.rt('tools'));setTools(_tools);try{window.shicCurrentTools=_tools;}catch(_e){}
+    const _mats=(d.mats||[]).map(_R.rt('mats'));setMats(_mats);try{window.shicCurrentMats=_mats;}catch(_e){}
+    setPpe((d.ppe || []).map(_R.rt('ppe')));
+    /* A drawn signature belongs to the CE it was drawn on. */
+    setSignatures({});
     /* migrate old numeric misc to arrays */
     const rawMisc = d.misc || {};
     const migratedMisc = {};
     MISC_DEF[d.ceType || 'onsite']?.forEach(([k]) => {
-      migratedMisc[k] = Array.isArray(rawMisc[k]) ? rawMisc[k].map(_rt) : N(rawMisc[k]) > 0 ? [{
+      migratedMisc[k] = Array.isArray(rawMisc[k]) ? rawMisc[k].map(_R.rt('misc')) : N(rawMisc[k]) > 0 ? [{
         id: uid(),
         desc: 'Lump sum',
         qty: 1,
@@ -2454,7 +2456,7 @@ function App({
       ...r,
       id: uid()
     })));
-    setAddlCosts((d.addlCosts || []).map(r => ({...r, id: r.id || uid()})));
+    setAddlCosts(_R.fixAddl(d.addlCosts));
     setMargin(d.margin || 0);
     setScope(d.scope || '');
     setDocFile(d.docRef ? {
@@ -2554,6 +2556,7 @@ function App({
     setScope('');
     setRates(stampRates());
     setVerifyNotes({});
+    setSignatures({});
     applyCeDefaults(ceType, BLANK_INFO.projType, true);
     setAddlCosts([]);
     setMargin(0);

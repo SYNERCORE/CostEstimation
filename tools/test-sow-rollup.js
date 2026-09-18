@@ -79,7 +79,7 @@ console.log('\nBreakdown notes:');
 ck('the note is written onto the scope item, so it travels with the task',
   /setSowItems\(p => p\.map\(s => s\.id === it\.id \? \{ \.\.\.s, note: v \} : s\)\)/.test(src),
   'a note kept in separate state would be orphaned by reorder/copy/delete');
-ck('load carries the note through the id remap', /\{ \.\.\.s, id: nid \}/.test(src),
+ck('load carries the note through the id remap', /\{ \.\.\.s, id: nid \}/.test(src + fs.readFileSync('src/helpers.js', 'utf8')),
   'the spread must be kept - listing fields by hand would drop note');
 ck('the note is part of the dirty signature', /sowItems, notes, addlCosts/.test(src),
   'editing a note must mark the CE unsaved');

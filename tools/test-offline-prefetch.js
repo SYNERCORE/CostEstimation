@@ -57,6 +57,7 @@ const _srcParse = new Function('return ' + db.match(/function _srcParse\(v\)\{[\
 
 const scope = new Function(
   'spGet', 'spList', '_shParse', '_srcParse', 'ceBulkPut', 'ceAll', 'USE_SP', 'getSiteURL', '_spGetTolerant', 'console',
+  db.match(/const _rowSig=[^\n]*/)[0] + ';' + db.match(/function _rowOrder\(rows,keys\)\{[\s\S]*?\n\}/)[0] + ';' +
   src + '; return {dbCacheAllCEs, _assembleCE};'
 )(spGet, spList, _shParse, _srcParse, ceBulkPut, ceAll, true, () => 'x', spGet, console);
 

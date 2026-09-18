@@ -6,11 +6,11 @@
 const fs = require('fs');
 const src = fs.readFileSync(process.argv[2], 'utf8');
 
-/* Pull the three remap lines straight out of the source. */
-const grab = re => { const m = src.match(re); if (!m) { console.error('could not find in source: ' + re); process.exit(1); } return m[0]; };
-const lineMap = grab(/const _sowMap = \{\};/);
-const lineSow = grab(/const _sow = \(d\.sowItems \|\| \[\]\)\.map\(s => \{[^\n]*\);/);
-const lineRt  = grab(/const _rt = r => \(\{[^\n]*\}\);/);
+/* The remap is ceIdRemapper in helpers.js; both loaders in App.js call it. */
+const helpers = fs.readFileSync(require('path').join(require('path').dirname(process.argv[2]), 'helpers.js'), 'utf8');
+const grab = (s, re) => { const m = s.match(re); if (!m) { console.error('could not find in source: ' + re); process.exit(1); } return m[0]; };
+const fnRemap = grab(helpers, /function ceIdRemapper\(sowItems\) \{[\s\S]*?\n\}/);
+grab(src, /const _R = ceIdRemapper\(d\.sowItems\);/);
 
 let n = 0;
 const uid = () => 'new' + (++n);
@@ -29,10 +29,9 @@ const d = {
 };
 
 const run = new Function('d', 'uid', `
-  ${lineMap}
-  ${lineSow}
-  ${lineRt}
-  return { sow: _sow, mp: (d.mp||[]).map(_rt) };
+  ${fnRemap}
+  const R = ceIdRemapper(d.sowItems);
+  return { sow: R.sow, mp: (d.mp||[]).map(R.rt('mp')) };
 `);
 
 const out = run(d, uid);

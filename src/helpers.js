@@ -217,6 +217,38 @@ function stampRates() {
   const s = stdRates();
   return { shiftMults: { ...s.shiftMults }, otMult: s.otMult };
 }
+/* Loading gives every row and scope task a fresh id. Three things point at
+   those ids and have to follow them:
+   - a row's taskId (its scope task),
+   - each entry of a row's shares (a row split across several tasks),
+   - a highlighted-cost callout's src / srcs ('row:<tab>:<id>', 'miscRow:<key>:<id>').
+   Only the first was remapped, so a shared row lost its tasks and a callout
+   linked to a line item read as "missing" after every reload. Ids are kept
+   per tab: rows from two SharePoint lists can share an 'sp<Id>'. */
+function ceIdRemapper(sowItems) {
+  const sowMap = {}, ids = {};
+  const sow = (sowItems || []).map(s => { const nid = uid(); sowMap[s.id] = nid; return { ...s, id: nid }; });
+  const rt = tab => r => {
+    const nid = uid();
+    if (r && r.id != null && r.id !== '') ids[tab + ':' + r.id] = nid;
+    const out = { ...r, id: nid, taskId: (r.taskId && sowMap[r.taskId]) || '' };
+    if (Array.isArray(r.shares)) out.shares = r.shares.filter(x => x && sowMap[x.taskId]).map(x => ({ ...x, taskId: sowMap[x.taskId] }));
+    return out;
+  };
+  const key = k => {
+    const m = /^(row:(mp|tools|mats|ppe)|miscRow:([^:]+)):(.+)$/.exec(String(k || ''));
+    if (!m) return k;
+    const nid = ids[(m[2] || 'misc') + ':' + m[4]];
+    return nid ? m[1] + ':' + nid : k;
+  };
+  const fixAddl = list => (list || []).map(r => ({
+    ...r,
+    id: r.id || uid(),
+    ...(r.src ? { src: key(r.src) } : {}),
+    ...(Array.isArray(r.srcs) ? { srcs: r.srcs.map(key) } : {})
+  }));
+  return { sow, rt, fixAddl };
+}
 function ceKwhRate(rates) {
   const v = rates && parseFloat(rates.kwhRate);
   return (isFinite(v) && v >= 0) ? v : KWH_RATE_DEFAULT;

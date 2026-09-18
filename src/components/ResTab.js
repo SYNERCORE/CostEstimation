@@ -136,7 +136,19 @@ showPower && /*#__PURE__*/React.createElement("label", {
     }));
     showToast(updated ? `Updated ${updated} rate(s) from masterlist.` : 'No matching items found in masterlist.', !updated);
   }
-}, "↺ Sync Rates"), showDays && /*#__PURE__*/React.createElement("span", {
+}, "↺ Sync Rates"), /*#__PURE__*/React.createElement("button", {
+  style: btn('ok', true),
+  title: "Set each row's unit to the Masterlist item's unit. Costs are not touched.",
+  onClick: () => {
+    /* Units only: a row keeps its cost, qty and days. Rows not on the
+       Masterlist, or whose Masterlist item has no unit, are left alone. */
+    const mlItems = masterlist[mlType] || [];
+    const find = r => mlItems.find(m => m.desc && r.desc && m.desc.trim().toUpperCase() === r.desc.trim().toUpperCase());
+    const n = rows.filter(r => { const m = find(r); return m && m.uom && m.uom !== r.uom; }).length;
+    if (n) set(p => p.map(r => { const m = find(r); return m && m.uom && m.uom !== r.uom ? {...r, uom: m.uom} : r; }));
+    showToast(n ? n + ' unit(s) updated from the Masterlist.' : 'Units already match the Masterlist.');
+  }
+}, "↺ Sync UOM"), showDays && /*#__PURE__*/React.createElement("span", {
   style: {display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, color: MT}
 }, "New rows:", /*#__PURE__*/React.createElement("select", {
   style: {...INP, width: 168, fontSize: 10, padding: '2px 4px'},

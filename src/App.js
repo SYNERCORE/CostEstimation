@@ -3373,7 +3373,7 @@ function App({
       vehicles: ['category', 'desc', 'rate', 'uom']
     };
     const colL = {
-      manpower: ['Item Code', 'Category', 'Role / Position', 'Day Rate (P)', 'Incentive (P/Day)', 'UOM'],
+      manpower: ['Item Code', 'Category', 'Role / Position', 'Day Rate (P)', 'Incentive (P/Day)', 'UOM', 'Food Allowance'],
       /* The four figures a tier price is derived from ride with the rate. The
          workbook the rates are maintained in has them; without them here, they
          could be typed into the calculator one item at a time and no other
@@ -3386,7 +3386,7 @@ function App({
     };
     const downloadMLTemplate = tab => {
       const colMap = {
-        manpower: ['code', 'category', 'role', 'rate', 'perDiem', 'uom'],
+        manpower: ['code', 'category', 'role', 'rate', 'perDiem', 'uom', 'mealCat'],
         tools: ['code', 'category', 'desc', 'cost', 'uom',
           'unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear', 'kw'],
         materials: ['code', 'category', 'desc', 'cost', 'uom'],
@@ -3400,7 +3400,10 @@ function App({
          from colL a few lines up. importMLExcel reads both spellings, so a
          template downloaded from an older build still imports. */
       const headers = (colL[tab] || colL.manpower);
-      const rows = (masterlist[tab] || []).map(r => keys.map(h => r[h] !== undefined ? r[h] : ''));
+      /* Food allowance is written as the word the dropdown shows; blank means
+         Auto (guessed from the role name) and imports back as blank. */
+      const MEAL_WORD = { PM: 'PM', ADMIN: 'Admin', SKILLED: 'Skilled Manpower' };
+      const rows = (masterlist[tab] || []).map(r => keys.map(h => h === 'mealCat' ? (MEAL_WORD[r.mealCat] || '') : (r[h] !== undefined ? r[h] : '')));
       const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Template');
@@ -3460,6 +3463,7 @@ function App({
           dayrate: 'rate', rate: 'rate',
           cost: 'cost',
           incentive: 'perDiem', perdiem: 'perDiem',
+          foodallowance: 'mealCat', mealallowance: 'mealCat', mealcategory: 'mealCat', mealcat: 'mealCat', foodallowancecategory: 'mealCat',
           uom: 'uom',
           /* Tier source columns, under the names the maintained workbook uses
              as well as the template's own. norm() has already stripped spaces,
@@ -3499,6 +3503,13 @@ function App({
              masterlist workbook already in circulation carries the old one. */
           if (tab === 'manpower') {
             item.perDiem = parseFloat(rk.perDiem || r.incentive || r.Incentive || r.perDiem || r.perdiem || 0) || 0;
+            /* PM / Admin / Skilled, in any case or spelling the sheet uses. A
+               blank or unrecognised cell is Auto; a sheet without the column
+               leaves the field off entirely. */
+            if (rk.mealCat !== undefined) {
+              const w = String(rk.mealCat || '').trim().toUpperCase();
+              item.mealCat = /^PM$|PROJECT\s*MANAGER/.test(w) ? 'PM' : /ADMIN/.test(w) ? 'ADMIN' : /SKILL/.test(w) ? 'SKILLED' : '';
+            }
           }
           /* Only what the sheet actually carried. Writing a 0 for a column the
              workbook does not have would turn "no basis to derive from" into a
@@ -3857,7 +3868,7 @@ function App({
         borderCollapse: 'collapse',
         fontSize: 12
       }
-    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, [...ls, ...(mlTab === 'manpower' ? ['Food Allowance'] : []), ''].map(h => /*#__PURE__*/React.createElement("th", {
+    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, [...ls, ''].map(h => /*#__PURE__*/React.createElement("th", {
       key: h,
       style: THS
     }, h)))), /*#__PURE__*/React.createElement("tbody", null, filtered.slice(mlPage * ML_PAGE_SIZE, (mlPage + 1) * ML_PAGE_SIZE).map(r => {

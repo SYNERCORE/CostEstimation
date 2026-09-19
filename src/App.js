@@ -7551,6 +7551,8 @@ function App({
     /* View from CE Monitoring: this copy of the app runs inside that frame
        only to draw the CE, so it swaps itself for the document -- which also
        stops it, leaving nothing running that could autosave. */
+    /* Preview wants the document, not a print window. */
+    if (opt && opt.htmlOnly) { window.__lastCEHtml = fullHtml; return fullHtml; }
     if (opt && opt.embed && window !== window.top) {
       document.open(); document.write(fullHtml); document.close();
       return;
@@ -7563,16 +7565,18 @@ function App({
   };
   /* Feature 1: Print Preview (no auto-print) */
   const handlePrintPreview = () => {
-    window.__lastCEHtml = null;
-    handleGenerateCE();
-    setTimeout(() => {
-      const html = window.__lastCEHtml;
-      if (!html) return;
+    /* The document only. This used to call Generate CE outright -- which opened
+       its own window and print dialog -- and then a second window on top, so
+       Preview and Generate CE looked like the same button. */
+    const w = window.open('','_blank');
+    if (!w) { showToast('Allow pop-ups for this site to preview the CE.', true); return; }
+    {
+      const html = handleGenerateCE({ htmlOnly: true });
+      if (!html) { w.close(); return; }
       const previewHtml = html.replace('</body>', `<div class="no-print" style="position:fixed;top:0;left:0;right:0;background:#1a1a2e;color:#fff;padding:10px 16px;display:flex;gap:10px;align-items:center;z-index:9999;font-family:sans-serif;font-size:13px"><b>👁 CE Preview</b><button onclick="window.print()" style="background:#F0A429;color:#000;border:none;padding:5px 14px;border-radius:4px;font-weight:700;cursor:pointer">🖨 Print</button><button onclick="window.close()" style="background:#333;color:#fff;border:1px solid #555;padding:5px 14px;border-radius:4px;cursor:pointer">✕ Close</button><span style="margin-left:auto;color:#aaa;font-size:11px">Use Ctrl+P to print</span></div></body>`);
-      const w = window.open('','_blank');
       w.document.write(previewHtml.replace('@page{', '@page{ margin-top:20mm;'));
       w.document.close();
-    }, 900);
+    }
   };
   /* Named line items that carry no cost. They look like real scope on the CE but
      contribute nothing to the total, so they are almost always an oversight.

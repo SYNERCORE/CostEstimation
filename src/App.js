@@ -904,6 +904,9 @@ function App({
     let _cleanupReconnect = null;
     const autoTimer=setInterval(()=>{
       try{
+        /* A copy of the app inside a View or xlsx frame is only there to draw
+           one CE. It must never save a draft under the viewer's name. */
+        if(window!==window.top)return;
         const live=_live.current;
         if(!live||!live.hasUnsavedWork||!live.hasUnsavedWork())return;
         if(live.sig===_lastAutoSig.current)return;
@@ -1005,6 +1008,22 @@ function App({
           }, 600);
         }
       } catch (e) { console.warn('print URL parse failed:', e.message); }
+      /* ?viewdraft=<key>&as=view -- CE Monitoring's View on a draft. The draft
+         has no saved record to fetch, so the row hands it over through
+         localStorage under a one-time key, read once and removed here. */
+      try {
+        const _vq = new URLSearchParams(window.location.search);
+        const _vk = _vq.get('viewdraft');
+        if (_vk && /^shic:viewDraft:/.test(_vk) && window !== window.top) {
+          window.history.replaceState({}, '', window.location.pathname);
+          let _vd = null;
+          try { _vd = JSON.parse(localStorage.getItem(_vk) || 'null'); localStorage.removeItem(_vk); } catch (_e) {}
+          if (_vd && _vd.info) setTimeout(() => {
+            try { applyDraftData(_vd); setAutoPrint({as: 'view', ceNum: (_vd.info || {}).ceNum || ''}); }
+            catch (ex) { showToast('Could not open that draft: ' + ex.message, true); }
+          }, 600);
+        }
+      } catch (e) { console.warn('viewdraft parse failed:', e.message); }
       /* Feature 7: load shared draft from URL ?draft= param */
       try {
         const urlDraft = new URLSearchParams(window.location.search).get('draft');
@@ -5831,7 +5850,11 @@ function App({
           }
         });
       }
-    }, confirmDel === e.id ? 'Sure?' : 'Del'), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{gridRow:2,gridColumn:1,...btn('info',true),fontSize:10,padding:'2px 8px'},onClick:()=>setViewCE({id:e.id,ceNum:e.info?.ceNum||e.ceNum||''}),title:"View the CE here without loading it — your open work is left as it is"},"👁 View"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{gridRow:3,gridColumn:1,...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:()=>openForPrint(e.id,'ce'),title:"Generate the printable CE in its own tab — this one is left as it is"},"\uD83D\uDDA8 CE"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{gridRow:3,gridColumn:2,...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:()=>openForPrint(e.id,'detailed'),title:"Export Detailed in its own tab — this one is left as it is"},"\u2B07 xlsx"), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{gridRow:4,gridColumn:1,...btn('ok',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleClone(e.data||e),title:"Clone with new CE number"},"Clone"), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{gridRow:4,gridColumn:2,...btn('info',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleRevise(e.data||e),title:"Revision copy (-R1, -R2...)"},"Revise"),
+    }, confirmDel === e.id ? 'Sure?' : 'Del'), e._draft&&typeof e.id!=='number'&&/*#__PURE__*/React.createElement("button",{style:{gridRow:2,gridColumn:1,...btn('info',true),fontSize:10,padding:'2px 8px'},onClick:()=>{
+      const k='shic:viewDraft:'+Date.now();
+      try { localStorage.setItem(k, JSON.stringify(e._draft)); } catch (ex) { showToast('This draft is too large to view here — use Load.', true); return; }
+      setViewCE({draftKey:k,ceNum:(e._draft.info&&e._draft.info.ceNum)||e.info?.ceNum||'',draft:true});
+    },title:"View this draft here without loading it — your open work is left as it is"},"👁 View"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{gridRow:2,gridColumn:1,...btn('info',true),fontSize:10,padding:'2px 8px'},onClick:()=>setViewCE({id:e.id,ceNum:e.info?.ceNum||e.ceNum||''}),title:"View the CE here without loading it — your open work is left as it is"},"👁 View"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{gridRow:3,gridColumn:1,...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:()=>openForPrint(e.id,'ce'),title:"Generate the printable CE in its own tab — this one is left as it is"},"\uD83D\uDDA8 CE"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{gridRow:3,gridColumn:2,...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:()=>openForPrint(e.id,'detailed'),title:"Export Detailed in its own tab — this one is left as it is"},"\u2B07 xlsx"), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{gridRow:4,gridColumn:1,...btn('ok',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleClone(e.data||e),title:"Clone with new CE number"},"Clone"), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{gridRow:4,gridColumn:2,...btn('info',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleRevise(e.data||e),title:"Revision copy (-R1, -R2...)"},"Revise"),
     /* Feature 3: Compare button for revisions */
     (()=>{const cn=(e.info?.ceNum||e.ceNum||'');const isRev=/-R\d+$/i.test(cn);if(!isRev)return null;return/*#__PURE__*/React.createElement("button",{style:{gridRow:4,gridColumn:3,...btn('def',true),fontSize:10,padding:'2px 8px'},title:"Compare with base CE",onClick:()=>{const base=cn.replace(/-R\d+$/i,'').toUpperCase();const baseEntry=history.find(h=>(h.info?.ceNum||h.ceNum||'').toUpperCase()===base);setDiffModal({base:baseEntry||null,rev:e.data||e});}},"⚖ Diff");})()
     )));
@@ -9426,10 +9449,10 @@ viewCE && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset
   /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:12,width:'min(960px,96vw)',height:'92vh',display:'flex',flexDirection:'column',gap:8},onClick:e=>e.stopPropagation()},
     /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',gap:8}},
       /*#__PURE__*/React.createElement("b", null, "👁 " + (viewCE.ceNum || 'CE')),
-      /*#__PURE__*/React.createElement("span", {style:{fontSize:11,color:MT}}, "Read-only view. Takes a few seconds to draw."),
+      /*#__PURE__*/React.createElement("span", {style:{fontSize:11,color:MT}}, viewCE.draft ? "Read-only view of an unsaved DRAFT — figures may still change." : "Read-only view. Takes a few seconds to draw."),
       /*#__PURE__*/React.createElement("button", {style:{...btn('def',true),marginLeft:'auto'},title:"Print or save this CE as PDF",onClick:()=>{try{document.getElementById('shic-view-ce').contentWindow.print();}catch(ex){showToast('Could not print: '+ex.message,true);}}}, "🖨 Print"),
       /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setViewCE(null)}, "✕ Close")),
-    /*#__PURE__*/React.createElement("iframe", {id:'shic-view-ce', title:'CE ' + (viewCE.ceNum || ''), src: window.location.pathname + '?print=' + viewCE.id + '&as=view', style:{flex:1,width:'100%',border:'1px solid '+BDR,borderRadius:6,background:'#fff'}}))),
+    /*#__PURE__*/React.createElement("iframe", {id:'shic-view-ce', title:'CE ' + (viewCE.ceNum || ''), src: window.location.pathname + (viewCE.draftKey ? '?viewdraft=' + encodeURIComponent(viewCE.draftKey) + '&as=view' : '?print=' + viewCE.id + '&as=view'), style:{flex:1,width:'100%',border:'1px solid '+BDR,borderRadius:6,background:'#fff'}}))),
 
 /* ── Feature 3: Revision Diff Modal ── */
 diffModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset:0,background:'#000a',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center'},onClick:()=>setDiffModal(null)},

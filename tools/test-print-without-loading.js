@@ -73,5 +73,10 @@ ck('the frame asks for the view', /'\?print=' \+ viewCE\.id \+ '&as=view'/.test(
 ck('the framed app replaces itself with the CE, so nothing keeps running',
   /if \(opt && opt\.embed && window !== window\.top\) \{\s*document\.open\(\); document\.write\(fullHtml\); document\.close\(\);\s*return;/.test(app));
 
+console.log('\nView on a draft:');
+ck('a draft row has its own View', /e\._draft&&typeof e\.id!=='number'&&/.test(app));
+ck('the draft is handed over once and removed', /localStorage\.getItem\(_vk\) \|\| 'null'\); localStorage\.removeItem\(_vk\);/.test(app));
+ck('a framed copy never autosaves a draft', /if\(window!==window\.top\)return;\s*const live=_live\.current;/.test(app));
+
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nprint without loading OK');
 process.exit(bad ? 1 : 0);

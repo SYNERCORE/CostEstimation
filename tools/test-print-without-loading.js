@@ -29,7 +29,7 @@ const ck = (n, c, x) => { if (c) console.log('  PASS  ' + n); else { console.log
 console.log('the Monitoring row opens its own tab:');
 ck('there is a printable-CE action', /onClick:\(\)=>openForPrint\(e\.id,'ce'\)/.test(app));
 ck('and an Export Detailed action', /onClick:\(\)=>openForPrint\(e\.id,'detailed'\)/.test(app));
-ck('both only on a row with a real CE id', /typeof e\.id==='number'&&[\s\S]{0,120}openForPrint/.test(app),
+ck('both only on a row with a real CE id', /typeof e\.id==='number'&&[\s\S]{0,160}openForPrint/.test(app),
   'a draft row has no numeric id and nothing saved to fetch');
 
 const opener = app.match(/const openForPrint = \(id, as\) => \{[\s\S]*?\n  \};/);

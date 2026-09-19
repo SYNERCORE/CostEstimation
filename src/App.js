@@ -12239,28 +12239,16 @@ tab === 'dashboard' && (() => {
       flexWrap: 'wrap',
       justifyContent: 'flex-end'
     }
-  }, /*#__PURE__*/React.createElement("button", {
+  }, /* Grouped by what they do -- keep, re-price, produce, send -- and each
+     explains itself on hover. */
+  /*#__PURE__*/React.createElement("div", {
+    title: "Saving and drafts",
+    style: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', border: '1px solid ' + BDR, borderRadius: 8, padding: '3px 6px' }
+  }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, fontWeight: 700, letterSpacing: .6, color: MT, textTransform: 'uppercase' } }, "Keep"), /*#__PURE__*/React.createElement("button", {
+    title: "Save this CE and share it with the team (Ctrl+S). The CE Number must be unique.",
     style: btn('def'),
     onClick: handleSave
   }, "Save"), /*#__PURE__*/React.createElement("button", {
-    style: {
-      ...btn('def'),
-      background: alpha(INFO, '22'),
-      borderColor: alpha(INFO, '55'),
-      color: INFO
-    },
-    onClick: handleSaveRevision,
-    title: 'Save as ' + ((info.ceNum || 'CE') + '-Rn revision')
-  }, "\u21BB Revise"), /*#__PURE__*/React.createElement("button", {
-    style: {
-      ...btn('def'),
-      background: alpha(OK, '22'),
-      borderColor: alpha(OK, '55'),
-      color: OK
-    },
-    onClick: syncRatesFromML,
-    title: 'Re-price every matching row from the masterlist. A saved CE keeps the cost it was quoted at until you do this.'
-  }, "\u21BA Sync Rates"), /*#__PURE__*/React.createElement("button", {
     style: {
       ...btn('def'),
       background: '#8B5CF622',
@@ -12268,7 +12256,7 @@ tab === 'dashboard' && (() => {
       color: 'var(--accent-violet)'
     },
     onClick: saveDraft,
-    title: "Save draft \u2014 shared with team via SharePoint"
+    title: "Park unfinished work as a draft the team can see and pick up. Saving the CE clears it."
   }, "\u2B07 Draft"), /*#__PURE__*/React.createElement("button", {
     style: {
       ...btn('def'),
@@ -12281,7 +12269,7 @@ tab === 'dashboard' && (() => {
       loadSharedDrafts();
       setDraftsOpen(true);
     },
-    title: "Unsaved work in progress, shared with the team \u2014 pick one up where it was left. Not the same as a saved CE whose status is Draft."
+    title: "Open the list of unsaved drafts — yours and the team's — and pick one up where it was left."
   }, "\uD83D\uDCCB Resume Work", sharedDrafts.length > 0 && /*#__PURE__*/React.createElement("span", {
     style: {
       position: 'absolute',
@@ -12299,13 +12287,50 @@ tab === 'dashboard' && (() => {
       fontWeight: 700
     }
   }, sharedDrafts.length)), /*#__PURE__*/React.createElement("button", {
+    title: "Save a copy of this CE as its next revision (-R1, -R2…); the original is kept.",
+    style: {
+      ...btn('def'),
+      background: alpha(INFO, '22'),
+      borderColor: alpha(INFO, '55'),
+      color: INFO
+    },
+    onClick: handleSaveRevision,
+    title: 'Save as ' + ((info.ceNum || 'CE') + '-Rn revision')
+  }, "\u21BB Revise")), /*#__PURE__*/React.createElement("div", {
+    title: "Re-pricing from the Masterlist",
+    style: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', border: '1px solid ' + BDR, borderRadius: 8, padding: '3px 6px' }
+  }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, fontWeight: 700, letterSpacing: .6, color: MT, textTransform: 'uppercase' } }, "Prices"), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...btn('def'),
+      background: alpha(OK, '22'),
+      borderColor: alpha(OK, '55'),
+      color: OK
+    },
+    onClick: syncRatesFromML,
+    title: "Re-price every matching row from the Masterlist. A saved CE keeps the price it was quoted at until you press this."
+  }, "\u21BA Sync Rates")), /*#__PURE__*/React.createElement("div", {
+    title: "Print and export",
+    style: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', border: '1px solid ' + BDR, borderRadius: 8, padding: '3px 6px' }
+  }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, fontWeight: 700, letterSpacing: .6, color: MT, textTransform: 'uppercase' } }, "Output"), /*#__PURE__*/React.createElement("button", {
+    style: {...btn('def'), borderColor: '#58A6FF55', color: INFO},
+    onClick: handlePrintPreview,
+    title: "See the printed CE on screen before printing. Nothing is sent to the printer."
+  }, "👁 Preview"), /*#__PURE__*/React.createElement("button", {
+    title: "Open the official CE form in a print window — print it or save it as PDF. Warns first about ₱0 items.",
     style: btn('info'),
     onClick: handleGenerateCEWithCheck
   }, "🖨 Generate CE"), /*#__PURE__*/React.createElement("button", {
-    style: {...btn('def'), borderColor: '#58A6FF55', color: INFO},
-    onClick: handlePrintPreview,
-    title: "Preview CE before printing"
-  }, "👁 Preview"), /*#__PURE__*/React.createElement("button", {
+    style: btn('ok'),
+    onClick: handleExportXLSX,
+    title: "Excel copy of the printed CE, page for page, with every column: OT hours, AOT, each benefit separately."
+  }, "Export Detailed"), /*#__PURE__*/React.createElement("button", {
+    style: btn('acc'),
+    onClick: handleExport,
+    title: "Excel in the SY3 master CE workbook layout (BOL, BOTE, BOCM…): shorter, the same 7 columns on every sheet."
+  }, "Export CE Template")), /*#__PURE__*/React.createElement("div", {
+    title: "Share with others",
+    style: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', border: '1px solid ' + BDR, borderRadius: 8, padding: '3px 6px' }
+  }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, fontWeight: 700, letterSpacing: .6, color: MT, textTransform: 'uppercase' } }, "Send"), /*#__PURE__*/React.createElement("button", {
     style: {...btn('def'), borderColor: '#3FB95055', color: OK},
     onClick: () => {
       try {
@@ -12314,10 +12339,10 @@ tab === 'dashboard' && (() => {
         navigator.clipboard.writeText(url).then(() => showToast('🔗 Share link copied to clipboard!')).catch(() => { prompt('Copy this link:', url); });
       } catch(e) { showToast('Failed to generate share link.', true); }
     },
-    title: "Copy shareable link to this draft"
+    title: "Copy a link that opens this CE as it is now in someone else's app. Anyone with the link sees the figures."
   }, "🔗 Share"), /*#__PURE__*/React.createElement("button", {
     style: {...btn('def'), borderColor: '#A371F755', color: '#A371F7'},
-    title: "Open email client to notify approvers",
+    title: "Start an email to the approvers with the CE number, client and cost summary filled in.",
     onClick: () => {
       const subject = encodeURIComponent(`[CE FOR APPROVAL] ${info.ceNum} — ${info.client || info.description || ''}`);
       const approverNames = approvers.map(a => `${a.role}: ${a.name}${a.title ? ' (' + a.title + ')' : ''}`).join('\n');
@@ -12335,15 +12360,7 @@ tab === 'dashboard' && (() => {
       );
       window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
     }
-  }, "📧 Notify"), /*#__PURE__*/React.createElement("button", {
-    style: btn('ok'),
-    onClick: handleExportXLSX,
-    title: "Detailed workbook — one sheet per section with every line item"
-  }, "Export Detailed"), /*#__PURE__*/React.createElement("button", {
-    style: btn('acc'),
-    onClick: handleExport,
-    title: "CE template — the standard SY3 Cost Estimate Summary layout"
-  }, "Export CE Template"))), /*#__PURE__*/React.createElement("table", {
+  }, "📧 Notify")))), /*#__PURE__*/React.createElement("table", {
     style: {
       width: '100%',
       borderCollapse: 'collapse',

@@ -108,7 +108,7 @@ ck('and the toast says Save is still needed', /Nothing is saved until you press 
 console.log('\nthe button is on the CE, next to the other CE-wide actions:');
 ck('it exists', /onClick: syncRatesFromML/.test(app));
 ck('and explains that a saved CE holds its quoted cost',
-  /A saved CE keeps the cost it was quoted at until you do this/.test(app));
+  /A saved CE keeps the price it was quoted at until you press this/.test(app));
 
 console.log('\nnothing re-prices a CE on its own:');
 const load = app.match(/const handleLoad = async e => \{[\s\S]*?\n  \};/)[0];

@@ -2326,6 +2326,10 @@ function App({
       showToast('Client name is required.', true);
       return;
     }
+    if (!String(info.projType || '').trim()) {
+      showToast('Discipline is required — choose it on Project Info.', true);
+      return;
+    }
     const badCost = [...(mp||[]), ...(tools||[]), ...(mats||[]), ...(ppe||[])].find(r => Number(r.cost||r.rate||0) < 0);
     if (badCost) {
       showToast('All cost/rate values must be zero or positive.', true);
@@ -2710,7 +2714,7 @@ function App({
 
     /* ---- CE SUMMARY ---------------------------------------------------- */
     const sum = head('COST ESTIMATE SUMMARY');
-    [['PROJECT TYPE:', (info.projType === 'electrical' ? 'Electrical ' : 'Mechanical ') + cl],
+    [['PROJECT TYPE:', (info.projType ? info.projType + ' ' : '') + cl],
      ['PROJECT DESCRIPTION:', info.description],
      ['CLIENT NAME:', info.client],
      ['CLIENT LOCATION:', info.location],
@@ -9746,14 +9750,18 @@ tab === 'dashboard' && (() => {
     }
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     style: LBL
-  }, "Discipline"), /*#__PURE__*/React.createElement("select", {
-    style: INP,
-    value: info.projType,
+  }, "Discipline", /*#__PURE__*/React.createElement("span", { style: { color: ERR } }, " *")), /*#__PURE__*/React.createElement("select", {
+    style: { ...INP, ...(info.projType ? {} : { borderColor: ERR }) },
+    title: 'Required before the CE can be saved',
+    value: info.projType || '',
     onChange: e => setInfo(p => ({
       ...p,
       projType: e.target.value
     }))
   }, /*#__PURE__*/React.createElement("option", {
+    value: "",
+    disabled: true
+  }, "— Select discipline —"), /*#__PURE__*/React.createElement("option", {
     value: "Electrical"
   }, "Electrical"), /*#__PURE__*/React.createElement("option", {
     value: "Mechanical"

@@ -114,7 +114,9 @@ const BLANK_INFO = {
   location: "",
   attention: "SALES DEPARTMENT",
   endUser: "C/O SALES",
-  projType: "Electrical",
+  /* Blank until chosen: a preset of Electrical went out on CEs nobody had
+     decided the discipline of. Saving requires it. */
+  projType: "",
   description: "",
   dept: "",
   status: "DRAFT",

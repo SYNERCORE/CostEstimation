@@ -59,7 +59,13 @@ ck('it waits for the CE number to match', /\(info\.ceNum \|\| ''\) !== autoPrint
 ck('it re-checks as the rows land', /\[autoPrint, info\.ceNum, mp, tools, mats, ppe\]/.test(eff[0]));
 ck('it fires once, not on every render', /setAutoPrint\(null\);/.test(eff[0]));
 ck('printable CE and Export Detailed are both reachable',
-  /if \(as === 'detailed'\) handleExportXLSX\(\); else if \(as === 'view'\) handleGenerateCE\(\{ embed: true \}\); else handleGenerateCE\(\)/.test(eff[0]));
+  /if \(as === 'detailed'\) \{ handleExportXLSX\(\);[\s\S]{0,300}\} else if \(as === 'view'\) handleGenerateCE\(\{ embed: true \}\); else handleGenerateCE\(\)/.test(eff[0]));
+
+console.log('\n⬇ xlsx leaves no window behind:');
+ck('the workbook is built in a hidden frame, not a new tab or window',
+  /if \(as === 'detailed'\) \{\s*const f = document\.createElement\('iframe'\);\s*f\.style\.display = 'none';/.test(opener[0]));
+ck('and the frame stops itself once the file is out',
+  /if \(window !== window\.top\) setTimeout\(\(\) => \{ document\.open\(\);/.test(eff[0]));
 
 console.log('\nView in CE Monitoring:');
 ck('the button opens the view, not the editor', /onClick:\(\)=>setViewCE\(\{id:e\.id,/.test(app));

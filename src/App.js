@@ -2256,6 +2256,18 @@ function App({
      matters: the CE you have open here does not move, and there is nothing to
      restore afterwards. */
   const openForPrint = (id, as) => {
+    /* The workbook is built in a hidden frame: a new tab -- in the installed
+       app, a whole second window -- stayed open on that CE after the file had
+       downloaded. The frame is removed once the file is out. */
+    if (as === 'detailed') {
+      const f = document.createElement('iframe');
+      f.style.display = 'none';
+      f.src = window.location.pathname + '?print=' + id + '&as=detailed';
+      document.body.appendChild(f);
+      setTimeout(() => { try { f.remove(); } catch (_e) {} }, 60000);
+      showToast('Preparing the Excel file — it will download in a few seconds...');
+      return;
+    }
     const w = window.open(window.location.pathname + '?print=' + id + '&as=' + as, '_blank');
     if (!w) { showToast('Allow pop-ups for this site to print a CE from here.', true); return; }
     let _what = 'the printable CE';
@@ -2271,7 +2283,11 @@ function App({
     const as = autoPrint.as;
     setAutoPrint(null);
     setTimeout(() => {
-      try { if (as === 'detailed') handleExportXLSX(); else if (as === 'view') handleGenerateCE({ embed: true }); else handleGenerateCE(); }
+      try { if (as === 'detailed') { handleExportXLSX();
+        /* In the hidden frame: once the file is out, stop this copy of the app
+           so nothing in it can autosave. */
+        if (window !== window.top) setTimeout(() => { document.open(); document.write('<p>Exported.</p>'); document.close(); }, 3000);
+      } else if (as === 'view') handleGenerateCE({ embed: true }); else handleGenerateCE(); }
       catch (ex) { showToast('Could not produce the document: ' + ex.message, true); }
     }, 250);
   }, [autoPrint, info.ceNum, mp, tools, mats, ppe]);

@@ -43,7 +43,7 @@ for (const v of VARS) {
   ck(v, inD && inL, (inD ? '' : 'missing from dark ') + (inL ? '' : 'missing from light'));
 }
 ck('and they differ, or the toggle would do nothing',
-  darkBlock.indexOf('--bg-canvas: #060e20') >= 0 && lightBlock.indexOf('--bg-canvas: #f8fafc') >= 0);
+  darkBlock.indexOf('--bg-canvas: #060e20') >= 0 && lightBlock.indexOf('--bg-canvas: #dfe4eb') >= 0);
 
 console.log('\nthe constants read the variables, not fixed hex:');
 for (const [name, v] of [['BG', 'bg-canvas'], ['CARD', 'bg-surface'], ['SURF', 'bg-surface-elevated'],
@@ -103,7 +103,7 @@ ck('it moves the browser chrome too', /meta\[name="theme-color"\]/.test(w));
    resolve var() against. The sweep that turned hex into variables reached
    this line once, and the address bar simply stopped changing. */
 ck('with a literal colour, not a variable',
-  /setAttribute\('content', t === 'light' \? '#f8fafc' : '#060e20'\)/.test(w));
+  /setAttribute\('content', t === 'light' \? '#dfe4eb' : '#060e20'\)/.test(w));
 ck('and the static default matches the dark canvas',
   /<meta name="theme-color" content="#060e20">/.test(html));
 ck('and it is in the header', /React\.createElement\(ThemeSwitch, null\)/.test(fs.readFileSync('src/App.js', 'utf8')));

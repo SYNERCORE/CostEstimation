@@ -455,7 +455,7 @@ function ThemeSwitch() {
       const meta = document.querySelector('meta[name="theme-color"]');
       /* Literal hex, never a variable: <meta name="theme-color"> is read by the
          browser chrome, which has no stylesheet to resolve var() against. */
-      if (meta) meta.setAttribute('content', t === 'light' ? '#f8fafc' : '#060e20');
+      if (meta) meta.setAttribute('content', t === 'light' ? '#dfe4eb' : '#060e20');
       window.dispatchEvent(new Event('shic:theme'));
     } catch (_e) {}
   };

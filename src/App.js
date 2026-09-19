@@ -2719,7 +2719,7 @@ function App({
   const apvLocked = apvState === 'pending' || apvState === 'approved';
   const _apvMe = () => ({ by: currentUser.username, byName: currentUser.name || currentUser.username, at: new Date().toISOString() });
   const apvSubmit = () => {
-    if (!apvRoute(approvers).length) { showToast('Link at least one signatory to a user first.', true); return; }
+    if (!apvRoute(approvers).length) { showToast('Pick a user in the dropdown on at least one signatory card below (it starts on ✍ Sign by hand), then Submit again.', true); return; }
     if (!String(info.ceNum || '').trim()) { showToast('Give the CE a number first.', true); return; }
     const me = _apvMe();
     const apv = { state: 'pending', submittedAt: me.at, submittedBy: me.by, submittedByName: me.byName, figSig: apvFigSig(mkEntry()), lines: {},
@@ -2810,7 +2810,7 @@ function App({
       /*#__PURE__*/React.createElement("span", {style: {flex: 1}}),
       !apvLocked && b('One after another', 'Each linked signatory signs in turn, left to right', () => setApprovers(p => p.map((x, i) => ({...x, step: i + 1})))),
       !apvLocked && b('All at once', 'Every linked signatory can sign straight away, in any order', () => setApprovers(p => p.map(x => ({...x, step: 1})))),
-      !apvLocked && s.total > 0 && b('📤 Submit for approval', 'Save and send to the linked signatories. Changing the figures later clears their signatures.', apvSubmit, 'acc'),
+      !apvLocked && b('📤 Submit for approval', s.total > 0 ? 'Save and send to the linked signatories. Changing the figures later clears their signatures.' : 'First pick a user in the dropdown on at least one signatory card below', apvSubmit, 'acc'),
       apvLocked && (isAdmin || (a && a.submittedBy === me)) && b('Withdraw', 'Take it back out of approval and clear the signatures', apvWithdraw),
       mine && b('✍ Approve & Sign', 'Sign the saved CE as ' + (mine.role || 'signatory'), () => apvStartSign(null), 'ok'),
       apvState === 'pending' && (mine || isAdmin) && b('↩ Return', 'Send it back to the estimator with a comment', () => apvStartReturn(null)));

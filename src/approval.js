@@ -31,7 +31,7 @@ function apvFigSig(ce) {
 /* The lines that take part in the routing, in signing order. */
 function apvRoute(approvers) {
   return (Array.isArray(approvers) ? approvers : []).map((a, i) => ({
-    id: a && a.id, user: String((a && a.user) || ''), role: (a && a.role) || '', name: (a && a.name) || '',
+    id: a && a.id, user: String((a && a.user) || ''), role: (a && a.role) || '', title: (a && a.title) || '', name: (a && a.name) || '',
     step: Math.max(1, parseInt(a && a.step, 10) || (i + 1))
   })).filter(l => l.id && l.user);
 }
@@ -63,12 +63,12 @@ function apvMirror(approvers, apv) {
 /* Burn who signed and when into the signature image itself: a faint diagonal
    name across the strokes and a line of text beneath them. A copy of the
    image lifted onto another document still says whose it is and when. */
-function apvStamp(dataUrl, who, when, ceNum) {
+function apvStamp(dataUrl, who, when, ceNum, title) {
   return new Promise(resolve => {
     const img = new Image();
     img.onload = () => {
       try {
-        const W = 420, H = 180, c = document.createElement('canvas');
+        const W = 420, H = title ? 198 : 180, c = document.createElement('canvas');
         c.width = W; c.height = H;
         const x = c.getContext('2d');
         x.fillStyle = '#fff'; x.fillRect(0, 0, W, H);
@@ -78,8 +78,10 @@ function apvStamp(dataUrl, who, when, ceNum) {
         x.fillText('E-SIGNED · ' + who, 0, 8); x.restore();
         x.fillStyle = '#1E7B34'; x.font = 'bold 12px Arial'; x.textAlign = 'left';
         x.fillText('E-signed by ' + who, 6, 156);
+        let y = 172;
+        if (title) { x.font = 'italic 11px Arial'; x.fillText(title, 6, y); y += 16; }
         x.font = '11px Arial';
-        x.fillText(when + (ceNum ? '  ·  ' + ceNum : ''), 6, 172);
+        x.fillText(when + (ceNum ? '  ·  ' + ceNum : ''), 6, y);
         resolve(c.toDataURL('image/png'));
       } catch (e) { resolve(dataUrl); }
     };

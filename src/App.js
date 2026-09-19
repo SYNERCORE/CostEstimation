@@ -2749,7 +2749,7 @@ function App({
       let sigs = {...(full.signatures || {})};
       if (action === 'approve') {
         if (!line) { showToast('It is not your turn to sign this CE.', true); return false; }
-        sigs[line.id] = await apvStamp(opt.sig, me.byName, apvWhen(me.at), inf.ceNum);
+        sigs[line.id] = await apvStamp(opt.sig, me.byName, apvWhen(me.at), inf.ceNum, line.title || line.role);
         apv.lines[line.id] = { at: me.at, by: me.by, byName: me.byName };
         apv.log.push({...me, action: 'approved', role: line.role});
         if (apvStatus(full.approvers, apv).done) apv.state = 'approved';
@@ -7648,7 +7648,7 @@ function App({
     const notesList = (notes.length || sowNotes.length) ? `<div style="margin-top:4px"><b>NOTE:</b><ol style="margin:1px 0 0 14px;padding:0;font-size:7.5pt">${notes.map(n=>`<li>${esc(n.text)}</li>`).join('')}${sowNotes.map(s=>`<li><b>Scope ${esc(sowLabels[s.id]||'')}</b> &#8212; ${esc(String(s.note).trim())}</li>`).join('')}</ol></div>` : '';
     const sigBlock = `<table style="width:100%;border-collapse:collapse;margin-top:20px;table-layout:fixed" class="sig">
       <tr>${approvers.map(a=>`<td style="border:1px solid #000;padding:4px 8px;font-size:8pt;font-weight:bold;vertical-align:top"><b>${esc(a.role)}:</b></td>`).join('')}</tr>
-      <tr>${approvers.map((a,i)=>{const sigImg=signatures[a.id||i]?`<img src="${signatures[a.id||i]}" style="height:48px;max-width:100%;display:block;margin:0 auto 2px"/>`:'';return`<td style="border:1px solid #000;padding:4px 8px;vertical-align:bottom"><div style="min-height:46px;text-align:center">${sigImg}</div><div style="border-top:1px solid #000;padding-top:3px;text-align:center"><b style="font-size:8pt">${esc(a.name||'')}</b><br><span style="font-size:7.5pt">${esc(a.title||a.role||'')}</span>${(()=>{const l=a.id&&info.approval&&(info.approval.lines||{})[a.id];return l?'<br><span style="font-size:6.5pt;color:#1E7B34">e-signed '+esc(apvWhen(l.at))+'</span>':'';})()}</div></td>`;}).join('')}</tr>
+      <tr>${approvers.map((a,i)=>{const sigImg=signatures[a.id||i]?`<img src="${signatures[a.id||i]}" style="height:48px;max-width:100%;display:block;margin:0 auto 2px"/>`:'';return`<td style="border:1px solid #000;padding:4px 8px;vertical-align:bottom"><div style="min-height:46px;text-align:center">${sigImg}</div><div style="border-top:1px solid #000;padding-top:3px;text-align:center"><b style="font-size:8pt">${esc((a.id&&info.approval&&(info.approval.lines||{})[a.id]||{}).byName||a.name||'')}</b><br><span style="font-size:7.5pt">${esc(a.title||a.role||'')}</span>${(()=>{const l=a.id&&info.approval&&(info.approval.lines||{})[a.id];return l?'<br><span style="font-size:6.5pt;color:#1E7B34">e-signed '+esc(apvWhen(l.at))+'</span>':'';})()}</div></td>`;}).join('')}</tr>
     </table>`;
 
     /* Manpower &#8212; skip zero-rate rows */

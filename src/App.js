@@ -491,6 +491,36 @@ function App({
      request to save once the state set alongside it has landed. */
   const [apvUsers, setApvUsers] = useState([]);
   const [saveReq, setSaveReq] = useState(0);
+  /* Masterlist Trash: null when closed, else the entries. */
+  const [mlTrash, setMlTrash] = useState(null);
+  const mlTrashItemName = it => (it && (it.desc || it.role)) || '(unnamed)';
+  const mlToTrash = async (tab, items) => {
+    const at = new Date().toISOString(), by = currentUser?.name || currentUser?.username || '';
+    const r = await dbMLTrashOp({ add: items.map(item => ({ key: uid(), tab, item, at, by })) });
+    if (r && r.sp === false && (USE_SP || getSiteURL())) showToast('Moved to Trash in this browser only — SharePoint did not accept it.', true);
+  };
+  const openMlTrash = () => { setMlTrash([]); dbGetMLTrash().then(l => setMlTrash(l || [])).catch(() => setMlTrash([])); };
+  const mlRestore = async entries => {
+    const next = {...masterlist};
+    let n = 0;
+    entries.forEach(e => {
+      const cur = next[e.tab] || [];
+      const k = String(mlTrashItemName(e.item)).trim().toUpperCase();
+      if (cur.some(r => String(mlTrashItemName(r)).trim().toUpperCase() === k)) return;
+      next[e.tab] = [{...e.item, id: e.item.id || uid()}, ...cur]; n++;
+    });
+    if (n) await saveML(next);
+    const r = await dbMLTrashOp({ remove: entries.map(e => e.key) });
+    setMlTrash(r.list || []);
+    auditLog('masterlist_restore', entries.map(e => e.tab + ':' + mlTrashItemName(e.item)).join(', '), currentUser?.username);
+    showToast(n === entries.length ? 'Restored ' + n + ' item' + (n === 1 ? '' : 's') + '.' : 'Restored ' + n + '; ' + (entries.length - n) + ' already in the list under the same name.');
+  };
+  const mlPurge = async entries => {
+    if (!confirm('Delete ' + entries.length + ' item' + (entries.length === 1 ? '' : 's') + ' permanently?\n\nThis cannot be undone.')) return;
+    const r = await dbMLTrashOp({ remove: entries.map(e => e.key) });
+    setMlTrash(r.list || []);
+    auditLog('masterlist_purge', entries.map(e => e.tab + ':' + mlTrashItemName(e.item)).join(', '), currentUser?.username);
+  };
   /* Bumped when the company feature switches arrive or change, so the
      editor re-reads them. */
   const [featTick, setFeatTick] = useState(0);
@@ -4012,10 +4042,21 @@ function App({
     };
     /* Named, so the site removes this one and keeps anything else it has
        that this browser has not seen yet. */
-    const delML = id => saveML({
-      ...masterlist,
-      [mlTab]: (masterlist[mlTab] || []).filter(r => r.id !== id)
-    }, {deleted: {[mlTab]: [id]}});
+    /* Asked first, and kept in the Trash for 30 days: the red x sits right
+       beside the fields people edit, and one stray click used to lose an
+       item and its rate with no way back. */
+    const delML = async id => {
+      const it = (masterlist[mlTab] || []).find(r => r.id === id);
+      if (!it) return;
+      if (!confirm('Delete "' + mlTrashItemName(it) + '" from the ' + mlTab + ' list?\n\nIt goes to the Trash and can be restored for 30 days.')) return;
+      await mlToTrash(mlTab, [it]);
+      saveML({
+        ...masterlist,
+        [mlTab]: (masterlist[mlTab] || []).filter(r => r.id !== id)
+      }, {deleted: {[mlTab]: [id]}});
+      auditLog('masterlist_delete', mlTab + ': ' + mlTrashItemName(it), currentUser?.username);
+      showToast('Moved to Trash — restore it from 🗑 Trash within 30 days.');
+    };
     const applyEscalation = () => {
       const pct = parseFloat(escPct);
       if (isNaN(pct) || pct === 0) { showToast('Enter a non-zero %', true); return; }
@@ -4109,7 +4150,8 @@ function App({
     }, "Download Template"), /*#__PURE__*/React.createElement("button", {
       style: btn('danger', true),
       onClick: () => {
-        if (confirm('Clear all ' + colL[mlTab][2].toLowerCase() + ' items in the ' + mlTab + ' list? This cannot be undone.')) {
+        if (confirm('Clear all ' + colL[mlTab][2].toLowerCase() + ' items in the ' + mlTab + ' list?\n\nThey go to the Trash and can be restored for 30 days.')) {
+          mlToTrash(mlTab, masterlist[mlTab] || []);
           saveML({
             ...masterlist,
             [mlTab]: []
@@ -4118,6 +4160,10 @@ function App({
         }
       }
     }, "Clear List"), /*#__PURE__*/React.createElement("button", {
+      style: btn('def', true),
+      title: "Deleted items stay here for 30 days and can be restored",
+      onClick: openMlTrash
+    }, "🗑 Trash"), /*#__PURE__*/React.createElement("button", {
       style: btn('acc', true),
       title: "Price every item in this tab that has none, using the most recent CE it was actually charged on",
       onClick: fillFromHistory
@@ -9666,6 +9712,28 @@ diffModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',in
   ),
 
 /* ── Feature 11: E-Signature Modal ── */
+/* ── Masterlist Trash ── */
+mlTrash && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset:0,background:'#000a',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center'},onClick:()=>setMlTrash(null)},
+  /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:16,width:'min(760px,96vw)',maxHeight:'86vh',display:'flex',flexDirection:'column',gap:8},onClick:e=>e.stopPropagation()},
+    /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',gap:8}},
+      /*#__PURE__*/React.createElement("b", null, "🗑 Masterlist Trash (" + mlTrash.length + ")"),
+      /*#__PURE__*/React.createElement("span", {style:{fontSize:11,color:MT}}, "Deleted items stay 30 days, then are removed for good."),
+      /*#__PURE__*/React.createElement("span", {style:{marginLeft:'auto'}}),
+      mlTrash.length > 0 && /*#__PURE__*/React.createElement("button", {style:btn('ok',true),onClick:()=>mlRestore(mlTrash)}, "Restore all"),
+      mlTrash.length > 0 && isAdmin && /*#__PURE__*/React.createElement("button", {style:btn('danger',true),onClick:()=>mlPurge(mlTrash)}, "Empty trash"),
+      /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setMlTrash(null)}, "✕")),
+    /*#__PURE__*/React.createElement("div", {style:{overflow:'auto',flex:1}},
+      mlTrash.length ? mlTrash.slice().sort((a,b)=>String(b.at).localeCompare(String(a.at))).map(e => {
+        const left = Math.max(0, 30 - Math.floor((Date.now() - new Date(e.at).getTime()) / 864e5));
+        return /*#__PURE__*/React.createElement("div", {key:e.key, style:{display:'flex',alignItems:'center',gap:8,padding:'6px 4px',borderBottom:'1px solid '+alpha(BDR,'55'),fontSize:12}},
+          /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT,width:74,textTransform:'uppercase'}}, e.tab),
+          /*#__PURE__*/React.createElement("span", {style:{flex:1}}, mlTrashItemName(e.item),
+            /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT,marginLeft:6,...MONO}}, '₱' + N(e.item.cost != null ? e.item.cost : e.item.rate).toLocaleString())),
+          /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT,width:170,textAlign:'right'},title:new Date(e.at).toLocaleString()}, (e.by ? e.by.split(' ')[0] + ' · ' : '') + new Date(e.at).toLocaleDateString('en-PH',{month:'short',day:'numeric'}) + ' · ' + left + 'd left'),
+          /*#__PURE__*/React.createElement("button", {style:btn('ok',true),onClick:()=>mlRestore([e])}, "Restore"),
+          isAdmin && /*#__PURE__*/React.createElement("button", {style:{...btn('danger',true),padding:'2px 6px'},title:'Delete permanently',onClick:()=>mlPurge([e])}, "✕"));
+      }) : /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:MT,textAlign:'center',padding:20}}, "Trash is empty.")))),
+
 sigModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset:0,background:'#000b',zIndex:3100,display:'flex',alignItems:'center',justifyContent:'center'},onClick:()=>setSigModal(null)},
   /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid #A78BFA',borderRadius:10,padding:20,width:460},onClick:e=>e.stopPropagation()},
     /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}},

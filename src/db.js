@@ -922,6 +922,43 @@ function _mlKey(it){
    this morning was gone the moment anybody else saved. Items the site has
    that the caller does not are merged back in and handed to the caller in
    `adopted`, section by section. */
+/* Masterlist Trash. Deleted items wait here for 30 days before they are gone
+   for good, so a stray click on the red x can be undone. Kept as one JSON row
+   ('trash') in the Masterlist list beside 'config', and mirrored locally.
+
+   op.add     entries to put in: {key, tab, item, at, by}
+   op.remove  keys to take out (restored, or deleted forever)
+   Anything older than 30 days is dropped on every read and write. */
+const ML_TRASH_DAYS = 30;
+function _mlTrashFresh(list){
+  const cut = Date.now() - ML_TRASH_DAYS * 864e5;
+  return (Array.isArray(list) ? list : []).filter(e => e && e.key && new Date(e.at).getTime() > cut);
+}
+async function dbGetMLTrash(){
+  if(USE_SP||getSiteURL()){
+    try{const r=await spGet(spList('Masterlist'),"Title eq 'trash'",'Id,shicData');
+      const v=r.length&&r[0].shicData?JSON.parse(r[0].shicData):[];
+      const f=_mlTrashFresh(v);LS.set('ml_trash',f);return f;}catch(e){console.warn('dbGetMLTrash:',e.message);}
+  }
+  return _mlTrashFresh(LS.get('ml_trash'));
+}
+async function dbMLTrashOp(op){
+  const o=op||{};const rm=new Set((o.remove||[]).map(String));
+  const apply=list=>{const have=new Set();const out=[];
+    for(const e of [...(o.add||[]),..._mlTrashFresh(list)]){if(!e||rm.has(String(e.key))||have.has(e.key))continue;have.add(e.key);out.push(e);}
+    return out;};
+  let local=apply(LS.get('ml_trash'));LS.set('ml_trash',local);
+  if(USE_SP||getSiteURL()){
+    try{const r=await spGet(spList('Masterlist'),"Title eq 'trash'",'Id,shicData');
+      let theirs=[];try{theirs=r.length&&r[0].shicData?JSON.parse(r[0].shicData):[];}catch(_e){}
+      const out=apply(theirs);
+      if(r.length)await spWithRetry(()=>spPatch(spList('Masterlist'),r[0].Id,{shicData:JSON.stringify(out)}));
+      else await spWithRetry(()=>spPost(spList('Masterlist'),{Title:'trash',shicData:JSON.stringify(out)}));
+      LS.set('ml_trash',out);return{sp:true,list:out};
+    }catch(e){console.warn('dbMLTrashOp:',e.message);return{sp:false,list:local,reason:e.message};}
+  }
+  return{sp:false,list:local};
+}
 async function dbSaveML(data,opts){
 /* Mirror locally FIRST, on both branches. The SharePoint branch used to
    `return` before ever reaching the LS.set below, so saving the masterlist

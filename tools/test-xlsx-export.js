@@ -77,7 +77,9 @@ ck('the summary reuses the same rows the app shows', /summaryRows\.forEach/.test
   'a second copy of the section list would drift from the screen');
 ck('selling price only when there is a margin', /margin !== 0\) a\.total/.test(exp));
 ck('highlighted costs are carried over', /hlRows\.forEach/.test(exp));
-ck('the unit price divides by the CE quantity', /UNIT PRICE \(qty '/.test(exp));
+ck('the unit price divides by the CE quantity', /a\.total\('', unitLbl, a\.money\(unitP\)\)/.test(exp) &&
+  /const unitP = \(grand - perJobT\) \/ \(N\(info\.qty\) \|\| 1\);/.test(fs.readFileSync('src/App.js', 'utf8')));
+ck('and per-job costs are charged once, on their own line', /if \(showUnitP && perJobT\) a\.total\('', perJobLbl, a\.money\(perJobT\)\)/.test(exp));
 
 console.log('\nNumbers are numbers, so the recipient can total a column:');
 ck('money cells carry a number format', /s: c\.n \? \(bodyStyle \? 'tdn' : 'valn'\)/.test(exp),

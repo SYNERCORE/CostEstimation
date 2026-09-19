@@ -1460,7 +1460,23 @@ function App({
   const demobSubT = demobVehiclesT;
   const mobT = cfg.mobDemob ? mobSubT + demobSubT : 0;
   const grand = mobT + mpTot + toolsT + matsT + ppeT + miscT;
-  const unitP = grand / (N(info.qty) || 1);
+  /* Costs charged once for the job, whatever the quantity -- transport to
+     site costs the same for one valve as for two. They are kept out of the
+     unit price and shown beside it. Chosen per CE on the Summary tab and kept
+     in info.perJob: misc category keys, and 'mobdemob'. */
+  const perJob = Array.isArray(info.perJob) ? info.perJob : [];
+  const perJobLines = [
+    ...(perJob.includes('mobdemob') && mobT > 0 ? [{ k: 'mobdemob', label: 'Mobilization / Demobilization', v: mobT }] : []),
+    ...(MISC_DEF[ceType] || MISC_DEF.onsite).filter(([k]) => perJob.includes(k)).map(([k, l]) => ({
+      k, label: String(l).replace(/^[A-Z]\.\d+\s*/, ''),
+      v: (Array.isArray(misc[k]) ? misc[k] : []).reduce((t, r) => t + miscRowCost(r), 0)
+    })).filter(x => x.v > 0)
+  ];
+  const perJobT = perJobLines.reduce((t, x) => t + x.v, 0);
+  const perJobNames = perJobLines.map(x => x.label).join(', ');
+  const unitP = (grand - perJobT) / (N(info.qty) || 1);
+  const unitLbl = 'UNIT PRICE (qty ' + (N(info.qty) || 1) + (perJobT ? ', excl. per-job costs' : '') + '):';
+  const perJobLbl = 'PER-JOB COSTS, CHARGED ONCE (' + perJobNames + '):';
   /* At qty 1 the unit price is just the total again, printed under it with a
      different name. On a supply CE covering several different items it reads
      as the price of one of them, which is the one thing it is not. Show it
@@ -2738,7 +2754,8 @@ function App({
       }
     });
     sum.push([S('', 'totlbl'), S('TOTAL AMOUNT:', 'totlbl', 4), null, null, null, null, S(N(grand), 'tot')]);
-    if (showUnitP) sum.push([S('', 'totlbl'), S('UNIT PRICE (qty ' + (N(info.qty) || 1) + '):', 'totlbl', 4), null, null, null, null, S(N(unitP), 'tot')]);
+    if (showUnitP) sum.push([S('', 'totlbl'), S(unitLbl, 'totlbl', 4), null, null, null, null, S(N(unitP), 'tot')]);
+    if (showUnitP && perJobT) sum.push([S('', 'totlbl'), S(perJobLbl, 'totlbl', 4), null, null, null, null, S(N(perJobT), 'tot')]);
     if (margin !== 0) {
       sum.push([S('', 'totlbl'), S('MARGIN:', 'totlbl', 4), null, null, null, null, S((margin > 0 ? '+' : '') + margin + '%', 'totlbl')]);
       sum.push([S('', 'totlbl'), S('SELLING PRICE:', 'totlbl', 4), null, null, null, null, S(N(grand * (1 + margin / 100)), 'tot')]);
@@ -7423,7 +7440,8 @@ function App({
       </tr>${r.sub?r.sub.map(s=>`<tr><td class="c" style="font-size:7pt">${s.letter}</td><td style="padding-left:16px;font-size:7pt">${esc(s.label)}</td><td class="r" style="font-size:7pt">${fmt(s.v)}</td></tr>`).join(''):''}
       `).join('')}
       <tr class="tot"><td colspan="2" class="b r" style="font-size:9pt">TOTAL AMOUNT:</td><td class="r b" style="font-size:9pt">${fmt(grand)}</td></tr>
-      ${showUnitP ? `<tr class="tot"><td colspan="2" class="b r">UNIT PRICE (qty ${N(info.qty)||1}):</td><td class="r b">${fmt(unitP)}</td></tr>` : ''}
+      ${showUnitP ? `<tr class="tot"><td colspan="2" class="b r">${esc(unitLbl)}</td><td class="r b">${fmt(unitP)}</td></tr>` : ''}
+      ${showUnitP && perJobT ? `<tr class="tot"><td colspan="2" class="b r">${esc(perJobLbl)}</td><td class="r b">${fmt(perJobT)}</td></tr>` : ''}
       ${margin !== 0 ? `<tr class="tot" style="background:#e8f5e9"><td colspan="2" class="b r">SELLING PRICE (${margin > 0 ? '+' : ''}${margin}% margin):</td><td class="r b">${fmt(grand*(1+margin/100))}</td></tr>` : ''}
       ${hlRows.length ? hlRows.map(r=>`<tr class="tot"><td colspan="2" class="b r">${esc(hlLabel(r).toUpperCase())}:</td><td class="r b">${fmt(hlAmt(r))}</td></tr>`).join('') : ''}
       ${servicesSummary.on && servicesSummary.ok ? `<tr><td colspan="3" class="c b" style="background:#ddd">SERVICES</td></tr>
@@ -7730,7 +7748,8 @@ function App({
       });
       a.blank();
       a.total('', 'TOTAL AMOUNT:', a.money(grand));
-      if (showUnitP) a.total('', 'UNIT PRICE (qty ' + (N(info.qty) || 1) + '):', a.money(unitP));
+      if (showUnitP) a.total('', unitLbl, a.money(unitP));
+      if (showUnitP && perJobT) a.total('', perJobLbl, a.money(perJobT));
       if (margin !== 0) a.total('', 'SELLING PRICE (' + (margin > 0 ? '+' : '') + margin + '% margin):', a.money(grand * (1 + margin / 100)));
       hlRows.forEach(r => a.total('', String(hlLabel(r)).toUpperCase() + ':', a.money(hlAmt(r))));
       if (servicesSummary.on && servicesSummary.ok) {
@@ -12479,7 +12498,16 @@ tab === 'dashboard' && (() => {
       ...TDS,
       color: MT
     }
-  }, "Unit Price (qty ", info.qty || 1, ")"), /*#__PURE__*/React.createElement("td", {
+  }, "Unit Price (qty ", info.qty || 1, perJobT ? ", excl. per-job costs" : "", ")",
+    /* Which costs are charged once for the job rather than per unit. */
+    /*#__PURE__*/React.createElement("div", { style: { marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', fontSize: 11 } },
+      /*#__PURE__*/React.createElement("span", { title: 'Ticked costs are the same whatever the quantity, so they are left out of the unit price and shown on their own line.' }, "Charged once per job:"),
+      [...(mobT > 0 ? [['mobdemob', 'Mob/Demob']] : []), ...(MISC_DEF[ceType] || MISC_DEF.onsite)
+        .filter(([k]) => (Array.isArray(misc[k]) ? misc[k] : []).some(r => miscRowCost(r) > 0))
+        .map(([k, l]) => [k, String(l).replace(/^[A-Z]\.\d+\s*/, '')])].map(([k, l]) =>
+        /*#__PURE__*/React.createElement("label", { key: k, style: { display: 'inline-flex', gap: 4, alignItems: 'center', cursor: 'pointer', border: '1px solid ' + BDR, borderRadius: 10, padding: '1px 8px', color: perJob.includes(k) ? ACC : MT } },
+          /*#__PURE__*/React.createElement("input", { type: 'checkbox', checked: perJob.includes(k),
+            onChange: e => setInfo(p => { const cur = Array.isArray(p.perJob) ? p.perJob : []; return { ...p, perJob: e.target.checked ? [...cur.filter(x => x !== k), k] : cur.filter(x => x !== k) }; }) }), l)))), /*#__PURE__*/React.createElement("td", {
     style: {
       ...TDS,
       ...MONO,

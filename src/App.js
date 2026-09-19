@@ -404,7 +404,7 @@ function App({
   onLogout
 }) {
   const [ceType, setCeType] = useState("onsite");
-  const [tab, setTab] = useState("info");
+  const [tab, setTab] = useState("mywork");
   const [info, setInfo] = useState({
     ...BLANK_INFO
   });
@@ -9764,6 +9764,69 @@ sigModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',ins
       }}, "💾 Save Signature")))),
 
 /* ── Feature 9: Dashboard Tab ── */
+/* ── My Work: everything waiting on the signed-in user, in one place ── */
+tab === 'mywork' && (() => {
+  const me = currentUser.username, names = meNames();
+  const heads = groupCERevisions(monRows, h => (h.info && h.info.ceNum) || h.ceNum || '').map(g => g.head);
+  const rows = heads.map(e => ({e, m: monOf(e)}));
+  const isMine = x => names.includes(String(x.m.ceeName || x.m.preparedBy || x.e.savedBy || '').trim().toUpperCase()) || x.e.savedBy === me;
+  const mine = rows.filter(x => !x.e._draft && isMine(x));
+  const apv = x => x.m.apv || {};
+  const toSign = rows.filter(x => apv(x).state === 'pending' && (apv(x).waiting || []).includes(me));
+  const returned = mine.filter(x => apv(x).state === 'returned');
+  const inApproval = mine.filter(x => apv(x).state === 'pending');
+  const forReview = rows.filter(x => !x.e._draft && x.m.status === 'For Approval' && !isMine(x) && !(apv(x).state === 'pending'));
+  const open = mine.filter(x => ceIsOpen(x.m.status) && apv(x).state !== 'pending')
+    .map(x => ({...x, dl: ceDeadline(x.m.deadline, x.m.dateSubmitted, x.m.status)}))
+    .sort((a, b) => (a.dl.days == null) - (b.dl.days == null) || (a.dl.days || 0) - (b.dl.days || 0));
+  const drafts = (sharedDrafts || []).filter(d => d.savedBy === me);
+  const now = new Date(), inMonth = v => { const d = v ? new Date(v) : null; return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); };
+  const subMonth = mine.filter(x => inMonth(x.m.dateSubmitted ? x.m.dateSubmitted + 'T00:00:00' : null) || (x.m.status === 'Submitted' && inMonth(x.m.statusChangedAt)));
+  const timed = mine.map(x => ceDeadline(x.m.deadline, x.m.dateSubmitted, x.m.status)).filter(d => d.done && d.days != null);
+  const onTime = timed.length ? Math.round(100 * timed.filter(d => !d.late).length / timed.length) : null;
+  const yr = mine.filter(x => new Date(x.e.savedAt || 0).getFullYear() === now.getFullYear());
+  const won = yr.filter(x => x.m.status === 'Approved').length, lost = yr.filter(x => ['No Quote', 'Cancelled'].includes(x.m.status)).length;
+  const overdue = open.filter(x => x.dl.late).length, dueSoon = open.filter(x => !x.dl.late && x.dl.days != null && x.dl.days <= 3).length;
+  const peso = v => '₱' + Math.round(N(v)).toLocaleString();
+  const kpi = (label, val, sub, col) => /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:'12px 14px',minWidth:0}},
+    /*#__PURE__*/React.createElement("div", {style:{fontSize:10,color:MT,textTransform:'uppercase',letterSpacing:'.06em'}}, label),
+    /*#__PURE__*/React.createElement("div", {style:{fontSize:24,fontWeight:800,color:col||'inherit',...MONO}}, val),
+    sub && /*#__PURE__*/React.createElement("div", {style:{fontSize:10,color:MT}}, sub));
+  const ceLabel = e => (e.info && e.info.ceNum) || e.ceNum || '(no number)';
+  const line = (x, extra, actions) => /*#__PURE__*/React.createElement("div", {key: x.e.id, style:{display:'flex',alignItems:'center',gap:8,padding:'6px 2px',borderBottom:'1px solid '+alpha(BDR,'44'),fontSize:12}},
+    /*#__PURE__*/React.createElement("b", {style:{...MONO,fontSize:11,whiteSpace:'nowrap'}}, ceLabel(x.e)),
+    /*#__PURE__*/React.createElement("span", {style:{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:MT}}, [(x.e.info && x.e.info.client) || x.m.customer || '', (x.e.info && x.e.info.description) || ''].filter(Boolean).join(' · ')),
+    extra, actions);
+  const viewBtn = x => typeof x.e.id === 'number' && /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setViewCE({id:x.e.id,ceNum:ceLabel(x.e)})}, "👁 View");
+  const loadBtn = x => /*#__PURE__*/React.createElement("button", {style:btn('acc',true),onClick:()=>handleLoad(x.e.data || x.e)}, "Load");
+  const section = (title, list, render, empty) => /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:'12px 14px'}},
+    /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:13,marginBottom:6}}, title, /*#__PURE__*/React.createElement("span", {style:{marginLeft:6,fontSize:11,color:MT}}, '(' + list.length + ')')),
+    list.length ? list.slice(0, 15).map(render) : /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,padding:'6px 0'}}, empty),
+    list.length > 15 && /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,marginTop:4}}, '+' + (list.length - 15) + ' more in CE Monitoring'));
+  return /*#__PURE__*/React.createElement("div", {style:{display:'flex',flexDirection:'column',gap:12}},
+    /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'baseline',gap:10,flexWrap:'wrap'}},
+      /*#__PURE__*/React.createElement("div", {style:{fontSize:18,fontWeight:800}}, 'Good ' + (now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening') + ', ' + String(currentUser.name || me).split(' ')[0]),
+      /*#__PURE__*/React.createElement("span", {style:{fontSize:12,color:MT}}, toSign.length + returned.length + overdue ? 'Here is what needs you today.' : 'Nothing urgent — you are all caught up.'),
+      /*#__PURE__*/React.createElement("button", {style:{...btn('acc',true),marginLeft:'auto'},onClick:()=>setTab('info')}, "➕ Go to the CE editor")),
+    /*#__PURE__*/React.createElement("div", {style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}},
+      kpi('Awaiting my signature', toSign.length, 'approvals routed to you', toSign.length ? 'var(--accent-cyan)' : null),
+      kpi('Open CEs assigned', open.length, overdue + ' overdue · ' + dueSoon + ' due ≤3 days', overdue ? ERR : null),
+      kpi('Returned to me', returned.length, 'need changes', returned.length ? ERR : null),
+      kpi('Submitted this month', subMonth.length, peso(subMonth.reduce((t, x) => t + N(x.e.grand), 0))),
+      kpi('On-time rate', onTime == null ? '—' : onTime + '%', timed.length + ' CEs with a deadline', onTime != null && onTime < 80 ? ERR : '#16a34a'),
+      kpi('Won ' + now.getFullYear(), won, lost + ' lost · ' + yr.length + ' CEs this year', '#16a34a')),
+    /*#__PURE__*/React.createElement("div", {style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(380px,1fr))',gap:12}},
+      section('✍ For my approval', toSign, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT,whiteSpace:'nowrap'}}, apv(x).signed + '/' + apv(x).total + ' signed'), viewBtn(x)), 'No CE is waiting on your signature.'),
+      section('↩ Returned to me', returned, x => line(x, null, loadBtn(x)), 'Nothing returned.'),
+      section('📂 My open CEs', open, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,fontWeight:700,whiteSpace:'nowrap',color:x.dl.late ? ERR : x.dl.days != null && x.dl.days <= 3 ? 'var(--accent-orange, #F07F12)' : MT}}, (x.m.status || 'Draft') + ' · ' + x.dl.label), [viewBtn(x), loadBtn(x)]), 'No open CEs assigned to you.'),
+      section('📝 My drafts', drafts, d => /*#__PURE__*/React.createElement("div", {key: d.draftId, style:{display:'flex',alignItems:'center',gap:8,padding:'6px 2px',borderBottom:'1px solid '+alpha(BDR,'44'),fontSize:12}},
+        /*#__PURE__*/React.createElement("b", {style:{...MONO,fontSize:11}}, (d.info && d.info.ceNum) || 'Untitled'),
+        /*#__PURE__*/React.createElement("span", {style:{flex:1,color:MT,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, ((d.info && d.info.client) || '') + ' · saved ' + new Date(d.savedAt).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})),
+        /*#__PURE__*/React.createElement("button", {style:btn('acc',true),onClick:()=>resumeDraft(d)}, "Resume")), 'No saved drafts.'),
+      section('⏳ My CEs in approval', inApproval, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT,whiteSpace:'nowrap'}}, apv(x).signed + '/' + apv(x).total + ' signed · waiting on ' + (apv(x).waiting || []).join(', ')), viewBtn(x)), 'None of your CEs are in approval.'),
+      forReview.length > 0 && section('🔎 For review (status For Approval)', forReview, x => line(x, null, viewBtn(x)), '')));
+})(),
+
 tab === 'dashboard' && (() => {
   const now = new Date(); const thisMonth = now.getMonth(); const thisYear = now.getFullYear();
   /* R01 of a CE is the same job, priced again. Counted as its own CE it was

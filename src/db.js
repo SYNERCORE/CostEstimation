@@ -505,7 +505,7 @@ function _rowKeysOf(e){
   const res=(tab,list,days)=>(list||[]).filter(r=>r.desc).map(r=>[r.id,_rowSig({shicTab:tab,shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicDays:days?(r.days||1):0,shicTaskId:r.taskId||''})]);
   return {mp,tools:res('tools',e.tools,true),mats:res('mats',e.mats),ppe:res('ppe',e.ppe)};
 }
-let _rowOrphans=0;
+let _rowOrphans=0,_rowDrop=false;
 function _rowOrder(rows,keys){
   if(!Array.isArray(keys)||!keys.length)return rows.map(r=>({r,id:null}));
   const pool=rows.slice(),out=[];
@@ -515,7 +515,7 @@ function _rowOrder(rows,keys){
      CE -- one SY3 CE saved at P745,593 opened at P2,075,492. The next save
      removes them for good. If some keyed row is missing, the save itself was
      interrupted and nothing is dropped. */
-  if(out.length===keys.length&&pool.length){_rowOrphans+=pool.length;return out;}
+  if(out.length===keys.length&&pool.length){_rowOrphans+=pool.length;if(_rowDrop)return out;}
   return out.concat(pool.map(r=>({r,id:null})));
 }
 const _shDump=v=>Array.isArray(v)&&v.length?JSON.stringify(v):'';
@@ -645,7 +645,20 @@ async function dbLoadCE(id){
      would not open. The IndexedDB archive holds the full record -- line items
      and all -- so serve it instead. SharePoint stays authoritative when online. */
   if(!(USE_SP||getSiteURL()))return await _ceLoadLocal(id);
-  try{const[hR,mR,rR]=await Promise.all([_spGetTolerant(spList('CEs'),`Id eq ${id}`,'Id,Title,shicType,shicClient,shicDesc,shicTotal,shicSavedBy,shicSavedAt,shicScope,shicNotes,shicApprovers,shicMob,shicDemob,shicMisc,shicSOW,shicInfo'),_spGetByCE(spList('CE_MP'),id,'Id,shicRole,shicRate,shicShift,shicDays,shicQty,shicPax,shicOTHours,shicPerDiem,shicTaskId,shicShares'),_spGetByCE(spList('CE_Resources'),id,'Id,shicTab,shicDesc,shicQty,shicUOM,shicCost,shicDays,shicTaskId,shicShares,shicTier,shicHours,shicKW,shicRunHrs,shicSrc')]);if(!hR.length)return null;const h=hR[0];_rowOrphans=0;const _ce=_assembleCE(h,mR,rR);if(_rowOrphans){const _n=_rowOrphans;console.warn('dbLoadCE: ignored '+_n+' leftover rows');setTimeout(()=>(window._shicToast||console.warn)(_ce.info.ceNum+': ignored '+_n+' leftover line(s) from an earlier save. Save the CE once to clean them up.',true),800);}
+  try{const[hR,mR,rR]=await Promise.all([_spGetTolerant(spList('CEs'),`Id eq ${id}`,'Id,Title,shicType,shicClient,shicDesc,shicTotal,shicSavedBy,shicSavedAt,shicScope,shicNotes,shicApprovers,shicMob,shicDemob,shicMisc,shicSOW,shicInfo'),_spGetByCE(spList('CE_MP'),id,'Id,shicRole,shicRate,shicShift,shicDays,shicQty,shicPax,shicOTHours,shicPerDiem,shicTaskId,shicShares'),_spGetByCE(spList('CE_Resources'),id,'Id,shicTab,shicDesc,shicQty,shicUOM,shicCost,shicDays,shicTaskId,shicShares,shicTier,shicHours,shicKW,shicRunHrs,shicSrc')]);if(!hR.length)return null;const h=hR[0];/* Rows outside the last save's row keys are either leftovers an earlier save
+   failed to delete, or real rows the keys do not describe. Only the saved
+   total can tell which: build the CE both ways and keep the one that matches
+   it. If neither does, nothing is dropped and the figures are reported. */
+_rowOrphans=0;_rowDrop=false;let _ce=_assembleCE(h,mR,rR);const _extra=_rowOrphans;
+if(_extra&&typeof computeCEGrand==='function'){
+  _rowDrop=true;const _slim=_assembleCE(h,mR,rR);_rowDrop=false;
+  const _tgt=Number(h.shicTotal)||0,_gAll=computeCEGrand(_ce),_gSlim=computeCEGrand(_slim);
+  const _near=(x)=>Math.abs(x-_tgt)<=Math.max(1,_tgt*0.001);
+  const _pf=v=>'P'+Math.round(v).toLocaleString();
+  if(_near(_gSlim)&&!_near(_gAll)){_ce=_slim;setTimeout(()=>(window._shicToast||console.warn)(_ce.info.ceNum+': ignored '+_extra+' leftover line(s) from an earlier save (with them it came to '+_pf(_gAll)+'). Save the CE once to clean them up.',true),800);}
+  else if(!_near(_gAll))setTimeout(()=>(window._shicToast||console.warn)(_ce.info.ceNum+' does not add up to its saved total '+_pf(_tgt)+': all '+(mR.length+rR.length)+' lines give '+_pf(_gAll)+', the '+(mR.length+rR.length-_extra)+' from the last save give '+_pf(_gSlim)+'. Nothing was dropped — check it before saving, and send this message to TSG.',true),800);
+  }
+
 /* Keep what was just fetched. Without this, opening a colleague's CE online
    left nothing behind, and the same CE would not open offline an hour later. */
 try{await cePut({..._ce,ceNum:_ce.info.ceNum,savedAt:_ce.savedAt||new Date().toISOString(),savedBy:_ce.savedBy||'',_syncState:'synced'});}catch(_){}

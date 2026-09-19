@@ -59,7 +59,13 @@ ck('it waits for the CE number to match', /\(info\.ceNum \|\| ''\) !== autoPrint
 ck('it re-checks as the rows land', /\[autoPrint, info\.ceNum, mp, tools, mats, ppe\]/.test(eff[0]));
 ck('it fires once, not on every render', /setAutoPrint\(null\);/.test(eff[0]));
 ck('printable CE and Export Detailed are both reachable',
-  /if \(as === 'detailed'\) handleExportXLSX\(\); else handleGenerateCE\(\)/.test(eff[0]));
+  /if \(as === 'detailed'\) handleExportXLSX\(\); else if \(as === 'view'\) handleGenerateCE\(\{ embed: true \}\); else handleGenerateCE\(\)/.test(eff[0]));
+
+console.log('\nView in CE Monitoring:');
+ck('the button opens the view, not the editor', /onClick:\(\)=>setViewCE\(\{id:e\.id,/.test(app));
+ck('the frame asks for the view', /'\?print=' \+ viewCE\.id \+ '&as=view'/.test(app));
+ck('the framed app replaces itself with the CE, so nothing keeps running',
+  /if \(opt && opt\.embed && window !== window\.top\) \{\s*document\.open\(\); document\.write\(fullHtml\); document\.close\(\);\s*return;/.test(app));
 
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nprint without loading OK');
 process.exit(bad ? 1 : 0);

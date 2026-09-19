@@ -488,6 +488,8 @@ function App({
   const [signatures, setSignatures] = useState({});
   const [sigModal, setSigModal] = useState(null);
   const [diffModal, setDiffModal] = useState(null);
+  /* CE Monitoring -> View: the printable CE of a saved CE, shown in place. */
+  const [viewCE, setViewCE] = useState(null);
   const [aiSuggest, setAiSuggest] = useState(null);
   const [printPreviewWin, setPrintPreviewWin] = useState(null);
   const [toastErr, setToastErr] = useState(false);
@@ -978,7 +980,7 @@ function App({
         const _q = new URLSearchParams(window.location.search);
         const _pid = Number(_q.get('print'));
         if (_pid) {
-          const _as = _q.get('as') === 'detailed' ? 'detailed' : 'ce';
+          const _as = _q.get('as') === 'detailed' ? 'detailed' : _q.get('as') === 'view' ? 'view' : 'ce';
           window.history.replaceState({}, '', window.location.pathname);
           setTimeout(async () => {
             try {
@@ -2256,7 +2258,7 @@ function App({
     const as = autoPrint.as;
     setAutoPrint(null);
     setTimeout(() => {
-      try { if (as === 'detailed') handleExportXLSX(); else handleGenerateCE(); }
+      try { if (as === 'detailed') handleExportXLSX(); else if (as === 'view') handleGenerateCE({ embed: true }); else handleGenerateCE(); }
       catch (ex) { showToast('Could not produce the document: ' + ex.message, true); }
     }, 250);
   }, [autoPrint, info.ceNum, mp, tools, mats, ppe]);
@@ -5789,7 +5791,7 @@ function App({
           }
         });
       }
-    }, confirmDel === e.id ? 'Sure?' : 'Del'), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:()=>openForPrint(e.id,'ce'),title:"Generate the printable CE in its own tab — this one is left as it is"},"\uD83D\uDDA8 CE"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:()=>openForPrint(e.id,'detailed'),title:"Export Detailed in its own tab — this one is left as it is"},"\u2B07 xlsx"), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{...btn('ok',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleClone(e.data||e),title:"Clone with new CE number"},"Clone"), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{...btn('info',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleRevise(e.data||e),title:"Revision copy (-R1, -R2...)"},"Revise"),
+    }, confirmDel === e.id ? 'Sure?' : 'Del'), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{...btn('info',true),fontSize:10,padding:'2px 8px'},onClick:()=>setViewCE({id:e.id,ceNum:e.info?.ceNum||e.ceNum||''}),title:"View the CE here without loading it — your open work is left as it is"},"👁 View"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:()=>openForPrint(e.id,'ce'),title:"Generate the printable CE in its own tab — this one is left as it is"},"\uD83D\uDDA8 CE"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:()=>openForPrint(e.id,'detailed'),title:"Export Detailed in its own tab — this one is left as it is"},"\u2B07 xlsx"), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{...btn('ok',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleClone(e.data||e),title:"Clone with new CE number"},"Clone"), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{...btn('info',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleRevise(e.data||e),title:"Revision copy (-R1, -R2...)"},"Revise"),
     /* Feature 3: Compare button for revisions */
     (()=>{const cn=(e.info?.ceNum||e.ceNum||'');const isRev=/-R\d+$/i.test(cn);if(!isRev)return null;return/*#__PURE__*/React.createElement("button",{style:{...btn('def',true),fontSize:10,padding:'2px 8px'},title:"Compare with base CE",onClick:()=>{const base=cn.replace(/-R\d+$/i,'').toUpperCase();const baseEntry=history.find(h=>(h.info?.ceNum||h.ceNum||'').toUpperCase()===base);setDiffModal({base:baseEntry||null,rev:e.data||e});}},"⚖ Diff");})()
     )));
@@ -7268,7 +7270,7 @@ function App({
   };
   const summaryDot = label => SUMMARY_DOT[String(label).replace(/^[A-Z]\.\s+/, '')] || MT;
   const summaryRows = [...ceSections.map(x => [(x.letter ? x.letter + '  ' : '') + x.label, x.v])];
-  const handleGenerateCE = () => {
+  const handleGenerateCE = (opt) => {
     const fmt = (n, d = 2) => 'P' + N(n).toLocaleString('en-PH', {
       minimumFractionDigits: d,
       maximumFractionDigits: d
@@ -7479,6 +7481,13 @@ function App({
       ${sowPage}
       ${billsPage}
     <\/body><\/html>`;
+    /* View from CE Monitoring: this copy of the app runs inside that frame
+       only to draw the CE, so it swaps itself for the document -- which also
+       stops it, leaving nothing running that could autosave. */
+    if (opt && opt.embed && window !== window.top) {
+      document.open(); document.write(fullHtml); document.close();
+      return;
+    }
     const w=window.open('','_blank');
     w.document.write(fullHtml);
     w.document.close();
@@ -9341,6 +9350,16 @@ attachPanel && /*#__PURE__*/React.createElement("div", {
     )
   )
 )),
+
+/* ── CE Monitoring -> View ── */
+viewCE && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset:0,background:'#000a',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center'},onClick:()=>setViewCE(null)},
+  /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:12,width:'min(960px,96vw)',height:'92vh',display:'flex',flexDirection:'column',gap:8},onClick:e=>e.stopPropagation()},
+    /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',gap:8}},
+      /*#__PURE__*/React.createElement("b", null, "👁 " + (viewCE.ceNum || 'CE')),
+      /*#__PURE__*/React.createElement("span", {style:{fontSize:11,color:MT}}, "Read-only view. Takes a few seconds to draw."),
+      /*#__PURE__*/React.createElement("button", {style:{...btn('def',true),marginLeft:'auto'},title:"Print or save this CE as PDF",onClick:()=>{try{document.getElementById('shic-view-ce').contentWindow.print();}catch(ex){showToast('Could not print: '+ex.message,true);}}}, "🖨 Print"),
+      /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setViewCE(null)}, "✕ Close")),
+    /*#__PURE__*/React.createElement("iframe", {id:'shic-view-ce', title:'CE ' + (viewCE.ceNum || ''), src: window.location.pathname + '?print=' + viewCE.id + '&as=view', style:{flex:1,width:'100%',border:'1px solid '+BDR,borderRadius:6,background:'#fff'}}))),
 
 /* ── Feature 3: Revision Diff Modal ── */
 diffModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset:0,background:'#000a',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center'},onClick:()=>setDiffModal(null)},

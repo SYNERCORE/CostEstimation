@@ -95,7 +95,12 @@ ck('and no on-accent text is hardcoded black', !/background: ACC,\n\s+color: '#0
 console.log('\nthe switcher (DESIGN.md §5.1):');
 ck('it exists', /function ThemeSwitch\(\)/.test(w));
 ck('at module scope, so it is not remounted', /^function ThemeSwitch/m.test(w));
-ck('it is a segmented pair, not a single toggle', /seg\('light', '☀', 'Executive Light'\), seg\('dark', '☽', 'Dark Slate'\)/.test(w));
+ck('it offers named choices you can see, not a bare toggle',
+  /label: 'Dark Slate'/.test(w) && /label: 'Executive Light'/.test(w) && /SHIC_PALETTES\.map\(card\)/.test(w));
+ck('every colour theme has its CSS block', [...w.matchAll(/\{ id: '([a-z]+)', base:/g)].every(m => html.indexOf('[data-palette="' + m[1] + '"]{') >= 0));
+ck('the palette is applied before first paint too', /localStorage\.getItem\("shic:palette"\)/.test(html));
+ck('a wallpaper keeps the cards solid, only the canvas turns see-through',
+  /html\[data-wp\] body\{background:/.test(html) && !/html\[data-wp\][^{]*\{[^}]*--bg-surface/.test(html));
 ck('it writes the attribute the CSS keys off', /setAttribute\('data-theme', t\)/.test(w));
 ck('it remembers the choice', /localStorage\.setItem\('shic:theme', t\)/.test(w));
 ck('it moves the browser chrome too', /meta\[name="theme-color"\]/.test(w));
@@ -103,7 +108,7 @@ ck('it moves the browser chrome too', /meta\[name="theme-color"\]/.test(w));
    resolve var() against. The sweep that turned hex into variables reached
    this line once, and the address bar simply stopped changing. */
 ck('with a literal colour, not a variable',
-  /setAttribute\('content', t === 'light' \? '#dfe4eb' : '#060e20'\)/.test(w));
+  /setAttribute\('content', pal && p \? p\.sw\[0\] : \(t === 'light' \? '#dfe4eb' : '#060e20'\)\)/.test(w));
 ck('and the static default matches the dark canvas',
   /<meta name="theme-color" content="#060e20">/.test(html));
 ck('and it is in the header', /React\.createElement\(ThemeSwitch, null\)/.test(fs.readFileSync('src/App.js', 'utf8')));

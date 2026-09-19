@@ -440,45 +440,120 @@ function RateHistory(props) {
 
    A segmented pair rather than a single toggle: with one button there is no
    way to see which mode you are in without knowing what the icon means. */
+const SHIC_PALETTES = [
+  { id: '', base: 'dark', label: 'Dark Slate', sw: ['#060e20', '#172036', '#f59e0b'] },
+  { id: '', base: 'light', label: 'Executive Light', sw: ['#dfe4eb', '#f1f3f6', '#d97706'] },
+  { id: 'ocean', base: 'dark', label: 'Ocean', sw: ['#04161f', '#103342', '#2dd4bf'] },
+  { id: 'forest', base: 'dark', label: 'Forest', sw: ['#07130c', '#173121', '#a3e635'] },
+  { id: 'nebula', base: 'dark', label: 'Nebula', sw: ['#0d0a1f', '#231c4d', '#e879f9'] },
+  { id: 'graphite', base: 'dark', label: 'Graphite', sw: ['#111113', '#27272a', '#fb923c'] },
+  { id: 'sunset', base: 'light', label: 'Sunset', sw: ['#f0dccf', '#fbf1ea', '#c2410c'] },
+  { id: 'lavender', base: 'light', label: 'Lavender', sw: ['#e1dcf1', '#f3f0fa', '#6d28d9'] },
+  { id: 'sakura', base: 'light', label: 'Sakura', sw: ['#f0dbe2', '#fbf1f4', '#be185d'] },
+  { id: 'mint', base: 'light', label: 'Mint', sw: ['#d7eae1', '#eff7f3', '#047857'] }
+];
+const SHIC_WALLPAPERS = [
+  { label: 'Aurora', css: 'linear-gradient(135deg,#0f766e 0%,#4338ca 50%,#9d174d 100%)' },
+  { label: 'Sunrise', css: 'linear-gradient(160deg,#fde68a 0%,#fb923c 45%,#db2777 100%)' },
+  { label: 'Deep sea', css: 'radial-gradient(circle at 20% 20%,#0ea5e9 0%,#0c4a6e 45%,#020617 100%)' },
+  { label: 'Meadow', css: 'linear-gradient(135deg,#bbf7d0 0%,#4ade80 40%,#166534 100%)' },
+  { label: 'Dusk', css: 'linear-gradient(180deg,#1e1b4b 0%,#7c3aed 55%,#f472b6 100%)' },
+  { label: 'Sand', css: 'linear-gradient(135deg,#fef3c7 0%,#e7c9a0 50%,#a16207 100%)' }
+];
 function ThemeSwitch() {
   const read = () => {
-    try { return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'; }
-    catch (_e) { return 'dark'; }
+    try { const r = document.documentElement; return { base: r.getAttribute('data-theme') === 'light' ? 'light' : 'dark', pal: r.getAttribute('data-palette') || '' }; }
+    catch (_e) { return { base: 'dark', pal: '' }; }
   };
-  const _s = React.useState(read), theme = _s[0], setTheme = _s[1];
-  const pick = t => {
-    setTheme(t);
+  const _s = React.useState(read), cur = _s[0], setCur = _s[1];
+  const _o = React.useState(false), open = _o[0], setOpen = _o[1];
+  const _w = React.useState(() => { try { return localStorage.getItem('shic:wallpaper') || ''; } catch (_e) { return ''; } }), wp = _w[0], setWp = _w[1];
+  const _d = React.useState(() => { try { return parseInt(localStorage.getItem('shic:wpdim') || '35', 10); } catch (_e) { return 35; } }), dim = _d[0], setDim = _d[1];
+  const _m = React.useState(''), msg = _m[0], setMsg = _m[1];
+  const pick = (t, pal) => {
+    setCur({ base: t, pal: pal || '' });
     try {
-      document.documentElement.setAttribute('data-theme', t);
+      const r = document.documentElement;
+      r.setAttribute('data-theme', t);
       localStorage.setItem('shic:theme', t);
-      /* The browser chrome and the address bar follow the canvas. */
-      const meta = document.querySelector('meta[name="theme-color"]');
-      /* Literal hex, never a variable: <meta name="theme-color"> is read by the
+      if (pal) { r.setAttribute('data-palette', pal); localStorage.setItem('shic:palette', pal); }
+      else { r.removeAttribute('data-palette'); localStorage.removeItem('shic:palette'); }
+      /* The browser chrome and the address bar follow the canvas.
+         Literal hex, never a variable: <meta name="theme-color"> is read by the
          browser chrome, which has no stylesheet to resolve var() against. */
-      if (meta) meta.setAttribute('content', t === 'light' ? '#dfe4eb' : '#060e20');
+      const meta = document.querySelector('meta[name="theme-color"]');
+      const p = SHIC_PALETTES.find(x => x.id === (pal || '') && x.base === t);
+      if (meta) meta.setAttribute('content', pal && p ? p.sw[0] : (t === 'light' ? '#dfe4eb' : '#060e20'));
       window.dispatchEvent(new Event('shic:theme'));
     } catch (_e) {}
   };
-  const seg = (t, icon, label) => React.createElement('button', {
-    type: 'button',
-    onClick: () => pick(t),
-    title: label,
-    'aria-pressed': theme === t,
-    style: {
-      cursor: 'pointer', border: 'none', borderRadius: 5, padding: '3px 8px',
-      fontSize: 11, lineHeight: '16px', fontFamily: 'inherit', fontWeight: 600,
-      background: theme === t ? 'var(--bg-surface-card)' : 'transparent',
-      color: theme === t ? 'var(--text-primary)' : 'var(--text-muted)',
-      boxShadow: theme === t ? 'var(--card-shadow)' : 'none'
-    }
-  }, icon);
-  return React.createElement('div', {
-    style: {
-      display: 'inline-flex', gap: 2, padding: 2, borderRadius: 6,
-      background: 'var(--bg-surface-elevated)',
-      border: '1px solid var(--border-subtle)', flexShrink: 0
-    }
-  }, seg('light', '☀', 'Executive Light'), seg('dark', '☽', 'Dark Slate'));
+  const applyWp = (css, d) => {
+    try {
+      const r = document.documentElement;
+      if (css) { r.setAttribute('data-wp', '1'); r.style.setProperty('--wp-img', css); r.style.setProperty('--wp-dim', String(d / 100)); localStorage.setItem('shic:wallpaper', css); }
+      else { r.removeAttribute('data-wp'); r.style.removeProperty('--wp-img'); localStorage.removeItem('shic:wallpaper'); }
+      localStorage.setItem('shic:wpdim', String(d));
+      setMsg('');
+    } catch (_e) { setMsg('This picture is too large for the browser to keep. Try a smaller one.'); }
+  };
+  const setWallpaper = css => { setWp(css); applyWp(css, dim); };
+  /* A phone photo is several MB; shrunk to screen size and saved as JPEG it
+     fits comfortably in the browser's storage. */
+  const upload = f => {
+    if (!f) return;
+    if (!/^image\//.test(f.type)) { setMsg('Pick an image file.'); return; }
+    const rd = new FileReader();
+    rd.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const k = Math.min(1, 1920 / img.width, 1200 / img.height);
+        const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        setWallpaper('url("' + c.toDataURL('image/jpeg', 0.8) + '")');
+      };
+      img.onerror = () => setMsg('That file could not be read as an image.');
+      img.src = rd.result;
+    };
+    rd.readAsDataURL(f);
+  };
+  const dot = c => React.createElement('span', { key: c, style: { width: 12, height: 12, borderRadius: '50%', background: c, border: '1px solid rgba(128,128,128,.4)', display: 'inline-block' } });
+  const card = p => {
+    const on = cur.base === p.base && cur.pal === p.id;
+    return React.createElement('button', {
+      key: p.label, type: 'button', onClick: () => pick(p.base, p.id), title: p.label,
+      style: { cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-start', padding: '7px 8px', borderRadius: 8, fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
+        background: p.sw[0], color: p.base === 'light' ? '#0f172a' : '#ffffff', border: on ? '2px solid ' + p.sw[2] : '1px solid rgba(128,128,128,.35)' }
+    }, React.createElement('span', { style: { display: 'flex', gap: 3 } }, p.sw.map(dot)), (on ? '✓ ' : '') + p.label);
+  };
+  const cur0 = SHIC_PALETTES.find(p => p.base === cur.base && p.id === cur.pal) || SHIC_PALETTES[0];
+  return React.createElement('div', { style: { position: 'relative', flexShrink: 0 } },
+    React.createElement('button', {
+      type: 'button', onClick: () => setOpen(v => !v), title: 'Theme and background',
+      style: { cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 6, fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
+        background: 'var(--bg-surface-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }
+    }, '🎨', React.createElement('span', { style: { display: 'flex', gap: 2 } }, cur0.sw.map(dot))),
+    open && React.createElement('div', { style: { position: 'fixed', inset: 0, zIndex: 3050 }, onClick: () => setOpen(false) }),
+    open && React.createElement('div', {
+      style: { position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 3060, width: 340, padding: 14, borderRadius: 10,
+        background: 'var(--bg-surface)', border: '1px solid var(--border-strong)', boxShadow: '0 12px 32px rgba(0,0,0,.35)', color: 'var(--text-primary)' }
+    },
+      React.createElement('div', { style: { fontWeight: 700, fontSize: 13, marginBottom: 8 } }, 'Theme'),
+      React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 6, marginBottom: 14 } }, SHIC_PALETTES.map(card)),
+      React.createElement('div', { style: { fontWeight: 700, fontSize: 13, marginBottom: 8 } }, 'Background'),
+      React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6, marginBottom: 8 } },
+        React.createElement('button', { type: 'button', onClick: () => setWallpaper(''), title: 'No picture — plain theme colour',
+          style: { cursor: 'pointer', height: 40, borderRadius: 6, fontSize: 10, fontFamily: 'inherit', background: 'var(--bg-canvas)', color: 'var(--text-secondary)', border: !wp ? '2px solid var(--brand-accent)' : '1px solid var(--border-subtle)' } }, 'None'),
+        SHIC_WALLPAPERS.map(x => React.createElement('button', { key: x.label, type: 'button', title: x.label, onClick: () => setWallpaper(x.css),
+          style: { cursor: 'pointer', height: 40, borderRadius: 6, background: x.css, border: wp === x.css ? '2px solid var(--brand-accent)' : '1px solid var(--border-subtle)' } })),
+        React.createElement('label', { title: 'Use your own picture', style: { cursor: 'pointer', height: 40, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600,
+          background: /^url/.test(wp) ? wp + ' center/cover' : 'var(--bg-surface-elevated)', color: /^url/.test(wp) ? '#fff' : 'var(--text-secondary)', textShadow: /^url/.test(wp) ? '0 1px 2px #000' : 'none',
+          border: /^url/.test(wp) ? '2px solid var(--brand-accent)' : '1px dashed var(--border-strong)' } }, '⬆ Photo',
+          React.createElement('input', { type: 'file', accept: 'image/*', style: { display: 'none' }, onChange: e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; upload(f); } }))),
+      wp && React.createElement('label', { style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-secondary)' } }, 'Soften',
+        React.createElement('input', { type: 'range', min: 0, max: 85, step: 5, value: dim, style: { flex: 1 },
+          onChange: e => { const d = parseInt(e.target.value, 10); setDim(d); applyWp(wp, d); } }), dim + '%'),
+      msg && React.createElement('div', { style: { fontSize: 11, color: 'var(--status-danger)', marginTop: 6 } }, msg),
+      React.createElement('div', { style: { fontSize: 10, color: 'var(--text-muted)', marginTop: 8 } }, 'Saved in this browser. Printed CEs and exports are not affected.')));
 }
 
 /* THE ENTERPRISE STATUS BARS, at module scope.

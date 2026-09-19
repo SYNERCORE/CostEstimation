@@ -491,6 +491,10 @@ function App({
      request to save once the state set alongside it has landed. */
   const [apvUsers, setApvUsers] = useState([]);
   const [saveReq, setSaveReq] = useState(0);
+  /* Bumped when the company feature switches arrive or change, so the
+     editor re-reads them. */
+  const [featTick, setFeatTick] = useState(0);
+  useEffect(() => { const h = () => setFeatTick(n => n + 1); window.addEventListener('shic-features', h); return () => window.removeEventListener('shic-features', h); }, []);
   const [diffModal, setDiffModal] = useState(null);
   /* CE Monitoring -> View: the printable CE of a saved CE, shown in place. */
   const [viewCE, setViewCE] = useState(null);
@@ -938,6 +942,7 @@ function App({
       dbGetCeDefaults().then(d => setCeDefaults(Array.isArray(d) ? d : [])).catch(e => console.warn('CE defaults:', e.message));
       /* The standard may have changed since this browser last saw it. Only the
          untouched blank CE picks the fresh one up. */
+      dbGetFeatures().then(() => setFeatTick(n => n + 1)).catch(e => console.warn('Features:', e.message));
       dbGetShiftRates().then(() => setRates(p => p === _initRates.current ? (_initRates.current = stampRates()) : p)).catch(e => console.warn('Shift rates:', e.message));
       /* Move the CE archive out of localStorage. Deliberately AFTER loadHist so
          reconciliation can reuse a warm SharePoint result, and fire-and-forget
@@ -1340,7 +1345,7 @@ function App({
      and zero everywhere else, which is what switches power costing off. One
      value, read by the tab, the totals, the print and both exports, so none
      of them can disagree about whether power was counted. */
-  const powerOn = !!cfg.power;
+  const powerOn = !!cfg.power && toolPowerEnabled() && featTick >= 0;
   const kwhRate = powerOn ? ceKwhRate(rr) : 0;
   const toolsT = useMemo(() => tools.reduce((s, r) => s + toolRowTotal(r, kwhRate), 0), [tools, kwhRate]);
   const matsT = useMemo(() => mats.reduce((s, r) => s + N(r.qty) * N(r.cost), 0), [mats]);

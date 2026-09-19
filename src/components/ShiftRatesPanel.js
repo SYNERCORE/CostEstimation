@@ -50,6 +50,7 @@ function ShiftRatesPanel() {
     React.createElement('span', { style: { fontSize: 11, color: MT, width: 90 } }, '×  (was ' + legacy + ')'));
 
   return React.createElement('div', null,
+    React.createElement(ToolPowerSwitch, null),
     React.createElement('div', { style: { fontWeight: 700, fontSize: 14, marginBottom: 4 } }, 'Shift Multipliers'),
     React.createElement('div', { style: { fontSize: 11, color: MT, marginBottom: 12, lineHeight: 1.5 } },
       'The company standard for new CEs. Change these when a new labour ruling comes out. Saved CEs keep what they were quoted at; a single CE can still be changed on its Manpower tab.'),
@@ -64,4 +65,34 @@ function ShiftRatesPanel() {
         onClick: () => { const v = {}; Object.keys(SHIFTS).forEach(k => { v[k] = String(SHIFTS[k].mult); }); v.ot = String(OT_MULT_DEFAULT); setVals(v); setDirty(true); }
       }, 'Reset to original'),
       msg && React.createElement('span', { style: { fontSize: 11, color: MT } }, msg)));
+}
+
+/* Company-wide on/off for tool power (kW x run hours). */
+function ToolPowerSwitch() {
+  const [on, setOn] = React.useState(toolPowerEnabled());
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState('');
+  React.useEffect(() => { dbGetFeatures().then(() => setOn(toolPowerEnabled())).catch(() => {}); }, []);
+  const flip = async () => {
+    const next = !on;
+    if (!window.confirm(next
+      ? 'Turn tool power ON?\n\nThe kW, Run hrs and Power columns come back on ShopWorks tools, and power is added to the totals.'
+      : 'Turn tool power OFF?\n\nThe kW columns are hidden and no CE counts power in its totals until it is switched back on. Figures already typed are kept.')) return;
+    setBusy(true); setMsg('');
+    let cur = {}; try { cur = await dbGetFeatures() || {}; } catch (e) {}
+    const sp = await dbSaveFeatures({ ...cur, toolPower: next, updatedAt: new Date().toISOString() });
+    setOn(next); setBusy(false);
+    try { window.dispatchEvent(new Event('shic-features')); } catch (e) {}
+    setMsg(sp ? 'Saved for everyone.' : 'Saved to this browser only — SharePoint did not accept it.');
+  };
+  return React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, padding: '10px 12px', border: '1px solid ' + BDR, borderRadius: 8 } },
+    React.createElement('div', { style: { flex: 1 } },
+      React.createElement('div', { style: { fontWeight: 700, fontSize: 14 } }, '⚡ Tool Power (kW usage)'),
+      React.createElement('div', { style: { fontSize: 11, color: MT, lineHeight: 1.5 } }, 'Electricity for tools: kW × run hours × tariff. Off hides the columns and leaves power out of every total.')),
+    React.createElement('button', {
+      role: 'switch', 'aria-checked': on, disabled: busy, onClick: flip, title: on ? 'On — click to turn off' : 'Off — click to turn on',
+      style: { width: 46, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', position: 'relative', background: on ? '#16a34a' : '#8b949e', flexShrink: 0 }
+    }, React.createElement('span', { style: { position: 'absolute', top: 3, left: on ? 25 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .15s' } })),
+    React.createElement('b', { style: { fontSize: 12, width: 28, color: on ? '#16a34a' : MT } }, on ? 'ON' : 'OFF'),
+    msg && React.createElement('span', { style: { fontSize: 11, color: MT } }, msg));
 }

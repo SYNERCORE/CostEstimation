@@ -848,6 +848,31 @@ async function dbGetCeDefaults(){
 /* The company's standard shift and OT multipliers. Another row in the
    Companies list, like ce_defaults, so it needs no new list. */
 const SHIFT_RATES_KEY = 'shift_rates';
+/* Company-wide feature switches, shared through the Companies list like the
+   shift rates. */
+const FEATURES_KEY = 'features';
+async function dbSaveFeatures(obj){
+  try{localStorage.setItem('shic:features',JSON.stringify(obj));}catch{}
+  if(USE_SP||getSiteURL()){
+    try{
+      const r=await spGet(spList('Companies'),"Title eq '"+FEATURES_KEY+"'",'Id');
+      if(r.length)await spPatch(spList('Companies'),r[0].Id,{shicData:JSON.stringify(obj)});
+      else await spPost(spList('Companies'),{Title:FEATURES_KEY,shicData:JSON.stringify(obj)});
+      return true;
+    }catch(e){console.warn('dbSaveFeatures:',e.message);}
+  }
+  return false;
+}
+async function dbGetFeatures(){
+  if(USE_SP||getSiteURL()){
+    try{
+      const r=await spGet(spList('Companies'),"Title eq '"+FEATURES_KEY+"'",'Id,shicData');
+      if(r.length&&r[0].shicData){const v=JSON.parse(r[0].shicData);
+        if(v&&typeof v==='object'){try{localStorage.setItem('shic:features',JSON.stringify(v));}catch{}return v;}}
+    }catch(e){console.warn('dbGetFeatures:',e.message);}
+  }
+  try{return JSON.parse(localStorage.getItem('shic:features')||'{}');}catch{return {};}
+}
 async function dbSaveShiftRates(obj){
   try{localStorage.setItem('shic:shift_rates',JSON.stringify(obj));}catch{}
   if(USE_SP||getSiteURL()){

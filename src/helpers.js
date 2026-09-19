@@ -320,7 +320,13 @@ function ceIncentiveOn(ceType) {
 }
 function cePowerOn(ceType) {
   const c = (typeof CE_CFG !== 'undefined' && CE_CFG[ceType]) || {};
-  return !!c.power;
+  return !!c.power && toolPowerEnabled();
+}
+/* The company-wide switch for tool power (kW x run hours). Off, the kW
+   columns disappear and no CE counts power in its totals. Set in Admin ->
+   Tool Power; kept in the browser so every total can read it synchronously. */
+function toolPowerEnabled() {
+  try { const f = JSON.parse(localStorage.getItem('shic:features') || '{}'); return f.toolPower !== false; } catch (e) { return true; }
 }
 /* Electricity for one tool row: rating x running hours x tariff.
    Running hours are typed, not derived from days. A grinder on the floor for

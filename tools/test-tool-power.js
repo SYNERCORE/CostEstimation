@@ -126,7 +126,8 @@ ck('it is set in the config, not hard-coded in a component',
 ck('and onsite does not have it', !/onsite: \{[\s\S]*?power: true[\s\S]*?\},\s*shopworks/.test(cfg));
 
 console.log('\none tariff, read by everything that shows a figure:');
-ck('derived once from the CE type', /const powerOn = !!cfg\.power;/.test(app));
+ck('derived once from the CE type and the company switch', /const powerOn = !!cfg\.power && toolPowerEnabled\(\)/.test(app));
+ck('the switch hides power everywhere, saved CEs included', /return !!c\.power && toolPowerEnabled\(\);/.test(fs.readFileSync('src/helpers.js','utf8')));
 ck('and once from the CE rates', /const kwhRate = powerOn \? ceKwhRate\(rr\) : 0;/.test(app));
 for (const [what, re] of [
   ['the section total', /toolsT = useMemo\(\(\) => tools\.reduce\(\(s, r\) => s \+ toolRowTotal\(r, kwhRate\), 0\)/],

@@ -1,4 +1,4 @@
-const CACHE='shic-ce-v203';
+const CACHE='shic-ce-v204';
 /* The libraries now ship in ./vendor and are precached as part of APP, so the
    app no longer needs the public internet at all after its first load. Only
    MSAL is still fetched remotely, and only as a fallback behind the local copy
@@ -16,37 +16,37 @@ const EXTRA=['./vendor/pdf.worker.min.js','./vendor/msal-browser.min.js'];
    app did. Kept in step with index.html by tools/check-sw-precache.js.
    APP_START */
 const APP=[
-  './vendor/react.production.min.js?v=203',
-  './vendor/react-dom.production.min.js?v=203',
-  './vendor/xlsx.full.min.js?v=203',
-  './vendor/pdf.min.js?v=203',
-  './vendor/mammoth.browser.min.js?v=203',
-  './src/constants.js?v=203',
-  './src/helpers.js?v=203',
-  './src/xlsx-styled.js?v=203',
-  './src/ai.js?v=203',
-  './src/ai_models.js?v=203',
-  './src/config.js?v=203',
-  './src/update.js?v=203',
-  './src/sp.js?v=203',
-  './src/idb.js?v=203',
-  './src/db.js?v=203',
-  './src/auth.js?v=203',
-  './src/components/LoginPage.js?v=203',
-  './src/components/RegisterPage.js?v=203',
-  './src/components/CompanyDBPanel.js?v=203',
-  './src/components/CeDefaultsPanel.js?v=203',
-  './src/components/ShiftRatesPanel.js?v=203',
-  './src/components/FbSetupPanel.js?v=203',
-  './src/components/LocalToSPSync.js?v=203',
-  './src/components/ChangePasswordModal.js?v=203',
-  './src/components/UpdatePublisher.js?v=203',
-  './src/components/AdminPanel.js?v=203',
-  './src/components/ResTab.js?v=203',
-  './src/App.js?v=203',
-  './src/widgets.js?v=203',
-  './src/tests.js?v=203',
-  './src/ml_utils.js?v=203'
+  './vendor/react.production.min.js?v=204',
+  './vendor/react-dom.production.min.js?v=204',
+  './vendor/xlsx.full.min.js?v=204',
+  './vendor/pdf.min.js?v=204',
+  './vendor/mammoth.browser.min.js?v=204',
+  './src/constants.js?v=204',
+  './src/helpers.js?v=204',
+  './src/xlsx-styled.js?v=204',
+  './src/ai.js?v=204',
+  './src/ai_models.js?v=204',
+  './src/config.js?v=204',
+  './src/update.js?v=204',
+  './src/sp.js?v=204',
+  './src/idb.js?v=204',
+  './src/db.js?v=204',
+  './src/auth.js?v=204',
+  './src/components/LoginPage.js?v=204',
+  './src/components/RegisterPage.js?v=204',
+  './src/components/CompanyDBPanel.js?v=204',
+  './src/components/CeDefaultsPanel.js?v=204',
+  './src/components/ShiftRatesPanel.js?v=204',
+  './src/components/FbSetupPanel.js?v=204',
+  './src/components/LocalToSPSync.js?v=204',
+  './src/components/ChangePasswordModal.js?v=204',
+  './src/components/UpdatePublisher.js?v=204',
+  './src/components/AdminPanel.js?v=204',
+  './src/components/ResTab.js?v=204',
+  './src/App.js?v=204',
+  './src/widgets.js?v=204',
+  './src/tests.js?v=204',
+  './src/ml_utils.js?v=204'
 ];
 /* APP_END */
 self.addEventListener('install',e=>{
@@ -107,6 +107,15 @@ self.addEventListener('fetch',e=>{
     url.endsWith('/icon.svg')||
     url===self.registration.scope
   );
+  /* Any page load with a query -- ?print=<id>&as=view|ce|detailed from CE
+     Monitoring, ?draft= -- is the same app. Offline it had no cached match,
+     so View, 🖨 CE and ⬇ xlsx failed without a connection. Serve the cached
+     shell for it; online it goes to the network as before. Not stored under
+     its own URL: one cached shell, not one per CE printed. */
+  if(!isShell&&e.request.mode==='navigate'&&url.indexOf(self.registration.scope)===0){
+    e.respondWith(fetch(e.request).catch(()=>caches.match(e.request,{ignoreSearch:true}).then(r=>r||caches.match('./index.html'))));
+    return;
+  }
   if(isShell){
     /* cache:'reload' bypasses the browser's OWN http cache. Plain fetch() here
        is still allowed to return a stale index.html from the disk cache, and

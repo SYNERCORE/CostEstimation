@@ -487,6 +487,10 @@ function App({
   const [toast, setToast] = useState('');
   const [signatures, setSignatures] = useState({});
   const [sigModal, setSigModal] = useState(null);
+  /* Approval routing: the people a signatory line can be linked to, and a
+     request to save once the state set alongside it has landed. */
+  const [apvUsers, setApvUsers] = useState([]);
+  const [saveReq, setSaveReq] = useState(0);
   const [diffModal, setDiffModal] = useState(null);
   /* CE Monitoring -> View: the printable CE of a saved CE, shown in place. */
   const [viewCE, setViewCE] = useState(null);
@@ -1985,6 +1989,7 @@ function App({
       grand,
       unitP,
       savedBy: currentUser.username,
+      ...(revSuffix ? { info: (({approval, ...r}) => ({...r, ceNum: revNum}))(info), signatures: apvStripSigs(approvers, signatures) } : {}),
       savedAt: new Date().toISOString(),
       docRef: docFile ? {
         name: docFile.name,
@@ -2387,6 +2392,18 @@ function App({
     }
     try {
       const _entry = mkEntry();
+      /* A signature belongs to the figures it approved. If they changed, every
+         routed signature goes and the routing starts again from the first step. */
+      const _apv = _entry.info.approval;
+      if (_apv && (_apv.state === 'pending' || _apv.state === 'approved') && apvFigSig(_entry) !== _apv.figSig) {
+        const _now = new Date().toISOString(), _had = Object.keys(_apv.lines || {}).length;
+        const _na = {..._apv, state: 'pending', figSig: apvFigSig(_entry), lines: {}, submittedAt: _now,
+          log: [...(_apv.log || []), {at: _now, by: currentUser.username, byName: currentUser.name || currentUser.username, action: 'reset', comment: 'Figures changed'}]};
+        _entry.info = {..._entry.info, approval: _na};
+        _entry.signatures = apvStripSigs(_entry.approvers, _entry.signatures);
+        setInfo(p => ({...p, approval: _na})); setSignatures(_entry.signatures);
+        if (_had) setTimeout(() => showToast('Figures changed — approval signatures cleared; routing restarts from the first step.', true), 1500);
+      }
       if (_fromRequest) { _entry.info = {..._entry.info, request: false}; setInfo(p => ({...p, request: false})); }
       const _res = await spWithRetry(() => dbSaveHistory(_entry));
       auditLog('save_ce', ceNum, currentUser?.username);
@@ -2402,6 +2419,11 @@ function App({
         const saved = await dbFindCEByNum(ceNum);
         const mapped = DOC_TO_MON[info.status];
         if (saved && saved.id != null && mapped && !(monData[saved.id] || {}).status) updateMon(saved.id, 'status', mapped);
+        const _a = _entry.info.approval;
+        if (saved && saved.id != null && _a) {
+          updateMon(saved.id, 'apv', apvMirror(_entry.approvers, _a));
+          if (_a.state === 'pending' && !Object.keys(_a.lines || {}).length && (monData[saved.id] || {}).status !== 'For Approval') updateMon(saved.id, 'status', 'For Approval');
+        }
       } catch (_e) { console.warn('status seed skipped:', _e.message); }
       clearDraft();
       /* Both spellings: saveDraft keyed the row off info.ceNum as typed, while
@@ -2603,7 +2625,7 @@ function App({
   };
   const handleClone = (e) => {
     const d = e.data || e;
-    handleLoad({...d, _newQuote: true, info: {...(d.info || {}), ceNum: nextCeNum(history, null, ceNums), date: new Date().toISOString().slice(0,10)}});
+    handleLoad({...d, _newQuote: true, signatures: apvStripSigs(d.approvers, d.signatures), info: {...(d.info || {}), approval: undefined, ceNum: nextCeNum(history, null, ceNums), date: new Date().toISOString().slice(0,10)}});
     showToast('Cloned — assigned new CE number.');
   };
   const handleRevise = (e) => {
@@ -2626,8 +2648,114 @@ function App({
       pad = /R0\d/i.test(tail);
     }
     const newCeNum = base + sep + 'R' + (pad && nextRev < 10 ? '0' + nextRev : String(nextRev));
-    handleLoad({...d, info: {...(d.info || {}), ceNum: newCeNum, date: new Date().toISOString().slice(0,10)}});
+    handleLoad({...d, signatures: apvStripSigs(d.approvers, d.signatures), info: {...(d.info || {}), approval: undefined, ceNum: newCeNum, date: new Date().toISOString().slice(0,10)}});
     showToast('Revision ' + newCeNum + ' loaded — review & save when ready.');
+  };
+  /* ── Approval routing (approval.js) ── */
+  useEffect(() => { if (saveReq) handleSave(); }, [saveReq]);
+  useEffect(() => {
+    if (tab !== 'summary') return;
+    dbGetUsers().then(u => setApvUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(() => {});
+  }, [tab]);
+  const apvState = (info.approval && info.approval.state) || 'none';
+  const apvLocked = apvState === 'pending' || apvState === 'approved';
+  const _apvMe = () => ({ by: currentUser.username, byName: currentUser.name || currentUser.username, at: new Date().toISOString() });
+  const apvSubmit = () => {
+    if (!apvRoute(approvers).length) { showToast('Link at least one signatory to a user first.', true); return; }
+    if (!String(info.ceNum || '').trim()) { showToast('Give the CE a number first.', true); return; }
+    const me = _apvMe();
+    const apv = { state: 'pending', submittedAt: me.at, submittedBy: me.by, submittedByName: me.byName, figSig: apvFigSig(mkEntry()), lines: {},
+      log: [...((info.approval && info.approval.log) || []), {...me, action: 'submitted'}] };
+    setSignatures(p => apvStripSigs(approvers, p));
+    setInfo(p => ({...p, approval: apv}));
+    setSaveReq(n => n + 1);
+    auditLog('apv_submit', info.ceNum, currentUser?.username);
+  };
+  const apvWithdraw = () => {
+    if (!confirm('Withdraw this CE from approval?\n\nSignatures collected so far are cleared.')) return;
+    const me = _apvMe(), a = info.approval || {};
+    setSignatures(p => apvStripSigs(approvers, p));
+    setInfo(p => ({...p, approval: {...a, state: 'withdrawn', lines: {}, log: [...(a.log || []), {...me, action: 'withdrawn'}]}}));
+    setSaveReq(n => n + 1);
+  };
+  /* The editor signs the SAVED CE, so what is on screen must be what was saved. */
+  const _apvEditorId = () => {
+    if (apvFigSig(mkEntry()) !== (info.approval || {}).figSig) { showToast('Save or undo your changes first — you can only sign the figures that were submitted.', true); return null; }
+    const k = String(info.ceNum || '').trim().toUpperCase();
+    const h = (history || []).find(x => String((x.info && x.info.ceNum) || x.ceNum || '').trim().toUpperCase() === k && typeof x.id === 'number');
+    if (!h) { showToast('Could not find the saved copy of this CE.', true); return null; }
+    return h.id;
+  };
+  const apvStartSign = (ceId) => {
+    const fromEditor = ceId == null;
+    const id = fromEditor ? _apvEditorId() : ceId;
+    if (id == null) return;
+    setSigModal({ mode: 'approve', ceId: id, fromEditor, id: '__apv', name: currentUser.name || currentUser.username });
+  };
+  const apvStartReturn = (ceId) => {
+    const fromEditor = ceId == null;
+    const id = fromEditor ? _apvEditorId() : ceId;
+    if (id == null) return;
+    const c = prompt('Return this CE to the estimator.\n\nWhat needs to change? (required)');
+    if (c == null) return;
+    if (!c.trim()) { showToast('A comment is required to return a CE.', true); return; }
+    apvAct(id, 'return', { comment: c.trim(), fromEditor });
+  };
+  const apvAct = async (ceId, action, opt = {}) => {
+    try {
+      const full = await dbLoadCE(ceId);
+      if (!full) { showToast('Could not open that CE.', true); return false; }
+      const inf = {...(full.info || {})}, a0 = inf.approval;
+      if (!a0 || a0.state !== 'pending') { showToast('This CE is not waiting for approval.', true); return false; }
+      if (apvFigSig(full) !== a0.figSig) { showToast('The figures changed after it was submitted — it has to be submitted again.', true); return false; }
+      const me = _apvMe();
+      const line = apvCanSign(full.approvers, a0, me.by);
+      const apv = {...a0, lines: {...(a0.lines || {})}, log: [...(a0.log || [])]};
+      let sigs = {...(full.signatures || {})};
+      if (action === 'approve') {
+        if (!line) { showToast('It is not your turn to sign this CE.', true); return false; }
+        sigs[line.id] = await apvStamp(opt.sig, me.byName, apvWhen(me.at), inf.ceNum);
+        apv.lines[line.id] = { at: me.at, by: me.by, byName: me.byName };
+        apv.log.push({...me, action: 'approved', role: line.role});
+        if (apvStatus(full.approvers, apv).done) apv.state = 'approved';
+      } else {
+        if (!line && !isAdmin) { showToast('Only the signatory whose turn it is can return this CE.', true); return false; }
+        sigs = apvStripSigs(full.approvers, sigs);
+        apv.lines = {}; apv.state = 'returned';
+        apv.log.push({...me, action: 'returned', comment: opt.comment});
+      }
+      inf.approval = apv;
+      const res = await spWithRetry(() => dbSaveHistory({...full, info: inf, signatures: sigs, grand: N(full.grand) || computeCEGrand(full)}));
+      updateMon(ceId, 'apv', apvMirror(full.approvers, apv));
+      if (action === 'return') updateMon(ceId, 'remarks', '↩ Returned by ' + me.byName + ': ' + opt.comment);
+      else if (apv.state === 'approved') updateMon(ceId, 'status', 'Approved');
+      auditLog('apv_' + action, inf.ceNum + (opt.comment ? ': ' + opt.comment : ''), currentUser?.username);
+      if (opt.fromEditor) { setInfo(p => ({...p, approval: apv})); setSignatures(sigs); }
+      setViewCE(v => v ? {...v, k: Date.now()} : v);
+      loadHist();
+      showToast(action === 'return' ? 'Returned with your comment.' : apv.state === 'approved' ? 'Signed — the CE is fully approved.' : 'Signed. It moves on to the next signatory.', res && res.sp === false);
+      return true;
+    } catch (ex) { showToast('Could not record that: ' + ex.message, true); return false; }
+  };
+  const apvBar = () => {
+    const a = info.approval, s = apvStatus(approvers, a), me = currentUser.username;
+    const mine = apvCanSign(approvers, a, me);
+    const col = {pending: 'var(--accent-cyan)', approved: '#16a34a', returned: ERR}[apvState] || MT;
+    const lbl = {none: 'Not submitted for approval', withdrawn: 'Withdrawn from approval', returned: '↩ Returned',
+      approved: '✅ Approved · ' + s.signedN + '/' + s.total + ' signed',
+      pending: '⏳ Step ' + s.step + ' · ' + s.signedN + '/' + s.total + ' signed · waiting on ' + s.waiting.map(l => l.name || l.user).join(', ')}[apvState];
+    const ret = a && (a.log || []).filter(l => l.action === 'returned').slice(-1)[0];
+    const b = (t, title, on, kind) => /*#__PURE__*/React.createElement("button", {style: {...btn(kind || 'def', true), fontSize: 10, padding: '3px 8px', textTransform: 'none', letterSpacing: 0}, title, onClick: on}, t);
+    return /*#__PURE__*/React.createElement("div", {style: {display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, margin: '0 0 10px', padding: '8px 10px', borderRadius: 6, border: '1px solid ' + alpha(BDR, '88'), background: SURF}},
+      /*#__PURE__*/React.createElement("b", {style: {fontSize: 11, color: col, textTransform: 'none', letterSpacing: 0}}, lbl),
+      apvState === 'returned' && ret && /*#__PURE__*/React.createElement("span", {style: {fontSize: 10, color: MT, textTransform: 'none', letterSpacing: 0}}, '— ' + ret.byName + ': "' + ret.comment + '"'),
+      /*#__PURE__*/React.createElement("span", {style: {flex: 1}}),
+      !apvLocked && b('One after another', 'Each linked signatory signs in turn, left to right', () => setApprovers(p => p.map((x, i) => ({...x, step: i + 1})))),
+      !apvLocked && b('All at once', 'Every linked signatory can sign straight away, in any order', () => setApprovers(p => p.map(x => ({...x, step: 1})))),
+      !apvLocked && s.total > 0 && b('📤 Submit for approval', 'Save and send to the linked signatories. Changing the figures later clears their signatures.', apvSubmit, 'acc'),
+      apvLocked && (isAdmin || (a && a.submittedBy === me)) && b('Withdraw', 'Take it back out of approval and clear the signatures', apvWithdraw),
+      mine && b('✍ Approve & Sign', 'Sign the saved CE as ' + (mine.role || 'signatory'), () => apvStartSign(null), 'ok'),
+      apvState === 'pending' && (mine || isAdmin) && b('↩ Return', 'Send it back to the estimator with a comment', () => apvStartReturn(null)));
   };
   /* Put the matching preset's notes and signatories on the CE.
 
@@ -4290,6 +4418,7 @@ function App({
   const [reqBusy, setReqBusy] = React.useState(false);
   const [reqUsers, setReqUsers] = React.useState([]);
   const [monMine, setMonMine] = React.useState(false);
+  const [monApvMine, setMonApvMine] = React.useState(false);
   /* Reassigning from the row: {id, ceNum, from, to} while the picker is open. */
   const [assignPanel, setAssignPanel] = React.useState(null);
   const openAssign = e => {
@@ -4510,6 +4639,7 @@ function App({
          discipline is a real thing to go looking for. */
       if (monDiscFilter !== 'all' && monDisc(e, m).trim().toUpperCase() !== monDiscFilter) return false;
       if (monCustFilter !== 'all' && monCust(e, m).trim().toUpperCase() !== monCustFilter) return false;
+      if (monApvMine && !(((m.apv || {}).state === 'pending') && ((m.apv || {}).waiting || []).includes(currentUser.username))) return false;
       if (monMine && !meNames().includes(String(m.ceeName || m.preparedBy || e.savedBy || '').trim().toUpperCase())) return false;
       if (!monSearch) return true;
       const q = monSearch.toLowerCase();
@@ -4593,7 +4723,7 @@ function App({
          SY3-CE-2026-10, and "aestillore" must sit with "Aestillore". */
       return String(va).localeCompare(String(vb), 'en', {numeric: true, sensitivity: 'base'}) * dir;
     });
-  }, [monRows, monData, monSearch, monStatusFilter, monTypeFilter, monDiscFilter, monCustFilter, monMine, monSortCol, monSortDir]);
+  }, [monRows, monData, monSearch, monStatusFilter, monTypeFilter, monDiscFilter, monCustFilter, monMine, monApvMine, monSortCol, monSortDir]);
   /* The rows actually drawn: one page of CEs, with the superseded revisions of
      any CE that has been expanded slotted in underneath it. Expanded after the
      page is cut, so a page is always the same 25 CEs whether or not anyone has
@@ -5223,6 +5353,11 @@ function App({
     title: "Only the CEs and requests whose Estimator is you",
     onClick: () => { setMonMine(v => !v); setMonPage(0); }
   }, "\uD83D\uDC64 Assigned to me"),
+  /*#__PURE__*/React.createElement("button", {
+    style: btn(monApvMine ? 'acc' : 'def', true),
+    title: "Only the CEs waiting on your signature",
+    onClick: () => { setMonApvMine(v => !v); setMonPage(0); }
+  }, "✍ Awaiting my signature (" + Object.values(monData || {}).filter(m => m && m.apv && m.apv.state === 'pending' && (m.apv.waiting || []).includes(currentUser.username)).length + ")"),
   (monSearch || monStatusFilter.size > 0 || monTypeFilter !== 'all' || monDiscFilter !== 'all' || monCustFilter !== 'all') && /*#__PURE__*/React.createElement("button", {
     style: {...btn('danger', true), fontSize:10},
     title: "Clear all filters",
@@ -5734,7 +5869,13 @@ function App({
       }
     }, /*#__PURE__*/React.createElement("div", null,
       /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',background:alpha(statusColor, '22'),color:statusColor,fontWeight:700,fontSize:10,padding:'2px 8px',borderRadius:12,whiteSpace:'nowrap'}}, m.status||'—'),
-      m.statusChangedAt && /*#__PURE__*/React.createElement("div", {style:{fontSize:9,color:MT,marginTop:2,lineHeight:1.3},title:'Changed by '+(m.statusChangedBy||'unknown')}, new Date(m.statusChangedAt).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}), m.statusChangedBy?' · '+m.statusChangedBy.split(' ')[0]:'')
+      m.statusChangedAt && /*#__PURE__*/React.createElement("div", {style:{fontSize:9,color:MT,marginTop:2,lineHeight:1.3},title:'Changed by '+(m.statusChangedBy||'unknown')}, new Date(m.statusChangedAt).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}), m.statusChangedBy?' · '+m.statusChangedBy.split(' ')[0]:''),
+      m.apv && ['pending','approved','returned'].includes(m.apv.state) && (() => {
+        const turn = m.apv.state === 'pending' && (m.apv.waiting || []).includes(currentUser.username);
+        return /*#__PURE__*/React.createElement("div", {style:{fontSize:9,marginTop:2,fontWeight:700,color:m.apv.state==='approved'?'#16a34a':m.apv.state==='returned'?ERR:'var(--accent-cyan)',cursor:turn?'pointer':'default'},
+          title: turn ? 'Open it to approve and sign' : '', onClick: turn ? () => setViewCE({id:e.id,ceNum:e.info?.ceNum||e.ceNum||''}) : undefined},
+          m.apv.state === 'approved' ? '✅ Approved' : m.apv.state === 'returned' ? '↩ Returned' : '✍ ' + m.apv.signed + '/' + m.apv.total + ' signed' + (turn ? ' · YOUR TURN' : ''));
+      })()
     )), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
@@ -7456,7 +7597,7 @@ function App({
     const notesList = (notes.length || sowNotes.length) ? `<div style="margin-top:4px"><b>NOTE:</b><ol style="margin:1px 0 0 14px;padding:0;font-size:7.5pt">${notes.map(n=>`<li>${esc(n.text)}</li>`).join('')}${sowNotes.map(s=>`<li><b>Scope ${esc(sowLabels[s.id]||'')}</b> &#8212; ${esc(String(s.note).trim())}</li>`).join('')}</ol></div>` : '';
     const sigBlock = `<table style="width:100%;border-collapse:collapse;margin-top:20px;table-layout:fixed" class="sig">
       <tr>${approvers.map(a=>`<td style="border:1px solid #000;padding:4px 8px;font-size:8pt;font-weight:bold;vertical-align:top"><b>${esc(a.role)}:</b></td>`).join('')}</tr>
-      <tr>${approvers.map((a,i)=>{const sigImg=signatures[a.id||i]?`<img src="${signatures[a.id||i]}" style="height:36px;max-width:100%;display:block;margin:0 auto 2px"/>`:'';return`<td style="border:1px solid #000;padding:4px 8px;vertical-align:bottom"><div style="min-height:46px;text-align:center">${sigImg}</div><div style="border-top:1px solid #000;padding-top:3px;text-align:center"><b style="font-size:8pt">${esc(a.name||'')}</b><br><span style="font-size:7.5pt">${esc(a.title||a.role||'')}</span></div></td>`;}).join('')}</tr>
+      <tr>${approvers.map((a,i)=>{const sigImg=signatures[a.id||i]?`<img src="${signatures[a.id||i]}" style="height:48px;max-width:100%;display:block;margin:0 auto 2px"/>`:'';return`<td style="border:1px solid #000;padding:4px 8px;vertical-align:bottom"><div style="min-height:46px;text-align:center">${sigImg}</div><div style="border-top:1px solid #000;padding-top:3px;text-align:center"><b style="font-size:8pt">${esc(a.name||'')}</b><br><span style="font-size:7.5pt">${esc(a.title||a.role||'')}</span>${(()=>{const l=a.id&&info.approval&&(info.approval.lines||{})[a.id];return l?'<br><span style="font-size:6.5pt;color:#1E7B34">e-signed '+esc(apvWhen(l.at))+'</span>':'';})()}</div></td>`;}).join('')}</tr>
     </table>`;
 
     /* Manpower &#8212; skip zero-rate rows */
@@ -9477,9 +9618,12 @@ viewCE && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset
     /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',gap:8}},
       /*#__PURE__*/React.createElement("b", null, "👁 " + (viewCE.ceNum || 'CE')),
       /*#__PURE__*/React.createElement("span", {style:{fontSize:11,color:MT}}, viewCE.draft ? "Read-only view of an unsaved DRAFT — figures may still change." : "Read-only view. Takes a few seconds to draw."),
-      /*#__PURE__*/React.createElement("button", {style:{...btn('def',true),marginLeft:'auto'},title:"Print or save this CE as PDF",onClick:()=>{try{document.getElementById('shic-view-ce').contentWindow.print();}catch(ex){showToast('Could not print: '+ex.message,true);}}}, "🖨 Print"),
+      /*#__PURE__*/React.createElement("span", {style:{marginLeft:'auto'}}),
+      !viewCE.draftKey && ((monData[viewCE.id]||{}).apv||{}).state==='pending' && (((monData[viewCE.id]||{}).apv||{}).waiting||[]).includes(currentUser.username) && /*#__PURE__*/React.createElement("button", {style:btn('ok',true),title:"Sign the CE shown here",onClick:()=>apvStartSign(viewCE.id)}, "✍ Approve & Sign"),
+      !viewCE.draftKey && ((monData[viewCE.id]||{}).apv||{}).state==='pending' && ((((monData[viewCE.id]||{}).apv||{}).waiting||[]).includes(currentUser.username) || isAdmin) && /*#__PURE__*/React.createElement("button", {style:btn('def',true),title:"Send it back to the estimator with a comment",onClick:()=>apvStartReturn(viewCE.id)}, "↩ Return"),
+      /*#__PURE__*/React.createElement("button", {style:btn('def',true),title:"Print or save this CE as PDF",onClick:()=>{try{document.getElementById('shic-view-ce').contentWindow.print();}catch(ex){showToast('Could not print: '+ex.message,true);}}}, "🖨 Print"),
       /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setViewCE(null)}, "✕ Close")),
-    /*#__PURE__*/React.createElement("iframe", {id:'shic-view-ce', title:'CE ' + (viewCE.ceNum || ''), src: window.location.pathname + (viewCE.draftKey ? '?viewdraft=' + encodeURIComponent(viewCE.draftKey) + '&as=view' : '?print=' + viewCE.id + '&as=view'), style:{flex:1,width:'100%',border:'1px solid '+BDR,borderRadius:6,background:'#fff'}}))),
+    /*#__PURE__*/React.createElement("iframe", {key:viewCE.k||0, id:'shic-view-ce', title:'CE ' + (viewCE.ceNum || ''), src: window.location.pathname + (viewCE.draftKey ? '?viewdraft=' + encodeURIComponent(viewCE.draftKey) + '&as=view' : '?print=' + viewCE.id + '&as=view'), style:{flex:1,width:'100%',border:'1px solid '+BDR,borderRadius:6,background:'#fff'}}))),
 
 /* ── Feature 3: Revision Diff Modal ── */
 diffModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset:0,background:'#000a',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center'},onClick:()=>setDiffModal(null)},
@@ -9520,7 +9664,7 @@ diffModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',in
 sigModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset:0,background:'#000b',zIndex:3100,display:'flex',alignItems:'center',justifyContent:'center'},onClick:()=>setSigModal(null)},
   /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid #A78BFA',borderRadius:10,padding:20,width:460},onClick:e=>e.stopPropagation()},
     /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}},
-      /*#__PURE__*/React.createElement("b", null, "✍ Signature — ", sigModal.name||sigModal.role),
+      /*#__PURE__*/React.createElement("b", null, sigModal.mode === 'approve' ? "✍ Approve & sign — " : "✍ Signature — ", sigModal.name||sigModal.role),
       /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setSigModal(null)}, "✕")),
     /*#__PURE__*/React.createElement("div", {style:{background:'#fff',borderRadius:6,marginBottom:10,overflow:'hidden',border:'1px solid #ccc'}},
       /*#__PURE__*/React.createElement("canvas", {
@@ -9541,6 +9685,7 @@ sigModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',ins
       /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>{const el=document.getElementById('sigCanvas');const ctx=el.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,420,140);}}, "🗑 Clear"),
       /*#__PURE__*/React.createElement("button", {style:{...btn('ok'),flex:1},onClick:()=>{
         const el=document.getElementById('sigCanvas');
+        if(sigModal.mode==='approve'){const d=el.toDataURL('image/png'),sm=sigModal;setSigModal(null);apvAct(sm.ceId,'approve',{sig:d,fromEditor:sm.fromEditor});return;}
         setSignatures(p=>({...p,[sigModal.id]:el.toDataURL('image/png')}));
         setSigModal(null); showToast('Signature saved.');
       }}, "💾 Save Signature")))),
@@ -12708,7 +12853,7 @@ tab === 'dashboard' && (() => {
         ? 'Applied the defaults for ' + (info.projType || 'this discipline') + '.'
         : 'No preset matches this CE type and discipline — set one up in the Users tab.', false);
     }
-  }, "Apply defaults")), /*#__PURE__*/React.createElement("div", {
+  }, "Apply defaults")), apvBar(), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: `repeat(${Math.min(approvers.length, 4)},1fr)`,
@@ -12786,14 +12931,33 @@ tab === 'dashboard' && (() => {
       title: e.target.value
     } : x))
   }),
+  /* Approval routing: link the line to a user, and the step it signs on. */
+  /*#__PURE__*/React.createElement("select", {
+    style: {...INP, fontSize: 9, width: '100%', marginTop: 4, padding: '2px 4px'},
+    disabled: apvLocked, value: a.user || '',
+    title: 'Link this line to a user so they approve and sign it in the app',
+    onChange: e => { const u = e.target.value, usr = apvUsers.find(x => x.username === u);
+      setApprovers(p => p.map((x, j) => j === i ? {...x, user: u, id: x.id || uid(), name: (!x.name && usr) ? (usr.name || usr.username) : x.name} : x)); }
+  }, /*#__PURE__*/React.createElement("option", {value: ''}, '✍ Sign by hand'),
+    a.user && !apvUsers.some(x => x.username === a.user) && /*#__PURE__*/React.createElement("option", {value: a.user}, a.user),
+    apvUsers.map(x => /*#__PURE__*/React.createElement("option", {key: x.username, value: x.username}, '👤 ' + (x.name || x.username)))),
+  a.user && /*#__PURE__*/React.createElement("label", {style: {display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center', fontSize: 9, color: MT, marginTop: 4}, title: 'Lines on the same step sign at the same time; the next step opens when they are all signed'}, 'Step',
+    /*#__PURE__*/React.createElement("input", {type: 'number', min: 1, disabled: apvLocked, value: a.step || i + 1, style: {...INP, width: 44, fontSize: 10, padding: '1px 4px', textAlign: 'center'},
+      onChange: e => setApprovers(p => p.map((x, j) => j === i ? {...x, step: Math.max(1, parseInt(e.target.value, 10) || 1)} : x))})),
+  a.user && info.approval && apvState !== 'none' && (() => {
+    const l = (info.approval.lines || {})[a.id];
+    const w = apvState === 'pending' && apvStatus(approvers, info.approval).waiting.some(x => x.id === a.id);
+    return /*#__PURE__*/React.createElement("div", {style: {fontSize: 9, marginTop: 3, fontWeight: 700, color: l ? '#16a34a' : w ? 'var(--accent-cyan)' : MT}},
+      l ? '✔ ' + l.byName + ' · ' + apvWhen(l.at) : w ? '⏳ Waiting' : apvState === 'pending' ? 'Step ' + (a.step || i + 1) : '');
+  })(),
   /* Feature 11: signature thumbnail + sign button */
   signatures[a.id||i] && /*#__PURE__*/React.createElement("div",{style:{margin:'4px 0'}},
     /*#__PURE__*/React.createElement("img",{src:signatures[a.id||i],style:{width:'100%',height:36,objectFit:'contain',background:'#fff',borderRadius:3,border:'1px solid '+BDR}})),
-  /*#__PURE__*/React.createElement("button",{
+  !a.user && /*#__PURE__*/React.createElement("button",{
     style:{...btn(signatures[a.id||i]?'ok':'def',true),fontSize:9,padding:'2px 6px',width:'100%',marginTop:4},
     onClick:()=>setSigModal({...a,id:a.id||i})
   }, signatures[a.id||i]?'✅ Re-sign':'✍ Sign'),
-  approvers.length > 1 && /*#__PURE__*/React.createElement("button", {
+  approvers.length > 1 && !(apvLocked && a.user) && /*#__PURE__*/React.createElement("button", {
     onClick: () => setApprovers(p => p.filter((_, j) => j !== i)),
     style: {
       position: 'absolute',

@@ -66,7 +66,7 @@ ck('and called unconditionally, twice', (app.match(/useMonFacet\(mon(Disc|Cust)\
   'a conditional call would change the hook order between renders');
 
 console.log('\nthe table reacts to them:');
-ck('both are in the filter dependencies', /monTypeFilter, monDiscFilter, monCustFilter, monMine, monSortCol/.test(app));
+ck('both are in the filter dependencies', /monTypeFilter, monDiscFilter, monCustFilter, monMine, (monApvMine, )?monSortCol/.test(app));
 ck('choosing one returns to page 1', /setMonDiscFilter\(e\.target\.value\); setMonPage\(0\)/.test(app),
   'staying on page 7 of a list that is now four rows long shows nothing');
 ck('and the same for customer', /setMonCustFilter\(e\.target\.value\); setMonPage\(0\)/.test(app));

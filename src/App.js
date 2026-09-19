@@ -12516,6 +12516,12 @@ tab === 'dashboard' && (() => {
     }
   }, "P", ph(unitP)), /*#__PURE__*/React.createElement("td", {
     style: TDS
+  })), showUnitP && perJobT > 0 && /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+    style: { ...TDS, color: MT }
+  }, "Charged once per job (", perJobNames, ")"), /*#__PURE__*/React.createElement("td", {
+    style: { ...TDS, ...MONO, textAlign: 'right', color: ACC }
+  }, "P", ph(perJobT)), /*#__PURE__*/React.createElement("td", {
+    style: TDS
   })), /*#__PURE__*/React.createElement("tr", {
     style: {background: alpha(OK, '10'), borderTop: `2px solid ${alpha(OK, '44')}`}
   }, /*#__PURE__*/React.createElement("td", {

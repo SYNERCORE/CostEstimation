@@ -571,6 +571,13 @@ function App({
   const [history, setHistory] = useState([]);
   const [histBusy, setHistBusy] = useState(false);
   const [monData, setMonData] = useState({});
+  /* Tell an approver, once per session, that CEs are waiting on them. */
+  const _apvToldRef = React.useRef(false);
+  useEffect(() => {
+    if (_apvToldRef.current || !currentUser || !currentUser.username) return;
+    const n = Object.values(monData || {}).filter(m => m && m.apv && m.apv.state === 'pending' && (m.apv.waiting || []).includes(currentUser.username)).length;
+    if (n) { _apvToldRef.current = true; setTimeout(() => showToast('✍ ' + n + ' CE' + (n === 1 ? ' is' : 's are') + ' waiting for your signature — see My Work.'), 1500); }
+  }, [monData]);
   const [customStatuses, setCustomStatuses] = useState(() => {
     try {
       const v = localStorage.getItem('shic:statuses');
@@ -2718,23 +2725,56 @@ function App({
   const apvState = (info.approval && info.approval.state) || 'none';
   const apvLocked = apvState === 'pending' || apvState === 'approved';
   const _apvMe = () => ({ by: currentUser.username, byName: currentUser.name || currentUser.username, at: new Date().toISOString() });
-  const apvSubmit = () => {
+  /* Store an approval change. Save refuses a CE number that is already saved
+     (so a finished CE cannot be overwritten by accident) -- which meant Submit
+     and Withdraw on any saved CE failed with "already taken", nothing was
+     stored, and approvers never saw it. A saved CE is updated directly
+     instead, and only while its figures are the ones on screen. */
+  const apvPersist = async (apv, sigs) => {
+    const e = mkEntry();
+    e.info = {...e.info, approval: apv};
+    e.signatures = sigs;
+    const num = String(e.info.ceNum || '').trim().toUpperCase();
+    const dup = await dbFindCEByNum(num).catch(() => null);
+    if (!dup || dup.id == null) {
+      /* Never saved: the normal save stores it, approval and all. */
+      setSignatures(sigs); setInfo(p => ({...p, approval: apv})); setSaveReq(n => n + 1);
+      return true;
+    }
+    try {
+      const full = await dbLoadCE(dup.id);
+      if (full && apvFigSig(full) !== apvFigSig(e)) {
+        showToast('The figures on screen differ from the saved ' + num + '. Use ↻ Revise to save your changes as a new revision, then submit that.', true);
+        return false;
+      }
+      e.info.ceNum = num;
+      e.savedBy = (full && full.savedBy) || dup.savedBy || e.savedBy;
+      const res = await spWithRetry(() => dbSaveHistory(e));
+      setSignatures(sigs); setInfo(p => ({...p, ceNum: num, approval: apv}));
+      updateMon(dup.id, 'apv', apvMirror(e.approvers, apv));
+      if (apv.state === 'pending' && !Object.keys(apv.lines || {}).length && (monData[dup.id] || {}).status !== 'For Approval') updateMon(dup.id, 'status', 'For Approval');
+      loadHist();
+      if (res && res.sp === false) { showToast('Stored in this browser only — SharePoint did not accept it, so approvers cannot see it yet.', true); return false; }
+      return true;
+    } catch (ex) { showToast('Could not update the approval: ' + ex.message, true); return false; }
+  };
+  const apvSubmit = async () => {
     if (!apvRoute(approvers).length) { showToast('Pick a user in the dropdown on at least one signatory card below (it starts on ✍ Sign by hand), then Submit again.', true); return; }
     if (!String(info.ceNum || '').trim()) { showToast('Give the CE a number first.', true); return; }
     const me = _apvMe();
     const apv = { state: 'pending', submittedAt: me.at, submittedBy: me.by, submittedByName: me.byName, figSig: apvFigSig(mkEntry()), lines: {},
       log: [...((info.approval && info.approval.log) || []), {...me, action: 'submitted'}] };
-    setSignatures(p => apvStripSigs(approvers, p));
-    setInfo(p => ({...p, approval: apv}));
-    setSaveReq(n => n + 1);
+    const ok = await apvPersist(apv, apvStripSigs(approvers, signatures));
+    if (!ok) return;
     auditLog('apv_submit', info.ceNum, currentUser?.username);
+    const s0 = apvStatus(approvers, apv);
+    showToast('Submitted for approval — waiting on ' + s0.waiting.map(l => l.name || l.user).join(', ') + '.');
   };
   const apvWithdraw = () => {
     if (!confirm('Withdraw this CE from approval?\n\nSignatures collected so far are cleared.')) return;
     const me = _apvMe(), a = info.approval || {};
-    setSignatures(p => apvStripSigs(approvers, p));
-    setInfo(p => ({...p, approval: {...a, state: 'withdrawn', lines: {}, log: [...(a.log || []), {...me, action: 'withdrawn'}]}}));
-    setSaveReq(n => n + 1);
+    apvPersist({...a, state: 'withdrawn', lines: {}, log: [...(a.log || []), {...me, action: 'withdrawn'}]}, apvStripSigs(approvers, signatures))
+      .then(ok => ok && showToast('Withdrawn from approval.'));
   };
   /* The editor signs the SAVED CE, so what is on screen must be what was saved. */
   const _apvEditorId = () => {

@@ -47,5 +47,13 @@ ck('signing checks the saved figures first', /apvFigSig\(full\) !== a0\.figSig/.
 ck('a return needs a comment', /A comment is required to return a CE/.test(app));
 ck('the signature is stamped with who and when', /apvStamp\(opt\.sig, me\.byName, apvWhen\(me\.at\)/.test(app));
 
+console.log('\nsubmitting a CE that is already saved:');
+const sub = (app.match(/const apvSubmit = async \(\) => \{[\s\S]*?\n  \};/) || [''])[0];
+ck('submit does not go through Save, which refuses a saved number', !/setSaveReq/.test(sub) && /await apvPersist\(/.test(sub));
+ck('a saved CE is updated directly', /const dup = await dbFindCEByNum\(num\)[\s\S]{0,900}dbSaveHistory\(e\)/.test(app));
+ck('only while its figures match the saved ones', /apvFigSig\(full\) !== apvFigSig\(e\)/.test(app));
+ck('and Monitoring learns who it waits on', /updateMon\(dup\.id, 'apv', apvMirror/.test(app));
+ck('approvers are told when they open the app', /waiting for your signature — see My Work/.test(app));
+
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\napproval OK');
 process.exit(bad ? 1 : 0);

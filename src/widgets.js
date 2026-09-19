@@ -466,7 +466,7 @@ function ThemeSwitch() {
     catch (_e) { return { base: 'dark', pal: '' }; }
   };
   const _s = React.useState(read), cur = _s[0], setCur = _s[1];
-  const _o = React.useState(false), open = _o[0], setOpen = _o[1];
+  const _o = React.useState(null), open = _o[0], setOpen = _o[1];
   const _w = React.useState(() => { try { return localStorage.getItem('shic:wallpaper') || ''; } catch (_e) { return ''; } }), wp = _w[0], setWp = _w[1];
   const _d = React.useState(() => { try { return parseInt(localStorage.getItem('shic:wpdim') || '35', 10); } catch (_e) { return 35; } }), dim = _d[0], setDim = _d[1];
   const _m = React.useState(''), msg = _m[0], setMsg = _m[1];
@@ -528,13 +528,16 @@ function ThemeSwitch() {
   const cur0 = SHIC_PALETTES.find(p => p.base === cur.base && p.id === cur.pal) || SHIC_PALETTES[0];
   return React.createElement('div', { style: { position: 'relative', flexShrink: 0 } },
     React.createElement('button', {
-      type: 'button', onClick: () => setOpen(v => !v), title: 'Theme and background',
+      type: 'button', title: 'Theme and background',
+      /* Fixed to the button's position on screen: the top bar clips anything
+         hanging below it, so an absolutely placed panel showed as a thin line. */
+      onClick: e => { const r = e.currentTarget.getBoundingClientRect(); setOpen(v => v ? null : { top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) }); },
       style: { cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 6, fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
         background: 'var(--bg-surface-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }
     }, '🎨', React.createElement('span', { style: { display: 'flex', gap: 2 } }, cur0.sw.map(dot))),
-    open && React.createElement('div', { style: { position: 'fixed', inset: 0, zIndex: 3050 }, onClick: () => setOpen(false) }),
+    open && React.createElement('div', { style: { position: 'fixed', inset: 0, zIndex: 3050 }, onClick: () => setOpen(null) }),
     open && React.createElement('div', {
-      style: { position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 3060, width: 340, padding: 14, borderRadius: 10,
+      style: { position: 'fixed', right: open.right, top: open.top, zIndex: 3060, width: 340, maxWidth: 'calc(100vw - 16px)', maxHeight: 'calc(100vh - ' + (open.top + 8) + 'px)', overflowY: 'auto', padding: 14, borderRadius: 10,
         background: 'var(--bg-surface)', border: '1px solid var(--border-strong)', boxShadow: '0 12px 32px rgba(0,0,0,.35)', color: 'var(--text-primary)' }
     },
       React.createElement('div', { style: { fontWeight: 700, fontSize: 13, marginBottom: 8 } }, 'Theme'),

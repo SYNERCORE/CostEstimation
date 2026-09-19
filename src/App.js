@@ -5732,9 +5732,12 @@ function App({
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 3
+        /* Three across rather than one tall column: thirteen stacked buttons
+           made every row as tall as the list of actions. */
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, auto)',
+        gap: 3,
+        whiteSpace: 'nowrap'
       }
     }, /*#__PURE__*/React.createElement("button", {
       /* Status changes constantly and everything else in the row does not, so

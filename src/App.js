@@ -12253,19 +12253,6 @@ tab === 'dashboard' && (() => {
     title: "Saving and drafts",
     style: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', border: '1px solid ' + BDR, borderRadius: 8, padding: '3px 6px' }
   }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, fontWeight: 700, letterSpacing: .6, color: MT, textTransform: 'uppercase' } }, "Keep"), /*#__PURE__*/React.createElement("button", {
-    title: "Save this CE and share it with the team (Ctrl+S). The CE Number must be unique.",
-    style: btn('def'),
-    onClick: handleSave
-  }, "Save"), /*#__PURE__*/React.createElement("button", {
-    style: {
-      ...btn('def'),
-      background: '#8B5CF622',
-      borderColor: '#8B5CF655',
-      color: 'var(--accent-violet)'
-    },
-    onClick: saveDraft,
-    title: "Park unfinished work as a draft the team can see and pick up. Saving the CE clears it."
-  }, "\u2B07 Draft"), /*#__PURE__*/React.createElement("button", {
     style: {
       ...btn('def'),
       background: '#8B5CF611',
@@ -12295,6 +12282,19 @@ tab === 'dashboard' && (() => {
       fontWeight: 700
     }
   }, sharedDrafts.length)), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...btn('def'),
+      background: '#8B5CF622',
+      borderColor: '#8B5CF655',
+      color: 'var(--accent-violet)'
+    },
+    onClick: saveDraft,
+    title: "Park unfinished work as a draft the team can see and pick up. Saving the CE clears it."
+  }, "\u2B07 Draft"), /*#__PURE__*/React.createElement("button", {
+    title: "Save this CE and share it with the team (Ctrl+S). The CE Number must be unique.",
+    style: { ...btn('acc'), fontWeight: 800, padding: '6px 18px' },
+    onClick: handleSave
+  }, "Save"), /*#__PURE__*/React.createElement("button", {
     title: "Save a copy of this CE as its next revision (-R1, -R2…); the original is kept.",
     style: {
       ...btn('def'),
@@ -12332,7 +12332,7 @@ tab === 'dashboard' && (() => {
     onClick: handleExportXLSX,
     title: "Excel copy of the printed CE, page for page, with every column: OT hours, AOT, each benefit separately."
   }, "Export Detailed"), /*#__PURE__*/React.createElement("button", {
-    style: btn('acc'),
+    style: { ...btn('def'), borderColor: alpha(ACC, '66'), color: ACC },
     onClick: handleExport,
     title: "Excel in the SY3 master CE workbook layout (BOL, BOTE, BOCM…): shorter, the same 7 columns on every sheet."
   }, "Export CE Template")), /*#__PURE__*/React.createElement("div", {

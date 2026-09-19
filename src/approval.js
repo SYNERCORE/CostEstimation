@@ -103,3 +103,25 @@ function apvStripSigs(approvers, sigs) {
   Object.keys(sigs || {}).forEach(k => { if (!ids.has(String(k))) out[k] = sigs[k]; });
   return out;
 }
+
+/* Everything a signatory is putting their name to, not only the totals: the
+   header, scope, notes and every priced line. Built from normalised fields
+   and sorted, so the same CE gives the same answer whether it came from the
+   editor or back from SharePoint. */
+function apvContentSig(ce) {
+  if (!ce) return '';
+  const s = v => String(v == null ? '' : v).trim(), n = v => String(Math.round(N(v) * 100) / 100);
+  const rows = (a, f) => (Array.isArray(a) ? a : []).filter(r => r && (r.desc || r.role)).map(f).sort().join(';');
+  const inf = ce.info || {};
+  const txt = [apvFigSig(ce),
+    ['client', 'description', 'location', 'attention', 'endUser', 'projType', 'material', 'dept', 'qty', 'days'].map(k => s(inf[k])).join('|'),
+    s(ce.scope),
+    (Array.isArray(ce.notes) ? ce.notes : []).map(x => s(x && typeof x === 'object' ? x.text : x)).join('|'),
+    rows(ce.mp, r => [s(r.role), n(r.rate), s(r.shift), n(r.days), n(r.pax), n(r.otHours)].join(',')),
+    rows(ce.tools, r => [s(r.desc), n(r.qty), s(r.uom), n(r.cost), n(r.days)].join(',')),
+    rows(ce.mats, r => [s(r.desc), n(r.qty), s(r.uom), n(r.cost)].join(',')),
+    rows(ce.ppe, r => [s(r.desc), n(r.qty), s(r.uom), n(r.cost)].join(','))].join('#');
+  let h = 5381;
+  for (let i = 0; i < txt.length; i++) h = ((h * 33) ^ txt.charCodeAt(i)) >>> 0;
+  return h.toString(36) + '.' + txt.length;
+}

@@ -2460,14 +2460,15 @@ function App({
       /* A signature belongs to the figures it approved. If they changed, every
          routed signature goes and the routing starts again from the first step. */
       const _apv = _entry.info.approval;
-      if (_apv && (_apv.state === 'pending' || _apv.state === 'approved') && apvFigSig(_entry) !== _apv.figSig) {
+      if (_apv && (_apv.state === 'pending' || _apv.state === 'approved') && (apvFigSig(_entry) !== _apv.figSig || (_apv.contentSig && apvContentSig(_entry) !== _apv.contentSig))) {
         const _now = new Date().toISOString(), _had = Object.keys(_apv.lines || {}).length;
-        const _na = {..._apv, state: 'pending', figSig: apvFigSig(_entry), lines: {}, submittedAt: _now,
-          log: [...(_apv.log || []), {at: _now, by: currentUser.username, byName: currentUser.name || currentUser.username, action: 'reset', comment: 'Figures changed'}]};
+        const _na = {..._apv, state: 'pending', figSig: apvFigSig(_entry), contentSig: apvContentSig(_entry), lines: {}, submittedAt: _now,
+          log: [...(_apv.log || []), {at: _now, by: currentUser.username, byName: currentUser.name || currentUser.username, action: 'reset', comment: 'CE changed'}]};
         _entry.info = {..._entry.info, approval: _na};
-        _entry.signatures = apvStripSigs(_entry.approvers, _entry.signatures);
+        /* Every signature, hand-drawn ones included: each was put to the CE as it was. */
+        _entry.signatures = {};
         setInfo(p => ({...p, approval: _na})); setSignatures(_entry.signatures);
-        if (_had) setTimeout(() => showToast('Figures changed — approval signatures cleared; routing restarts from the first step.', true), 1500);
+        if (_had || Object.keys(signatures || {}).length) setTimeout(() => showToast('The CE changed — every signature was cleared; routing restarts from the first step.', true), 1500);
       }
       if (_fromRequest) { _entry.info = {..._entry.info, request: false}; setInfo(p => ({...p, request: false})); }
       const _res = await spWithRetry(() => dbSaveHistory(_entry));
@@ -2749,6 +2750,12 @@ function App({
       }
       e.info.ceNum = num;
       e.savedBy = (full && full.savedBy) || dup.savedBy || e.savedBy;
+      /* Anything edited since the saved copy -- scope, notes, a line's text --
+         and no signature on it stands, hand-drawn ones included. */
+      if (full && apvContentSig(full) !== apvContentSig(e) && Object.keys(e.signatures || {}).length) {
+        e.signatures = {}; sigs = {};
+        setTimeout(() => showToast('The CE was edited since it was saved, so every signature on it was cleared.', true), 1500);
+      }
       const res = await spWithRetry(() => dbSaveHistory(e));
       setSignatures(sigs); setInfo(p => ({...p, ceNum: num, approval: apv}));
       updateMon(dup.id, 'apv', apvMirror(e.approvers, apv));
@@ -2762,7 +2769,7 @@ function App({
     if (!apvRoute(approvers).length) { showToast('Pick a user in the dropdown on at least one signatory card below (it starts on ✍ Sign by hand), then Submit again.', true); return; }
     if (!String(info.ceNum || '').trim()) { showToast('Give the CE a number first.', true); return; }
     const me = _apvMe();
-    const apv = { state: 'pending', submittedAt: me.at, submittedBy: me.by, submittedByName: me.byName, figSig: apvFigSig(mkEntry()), lines: {},
+    const apv = { state: 'pending', submittedAt: me.at, submittedBy: me.by, submittedByName: me.byName, figSig: apvFigSig(mkEntry()), contentSig: apvContentSig(mkEntry()), lines: {},
       log: [...((info.approval && info.approval.log) || []), {...me, action: 'submitted'}] };
     const ok = await apvPersist(apv, apvStripSigs(approvers, signatures));
     if (!ok) return;

@@ -43,11 +43,49 @@ function SignInBanner() {
     const t = setInterval(up, 5000);
     return () => { window.removeEventListener('shic-auth-required', up); window.removeEventListener('shic-auth-ok', up); clearInterval(t); };
   }, []);
-  if (!need) return null;
+  /* The top-bar button alone was mostly overlooked, so people worked for hours
+     believing they were saving to SharePoint. Say it once, in the middle of the
+     screen, each time the connection is lost -- then leave the button. */
+  const [pop, setPop] = React.useState(null);
+  const [off, setOff] = React.useState(typeof navigator !== 'undefined' && navigator.onLine === false);
+  React.useEffect(() => {
+    const o = () => { setOff(true); setPop('offline'); }, b = () => { setOff(false); setPop(p => p === 'offline' ? null : p); };
+    window.addEventListener('offline', o); window.addEventListener('online', b);
+    if (navigator.onLine === false) setPop('offline');
+    return () => { window.removeEventListener('offline', o); window.removeEventListener('online', b); };
+  }, []);
+  const _needRef = React.useRef(false);
+  React.useEffect(() => { if (need && !_needRef.current && !off) setPop('signin'); if (!need && pop === 'signin') setPop(null); _needRef.current = need; }, [need, off]);
+  const doSignIn = async () => {
+    setBusy(true);
+    try {
+      if (await spSignIn()) {
+        setNeed(false); setPop(null);
+        if (window._shicFullRefresh) await window._shicFullRefresh();
+        if (window._shicToast) window._shicToast('Signed back in — refreshing your data.');
+      }
+    } catch (e) { if (window._shicToast) window._shicToast('Sign-in failed: ' + (e.message || e), true); }
+    setBusy(false);
+  };
+  const dialog = pop && React.createElement('div', {
+      role: 'alertdialog', 'aria-modal': true,
+      style: { position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 } },
+    React.createElement('div', { style: { background: CARD, color: TX, border: '1px solid ' + BDR, borderRadius: 12, padding: 22, maxWidth: 420, width: '100%', boxShadow: '0 12px 40px rgba(0,0,0,.4)' } },
+      React.createElement('div', { style: { fontSize: 30, marginBottom: 6 } }, pop === 'offline' ? '📴' : '🔒'),
+      React.createElement('div', { style: { fontSize: 16, fontWeight: 700, marginBottom: 8 } },
+        pop === 'offline' ? 'You are offline' : 'You are not signed in to SharePoint'),
+      React.createElement('div', { style: { fontSize: 13, color: MT, lineHeight: 1.5, marginBottom: 16 } },
+        pop === 'offline'
+          ? 'This device has no internet connection. You can keep working: anything you save stays on this device and uploads when you are back online. Other people will not see it until then, and you will not see their latest changes.'
+          : 'Your Microsoft session has expired. Until you sign in, what you save stays on this device only — approvers and teammates cannot see it, and you are not seeing their latest changes.'),
+      React.createElement('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' } },
+        React.createElement('button', { style: btn('def'), onClick: () => setPop(null) }, pop === 'offline' ? 'OK, work offline' : 'Later'),
+        pop === 'signin' && React.createElement('button', { style: btn('acc'), disabled: busy, onClick: doSignIn }, busy ? 'Opening Microsoft sign-in…' : 'Sign in to Microsoft'))));
+  if (!need) return dialog || null;
   /* A button in the top bar, not a banner above it. The banner sat over the
      sticky header and scrolled away with the page, so an expired session was
      easy to miss the moment anyone scrolled down to work. */
-  return React.createElement('button', {
+  return React.createElement(React.Fragment, null, dialog, React.createElement('button', {
       title: 'SharePoint session expired. Saved work is kept on this device and will upload once you sign in again.',
       style: { ...btn('acc', true), fontSize: 10, whiteSpace: 'nowrap' }, disabled: busy,
       onClick: async () => {
@@ -61,7 +99,7 @@ function SignInBanner() {
         } catch (e) { if (window._shicToast) window._shicToast('Sign-in failed: ' + (e.message || e), true); }
         setBusy(false);
       }
-    }, busy ? 'Opening Microsoft sign-in…' : '⚠ Sign in to Microsoft');
+    }, busy ? 'Opening Microsoft sign-in…' : '⚠ Sign in to Microsoft'));
 }
 function SyncStatusBar() {
   const [sync, setSync] = React.useState(() => getSyncStatus());

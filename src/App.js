@@ -9068,6 +9068,8 @@ tab === 'sowbreak' && (() => {
         /*#__PURE__*/React.createElement("span", { style: { ...MONO, marginLeft: 'auto', fontSize: 10, color: MT }, title: t.label + " subtotal for this task" },
           "₱" + ph(rows.reduce((a, r) => a + rowCostForTask(t.key, r, taskId), 0)))
       ),
+      /*#__PURE__*/React.createElement("datalist", { id: 'sb_ml_' + t.ml },
+        ((masterlist && masterlist[t.ml]) || []).map(x => /*#__PURE__*/React.createElement("option", { key: x.id, value: x[t.nameKey] || x.desc || x.role || '' }))),
       /*#__PURE__*/React.createElement("table", { style: { width: '100%', borderCollapse: 'collapse', fontSize: 11, marginBottom: 2 } },
         hdr([['Item description'], [isMp ? 'Pax' : 'Qty', 58], ...(hasDays ? [['Days', 56]] : []), ...(isMp ? [] : [['UOM', 66]]), [isMp ? 'Rate' : 'Unit cost', 92], ['Cost', 92], ['', 56]]),
         /*#__PURE__*/React.createElement("tbody", null, rows.map(r =>
@@ -9075,8 +9077,13 @@ tab === 'sowbreak' && (() => {
             /*#__PURE__*/React.createElement("td", { style: { ...TDS, paddingLeft: 128 } },
               /*#__PURE__*/React.createElement("input", {
                 style: { ...INP, width: '100%', fontSize: 11, padding: '2px 6px' },
-                value: r[t.nameKey] || '', placeholder: "Item description...",
-                onChange: e => updRow(t.set, r.id, t.nameKey, e.target.value)
+                value: r[t.nameKey] || '', placeholder: "Type or pick from the Masterlist...",
+                list: 'sb_ml_' + t.ml,
+                /* Picking a Masterlist name brings its rate and unit, as on the resource tabs. */
+                onChange: e => { const v = e.target.value;
+                  const f = ((masterlist && masterlist[t.ml]) || []).find(x => (x[t.nameKey] || x.desc || x.role) === v);
+                  t.set(p => p.map(x => x.id !== r.id ? x : {...x, [t.nameKey]: v, ...(f ? {[t.costKey]: N(f[t.costKey] != null ? f[t.costKey] : (f.cost != null ? f.cost : f.rate)), ...(!isMp && f.uom ? {uom: f.uom} : {}),
+                    ...['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear', 'kw'].reduce((o, k) => { if (N(f[k]) > 0) o[k] = N(f[k]); return o; }, {})} : {})})); }
               }),
               /* One consolidated crew shown under each task it serves. Without
                  this the same row appearing in two places, at two different
@@ -9141,6 +9148,8 @@ tab === 'sowbreak' && (() => {
         /*#__PURE__*/React.createElement("span", { style: { ...MONO, marginLeft: 'auto', fontSize: 10, color: MT }, title: "Miscellaneous subtotal for this task" },
           "₱" + ph(rows.reduce((a, r) => a + rowCost('misc', r), 0)))
       ),
+      /*#__PURE__*/React.createElement("datalist", { id: 'sb_ml_misc' },
+        ((masterlist && masterlist.vehicles) || []).map(x => /*#__PURE__*/React.createElement("option", { key: x.id, value: x.desc || '' }))),
       /*#__PURE__*/React.createElement("table", { style: { width: '100%', borderCollapse: 'collapse', fontSize: 11, marginBottom: 2 } },
         hdr([['Item description'], ['Qty', 58], ['UOM', 66], ['Unit cost', 92], ['Cost', 92], ['', 56]]),
         /*#__PURE__*/React.createElement("tbody", null, rows.map(r =>
@@ -9148,8 +9157,10 @@ tab === 'sowbreak' && (() => {
             /*#__PURE__*/React.createElement("td", { style: { ...TDS, paddingLeft: 128 } },
               /*#__PURE__*/React.createElement("input", {
                 style: { ...INP, width: '100%', fontSize: 11, padding: '2px 6px' },
-                value: r.desc || '', placeholder: r._catLabel + " item...",
-                onChange: e => miscUpd(r._cat, r.id, 'desc', e.target.value)
+                value: r.desc || '', placeholder: r._catLabel + " item — type or pick...",
+                list: 'sb_ml_misc',
+                onChange: e => { const v = e.target.value; const f = ((masterlist && masterlist.vehicles) || []).find(x => x.desc === v);
+                  setMisc(p => ({ ...p, [r._cat]: (p[r._cat] || []).map(x => x.id !== r.id ? x : {...x, desc: v, ...(f ? {cost: N(f.cost != null ? f.cost : f.rate), ...(f.uom ? {uom: f.uom} : {})} : {})}) })); }
               })
             ),
             numCell(r.qty || 0, e => miscUpd(r._cat, r.id, 'qty', N(e.target.value)), 'QTY', 58),

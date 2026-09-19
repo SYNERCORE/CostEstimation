@@ -505,7 +505,7 @@ function _rowKeysOf(e){
   const res=(tab,list,days)=>(list||[]).filter(r=>r.desc).map(r=>[r.id,_rowSig({shicTab:tab,shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicDays:days?(r.days||1):0,shicTaskId:r.taskId||''})]);
   return {mp,tools:res('tools',e.tools,true),mats:res('mats',e.mats),ppe:res('ppe',e.ppe)};
 }
-let _rowOrphans=0,_rowDrop=false;
+let _rowOrphans=0,_rowDrop=false,_rowMissing=0;
 function _rowOrder(rows,keys){
   if(!Array.isArray(keys)||!keys.length)return rows.map(r=>({r,id:null}));
   const pool=rows.slice(),out=[];
@@ -515,6 +515,7 @@ function _rowOrder(rows,keys){
      CE -- one SY3 CE saved at P745,593 opened at P2,075,492. The next save
      removes them for good. If some keyed row is missing, the save itself was
      interrupted and nothing is dropped. */
+  if(out.length<keys.length)_rowMissing+=keys.length-out.length;
   if(out.length===keys.length&&pool.length){_rowOrphans+=pool.length;if(_rowDrop)return out;}
   return out.concat(pool.map(r=>({r,id:null})));
 }
@@ -649,7 +650,18 @@ async function dbLoadCE(id){
    failed to delete, or real rows the keys do not describe. Only the saved
    total can tell which: build the CE both ways and keep the one that matches
    it. If neither does, nothing is dropped and the figures are reported. */
-_rowOrphans=0;_rowDrop=false;let _ce=_assembleCE(h,mR,rR);const _extra=_rowOrphans;
+_rowOrphans=0;_rowDrop=false;_rowMissing=0;let _ce=_assembleCE(h,mR,rR);const _extra=_rowOrphans,_missing=_rowMissing;
+/* An interrupted save: the header (and its total) reached SharePoint but some
+   of its lines did not. The saving browser kept the whole CE locally, so if
+   this is that browser, open that copy instead of the partial one. */
+let _partial=false;
+if(_missing&&typeof computeCEGrand==='function'){
+  const _tgt=Number(h.shicTotal)||0,_num=String(_ce.info.ceNum||'').trim().toUpperCase();
+  let _loc=null;try{_loc=(await ceAll()).filter(r=>r&&String((r.info&&r.info.ceNum)||r.ceNum||'').trim().toUpperCase()===_num)
+    .find(r=>Math.abs(computeCEGrand(r)-_tgt)<=Math.max(1,_tgt*0.001));}catch(_){}
+  if(_loc){_ce={..._loc,id:h.Id};setTimeout(()=>(window._shicToast||console.warn)(_ce.info.ceNum+': only part of its last save reached SharePoint. Opened the complete copy kept in this browser — SAVE it now to upload the missing lines.',true),800);}
+  else{_partial=true;setTimeout(()=>(window._shicToast||console.warn)(_ce.info.ceNum+': its last save was interrupted — '+_missing+' line(s) never reached SharePoint, so it adds up to less than its saved total. Do not save it from here. The complete copy is in the browser of '+(h.shicSavedBy||'whoever saved it')+': they should open the app and run Push All Local Data (Users tab).',true),800);}
+  }
 if(_extra&&typeof computeCEGrand==='function'){
   _rowDrop=true;const _slim=_assembleCE(h,mR,rR);_rowDrop=false;
   const _tgt=Number(h.shicTotal)||0,_gAll=computeCEGrand(_ce),_gSlim=computeCEGrand(_slim);
@@ -661,7 +673,9 @@ if(_extra&&typeof computeCEGrand==='function'){
 
 /* Keep what was just fetched. Without this, opening a colleague's CE online
    left nothing behind, and the same CE would not open offline an hour later. */
-try{await cePut({..._ce,ceNum:_ce.info.ceNum,savedAt:_ce.savedAt||new Date().toISOString(),savedBy:_ce.savedBy||'',_syncState:'synced'});}catch(_){}
+/* Not a partial one: it would overwrite the complete local copy of the
+   browser that saved it, the only place the missing lines still exist. */
+if(!_partial&&!_missing)try{await cePut({..._ce,ceNum:_ce.info.ceNum,savedAt:_ce.savedAt||new Date().toISOString(),savedBy:_ce.savedBy||'',_syncState:'synced'});}catch(_){}
 return _ce;}catch(e){console.warn('dbLoadCE:',e.message);return await _ceLoadLocal(id);}}
 /* Full CE from the offline archive, by SharePoint item Id. */
 async function _ceLoadLocal(id){

@@ -110,7 +110,7 @@ ck('and it does not disturb the multipliers',
 
 console.log('\nthe grand total charges it on shopworks and only there:');
 const ce = t => ({ceType: t, mp: [], tools: [row], mats: [], ppe: [], misc: {}, rates: {kwhRate: 12}});
-const grand = (help.match(/function computeCEGrand\(ce\) \{[\s\S]*?\n\}/) || [''])[0];
+const grand = (help.match(/function computeCEParts\(ce\) \{[\s\S]*?\nfunction computeCEGrand\(ce\) \{[\s\S]*?\n\}/) || [''])[0];
 vm.runInContext((help.match(/function ceMpRowCost\(r, rates\) \{[\s\S]*?\n\}/) || [''])[0] + '\n' +
   grand + ';globalThis._g=computeCEGrand;', ctx);
 const G = ctx._g;

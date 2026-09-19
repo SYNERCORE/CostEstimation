@@ -446,8 +446,11 @@ function mealGroups(mp, cats) {
   });
   return g;
 }
-function computeCEGrand(ce) {
-  if (!ce) return 0;
+/* A saved CE's cost by section, recomputed from its rows. Saved CEs carry
+   only the grand total, so anything that wants the breakdown -- the revision
+   comparison -- asks here. computeCEGrand is the sum of these. */
+function computeCEParts(ce) {
+  if (!ce) return { mob: 0, demob: 0, mpT: 0, toolsT: 0, matsT: 0, ppeT: 0, miscT: 0, total: 0 };
   const cfg = (typeof CE_CFG !== 'undefined' && CE_CFG[ce.ceType]) || {};
   const arr = v => Array.isArray(v) ? v : [];
   /* The CE's own multipliers, so a recompute reproduces what it was quoted
@@ -466,8 +469,12 @@ function computeCEGrand(ce) {
     return s + arr((ce.misc || {})[k]).reduce((t, r) => t + miscRowCost(r), 0);
   }, 0);
   const veh = rows => arr(rows).reduce((s, r) => s + mobRowCost(r, _rates), 0);
-  const mobT = cfg.mobDemob ? veh(ce.mobVehicles) + veh(ce.demobVehicles) : 0;
-  return mobT + mpT + toolsT + matsT + ppeT + miscT;
+  const mob = cfg.mobDemob ? veh(ce.mobVehicles) : 0;
+  const demob = cfg.mobDemob ? veh(ce.demobVehicles) : 0;
+  return { mob, demob, mpT, toolsT, matsT, ppeT, miscT, total: mob + demob + mpT + toolsT + matsT + ppeT + miscT };
+}
+function computeCEGrand(ce) {
+  return computeCEParts(ce).total;
 }
 async function sha256(s) {
   const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s + 'sy3_salt_2026'));

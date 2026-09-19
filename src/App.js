@@ -9354,10 +9354,19 @@ diffModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',in
         /*#__PURE__*/React.createElement("th", {style:{...THS,color:INFO}}, "Base: "+diffModal.base.info?.ceNum),
         /*#__PURE__*/React.createElement("th", {style:{...THS,color:ACC}}, "Revision: "+diffModal.rev.info?.ceNum),
         /*#__PURE__*/React.createElement("th", {style:THS}, "Δ Change"))),
-      /*#__PURE__*/React.createElement("tbody", null, [
-        ['Manpower','mpTot'],['Tools','toolsT'],['Materials','matsT'],['PPE','ppeT'],['Misc','miscT'],['Grand Total','grand']
-      ].map(([label, key]) => {
-        const bv = N(diffModal.base[key]||0), rv = N(diffModal.rev[key]||0), delta = rv - bv;
+      /*#__PURE__*/React.createElement("tbody", null, (() => {
+        /* Saved CEs store only the grand total, so each section is recomputed
+           from the CE's own rows. Mob/Demob rows show only when either CE has
+           them. The grand total is the one each CE was saved with. */
+        const _d = x => (x && x.data) || x || {};
+        const B = computeCEParts(_d(diffModal.base)), R = computeCEParts(_d(diffModal.rev));
+        const _g = x => N(_d(x).grand) || N(x && x.grand) || null;
+        B.grand = _g(diffModal.base) ?? B.total; R.grand = _g(diffModal.rev) ?? R.total;
+        return [['Mobilization','mob'],['Demobilization','demob'],['Manpower','mpT'],['Tools','toolsT'],['Materials','matsT'],['PPE','ppeT'],['Misc','miscT'],['Grand Total','grand']]
+          .filter(([, k]) => (k !== 'mob' && k !== 'demob') || B[k] || R[k])
+          .map(([label, key]) => [label, B[key], R[key]]);
+      })().map(([label, bv0, rv0]) => {
+        const bv = N(bv0), rv = N(rv0), delta = rv - bv;
         return /*#__PURE__*/React.createElement("tr", {key:label},
           /*#__PURE__*/React.createElement("td", {style:TDS}, label),
           /*#__PURE__*/React.createElement("td", {style:{...TDS,...MONO,textAlign:'right'}}, "P"+ph(bv)),

@@ -490,6 +490,9 @@ function App({
   const [diffModal, setDiffModal] = useState(null);
   /* CE Monitoring -> View: the printable CE of a saved CE, shown in place. */
   const [viewCE, setViewCE] = useState(null);
+  /* CE Monitoring -> Remarks trail: {id, ceNum} of the CE whose remarks are open. */
+  const [remarksPanel, setRemarksPanel] = useState(null);
+  const [remarkDraft, setRemarkDraft] = useState('');
   const [aiSuggest, setAiSuggest] = useState(null);
   const [printPreviewWin, setPrintPreviewWin] = useState(null);
   const [toastErr, setToastErr] = useState(false);
@@ -622,6 +625,16 @@ function App({
         at: extra.statusChangedAt,
         by: extra.statusChangedBy
       }].slice(-60);
+    }
+    /* Remarks keep a trail like status does: every remark, who wrote it and
+       when. The remark already on a CE from before the trail existed becomes
+       its first entry, undated, rather than being lost to the next edit. */
+    if (field === 'remarks') {
+      const before = prev[ceId] || {};
+      let log = Array.isArray(before.remarksLog) ? before.remarksLog : [];
+      if (!log.length && String(before.remarks || '').trim()) log = [{ text: String(before.remarks), at: '', by: '' }];
+      if (String(val || '').trim()) log = [...log, { text: String(val).trim(), at: new Date().toISOString(), by: currentUser?.name || currentUser?.username || '' }];
+      extra.remarksLog = log.slice(-60);
     }
     /* Correcting when a status changed has to correct the trail too, or the
        history would still show the day it was recorded here rather than the day
@@ -5733,6 +5746,11 @@ function App({
       onClick: () => { if (!e._draft) setStatusPanel(statusPanel === e.id ? null : e.id); }
     }, '⚑ Status'), /*#__PURE__*/React.createElement("button", {
       disabled: !!e._draft,
+      style: {...btn('def', true), fontSize: 10, padding: '2px 8px', opacity: e._draft ? .4 : 1, cursor: e._draft ? 'not-allowed' : 'pointer'},
+      title: e._draft ? 'Save the CE to start its remarks' : 'Add a remark and read every earlier one',
+      onClick: () => { if (!e._draft) { setRemarkDraft(''); setRemarksPanel({ id: e.id, ceNum: e.info?.ceNum || e.ceNum || '' }); } }
+    }, '💬 Remarks' + (((monData[e.id] || {}).remarksLog || []).length > 1 ? ' (' + monData[e.id].remarksLog.length + ')' : '')), /*#__PURE__*/React.createElement("button", {
+      disabled: !!e._draft,
       style: {...btn(assignPanel && assignPanel.id === e.id ? 'acc' : 'def', true), fontSize: 10, padding: '2px 8px', opacity: e._draft ? .4 : 1, cursor: e._draft ? 'not-allowed' : 'pointer'},
       title: e._draft ? 'Save the CE first — a draft has no monitoring record to assign' : 'Reassign this CE to another estimator',
       onClick: () => { if (!e._draft) openAssign(e); }
@@ -9350,6 +9368,36 @@ attachPanel && /*#__PURE__*/React.createElement("div", {
     )
   )
 )),
+
+/* ── CE Monitoring -> Remarks trail ── */
+remarksPanel && (() => {
+  const m = monData[remarksPanel.id] || {};
+  let log = Array.isArray(m.remarksLog) ? m.remarksLog : [];
+  if (!log.length && String(m.remarks || '').trim()) log = [{ text: m.remarks, at: '', by: '' }];
+  const add = () => {
+    const t = remarkDraft.trim();
+    if (!t) return;
+    updateMon(remarksPanel.id, 'remarks', t);
+    setRemarkDraft('');
+    showToast('Remark added.');
+  };
+  return /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset:0,background:'#000a',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center'},onClick:()=>setRemarksPanel(null)},
+    /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:18,width:'min(520px,94vw)',maxHeight:'82vh',display:'flex',flexDirection:'column',gap:10},onClick:e=>e.stopPropagation()},
+      /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center'}},
+        /*#__PURE__*/React.createElement("b", null, "💬 Remarks — " + (remarksPanel.ceNum || 'CE')),
+        /*#__PURE__*/React.createElement("button", {style:{...btn('def',true),marginLeft:'auto'},onClick:()=>setRemarksPanel(null)}, "✕ Close")),
+      /*#__PURE__*/React.createElement("textarea", {style:{...INP,height:64,resize:'vertical'},value:remarkDraft,autoFocus:true,placeholder:'New remark — e.g. Prebid done 09/15, deadline extension requested...',
+        onChange:e=>setRemarkDraft(e.target.value), onKeyDown:e=>{ if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) add(); }}),
+      /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',gap:8}},
+        /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT}}, "Ctrl+Enter to add. Earlier remarks are kept below."),
+        /*#__PURE__*/React.createElement("button", {style:{...btn('acc',true),marginLeft:'auto'},disabled:!remarkDraft.trim(),onClick:add}, "+ Add Remark")),
+      /*#__PURE__*/React.createElement("div", {style:{overflowY:'auto',display:'flex',flexDirection:'column',gap:6}},
+        log.length ? log.slice().reverse().map((h, i) => /*#__PURE__*/React.createElement("div", {key:i,style:{background:SURF,border:'1px solid '+BDR,borderRadius:6,padding:'6px 10px'}},
+          /*#__PURE__*/React.createElement("div", {style:{fontSize:10,color:MT,marginBottom:2}},
+            (i === 0 ? 'LATEST · ' : '') + (h.by || 'Earlier remark') + (h.at ? ' · ' + new Date(h.at).toLocaleString() : '')),
+          /*#__PURE__*/React.createElement("div", {style:{fontSize:12,whiteSpace:'pre-wrap'}}, h.text)))
+        : /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,textAlign:'center',padding:12}}, "No remarks yet."))));
+})(),
 
 /* ── CE Monitoring -> View ── */
 viewCE && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset:0,background:'#000a',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center'},onClick:()=>setViewCE(null)},

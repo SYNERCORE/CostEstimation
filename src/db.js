@@ -78,7 +78,7 @@ function _monMergeLog(theirs,mine){
   const out=[],seen={};
   for(const h of [...(Array.isArray(theirs)?theirs:[]),...(Array.isArray(mine)?mine:[])]){
     if(!h||typeof h!=='object')continue;
-    const k=String(h.status||'')+'|'+String(h.at||'')+'|'+String(h.by||'');
+    const k=String(h.status!=null?h.status:(h.text||''))+'|'+String(h.at||'')+'|'+String(h.by||'');
     if(seen[k])continue;
     seen[k]=1;out.push(h);
   }
@@ -123,6 +123,13 @@ async function dbSaveMonEntry(ceId, ceNum, monFields, changed){
       toWrite={...theirs};
       for(const k of changed)toWrite[k]=monFields[k];
       if(changed.indexOf('statusLog')>=0)toWrite.statusLog=_monMergeLog(theirs.statusLog,monFields.statusLog);
+      /* Remarks from two people at once both stay in the trail, and the
+         column shows whichever was written last. */
+      if(changed.indexOf('remarksLog')>=0){
+        toWrite.remarksLog=_monMergeLog(theirs.remarksLog,monFields.remarksLog);
+        const last=toWrite.remarksLog[toWrite.remarksLog.length-1];
+        if(last)toWrite.remarks=last.text||'';
+      }
     }
     const payload={shicMonData:JSON.stringify(toWrite)};
     if(spId){

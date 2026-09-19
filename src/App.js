@@ -491,6 +491,29 @@ function App({
      request to save once the state set alongside it has landed. */
   const [apvUsers, setApvUsers] = useState([]);
   const [saveReq, setSaveReq] = useState(0);
+  /* My Signature: the signed-in user's saved signature, and whether its editor is open. */
+  const [mySig, setMySig] = useState('');
+  const [mySigOpen, setMySigOpen] = useState(false);
+  useEffect(() => { if (currentUser && currentUser.username) dbGetMySig(currentUser.username).then(v => setMySig(v || '')).catch(() => {}); }, [currentUser && currentUser.username]);
+  /* Any image, drawn onto a white 420x140 canvas the same shape as the pad. */
+  const sigFit = src => new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas'); c.width = 420; c.height = 140;
+      const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 420, 140);
+      const k = Math.min(400 / img.width, 130 / img.height);
+      const w = img.width * k, h = img.height * k;
+      x.drawImage(img, (420 - w) / 2, (140 - h) / 2, w, h);
+      res(c.toDataURL('image/png'));
+    };
+    img.onerror = () => rej(new Error('That file is not an image the browser can read.'));
+    img.src = src;
+  });
+  const saveMySig = async img => {
+    const ok = await dbSaveMySig(currentUser.username, img);
+    setMySig(img);
+    showToast(img ? (ok ? 'Signature saved to your account.' : 'Signature saved in this browser only — SharePoint did not accept it.') : 'Saved signature removed.', !ok && (USE_SP || getSiteURL()));
+  };
   /* Masterlist Trash: null when closed, else the entries. */
   const [mlTrash, setMlTrash] = useState(null);
   const mlTrashItemName = it => (it && (it.desc || it.role)) || '(unnamed)';
@@ -8741,7 +8764,7 @@ function App({
       textTransform: 'uppercase',
       letterSpacing: '0.07em'
     }
-  }, currentUser.role)), /*#__PURE__*/React.createElement(OnlinePill,null), /*#__PURE__*/React.createElement(ChangePasswordModal,{currentUser}), /*#__PURE__*/React.createElement("button", {
+  }, currentUser.role)), /*#__PURE__*/React.createElement(OnlinePill,null), /*#__PURE__*/React.createElement(ChangePasswordModal,{currentUser}), /*#__PURE__*/React.createElement("button", {style:btn('def',true),title:"Your saved signature — used when you Approve & Sign",onClick:()=>setMySigOpen(true)}, "✍ My Signature"), /*#__PURE__*/React.createElement("button", {
     onClick: onLogout,
     style: btn('danger', true)
   }, "Sign Out"))), /*#__PURE__*/React.createElement("div", {
@@ -9712,6 +9735,39 @@ diffModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',in
   ),
 
 /* ── Feature 11: E-Signature Modal ── */
+/* ── My Signature ── */
+mySigOpen && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset:0,background:'#000b',zIndex:3100,display:'flex',alignItems:'center',justifyContent:'center'},onClick:()=>setMySigOpen(false)},
+  /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid #A78BFA',borderRadius:10,padding:20,width:460},onClick:e=>e.stopPropagation()},
+    /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}},
+      /*#__PURE__*/React.createElement("b", null, "✍ My Signature"),
+      /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setMySigOpen(false)}, "✕")),
+    /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,marginBottom:10,lineHeight:1.5}}, "Draw it below or upload an image. It is saved to your account and fills in the pad when you Approve & Sign; each CE still stamps it with your name, title, date and time."),
+    /*#__PURE__*/React.createElement("div", {style:{background:'#fff',borderRadius:6,marginBottom:10,overflow:'hidden',border:'1px solid #ccc'}},
+      /*#__PURE__*/React.createElement("canvas", {
+        id:'mySigCanvas', width:420, height:140, style:{display:'block',cursor:'crosshair'},
+        ref: el => {
+          if(!el||el.__sigReady) return; el.__sigReady=true;
+          const ctx=el.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,420,140);
+          ctx.strokeStyle='#111'; ctx.lineWidth=2; ctx.lineCap='round'; ctx.lineJoin='round';
+          let drawing=false;
+          const pos=e=>{const r=el.getBoundingClientRect();const t=e.touches?e.touches[0]:e;return{x:t.clientX-r.left,y:t.clientY-r.top};};
+          el.onmousedown=el.ontouchstart=e=>{e.preventDefault();drawing=true;const p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);};
+          el.onmousemove=el.ontouchmove=e=>{e.preventDefault();if(!drawing)return;const p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();};
+          el.onmouseup=el.ontouchend=()=>{drawing=false;};
+          if(mySig){const img=new Image();img.onload=()=>ctx.drawImage(img,0,0);img.src=mySig;}
+        }
+      })),
+    /*#__PURE__*/React.createElement("div", {style:{display:'flex',gap:8,flexWrap:'wrap'}},
+      /*#__PURE__*/React.createElement("label", {style:{...btn('info',true),cursor:'pointer'},title:"PNG or JPG, ideally on a white or transparent background"}, "⬆ Upload image",
+        /*#__PURE__*/React.createElement("input", {type:'file',accept:'image/png,image/jpeg,image/webp',style:{display:'none'},onChange:ev=>{
+          const f=ev.target.files&&ev.target.files[0]; ev.target.value=''; if(!f) return;
+          if(f.size>3*1024*1024){showToast('Pick an image under 3 MB.',true);return;}
+          const rd=new FileReader(); rd.onload=()=>sigFit(rd.result).then(d=>{const c=document.getElementById('mySigCanvas');const x=c.getContext('2d');const im=new Image();im.onload=()=>{x.fillStyle='#fff';x.fillRect(0,0,420,140);x.drawImage(im,0,0);};im.src=d;}).catch(er=>showToast(er.message,true)); rd.readAsDataURL(f);
+        }})),
+      /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>{const el=document.getElementById('mySigCanvas');const x=el.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,420,140);}}, "🗑 Clear"),
+      mySig && /*#__PURE__*/React.createElement("button", {style:btn('danger',true),onClick:()=>{if(confirm('Remove your saved signature?')){saveMySig('');setMySigOpen(false);}}}, "Remove saved"),
+      /*#__PURE__*/React.createElement("button", {style:{...btn('ok'),flex:1},onClick:()=>{saveMySig(document.getElementById('mySigCanvas').toDataURL('image/png'));setMySigOpen(false);}}, "💾 Save to my account")))),
+
 /* ── Masterlist Trash ── */
 mlTrash && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset:0,background:'#000a',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center'},onClick:()=>setMlTrash(null)},
   /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:16,width:'min(760px,96vw)',maxHeight:'86vh',display:'flex',flexDirection:'column',gap:8},onClick:e=>e.stopPropagation()},
@@ -9751,7 +9807,7 @@ sigModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',ins
           el.onmousedown=el.ontouchstart=e=>{e.preventDefault();drawing=true;const p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);};
           el.onmousemove=el.ontouchmove=e=>{e.preventDefault();if(!drawing)return;const p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();};
           el.onmouseup=el.ontouchend=()=>{drawing=false;};
-          if(signatures[sigModal.id]){const img=new Image();img.onload=()=>ctx.drawImage(img,0,0);img.src=signatures[sigModal.id];}
+          const pre=sigModal.mode==='approve'?mySig:signatures[sigModal.id];if(pre){const img=new Image();img.onload=()=>ctx.drawImage(img,0,0);img.src=pre;}
         }
       })),
     /*#__PURE__*/React.createElement("div", {style:{display:'flex',gap:8}},

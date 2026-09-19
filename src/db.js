@@ -934,6 +934,30 @@ function _mlTrashFresh(list){
   const cut = Date.now() - ML_TRASH_DAYS * 864e5;
   return (Array.isArray(list) ? list : []).filter(e => e && e.key && new Date(e.at).getTime() > cut);
 }
+/* A user's saved signature, used to pre-fill Approve & Sign. One row per
+   user ('sig:<username>') in the Masterlist list, beside 'config' and 'trash'.
+   Mirrored locally so it is there offline. */
+async function dbGetMySig(username){
+  const k='sig:'+String(username||'').toLowerCase();
+  if(USE_SP||getSiteURL()){
+    try{const r=await spGet(spList('Masterlist'),"Title eq '"+k.replace(/'/g,"''")+"'",'Id,shicData');
+      const v=r.length&&r[0].shicData?(JSON.parse(r[0].shicData).img||''):'';
+      LS.set('my_sig:'+k,v);return v;}catch(e){console.warn('dbGetMySig:',e.message);}
+  }
+  return LS.get('my_sig:'+k)||'';
+}
+async function dbSaveMySig(username,img){
+  const k='sig:'+String(username||'').toLowerCase();
+  LS.set('my_sig:'+k,img||'');
+  if(USE_SP||getSiteURL()){
+    try{const r=await spGet(spList('Masterlist'),"Title eq '"+k.replace(/'/g,"''")+"'",'Id');
+      const body={shicData:JSON.stringify({img:img||'',at:new Date().toISOString()})};
+      if(r.length)await spWithRetry(()=>spPatch(spList('Masterlist'),r[0].Id,body));
+      else await spWithRetry(()=>spPost(spList('Masterlist'),{Title:k,...body}));
+      return true;}catch(e){console.warn('dbSaveMySig:',e.message);return false;}
+  }
+  return false;
+}
 async function dbGetMLTrash(){
   if(USE_SP||getSiteURL()){
     try{const r=await spGet(spList('Masterlist'),"Title eq 'trash'",'Id,shicData');

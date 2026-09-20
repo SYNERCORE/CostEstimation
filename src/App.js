@@ -8168,6 +8168,7 @@ function App({
     sig: JSON.stringify([ceType, info, mp, tools, mats, ppe, misc, sowItems, notes, addlCosts, margin, approvers, scope, mobVehicles, demobVehicles, verifyNotes, rates])
   };
   return /*#__PURE__*/React.createElement("div", {
+    className: "shic-app-root",
     style: {
       background: BG,
       color: TX,

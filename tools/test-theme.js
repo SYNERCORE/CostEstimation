@@ -101,6 +101,7 @@ ck('every colour theme has its CSS block', [...w.matchAll(/\{ id: '([a-z]+)', ba
 ck('the palette is applied before first paint too', /localStorage\.getItem\("shic:palette"\)/.test(html));
 ck('a wallpaper keeps the cards solid, only the canvas turns see-through',
   /html\[data-wp\] body\{background:/.test(html) && !/html\[data-wp\][^{]*\{[^}]*--bg-surface/.test(html));
+ck('the app root does not paint over the wallpaper', /html\[data-wp\][^{]*\.shic-app-root\{background:transparent/.test(html) && /className: "shic-app-root"/.test(fs.readFileSync('src/App.js', 'utf8')));
 ck('it writes the attribute the CSS keys off', /setAttribute\('data-theme', t\)/.test(w));
 ck('it remembers the choice', /localStorage\.setItem\('shic:theme', t\)/.test(w));
 ck('it moves the browser chrome too', /meta\[name="theme-color"\]/.test(w));

@@ -7660,7 +7660,8 @@ function App({
     const coInfo = allCos.find(c => String(c.id) === String(info.companyId)) || allCos[0] || {};
     const _br = ceBrand(coInfo);
     const pageStyle = `
-      @page{size:A4 portrait;margin:8mm 0.25in}
+      /* Room in the page margins for the running header and footer below. */
+      @page{size:A4 portrait;margin:16mm 0.25in 12mm}
       *{box-sizing:border-box}
       body{font-family:Arial,sans-serif;font-size:8pt;color:#000;margin:0;padding:0}
       table{width:100%;border-collapse:collapse}
@@ -7675,6 +7676,13 @@ function App({
       .r{text-align:right} .c{text-align:center} .b{font-weight:bold}
       .tot{background:#f5f5f5;font-weight:bold}
       .sig td{border:none;text-align:center;padding:0 6px;vertical-align:bottom}
+      /* A fixed element repeats on every printed page. Before this the header
+         appeared on the first page of each section only, and later pages
+         carried nothing naming the CE or the document. */
+      .run-hdr,.run-ftr{position:fixed;left:0;right:0;font-size:6.5pt;color:#333;display:flex;justify-content:space-between;gap:8px}
+      .run-hdr{top:-13mm;border-bottom:.5pt solid #999;padding-bottom:1px}
+      .run-ftr{bottom:-9mm;border-top:.5pt solid #999;padding-top:1px}
+      @media screen{.run-hdr,.run-ftr{display:none}}
       @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
     `;
     const co = {
@@ -7747,10 +7755,26 @@ function App({
        after the manually written ones, each labelled with its scope number. */
     const sowNotes = (sowItems || []).filter(s => String(s.note || '').trim());
     const notesList = (notes.length || sowNotes.length) ? `<div style="margin-top:4px"><b>NOTE:</b><ol style="margin:1px 0 0 14px;padding:0;font-size:7.5pt">${notes.map(n=>`<li>${esc(n.text)}</li>`).join('')}${sowNotes.map(s=>`<li><b>Scope ${esc(sowLabels[s.id]||'')}</b> &#8212; ${esc(String(s.note).trim())}</li>`).join('')}</ol></div>` : '';
-    const sigBlock = `<table style="width:100%;border-collapse:collapse;margin-top:20px;table-layout:fixed" class="sig">
-      <tr>${approvers.map(a=>`<td style="border:1px solid #000;padding:4px 8px;font-size:8pt;font-weight:bold;vertical-align:top"><b>${esc(a.role)}:</b></td>`).join('')}</tr>
-      <tr>${approvers.map((a,i)=>{const sigImg=signatures[a.id||i]?`<img src="${signatures[a.id||i]}" style="height:48px;max-width:100%;display:block;margin:0 auto 2px"/>`:'';return`<td style="border:1px solid #000;padding:4px 8px;vertical-align:bottom"><div style="min-height:46px;text-align:center">${sigImg}</div><div style="border-top:1px solid #000;padding-top:3px;text-align:center"><b style="font-size:8pt">${esc((a.id&&info.approval&&(info.approval.lines||{})[a.id]||{}).byName||a.name||'')}</b><br><span style="font-size:7.5pt">${esc(a.title||a.role||'')}</span>${(()=>{const l=a.id&&info.approval&&(info.approval.lines||{})[a.id];return l?'<br><span style="font-size:6.5pt;color:#1E7B34">e-signed '+esc(apvWhen(l.at))+'</span>':'';})()}</div></td>`;}).join('')}</tr>
+    /* Four signatories to a row. Seven in a single row left each about 2cm
+       wide and shrank every signature image to match; the sheet is the same
+       width whatever the routing is, so the row has to wrap instead. */
+    const SIG_PER_ROW = 4;
+    const sigRows = [];
+    for (let i = 0; i < approvers.length; i += SIG_PER_ROW) sigRows.push(approvers.slice(i, i + SIG_PER_ROW));
+    const sigCell = (a, i) => {
+      const sigImg = signatures[a.id || i] ? `<img src="${signatures[a.id || i]}" style="height:52px;max-width:100%;display:block;margin:0 auto 2px"/>` : '';
+      const line = a.id && info.approval && (info.approval.lines || {})[a.id];
+      return `<td style="border:1px solid #000;padding:4px 8px;vertical-align:bottom"><div style="min-height:50px;text-align:center">${sigImg}</div><div style="border-top:1px solid #000;padding-top:3px;text-align:center"><b style="font-size:8pt">${esc((line || {}).byName || a.name || '')}</b><br><span style="font-size:7.5pt">${esc(a.title || a.role || '')}</span>${line ? '<br><span style="font-size:6.5pt;color:#1E7B34">e-signed ' + esc(apvWhen(line.at)) + '</span>' : ''}</div></td>`;
+    };
+    const sigBlock = sigRows.map((row, ri) => {
+      /* A short last row keeps the cell width of a full one, so four
+         signatories and five do not draw at different sizes. */
+      const pad = ri ? Array(SIG_PER_ROW - row.length).fill('<td style="border:none"></td>').join('') : '';
+      return `<table style="width:100%;border-collapse:collapse;margin-top:${ri ? 8 : 20}px;table-layout:fixed;page-break-inside:avoid" class="sig">
+      <tr>${row.map(a => `<td style="border:1px solid #000;padding:4px 8px;font-size:8pt;font-weight:bold;vertical-align:top"><b>${esc(a.role)}:</b></td>`).join('')}${pad}</tr>
+      <tr>${row.map((a, i) => sigCell(a, ri * SIG_PER_ROW + i)).join('')}${pad}</tr>
     </table>`;
+    }).join('');
 
     /* Manpower &#8212; skip zero-rate rows */
     const mpActive = mp.filter(r=>N(r.rate)>0||String(r.role||'').trim());
@@ -7848,7 +7872,10 @@ function App({
 
     const sowPage=sowItems.length?`<div class="page page-break">${docHdr('SCOPE OF WORK')}<div style="font-size:8pt;line-height:1.6">${(()=>{let mc=0,sc=0;return sowItems.map(it=>{if(it.type==='main'){mc++;sc=0;return`<div style="margin-top:4px"><b>${mc}. ${esc(it.text)}</b></div>`;}else{sc++;return`<div style="margin-left:14px">${mc}.${sc} ${esc(it.text)}</div>`;}}).join('');})()}</div></div>`:'';
 
+    const runHdr = `<div class="run-hdr"><span><b>${esc(co.name)}</b> — COST ESTIMATE SUMMARY</span><span><b>CE No.:</b> ${esc(info.ceNum || '')} &nbsp; <b>CE TYPE:</b> ${esc(ceType.toUpperCase())}</span></div>`;
+    const runFtr = `<div class="run-ftr"><span>Document No.: ${esc(co.doc)} Rev. ${esc(co.revNo)}</span><span>${esc(info.client || '')}</span><span>Printed ${esc(new Date().toLocaleDateString('en-PH'))}</span></div>`;
     const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>CE ${esc(info.ceNum||'')}<\/title><style>${pageStyle}<\/style><\/head><body>
+      ${runHdr}${runFtr}
       <div class="page">
         ${docHdr('COST ESTIMATE SUMMARY')}
         ${infoTable}

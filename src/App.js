@@ -7660,8 +7660,9 @@ function App({
     const coInfo = allCos.find(c => String(c.id) === String(info.companyId)) || allCos[0] || {};
     const _br = ceBrand(coInfo);
     const pageStyle = `
-      /* Room in the page margins for the running header and footer below. */
-      @page{size:A4 portrait;margin:16mm 0.25in 12mm}
+      /* Zero: every sheet carries its own margins as padding, so what is on
+         screen is exactly what leaves the printer. */
+      @page{size:A4 portrait;margin:0}
       *{box-sizing:border-box}
       body{font-family:Arial,sans-serif;font-size:8pt;color:#000;margin:0;padding:0}
       table{width:100%;border-collapse:collapse}
@@ -7676,13 +7677,18 @@ function App({
       .r{text-align:right} .c{text-align:center} .b{font-weight:bold}
       .tot{background:#f5f5f5;font-weight:bold}
       .sig td{border:none;text-align:center;padding:0 6px;vertical-align:bottom}
-      /* A fixed element repeats on every printed page. Before this the header
-         appeared on the first page of each section only, and later pages
-         carried nothing naming the CE or the document. */
-      .run-hdr,.run-ftr{position:fixed;left:0;right:0;font-size:6.5pt;color:#333;display:flex;justify-content:space-between;gap:8px}
-      .run-hdr{top:-13mm;border-bottom:.5pt solid #999;padding-bottom:1px}
-      .run-ftr{bottom:-9mm;border-top:.5pt solid #999;padding-top:1px}
-      @media screen{.run-hdr,.run-ftr{display:none}}
+      /* The document is laid out into real A4 sheets before printing, each
+         carrying its own header and footer. A position:fixed running header is
+         drawn wherever the printer's own margins happen to fall -- which is how
+         a footer ended up struck through the middle of a table -- and HTML has
+         no way to count pages, so "Page 3 of 12" was impossible that way. */
+      .sheet{width:210mm;height:297mm;padding:9mm 7mm 8mm;display:flex;flex-direction:column;overflow:hidden;background:#fff;page-break-after:always;break-after:page}
+      .sheet:last-child{page-break-after:auto;break-after:auto}
+      .sbody{flex:1;min-height:0;overflow:hidden}
+      .run-hdr,.run-ftr{font-size:6.5pt;color:#333;display:flex;justify-content:space-between;gap:8px;flex:none}
+      .run-hdr{border-bottom:.5pt solid #999;padding-bottom:2px;margin-bottom:3mm}
+      .run-ftr{border-top:.5pt solid #999;padding-top:2px;margin-top:3mm}
+      @media screen{body{background:#e9e9ee}.sheet{margin:0 auto 8px;box-shadow:0 1px 6px rgba(0,0,0,.25)}}
       @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
     `;
     const co = {
@@ -7872,10 +7878,71 @@ function App({
 
     const sowPage=sowItems.length?`<div class="page page-break">${docHdr('SCOPE OF WORK')}<div style="font-size:8pt;line-height:1.6">${(()=>{let mc=0,sc=0;return sowItems.map(it=>{if(it.type==='main'){mc++;sc=0;return`<div style="margin-top:4px"><b>${mc}. ${esc(it.text)}</b></div>`;}else{sc++;return`<div style="margin-left:14px">${mc}.${sc} ${esc(it.text)}</div>`;}}).join('');})()}</div></div>`:'';
 
-    const runHdr = `<div class="run-hdr"><span><b>${esc(co.name)}</b> — COST ESTIMATE SUMMARY</span><span><b>CE No.:</b> ${esc(info.ceNum || '')} &nbsp; <b>CE TYPE:</b> ${esc(ceType.toUpperCase())}</span></div>`;
-    const runFtr = `<div class="run-ftr"><span>Document No.: ${esc(co.doc)} Rev. ${esc(co.revNo)}</span><span>${esc(info.client || '')}</span><span>Printed ${esc(new Date().toLocaleDateString('en-PH'))}</span></div>`;
+    const runHdr = `<div class="run-hdr"><span>${esc(co.name)} — COST ESTIMATE SUMMARY</span><span><b>CE No.:</b> ${esc(info.ceNum || '')} &nbsp; <b>CE TYPE:</b> ${esc(ceType.toUpperCase())}</span></div>`;
+    const runFtr = `<div class="run-ftr"><span>Document No.: ${esc(co.doc)} Rev. ${esc(co.revNo)}</span><span class="pnum"></span></div>`;
+    /* Laid out here, not by the browser: only by measuring can a header and a
+       footer sit on every page without crossing the rows, and only by counting
+       the sheets can a footer say "of 12". */
+    const paginator = `(function(){
+      var HDR = ${JSON.stringify(runHdr)}, FTR = ${JSON.stringify(runFtr)};
+      function sheet(){
+        var d = document.createElement('div'); d.className = 'sheet';
+        d.innerHTML = HDR + '<div class="sbody"></div>' + FTR;
+        document.getElementById('out').appendChild(d); return d;
+      }
+      function run(){
+        var src = document.getElementById('doc'), out = document.getElementById('out');
+        if (!src || !out) return;
+        src.style.display = '';
+        var sections = [].slice.call(src.children);
+        var sh = null, body = null, avail = 0;
+        function fresh(){ sh = sheet(); body = sh.querySelector('.sbody'); avail = body.clientHeight; }
+        function fits(){ return body.scrollHeight <= avail; }
+        function put(el){
+          body.appendChild(el);
+          if (fits()) return;
+          /* Taller than a whole sheet however it is placed, so it is cut here
+             rather than moved: moving it left the heading above it alone on a
+             page of its own with the table starting on the next one. */
+          if (el.offsetHeight > avail || body.children.length === 1) { split(el); return; }
+          body.removeChild(el); fresh(); put(el);
+        }
+        /* A table taller than a page is cut between its rows, and its first
+           row -- the column headings -- repeats on the sheet after it. */
+        function split(tbl){
+          if (tbl.tagName !== 'TABLE') return;
+          body.removeChild(tbl);
+          var rows = [].slice.call(tbl.rows), head = rows.length ? rows[0].cloneNode(true) : null, i = 0;
+          while (i < rows.length) {
+            var part = tbl.cloneNode(false), tb = document.createElement('tbody');
+            part.appendChild(tb); body.appendChild(part);
+            if (i && head) tb.appendChild(head.cloneNode(true));
+            var placed = 0;
+            while (i < rows.length) {
+              tb.appendChild(rows[i]);
+              if (!fits() && placed) { tb.removeChild(rows[i]); break; }
+              i++; placed++;
+            }
+            if (i < rows.length) fresh();
+          }
+        }
+        fresh();
+        sections.forEach(function(sec, si){
+          if (si) fresh();
+          [].slice.call(sec.children).forEach(put);
+        });
+        src.parentNode.removeChild(src);
+        var sheets = out.children, n = sheets.length;
+        for (var p = 0; p < n; p++) {
+          var t = sheets[p].querySelector('.pnum');
+          if (t) t.textContent = 'Page ' + (p + 1) + ' of ' + n;
+        }
+        document.body.setAttribute('data-paged', '1');
+      }
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
+    })();`;
     const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>CE ${esc(info.ceNum||'')}<\/title><style>${pageStyle}<\/style><\/head><body>
-      ${runHdr}${runFtr}
+      <div id="doc" style="display:none">
       <div class="page">
         ${docHdr('COST ESTIMATE SUMMARY')}
         ${infoTable}
@@ -7885,6 +7952,8 @@ function App({
       </div>
       ${sowPage}
       ${billsPage}
+      </div><div id="out"></div>
+      <script>${paginator}</script>
     <\/body><\/html>`;
     /* View from CE Monitoring: this copy of the app runs inside that frame
        only to draw the CE, so it swaps itself for the document -- which also
@@ -7912,7 +7981,9 @@ function App({
       const html = handleGenerateCE({ htmlOnly: true });
       if (!html) { w.close(); return; }
       const previewHtml = html.replace('</body>', `<div class="no-print" style="position:fixed;top:0;left:0;right:0;background:#1a1a2e;color:#fff;padding:10px 16px;display:flex;gap:10px;align-items:center;z-index:9999;font-family:sans-serif;font-size:13px"><b>👁 CE Preview</b><button onclick="window.print()" style="background:#F0A429;color:#000;border:none;padding:5px 14px;border-radius:4px;font-weight:700;cursor:pointer">🖨 Print</button><button onclick="window.close()" style="background:#333;color:#fff;border:1px solid #555;padding:5px 14px;border-radius:4px;cursor:pointer">✕ Close</button><span style="margin-left:auto;color:#aaa;font-size:11px">Use Ctrl+P to print</span></div></body>`);
-      w.document.write(previewHtml.replace('@page{', '@page{ margin-top:20mm;'));
+      /* No extra page margin: each sheet carries its own, and adding one here
+         pushed every page down and split the last line onto a page of its own. */
+      w.document.write(previewHtml);
       w.document.close();
     }
   };

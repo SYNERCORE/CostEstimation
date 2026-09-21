@@ -8,9 +8,15 @@ let bad = 0; const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + 
 ck('at most four signatories to a row', /const SIG_PER_ROW = 4;/.test(app) && /approvers\.slice\(i, i \+ SIG_PER_ROW\)/.test(app));
 ck('a short last row keeps the same cell width', /fill\('<td style="border:none"><\/td>'\)/.test(app));
 ck('a signature block is never split across pages', /class="sig"/.test(app) && /page-break-inside:avoid" class="sig"/.test(app));
-ck('the header repeats on every page', /\.run-hdr\{top:/.test(app) && /position:fixed/.test(app));
-ck('and names the CE', /class="run-hdr"[\s\S]{0,200}CE No\./.test(app));
-ck('the footer repeats too, with the document number', /class="run-ftr"[\s\S]{0,120}Document No\./.test(app));
-ck('the page margins leave room for both', /@page\{size:A4 portrait;margin:16mm 0\.25in 12mm\}/.test(app));
-ck('neither shows on screen, only in print', /@media screen\{\.run-hdr,\.run-ftr\{display:none\}\}/.test(app));
+/* A position:fixed header is drawn wherever the printer's own margins fall, so
+   it struck through the middle of tables; the document is laid out into real
+   sheets instead, which is also the only way to count the pages. */
+ck('the document is laid out into A4 sheets', /\.sheet\{width:210mm;height:297mm/.test(app));
+ck('each sheet carries the header and the footer', /d\.innerHTML = HDR \+ '<div class="sbody"><\/div>' \+ FTR/.test(app));
+ck('the header names the CE', /class="run-hdr"[\s\S]{0,200}CE No\./.test(app));
+ck('the footer is the document number, then page X of Y', /class="run-ftr"><span>Document No\.[\s\S]{0,80}class="pnum"/.test(app) && /'Page ' \+ \(p \+ 1\) \+ ' of ' \+ n/.test(app));
+ck('nothing is left overflowing a sheet', /if \(!fits\(\) && placed\)/.test(app));
+ck('a long table is cut between rows, headings repeated', /if \(i && head\) tb\.appendChild\(head\.cloneNode\(true\)\)/.test(app));
+ck('and a heading is never left alone above it', /el\.offsetHeight > avail \|\| body\.children\.length === 1/.test(app));
+ck('the page box is edge to edge, the sheet holds the margins', /@page\{size:A4 portrait;margin:0\}/.test(app));
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nprint layout OK'); process.exit(bad ? 1 : 0);

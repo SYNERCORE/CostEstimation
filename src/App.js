@@ -2722,7 +2722,10 @@ function App({
     if (tab !== 'summary') return;
     dbGetUsers().then(u => setApvUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(() => {});
   }, [tab]);
-  const apvState = (info.approval && info.approval.state) || 'none';
+  /* Monitoring knows when a revision was superseded; the CE's own copy of the
+     approval was written before that and still says pending. */
+  const _apvMon = (() => { try { const id = (history.find(h => ((h.info && h.info.ceNum) || h.ceNum) === info.ceNum) || {}).id; return id != null && (monData[id] || {}).apv; } catch (_e) { return null; } })();
+  const apvState = (_apvMon && _apvMon.state === 'superseded') ? 'superseded' : ((info.approval && info.approval.state) || 'none');
   const apvLocked = apvState === 'pending' || apvState === 'approved';
   const _apvMe = () => ({ by: currentUser.username, byName: currentUser.name || currentUser.username, at: new Date().toISOString() });
   /* Store an approval change. Save refuses a CE number that is already saved
@@ -2846,6 +2849,7 @@ function App({
     const mine = apvCanSign(approvers, a, me);
     const col = {pending: 'var(--accent-cyan)', approved: '#16a34a', returned: ERR}[apvState] || MT;
     const lbl = {none: 'Not submitted for approval', withdrawn: 'Withdrawn from approval', returned: '↩ Returned',
+      superseded: '⊘ Superseded' + (_apvMon && _apvMon.supersededBy ? ' by ' + _apvMon.supersededBy : '') + ' — route the latest revision instead',
       approved: '✅ Approved · ' + s.signedN + '/' + s.total + ' signed',
       pending: '⏳ Step ' + s.step + ' · ' + s.signedN + '/' + s.total + ' signed · waiting on ' + s.waiting.map(l => l.name || l.user).join(', ')}[apvState];
     const ret = a && (a.log || []).filter(l => l.action === 'returned').slice(-1)[0];
@@ -4726,6 +4730,25 @@ function App({
        deleted -- is stale: it showed as "CE #2817" with nothing to sign. */
     return {sign: sign, returned: returned, total: sign.length + returned.length};
   }, [monRows, monData, currentUser]);
+  /* A revision replaced by a newer one is no longer waiting on anyone. Its
+     approval is closed as superseded -- in Monitoring, where every user and
+     every filter reads it -- rather than left pending for ever. Runs whenever
+     the list changes, so a ↻ Revise closes the one it replaced as soon as the
+     new revision is saved; each record is written once. */
+  const _supersededRef = React.useRef(new Set());
+  useEffect(() => {
+    if (!currentUser || !monRows.length) return;
+    groupCERevisions(monRows, h => (h.info && h.info.ceNum) || h.ceNum || '').forEach(g => {
+      if (g.dup || !g.revs.length) return;
+      const headNum = (g.head.info && g.head.info.ceNum) || g.head.ceNum || '';
+      g.revs.forEach(e => {
+        const a = (monData[e.id] || {}).apv;
+        if (!a || !['pending', 'returned'].includes(a.state) || _supersededRef.current.has(String(e.id))) return;
+        _supersededRef.current.add(String(e.id));
+        updateMon(e.id, 'apv', {...a, state: 'superseded', waiting: [], supersededBy: headNum, at: new Date().toISOString()});
+      });
+    });
+  }, [monRows, monData]);
   /* Say it when it first appears and again whenever it grows, not once a session. */
   const _apvToldRef = React.useRef(-1);
   useEffect(() => {
@@ -6026,6 +6049,7 @@ function App({
     }, /*#__PURE__*/React.createElement("div", null,
       /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',background:alpha(statusColor, '22'),color:statusColor,fontWeight:700,fontSize:10,padding:'2px 8px',borderRadius:12,whiteSpace:'nowrap'}}, m.status||'—'),
       m.statusChangedAt && /*#__PURE__*/React.createElement("div", {style:{fontSize:9,color:MT,marginTop:2,lineHeight:1.3},title:'Changed by '+(m.statusChangedBy||'unknown')}, new Date(m.statusChangedAt).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}), m.statusChangedBy?' · '+m.statusChangedBy.split(' ')[0]:''),
+      m.apv && m.apv.state === 'superseded' && /*#__PURE__*/React.createElement("div", {style:{fontSize:9,marginTop:2,fontWeight:700,color:MT}, title:'This revision was replaced; its approval was closed.'}, '⊘ Superseded' + (m.apv.supersededBy ? ' by ' + m.apv.supersededBy : '')),
       m.apv && ['pending','approved','returned'].includes(m.apv.state) && (() => {
         const turn = m.apv.state === 'pending' && (m.apv.waiting || []).includes(currentUser.username);
         return /*#__PURE__*/React.createElement("div", {style:{fontSize:9,marginTop:2,fontWeight:700,color:m.apv.state==='approved'?'#16a34a':m.apv.state==='returned'?ERR:'var(--accent-cyan)',cursor:turn?'pointer':'default'},

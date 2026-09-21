@@ -571,36 +571,6 @@ function App({
   const [history, setHistory] = useState([]);
   const [histBusy, setHistBusy] = useState(false);
   const [monData, setMonData] = useState({});
-  /* What is waiting on this user right now: CEs routed to them for signature,
-     plus their own CEs that came back returned. Counted here rather than inside
-     the My Work tab so the badge is on screen from whatever tab they are on --
-     a toast that scrolled past was the only hint before, and it was missed. */
-  const myTodo = React.useMemo(() => {
-    const me = currentUser && currentUser.username;
-    if (!me) return {sign: 0, returned: 0, total: 0};
-    let sign = 0, returned = 0;
-    Object.values(monData || {}).forEach(m => {
-      const a = m && m.apv; if (!a) return;
-      if (a.state === 'pending' && (a.waiting || []).includes(me)) sign++;
-      else if (a.state === 'returned' && a.submittedBy === me) returned++;
-    });
-    return {sign: sign, returned: returned, total: sign + returned};
-  }, [monData, currentUser]);
-  /* Say it when it first appears and again whenever it grows, not once a session. */
-  const _apvToldRef = React.useRef(-1);
-  useEffect(() => {
-    const n = myTodo.total, was = _apvToldRef.current;
-    if (n > was && was >= 0) setTimeout(() => showToast(
-      (myTodo.sign ? '✍ ' + myTodo.sign + ' CE' + (myTodo.sign === 1 ? '' : 's') + ' waiting for your signature' : '') +
-      (myTodo.sign && myTodo.returned ? ' · ' : '') +
-      (myTodo.returned ? '↩ ' + myTodo.returned + ' returned to you' : '') + ' — see My Work.'), 1200);
-    _apvToldRef.current = n;
-  }, [myTodo.total]);
-  /* And on the tab title, so it shows while the app is in another window. */
-  useEffect(() => {
-    const base = 'SHIC Cost Estimator';
-    try { document.title = myTodo.total ? '(' + myTodo.total + ') ' + base : base; } catch (_e) {}
-  }, [myTodo.total]);
   const [customStatuses, setCustomStatuses] = useState(() => {
     try {
       const v = localStorage.getItem('shic:statuses');
@@ -4730,6 +4700,44 @@ function App({
   /* A draft has no monitoring record -- there is no CE to attach a deadline or
      a received-by to yet -- so it reports the one field it does know. */
   const monOf = e => monData[e.id] || (e && e._draft ? {status: 'Draft'} : {});
+  /* What is waiting on this user right now, as rows -- not a separate count.
+     The badge said "1" while My Work showed nothing, because the badge counted
+     monitoring records and the tab listed CEs; a record whose CE is not the
+     latest revision, or whose CE this browser has not loaded, belonged to one
+     and not the other. Both read this. */
+  const myTodo = useMemo(() => {
+    const me = currentUser && currentUser.username;
+    if (!me) return {sign: [], returned: [], total: 0};
+    const heads = groupCERevisions(monRows, h => (h.info && h.info.ceNum) || h.ceNum || '')
+      .map(g => g.head).filter(e => !e._draft);
+    const rows = heads.map(e => ({e: e, m: monData[e.id] || {}}));
+    const apv = x => x.m.apv || {};
+    const sign = rows.filter(x => apv(x).state === 'pending' && (apv(x).waiting || []).includes(me));
+    const returned = rows.filter(x => apv(x).state === 'returned' && apv(x).submittedBy === me);
+    /* A pending record with no CE row here -- a superseded revision, or a CE
+       this browser has not got -- is still shown, never silently counted. */
+    const have = new Set(heads.map(e => String(e.id)));
+    const orphan = Object.keys(monData || {})
+      .filter(id => !have.has(String(id)))
+      .map(id => ({e: {id: /^[0-9]+$/.test(id) ? Number(id) : id, info: {ceNum: (monData[id] || {}).ceNum || 'CE #' + id}}, m: monData[id] || {}, _orphan: true}))
+      .filter(x => (x.m.apv || {}).state === 'pending' && ((x.m.apv || {}).waiting || []).includes(me));
+    return {sign: sign.concat(orphan), returned: returned, total: sign.length + orphan.length + returned.length};
+  }, [monRows, monData, currentUser]);
+  /* Say it when it first appears and again whenever it grows, not once a session. */
+  const _apvToldRef = React.useRef(-1);
+  useEffect(() => {
+    const n = myTodo.total, was = _apvToldRef.current;
+    if (n > was && was >= 0) setTimeout(() => showToast(
+      (myTodo.sign.length ? '✍ ' + myTodo.sign.length + ' CE' + (myTodo.sign.length === 1 ? '' : 's') + ' waiting for your signature' : '') +
+      (myTodo.sign.length && myTodo.returned.length ? ' · ' : '') +
+      (myTodo.returned.length ? '↩ ' + myTodo.returned.length + ' returned to you' : '') + ' — see My Work.'), 1200);
+    _apvToldRef.current = n;
+  }, [myTodo.total]);
+  /* And on the window title, so it shows while the app is in another window. */
+  useEffect(() => {
+    const base = 'SHIC Cost Estimator';
+    try { document.title = myTodo.total ? '(' + myTodo.total + ') ' + base : base; } catch (_e) {}
+  }, [myTodo.total]);
   /* Both fields have a monitoring value that falls back to the CE's own. Read
      the same way by the filter, the sort and the cell, or a row could be
      filtered out by a value the column does not show. */
@@ -8876,7 +8884,7 @@ function App({
       }
     }, t.label, cnt > 0 && /*#__PURE__*/React.createElement("span", {
       title: t.id === 'mywork'
-        ? [myTodo.sign ? myTodo.sign + ' waiting for your signature' : '', myTodo.returned ? myTodo.returned + ' returned to you' : ''].filter(Boolean).join(' · ')
+        ? [myTodo.sign.length ? myTodo.sign.length + ' waiting for your signature' : '', myTodo.returned.length ? myTodo.returned.length + ' returned to you' : ''].filter(Boolean).join(' · ')
         : t.id === 'sowbreak'
         ? cnt + ' resource row' + (cnt === 1 ? '' : 's') + ' not yet assigned to a scope task'
         : cnt + ' item' + (cnt === 1 ? '' : 's'),
@@ -9913,8 +9921,7 @@ tab === 'mywork' && (() => {
   const isMine = x => names.includes(String(x.m.ceeName || x.m.preparedBy || x.e.savedBy || '').trim().toUpperCase()) || x.e.savedBy === me;
   const mine = rows.filter(x => !x.e._draft && isMine(x));
   const apv = x => x.m.apv || {};
-  const toSign = rows.filter(x => apv(x).state === 'pending' && (apv(x).waiting || []).includes(me));
-  const returned = mine.filter(x => apv(x).state === 'returned');
+  const toSign = myTodo.sign, returned = myTodo.returned;
   const inApproval = mine.filter(x => apv(x).state === 'pending');
   const forReview = rows.filter(x => !x.e._draft && x.m.status === 'For Approval' && !isMine(x) && !(apv(x).state === 'pending'));
   const open = mine.filter(x => ceIsOpen(x.m.status) && apv(x).state !== 'pending')

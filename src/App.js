@@ -1899,34 +1899,52 @@ function App({
     }
     throw new Error('Unsupported file type: .' + ext + '. Use PDF, DOCX, XLSX or TXT.');
   };
-  const handleDocUpload = async file => {
-    if (!file) return;
+  /* Client Document holds several files: an enquiry usually comes as a letter,
+     a TOR and a drawing list, and the AI reads better with all of them. The
+     one docFile object stays -- save, load and the AI read it as before --
+     with the files listed inside it and their text joined under a heading each. */
+  const docCombine = files => files.length ? {
+    name: files.length === 1 ? files[0].name : files.length + ' documents',
+    size: files.reduce((t, f) => t + (f.size || 0), 0),
+    text: files.map(f => files.length > 1 && f.text ? '=== ' + f.name + ' ===\n' + f.text : (f.text || '')).filter(Boolean).join('\n\n'),
+    spUrl: files[0].spUrl || null,
+    files: files,
+    uploadedAt: new Date().toISOString()
+  } : null;
+  const docFilesOf = d => !d ? [] : (Array.isArray(d.files) && d.files.length ? d.files : [{name: d.name, size: d.size || 0, text: d.text || '', spUrl: d.spUrl || null}]);
+  const handleDocUpload = async (input, append) => {
+    const list = Array.from(input && input.length != null ? input : (input ? [input] : []));
+    if (!list.length) return;
     setDocBusy(true);
-    try {
-      const text = await readDoc(file);
-      let spUrl = null;
-      if (USE_SP) {
-        const ab = await file.arrayBuffer();
-        spUrl = await spUploadDoc(file.name, ab);
+    const added = [];
+    for (const file of list) {
+      try {
+        const text = await readDoc(file);
+        let spUrl = null;
+        if (USE_SP) {
+          const ab = await file.arrayBuffer();
+          spUrl = await spUploadDoc(file.name, ab);
+        }
+        added.push({name: file.name, size: file.size, text, spUrl});
+      } catch (e) {
+        showToast('"' + file.name + '": ' + e.message, true);
       }
-      setDocFile({
-        name: file.name,
-        size: file.size,
-        text,
-        spUrl,
-        uploadedAt: new Date().toISOString()
+    }
+    if (added.length) {
+      setDocFile(prev => {
+        const keep = append ? docFilesOf(prev).filter(f => !added.some(a => a.name === f.name)) : [];
+        return docCombine(keep.concat(added));
       });
-      showToast('"' + file.name + '" loaded. Click Extract Info to auto-fill fields.');
-    } catch (e) {
-      showToast(e.message, true);
+      showToast((added.length === 1 ? '"' + added[0].name + '"' : added.length + ' documents') + ' loaded. Click Extract Info to auto-fill fields.');
     }
     setDocBusy(false);
   };
+  const removeDoc = name => setDocFile(prev => docCombine(docFilesOf(prev).filter(f => f.name !== name)));
   const extractDocInfo = async () => {
     if (!docFile?.text) return;
     setDocBusy(true);
     try {
-      const preview = docFile.text.slice(0, 10000);
+      const preview = docFile.text.slice(0, docFilesOf(docFile).length > 1 ? 20000 : 10000);
       const mlRoles = masterlist.manpower.map(r => r.role + ':P' + r.rate).join(', ');
       const tlList = masterlist.tools.slice(0, 30).map(r => r.desc).join(', ');
       const mtList = masterlist.materials.slice(0, 30).map(r => r.desc).join(', ');
@@ -2057,7 +2075,8 @@ function App({
       savedAt: new Date().toISOString(),
       docRef: docFile ? {
         name: docFile.name,
-        spUrl: docFile.spUrl || null
+        spUrl: docFile.spUrl || null,
+        files: docFilesOf(docFile).map(f => ({name: f.name, spUrl: f.spUrl || null, size: f.size || 0}))
       } : null
     };
   };
@@ -2678,12 +2697,9 @@ function App({
     setAddlCosts(_R.fixAddl(d.addlCosts));
     setMargin(d.margin || 0);
     setScope(d.scope || '');
-    setDocFile(d.docRef ? {
-      name: d.docRef.name,
-      spUrl: d.docRef.spUrl,
-      text: '',
-      size: 0
-    } : null);
+    setDocFile(d.docRef ? (Array.isArray(d.docRef.files) && d.docRef.files.length
+      ? docCombine(d.docRef.files.map(f => ({...f, text: ''})))
+      : {name: d.docRef.name, spUrl: d.docRef.spUrl, text: '', size: 0}) : null);
     setDocPreview(false);
     setTab('info');
     showToast('Loaded: ' + (d.info?.ceNum || ''));
@@ -2767,9 +2783,24 @@ function App({
       return true;
     } catch (ex) { showToast('Could not update the approval: ' + ex.message, true); return false; }
   };
+  /* The number of a later revision of this CE, or '' when this is the latest. */
+  const apvNewerRevision = num => {
+    const f = ceFamily(num); if (!f.key) return '';
+    let best = null;
+    (history || []).forEach(h => {
+      const n = (h.info && h.info.ceNum) || h.ceNum || '', g = ceFamily(n);
+      if (g.key === f.key && g.rev > f.rev && (!best || g.rev > best.rev)) best = {rev: g.rev, num: n};
+    });
+    return best ? best.num : '';
+  };
   const apvSubmit = async () => {
     if (!apvRoute(approvers).length) { showToast('Pick a user in the dropdown on at least one signatory card below (it starts on ✍ Sign by hand), then Submit again.', true); return; }
     if (!String(info.ceNum || '').trim()) { showToast('Give the CE a number first.', true); return; }
+    /* Only the latest revision can be routed. An older one submitted again was
+       closed as superseded the next time anyone opened the list, so approvers
+       saw it appear and vanish. */
+    { const newer = apvNewerRevision(info.ceNum);
+      if (newer) { showToast(info.ceNum + ' has been revised — ' + newer + ' is the latest. Load ' + newer + ' and submit that.', true); return; } }
     const me = _apvMe();
     const apv = { state: 'pending', submittedAt: me.at, submittedBy: me.by, submittedByName: me.byName, figSig: apvFigSig(mkEntry()), contentSig: apvContentSig(mkEntry()), lines: {},
       log: [...((info.approval && info.approval.log) || []), {...me, action: 'submitted'}] };
@@ -10476,8 +10507,7 @@ tab === 'dashboard' && (() => {
     onDrop: e => {
       e.preventDefault();
       e.currentTarget.style.borderColor = BDR;
-      const f = e.dataTransfer.files[0];
-      if (f) handleDocUpload(f);
+      if (e.dataTransfer.files && e.dataTransfer.files.length) handleDocUpload(e.dataTransfer.files, true);
     }
   }, docBusy ? /*#__PURE__*/React.createElement("div", {
     style: {
@@ -10506,7 +10536,7 @@ tab === 'dashboard' && (() => {
       fontWeight: 600,
       marginBottom: 4
     }
-  }, "Drop file here or click to browse"), /*#__PURE__*/React.createElement("div", {
+  }, "Drop files here or click to browse — several at once is fine"), /*#__PURE__*/React.createElement("div", {
     style: {
       color: MT,
       fontSize: 11
@@ -10559,8 +10589,9 @@ tab === 'dashboard' && (() => {
     onClick: () => setDocPreview(p => !p)
   }, docPreview ? 'Hide' : 'Preview'), /*#__PURE__*/React.createElement("button", {
     style: btn('def', true),
+    title: 'Add more documents to this CE',
     onClick: () => fileRef.current?.click()
-  }, "Replace"), /*#__PURE__*/React.createElement("button", {
+  }, "＋ Add files"), /*#__PURE__*/React.createElement("button", {
     style: {
       background: 'none',
       border: 'none',
@@ -10573,7 +10604,19 @@ tab === 'dashboard' && (() => {
       setDocFile(null);
       setDocPreview(false);
     }
-  }, "x"))), docPreview && docFile.text && /*#__PURE__*/React.createElement("div", {
+  }, "x"))), docFilesOf(docFile).length > 1 && /*#__PURE__*/React.createElement("div", {
+    style: {display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10}
+  }, docFilesOf(docFile).map(f => /*#__PURE__*/React.createElement("div", {
+    key: f.name,
+    style: {display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, padding: '4px 10px', background: SURF, border: '1px solid ' + BDR, borderRadius: 6}
+  }, /*#__PURE__*/React.createElement("span", {style: {flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}, '📄 ' + f.name),
+    f.size > 0 && /*#__PURE__*/React.createElement("span", {style: {color: MT, fontSize: 10}}, Math.round(f.size / 1024) + ' KB'),
+    f.spUrl && /*#__PURE__*/React.createElement("a", {href: spAbsUrl(f.spUrl), target: '_blank', style: {color: INFO, textDecoration: 'none', fontSize: 10}}, 'open'),
+    /*#__PURE__*/React.createElement("button", {
+      title: 'Remove ' + f.name + ' from this CE',
+      style: {background: 'none', border: 'none', color: ERR, cursor: 'pointer', fontSize: 13, padding: '0 4px'},
+      onClick: () => removeDoc(f.name)
+    }, '×')))), docPreview && docFile.text && /*#__PURE__*/React.createElement("div", {
     style: {
       background: SURF,
       border: `1px solid ${BDR}`,
@@ -10621,12 +10664,12 @@ tab === 'dashboard' && (() => {
     ref: fileRef,
     type: "file",
     accept: ".pdf,.docx,.xlsx,.xls,.txt,.csv",
+    multiple: true,
     style: {
       display: 'none'
     },
     onChange: e => {
-      const f = e.target.files[0];
-      if (f) handleDocUpload(f);
+      if (e.target.files && e.target.files.length) handleDocUpload(e.target.files, true);
       e.target.value = '';
     }
   })), ScopeBuilder(), /*#__PURE__*/React.createElement("div", {

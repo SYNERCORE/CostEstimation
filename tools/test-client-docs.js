@@ -21,4 +21,10 @@ ck('a later revision is looked for', app.includes('const apvNewerRevision = num 
 ck('and submit refuses, naming the latest', /const newer = apvNewerRevision\(info\.ceNum\);\s*if \(newer\) \{ showToast\(/.test(app));
 ck('before anything is stored', app.indexOf('const newer = apvNewerRevision(info.ceNum)') < app.indexOf('const ok = await apvPersist(apv, apvStripSigs(approvers, signatures))'));
 
+console.log('\nreading a PDF:');
+ck('every page is read, not the first 30', app.includes('const PDF_MAX_PAGES = 200;') && !app.includes('Math.min(pdf.numPages, 30)'));
+ck('one line per printed line, so table rows stay rows', app.includes('Math.abs(y - lastY) > 2') && app.includes('x.hasEOL'));
+ck('the AI reads more of a long document', app.includes('const AI_DOC_CHARS = 30000;'));
+ck('and says when it could not read all of it', app.includes('the AI reads the first '));
+
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nclient docs OK'); process.exit(bad ? 1 : 0);

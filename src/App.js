@@ -1878,13 +1878,29 @@ function App({
       const pdf = await lib.getDocument({
         data: ab
       }).promise;
+      /* Every page, and one line per printed line. It read the first 30 pages
+         only, and ran each page into a single line -- so a 42-page tool list
+         lost its last 12 pages and every table row ran into the next, which
+         is what the AI then had to make sense of. */
+      const PDF_MAX_PAGES = 200;
       let t = '';
-      for (let i = 1; i <= Math.min(pdf.numPages, 30); i++) {
+      for (let i = 1; i <= Math.min(pdf.numPages, PDF_MAX_PAGES); i++) {
         const pg = await pdf.getPage(i);
         const c = await pg.getTextContent();
-        t += c.items.map(x => x.str).join(' ') + '\n';
+        let line = '', lastY = null;
+        const lines = [];
+        c.items.forEach(x => {
+          const y = x.transform ? Math.round(x.transform[5]) : lastY;
+          if (lastY !== null && y !== null && Math.abs(y - lastY) > 2 && line.trim()) { lines.push(line.trim()); line = ''; }
+          line += (line && x.str && !/\s$/.test(line) ? ' ' : '') + x.str;
+          lastY = y;
+          if (x.hasEOL && line.trim()) { lines.push(line.trim()); line = ''; }
+        });
+        if (line.trim()) lines.push(line.trim());
+        t += lines.join('\n') + '\n\n';
       }
-      return t.trim();
+      if (pdf.numPages > PDF_MAX_PAGES) t += '[only the first ' + PDF_MAX_PAGES + ' of ' + pdf.numPages + ' pages were read]';
+      return t.replace(/[ \t]+/g, ' ').trim();
     } else if (ext === 'docx') {
       const ab = await file.arrayBuffer();
       return (await mammoth.extractRawText({
@@ -1944,7 +1960,13 @@ function App({
     if (!docFile?.text) return;
     setDocBusy(true);
     try {
-      const preview = docFile.text.slice(0, docFilesOf(docFile).length > 1 ? 20000 : 10000);
+      /* 10,000 characters was about 8 pages of a 42-page kit list. The limit
+         is what the free AI providers accept in one request, so it is raised
+         only as far as they reliably take, and a longer document says what
+         was left out rather than quietly reading the start of it. */
+      const AI_DOC_CHARS = 30000;
+      const preview = docFile.text.slice(0, AI_DOC_CHARS);
+      if (docFile.text.length > AI_DOC_CHARS) showToast('The document is long: the AI reads the first ' + Math.round(100 * AI_DOC_CHARS / docFile.text.length) + '% of it. Split it, or remove files you do not need it to read.', true);
       const mlRoles = masterlist.manpower.map(r => r.role + ':P' + r.rate).join(', ');
       const tlList = masterlist.tools.slice(0, 30).map(r => r.desc).join(', ');
       const mtList = masterlist.materials.slice(0, 30).map(r => r.desc).join(', ');

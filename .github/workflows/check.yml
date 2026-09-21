@@ -168,6 +168,8 @@ jobs:
         run: node tools/test-client-docs.js
       - name: Shop + Site CE type
         run: node tools/test-shop-site.js
+      - name: Import tool list
+        run: node tools/test-import-tool-list.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents
@@ -250,6 +252,8 @@ jobs:
         run: node tools/test-client-docs.js
       - name: Shop + Site CE type
         run: node tools/test-shop-site.js
+      - name: Import tool list
+        run: node tools/test-import-tool-list.js
       - name: Detailed Excel export mirrors the printed CE
         run: node tools/test-xlsx-export.js src/App.js
       - name: Every host the app calls is allowed by the CSP

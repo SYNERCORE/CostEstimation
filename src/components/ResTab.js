@@ -20,6 +20,9 @@ const ResTab = ({
   kwhRate,
   /* Share of a row's power that is charged (Shop + Site: its shop share). */
   pwrFrac,
+  /* Tools only: reads a file to text (the Client Document reader), for
+     Import list. */
+  readFile,
   setKwhRate,
   /* Puts rows the Masterlist does not have yet into it, so an item met for the
      first time on a CE is there for the next one. */
@@ -69,6 +72,35 @@ const ResTab = ({
     return t === 1 && rates.tier1 === null;
   };
   const [_rtNewId, _rtSetNewId] = useState(null);
+  /* Import list: the rows read from a supplier's kit list, waiting to be
+     checked before they go on the CE. null when nothing is being imported. */
+  const [imp, setImp] = useState(null);
+  const impRef = useRef(null);
+  const mlFind = d => (masterlist[mlType] || []).find(m => String(m.desc || '').trim().toUpperCase() === String(d || '').trim().toUpperCase());
+  const importFile = async file => {
+    if (!file) return;
+    try {
+      const text = await readFile(file);
+      const list = parseToolList(text);
+      if (!list.length) { showToast('No tool rows found in ' + file.name + '. The list needs a Description and a Qty column, or numbered lines ending in a quantity and unit.', true); return; }
+      setImp({ name: file.name, rows: list.map(it => ({ ...it, id: uid(), on: true })) });
+    } catch (e) {
+      showToast('Could not read ' + file.name + ': ' + e.message, true);
+    }
+  };
+  const importAdd = () => {
+    const pick = imp.rows.filter(r => r.on && String(r.desc).trim());
+    const tier = N(defaultTier) || 2;
+    set(p => [...p, ...pick.map(r => {
+      const m = mlFind(r.desc);
+      return { ...mkRes(), id: uid(), desc: r.desc.trim(), qty: N(r.qty) || 1, uom: (m && m.uom) || r.uom || 'Pc',
+        cost: m ? (m.cost !== undefined ? m.cost : (m.rate || 0)) : 0, ...(showDays ? { tier } : {}), ..._srcFields(m) };
+    })]);
+    const priced = pick.filter(r => mlFind(r.desc)).length;
+    showToast(pick.length + ' tool row(s) added from ' + imp.name + '. ' + priced + ' priced from the Masterlist' +
+      (pick.length > priced ? ', ' + (pick.length - priced) + ' at P0 -- type their rate, or add them to the Masterlist.' : '.'), pick.length > priced);
+    setImp(null);
+  };
   const _rtDescRef = useRef(null);
   useEffect(() => {
     if (_rtNewId && _rtDescRef.current) { _rtDescRef.current.focus(); _rtSetNewId(null); }
@@ -128,7 +160,15 @@ showPower && /*#__PURE__*/React.createElement("label", {
       ..._srcFields(item)
     }])
   })
-}, "From Masterlist"), /*#__PURE__*/React.createElement("button", {
+}, "From Masterlist"), readFile && /*#__PURE__*/React.createElement("button", {
+  className: 'import-tool-list',
+  style: btn('info', true),
+  title: "Read a tool or kit list (PDF, Excel, CSV) into rows. You check them before they are added.",
+  onClick: () => impRef.current && impRef.current.click()
+}, "⇪ Import list"), readFile && /*#__PURE__*/React.createElement("input", {
+  ref: impRef, type: 'file', accept: '.pdf,.xlsx,.xls,.csv,.txt,.docx', style: { display: 'none' },
+  onChange: e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; importFile(f); }
+}), /*#__PURE__*/React.createElement("button", {
   style: btn('ok', true),
   title: "Update all costs to current masterlist rates",
   onClick: () => {
@@ -513,5 +553,40 @@ showPower && /*#__PURE__*/React.createElement("label", {
 }, "P", total.toLocaleString('en-PH', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2
-})))));
+})))), imp && /*#__PURE__*/React.createElement("div", {
+  className: 'import-preview',
+  style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 },
+  onClick: e => { if (e.target === e.currentTarget) setImp(null); }
+}, /*#__PURE__*/React.createElement("div", {
+  style: { ...CS, background: 'var(--bg-surface)', width: 'min(860px, 100%)', maxHeight: '86vh', display: 'flex', flexDirection: 'column', gap: 10, margin: 0 }
+}, /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' } },
+  /*#__PURE__*/React.createElement("b", null, "Import tool list"),
+  /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: 'var(--text-secondary)' } },
+    imp.name + ' -- ' + imp.rows.length + ' item(s) read, ' + imp.rows.filter(r => mlFind(r.desc)).length + ' on the Masterlist. Same items are added up. Untick what the job does not need.'),
+  /*#__PURE__*/React.createElement("span", { style: { marginLeft: 'auto', display: 'flex', gap: 6 } },
+    /*#__PURE__*/React.createElement("button", { style: btn('ok', true), onClick: () => setImp(p => ({ ...p, rows: p.rows.map(r => ({ ...r, on: true })) })) }, "All"),
+    /*#__PURE__*/React.createElement("button", { style: btn('ok', true), onClick: () => setImp(p => ({ ...p, rows: p.rows.map(r => ({ ...r, on: false })) })) }, "None"))),
+/*#__PURE__*/React.createElement("div", { style: { overflow: 'auto', flex: 1, minHeight: 0 } },
+/*#__PURE__*/React.createElement("table", { style: { width: '100%', borderCollapse: 'collapse' } },
+/*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null,
+  ['', 'Description', 'Qty', 'UOM', 'Code', 'Masterlist rate'].map((h, i) => /*#__PURE__*/React.createElement("th", { key: i, style: { ...THS, position: 'sticky', top: 0, textAlign: i >= 2 ? 'center' : 'left' } }, h)))),
+/*#__PURE__*/React.createElement("tbody", null, imp.rows.map(r => {
+  const m = mlFind(r.desc);
+  const upd = patch => setImp(p => ({ ...p, rows: p.rows.map(x => x.id === r.id ? { ...x, ...patch } : x) }));
+  return /*#__PURE__*/React.createElement("tr", { key: r.id, style: { opacity: r.on ? 1 : 0.45 } },
+    /*#__PURE__*/React.createElement("td", { style: TDS }, /*#__PURE__*/React.createElement("input", { type: 'checkbox', checked: r.on, onChange: e => upd({ on: e.target.checked }) })),
+    /*#__PURE__*/React.createElement("td", { style: TDS }, /*#__PURE__*/React.createElement("input", { style: { ...INP, width: '100%', minWidth: 220 }, value: r.desc, onChange: e => upd({ desc: e.target.value }) })),
+    /*#__PURE__*/React.createElement("td", { style: TDS }, /*#__PURE__*/React.createElement("input", { style: { ...INP, width: 56, textAlign: 'center' }, type: 'number', min: 0, value: r.qty, onChange: e => upd({ qty: e.target.value }) })),
+    /*#__PURE__*/React.createElement("td", { style: { ...TDS, textAlign: 'center', fontSize: 11 } }, (m && m.uom) || r.uom),
+    /*#__PURE__*/React.createElement("td", { style: { ...TDS, textAlign: 'center', fontSize: 10, color: 'var(--text-secondary)' } }, r.code || ''),
+    /*#__PURE__*/React.createElement("td", { style: { ...TDS, textAlign: 'right', fontSize: 11, fontFamily: "'JetBrains Mono',monospace", color: m ? 'var(--status-success)' : 'var(--text-secondary)' } },
+      m ? 'P' + N(m.cost !== undefined ? m.cost : m.rate).toLocaleString('en-PH', { minimumFractionDigits: 2 }) : 'not on list'));
+})))),
+/*#__PURE__*/React.createElement("div", { style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
+  /*#__PURE__*/React.createElement("button", { style: btn('def', true), onClick: () => setImp(null) }, "Cancel"),
+  /*#__PURE__*/React.createElement("button", {
+    style: btn('acc', true),
+    disabled: !imp.rows.some(r => r.on),
+    onClick: importAdd
+  }, "Add " + imp.rows.filter(r => r.on).length + " row(s)")))));
 };

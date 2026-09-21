@@ -688,3 +688,84 @@ function ceNumPrefix(ceNum) {
   const i = t.indexOf('-CE-');
   return i > 0 ? t.slice(0, i) : '';
 }
+/* Import tool list: the text of a supplier's kit list (PDF, Excel, CSV) into
+   rows {desc, qty, uom, code}. Two shapes are read:
+     - a table with a header row naming the description and quantity columns
+       (Excel and CSV, one row per line);
+     - numbered lines, as a PDF kit report prints them:
+         "2 Socket, 3/8 dr x 9mm, 6 point 78049829 D 2 Each 0.05 Pound"
+       a description that wraps carries on the lines after, up to the next
+       number. The same item listed twice is added up, not repeated.
+   What it cannot read it leaves out; the preview shows the rest. */
+const TOOL_UOMS = /each|ea|pcs?|pc\.?|pieces?|sets?|lots?|units?|nos?\.?|pairs?|prs?|rolls?|box(?:es)?|kits?|meters?|m|lengths?|pack|pkts?|bottles?|cans?|tubes?|sheets?/.source;
+function parseCsvLine(line) {
+  const out = []; let cur = '', q = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (q) { if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; }
+    else if (c === '"' && !cur) q = true; /* 4" mid-cell is inches */ else if (c === ',') { out.push(cur); cur = ''; } else cur += c;
+  }
+  out.push(cur);
+  return out.map(s => s.trim());
+}
+function parseToolList(text) {
+  const lines = String(text || '').split(/\r?\n/).map(l => l.replace(/\s+/g, ' ').trim());
+  const items = [];
+  const push = (desc, qty, uom, code) => {
+    desc = String(desc || '').replace(/\s+/g, ' ').replace(/^[-–•*.\s]+|[,;\s]+$/g, '').trim();
+    const q = parseFloat(qty);
+    if (!desc || desc.length < 2 || !(q > 0)) return;
+    items.push({ desc, qty: q, uom: uom ? uom.charAt(0).toUpperCase() + uom.slice(1).toLowerCase() : 'Pc', code: code || '' });
+  };
+  /* A table with a header row. */
+  const isHdr = cells => cells.some(c => /^(item )?desc(ription)?\b|^item( name)?$|^(tool|equipment|particulars?)( name)?$/i.test(c)) &&
+    cells.some(c => /^(qty|quantity|q'?ty)\b/i.test(c));
+  let hdr = null;
+  lines.forEach(l => {
+    if (!l || /^\[.*\]$/.test(l)) { if (/^\[.*\]$/.test(l)) hdr = null; return; }
+    if (!/,/.test(l)) return;
+    const cells = parseCsvLine(l);
+    if (isHdr(cells)) {
+      const f = re => cells.findIndex(c => re.test(c));
+      hdr = { d: f(/^(item )?desc(ription)?\b|^item( name)?$|^(tool|equipment|particulars?)( name)?$/i), q: f(/^(qty|quantity|q'?ty)\b/i),
+        u: f(/^(uom|unit|u\/m|units?)\b/i), c: f(/^(sku|code|part( no\.?| number)?|item (no|code)|material( no)?)\b/i) };
+      return;
+    }
+    if (hdr) push(cells[hdr.d], cells[hdr.q], hdr.u >= 0 ? cells[hdr.u] : '', hdr.c >= 0 ? cells[hdr.c] : '');
+  });
+  if (items.length) return mergeToolList(items);
+  /* Numbered lines. A record runs from item N to item N+1, so a description
+     or a part number that wrapped onto the next lines is read with it. Lines
+     printed on every page (title, page header, footer) are dropped first. */
+  const seen = {};
+  lines.forEach(l => { if (l) seen[l] = (seen[l] || 0) + 1; });
+  const keep = l => l && seen[l] < 3 && l.length <= 120 && !/^page \d+$/i.test(l);
+  const kit = /^(\d+)[.)]?\s+(.+?)\s+(\d{5,})\s+([A-Z])\s+(\d+(?:\.\d+)?)\s+([A-Za-z]+)\b/;
+  const gen = new RegExp(/^(\d+)[.)]?\s+(.+?)\s+(\d+(?:\.\d+)?)\s*/.source + '(' + TOOL_UOMS + ')' + /\b/.source, 'i');
+  const recs = [];
+  let cur = null;
+  lines.filter(keep).forEach(l => {
+    const m = l.match(/^(\d+)[.)]?\s/);
+    const n = m ? parseInt(m[1], 10) : NaN;
+    const starts = m && (!cur ? true : n === cur.n + 1 || (n < 10000 && n !== cur.n && (kit.test(l) || gen.test(l))));
+    if (starts) { cur = { n, text: l }; recs.push(cur); }
+    else if (cur) cur.text += ' ' + l;
+  });
+  /* A location column printed before the name (D-01 Loc-03) is not the name. */
+  const loc = /^(?:[A-Z]{1,3}-\d{1,3}\s+)?(?:Loc-\d+\s+)?/i;
+  recs.forEach(r => {
+    let m = r.text.match(kit);
+    if (m) return push(m[2].replace(loc, ''), m[5], m[6], m[3]);
+    m = r.text.match(gen);
+    if (m) push(m[2].replace(loc, ''), m[3], m[4], '');
+  });
+  return mergeToolList(items);
+}
+function mergeToolList(items) {
+  const by = new Map();
+  items.forEach(it => {
+    const k = it.desc.toUpperCase() + '|' + it.uom.toUpperCase();
+    if (by.has(k)) by.get(k).qty += it.qty; else by.set(k, { ...it });
+  });
+  return [...by.values()];
+}

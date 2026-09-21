@@ -12062,6 +12062,7 @@ tab === 'dashboard' && (() => {
     showPower: powerOn,
     kwhRate,
     pwrFrac,
+    readFile: readDoc,
     /* A rate equal to the default is removed rather than stored, so a CE that
        was never touched is not frozen against a future change to it -- the
        same rule the shift multipliers follow. */

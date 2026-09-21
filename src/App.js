@@ -7719,7 +7719,7 @@ function App({
       </td></tr></table>`;
     const docHdr = title => `<table style="border:1px solid #000;margin-bottom:4px;font-size:7.5pt">
       <tr><td colspan="3" style="text-align:center;background:${_br.bar};color:${_br.text};font-weight:bold;font-size:9pt;padding:3px;border:1px solid #000">${title}</td></tr>
-      <tr><td colspan="3" style="border:none;text-align:right;font-size:7.5pt;padding:1px 4px"><b>CE No.:</b>&nbsp;${esc(info.ceNum || '')}&nbsp;&nbsp;<b>CE TYPE:</b>&nbsp;${ceType.toUpperCase()}&nbsp;&nbsp;<b>DATE:</b>&nbsp;${esc(info.date||'')}</td></tr>
+      <tr><td colspan="3" style="border:none;font-size:7.5pt;padding:1px 4px"><div style="display:flex;justify-content:space-between;gap:8px"><span><b>CE TYPE:</b>&nbsp;${ceType.toUpperCase()}</span><span><b>CE No.:</b>&nbsp;${esc(info.ceNum || '')}&nbsp;&nbsp;<b>DATE:</b>&nbsp;${esc(info.date||'')}</span></div></td></tr>
     </table>`;
 
     const infoTable = `<table class="bdr" style="margin-bottom:5px;font-size:7.5pt">

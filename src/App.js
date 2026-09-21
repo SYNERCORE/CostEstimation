@@ -1125,6 +1125,11 @@ function App({
     const m = (_monRef.current || {})[id];
     if (!m) return false;
     const me = [currentUser?.name, currentUser?.username].map(x => String(x || '').trim().toUpperCase()).filter(Boolean);
+    /* And any CE routed to them for signature. Without this an approver who is
+       not an admin was told a CE waited on them but never received the CE
+       itself, so there was nothing to open. */
+    const a = m.apv;
+    if (a && a.state === 'pending' && (a.waiting || []).includes(currentUser?.username)) return true;
     return me.includes(String(m.ceeName || '').trim().toUpperCase()) || me.includes(String(m.receivedBy || '').trim().toUpperCase());
   };
   const loadHist = async () => {
@@ -4716,14 +4721,10 @@ function App({
     const apv = x => x.m.apv || {};
     const sign = rows.filter(x => apv(x).state === 'pending' && (apv(x).waiting || []).includes(me));
     const returned = rows.filter(x => apv(x).state === 'returned' && apv(x).submittedBy === me);
-    /* A pending record with no CE row here -- a superseded revision, or a CE
-       this browser has not got -- is still shown, never silently counted. */
-    const have = new Set(heads.map(e => String(e.id)));
-    const orphan = Object.keys(monData || {})
-      .filter(id => !have.has(String(id)))
-      .map(id => ({e: {id: /^[0-9]+$/.test(id) ? Number(id) : id, info: {ceNum: (monData[id] || {}).ceNum || 'CE #' + id}}, m: monData[id] || {}, _orphan: true}))
-      .filter(x => (x.m.apv || {}).state === 'pending' && ((x.m.apv || {}).waiting || []).includes(me));
-    return {sign: sign.concat(orphan), returned: returned, total: sign.length + orphan.length + returned.length};
+    /* Only the latest revision of a CE is waiting on anyone. An approval left
+       pending on an older revision -- replaced by ↻ Revise, or a CE since
+       deleted -- is stale: it showed as "CE #2817" with nothing to sign. */
+    return {sign: sign, returned: returned, total: sign.length + returned.length};
   }, [monRows, monData, currentUser]);
   /* Say it when it first appears and again whenever it grows, not once a session. */
   const _apvToldRef = React.useRef(-1);

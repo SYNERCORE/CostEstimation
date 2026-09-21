@@ -10,7 +10,10 @@ ck('and my own CEs that came back returned', /apv\(x\)\.state === 'returned' && 
 /* The badge read monitoring records while the tab listed CEs, so a record whose
    CE was not the latest revision counted in one and appeared in neither. */
 ck('the badge and the My Work lists are the same rows', /const toSign = myTodo\.sign, returned = myTodo\.returned;/.test(app));
-ck('a pending record with no CE row is still shown, not just counted', /_orphan: true/.test(app));
+/* An approval left pending on a replaced revision showed as "CE #2817" with
+   nothing to sign: only the latest revision waits on anyone. */
+ck('a stale approval on an older revision is not counted', !app.includes('_orphan: true') && app.includes('return {sign: sign, returned: returned, total: sign.length + returned.length};'));
+ck('an approver who is not an admin still receives the CEs routed to them', app.includes("if (a && a.state === 'pending' && (a.waiting || []).includes(currentUser?.username)) return true;"));
 ck('the My Work tab carries the count', /sowbreak: sowUnassignedCount, mywork: myTodo\.total/.test(app));
 ck('drawn in red, not the dim row-count style', /t\.id === 'mywork' \? ERR :/.test(app));
 ck('the browser tab title shows it too', /document\.title = myTodo\.total \?/.test(app));

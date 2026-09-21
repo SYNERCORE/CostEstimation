@@ -7686,7 +7686,7 @@ function App({
       .sheet:last-child{page-break-after:auto;break-after:auto}
       .sbody{flex:1;min-height:0;overflow:hidden}
       .run-hdr,.run-ftr{font-size:6.5pt;color:#333;display:flex;justify-content:space-between;gap:8px;flex:none}
-      .run-hdr{border-bottom:.5pt solid #999;padding-bottom:2px;margin-bottom:3mm}
+      .run-hdr{display:block;font-size:inherit;color:inherit;margin-bottom:2mm}
       .run-ftr{border-top:.5pt solid #999;padding-top:2px;margin-top:3mm}
       @media screen{body{background:#e9e9ee}.sheet{margin:0 auto 8px;box-shadow:0 1px 6px rgba(0,0,0,.25)}}
       @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
@@ -7704,14 +7704,20 @@ function App({
       ? `<img src="${esc(co.logo)}" style="max-width:70px;max-height:36px;object-fit:contain">`
       : `<div style="font-weight:900;font-size:10pt;color:${esc(co.color)};line-height:1.1">${esc(co.name)}<br><span style="font-size:6pt">${esc(co.sub)}</span></div>`;
 
-    const docHdr = title => `<table style="border:1px solid #000;margin-bottom:4px;font-size:7.5pt"><tr>
+    /* The logo / title / document-number block. It is the header of every
+       printed page (the paginator puts it on each sheet), so the sections below
+       carry only their own title bar. The right column was 150px with the
+       labels fixed at 80px, which wrapped "SY3-F-TSG-025" onto two lines on a
+       page with room to spare; it is sized to its content and never wraps. */
+    const docTop = `<table style="border:1px solid #000;font-size:7.5pt"><tr>
       <td style="border:none;width:75px;padding:2px">${logoCell}</td>
       <td style="border:none;text-align:center"><h2>COST ESTIMATE SUMMARY</h2></td>
-      <td style="border:none;width:150px;font-size:7pt">
-        <table class="nb"><tr><td style="border:none;width:80px">Document No.:</td><td style="border:none">${esc(co.doc)}</td></tr>
-        <tr><td style="border:none">Revision No.:</td><td style="border:none">${esc(co.revNo)}</td></tr>
-        <tr><td style="border:none">Revision Date:</td><td style="border:none">${esc(co.revDate)}</td></tr></table>
-      </td></tr>
+      <td style="border:none;width:1%;white-space:nowrap;font-size:7pt;padding:2px 6px">
+        <table class="nb" style="width:auto"><tr><td style="border:none;white-space:nowrap;padding-right:8px">Document No.:</td><td style="border:none;white-space:nowrap">${esc(co.doc)}</td></tr>
+        <tr><td style="border:none;white-space:nowrap;padding-right:8px">Revision No.:</td><td style="border:none;white-space:nowrap">${esc(co.revNo)}</td></tr>
+        <tr><td style="border:none;white-space:nowrap;padding-right:8px">Revision Date:</td><td style="border:none;white-space:nowrap">${esc(co.revDate)}</td></tr></table>
+      </td></tr></table>`;
+    const docHdr = title => `<table style="border:1px solid #000;margin-bottom:4px;font-size:7.5pt">
       <tr><td colspan="3" style="text-align:center;background:${_br.bar};color:${_br.text};font-weight:bold;font-size:9pt;padding:3px;border:1px solid #000">${title}</td></tr>
       <tr><td colspan="3" style="border:none;text-align:right;font-size:7.5pt;padding:1px 4px"><b>CE No.:</b>&nbsp;${esc(info.ceNum || '')}&nbsp;&nbsp;<b>CE TYPE:</b>&nbsp;${ceType.toUpperCase()}&nbsp;&nbsp;<b>DATE:</b>&nbsp;${esc(info.date||'')}</td></tr>
     </table>`;
@@ -7878,7 +7884,7 @@ function App({
 
     const sowPage=sowItems.length?`<div class="page page-break">${docHdr('SCOPE OF WORK')}<div style="font-size:8pt;line-height:1.6">${(()=>{let mc=0,sc=0;return sowItems.map(it=>{if(it.type==='main'){mc++;sc=0;return`<div style="margin-top:4px"><b>${mc}. ${esc(it.text)}</b></div>`;}else{sc++;return`<div style="margin-left:14px">${mc}.${sc} ${esc(it.text)}</div>`;}}).join('');})()}</div></div>`:'';
 
-    const runHdr = `<div class="run-hdr"><span>${esc(co.name)} — COST ESTIMATE SUMMARY</span><span><b>CE No.:</b> ${esc(info.ceNum || '')} &nbsp; <b>CE TYPE:</b> ${esc(ceType.toUpperCase())}</span></div>`;
+    const runHdr = `<div class="run-hdr">${docTop}</div>`;
     const runFtr = `<div class="run-ftr"><span>Document No.: ${esc(co.doc)} Rev. ${esc(co.revNo)}</span><span class="pnum"></span></div>`;
     /* Laid out here, not by the browser: only by measuring can a header and a
        footer sit on every page without crossing the rows, and only by counting

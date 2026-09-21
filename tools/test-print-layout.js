@@ -13,10 +13,13 @@ ck('a signature block is never split across pages', /class="sig"/.test(app) && /
    sheets instead, which is also the only way to count the pages. */
 ck('the document is laid out into A4 sheets', /\.sheet\{width:210mm;height:297mm/.test(app));
 ck('each sheet carries the header and the footer', /d\.innerHTML = HDR \+ '<div class="sbody"><\/div>' \+ FTR/.test(app));
-ck('the header names the CE', /class="run-hdr"[\s\S]{0,200}CE No\./.test(app));
 ck('the footer is the document number, then page X of Y', /class="run-ftr"><span>Document No\.[\s\S]{0,80}class="pnum"/.test(app) && /'Page ' \+ \(p \+ 1\) \+ ' of ' \+ n/.test(app));
 ck('nothing is left overflowing a sheet', /if \(!fits\(\) && placed\)/.test(app));
 ck('a long table is cut between rows, headings repeated', /if \(i && head\) tb\.appendChild\(head\.cloneNode\(true\)\)/.test(app));
 ck('and a heading is never left alone above it', /el\.offsetHeight > avail \|\| body\.children\.length === 1/.test(app));
 ck('the page box is edge to edge, the sheet holds the margins', /@page\{size:A4 portrait;margin:0\}/.test(app));
+/* The header on every page is the company block itself -- logo, title and
+   the Document / Revision numbers -- not a line of small print. */
+ck('every sheet is headed by the logo and document-number block', app.includes('const runHdr = `<div class="run-hdr">${docTop}</div>`;'));
+ck('the document number never wraps', app.includes('white-space:nowrap">${esc(co.doc)}'));
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nprint layout OK'); process.exit(bad ? 1 : 0);

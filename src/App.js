@@ -571,13 +571,36 @@ function App({
   const [history, setHistory] = useState([]);
   const [histBusy, setHistBusy] = useState(false);
   const [monData, setMonData] = useState({});
-  /* Tell an approver, once per session, that CEs are waiting on them. */
-  const _apvToldRef = React.useRef(false);
+  /* What is waiting on this user right now: CEs routed to them for signature,
+     plus their own CEs that came back returned. Counted here rather than inside
+     the My Work tab so the badge is on screen from whatever tab they are on --
+     a toast that scrolled past was the only hint before, and it was missed. */
+  const myTodo = React.useMemo(() => {
+    const me = currentUser && currentUser.username;
+    if (!me) return {sign: 0, returned: 0, total: 0};
+    let sign = 0, returned = 0;
+    Object.values(monData || {}).forEach(m => {
+      const a = m && m.apv; if (!a) return;
+      if (a.state === 'pending' && (a.waiting || []).includes(me)) sign++;
+      else if (a.state === 'returned' && a.submittedBy === me) returned++;
+    });
+    return {sign: sign, returned: returned, total: sign + returned};
+  }, [monData, currentUser]);
+  /* Say it when it first appears and again whenever it grows, not once a session. */
+  const _apvToldRef = React.useRef(-1);
   useEffect(() => {
-    if (_apvToldRef.current || !currentUser || !currentUser.username) return;
-    const n = Object.values(monData || {}).filter(m => m && m.apv && m.apv.state === 'pending' && (m.apv.waiting || []).includes(currentUser.username)).length;
-    if (n) { _apvToldRef.current = true; setTimeout(() => showToast('✍ ' + n + ' CE' + (n === 1 ? ' is' : 's are') + ' waiting for your signature — see My Work.'), 1500); }
-  }, [monData]);
+    const n = myTodo.total, was = _apvToldRef.current;
+    if (n > was && was >= 0) setTimeout(() => showToast(
+      (myTodo.sign ? '✍ ' + myTodo.sign + ' CE' + (myTodo.sign === 1 ? '' : 's') + ' waiting for your signature' : '') +
+      (myTodo.sign && myTodo.returned ? ' · ' : '') +
+      (myTodo.returned ? '↩ ' + myTodo.returned + ' returned to you' : '') + ' — see My Work.'), 1200);
+    _apvToldRef.current = n;
+  }, [myTodo.total]);
+  /* And on the tab title, so it shows while the app is in another window. */
+  useEffect(() => {
+    const base = 'SHIC Cost Estimator';
+    try { document.title = myTodo.total ? '(' + myTodo.total + ') ' + base : base; } catch (_e) {}
+  }, [myTodo.total]);
   const [customStatuses, setCustomStatuses] = useState(() => {
     try {
       const v = localStorage.getItem('shic:statuses');
@@ -8830,7 +8853,7 @@ function App({
     /* Count only rows the user actually filled in. mkMP() defaults pax to 1, so
        `r.role||r.pax` counted the blank starter row and every new CE showed a
        phantom "1" on the Manpower tab. */
-    const tabCounts = {manpower: mp.filter(r=>r.role).length, tools: tools.filter(r=>r.desc).length, materials: mats.filter(r=>r.desc).length, ppe: ppe.filter(r=>r.desc).length, /* Miscellaneous is the one tab that keeps its rows in per-category lists, which is why it was the one tab with no badge -- there is no flat array to count. */ misc: Object.values(misc || {}).reduce((n, arr) => n + (Array.isArray(arr) ? arr.filter(r => r && r.desc).length : 0), 0), sowbreak: sowUnassignedCount};
+    const tabCounts = {manpower: mp.filter(r=>r.role).length, tools: tools.filter(r=>r.desc).length, materials: mats.filter(r=>r.desc).length, ppe: ppe.filter(r=>r.desc).length, /* Miscellaneous is the one tab that keeps its rows in per-category lists, which is why it was the one tab with no badge -- there is no flat array to count. */ misc: Object.values(misc || {}).reduce((n, arr) => n + (Array.isArray(arr) ? arr.filter(r => r && r.desc).length : 0), 0), sowbreak: sowUnassignedCount, mywork: myTodo.total};
     const cnt = tabCounts[t.id];
     return /*#__PURE__*/React.createElement("button", {
       key: t.id,
@@ -8852,12 +8875,15 @@ function App({
         gap: 5
       }
     }, t.label, cnt > 0 && /*#__PURE__*/React.createElement("span", {
-      title: t.id === 'sowbreak'
+      title: t.id === 'mywork'
+        ? [myTodo.sign ? myTodo.sign + ' waiting for your signature' : '', myTodo.returned ? myTodo.returned + ' returned to you' : ''].filter(Boolean).join(' · ')
+        : t.id === 'sowbreak'
         ? cnt + ' resource row' + (cnt === 1 ? '' : 's') + ' not yet assigned to a scope task'
         : cnt + ' item' + (cnt === 1 ? '' : 's'),
+      /* Work waiting on a person is red and never dimmed: it is not a row count. */
       style: {
-        background: tab === t.id ? ACC : alpha(ACC, '44'),
-        color: tab === t.id ? ON_ACC : ACC,
+        background: t.id === 'mywork' ? ERR : tab === t.id ? ACC : alpha(ACC, '44'),
+        color: t.id === 'mywork' ? '#fff' : tab === t.id ? ON_ACC : ACC,
         fontSize: 9,
         fontWeight: 700,
         borderRadius: 8,

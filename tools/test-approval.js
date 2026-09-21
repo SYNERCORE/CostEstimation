@@ -53,7 +53,7 @@ ck('submit does not go through Save, which refuses a saved number', !/setSaveReq
 ck('a saved CE is updated directly', /const dup = await dbFindCEByNum\(num\)[\s\S]{0,1500}dbSaveHistory\(e\)/.test(app));
 ck('only while its figures match the saved ones', /apvFigSig\(full\) !== apvFigSig\(e\)/.test(app));
 ck('and Monitoring learns who it waits on', /updateMon\(dup\.id, 'apv', apvMirror/.test(app));
-ck('approvers are told when they open the app', /waiting for your signature — see My Work/.test(app));
+ck('approvers are told when they open the app', /waiting for your signature/.test(app) && /see My Work/.test(app));
 
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\napproval OK');
 process.exit(bad ? 1 : 0);

@@ -22,4 +22,8 @@ ck('the page box is edge to edge, the sheet holds the margins', /@page\{size:A4 
    the Document / Revision numbers -- not a line of small print. */
 ck('every sheet is headed by the logo and document-number block', app.includes('const runHdr = `<div class="run-hdr">${docTop}</div>`;'));
 ck('the document number never wraps', app.includes('white-space:nowrap">${esc(co.doc)}'));
+/* PPE has six columns; its TOTAL row spanned five and put the amount under
+   UNIT PRICE, leaving the TOTAL column empty. */
+ck('the PPE total sits under TOTAL', app.includes('<td colspan="5" class="r b">TOTAL:</td><td class="r b">${fmt(ppeT)}</td>'));
+ck('and so does the materials total', app.includes('<td colspan="5" class="r b">TOTAL:</td><td class="r b">${fmt(matsT)}</td>'));
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nprint layout OK'); process.exit(bad ? 1 : 0);

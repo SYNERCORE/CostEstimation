@@ -27,7 +27,7 @@ const TIERS = grab(helpersSrc, /const TIER_HOURS_PER_YEAR[\s\S]*?\nfunction tool
    Given no rates they answer with the statutory defaults, which is exactly the
    property the assertions below depend on. */
 const RATES = grab(helpersSrc,
-  /const OT_MULT_DEFAULT[\s\S]*?\nfunction toolRowTotal\(row, kwhRate, src\) \{[\s\S]*?\n\}/, 'rate resolvers');
+  /const OT_MULT_DEFAULT[\s\S]*?\nfunction toolRowTotal\(row, kwhRate, src, powerFrac\) \{[\s\S]*?\n\}/, 'rate resolvers');
 const helper = new Function('N', 'SHIFTS', 'CE_CFG',
   RATES + '\n' +
   grab(helpersSrc, /function ceResDays\(r\) \{[\s\S]*?\n\}/, 'ceResDays') + '\n' + TIERS + '\n' +
@@ -44,7 +44,7 @@ const editor = new Function('N', 'SHIFTS', 'rr', 'kwhRate',
   RATES + '\n' +
   grab(helpersSrc, /function ceResDays\(r\) \{[\s\S]*?\n\}/, 'ceResDays') + '\n' + TIERS + '\n' +
   grab(appSrc, /const resDays = r => [^\n]*;/, 'resDays') + '\n' +
-  'const incOn = true;\n' +
+  'const cfg = {}, siteFrac = () => 1, pwrFrac = () => 1, _workMap = null; const incOn = true;\n' +
   grab(appSrc, /const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen').replace(/^/, 'const eccMap = new Map();') + '\n' +
   /* The wage half of a manpower row, which rowCost now calls rather than
      carrying its own copy of. */

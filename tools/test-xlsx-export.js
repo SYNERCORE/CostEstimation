@@ -70,7 +70,7 @@ ck('the sheet has no wage arithmetic of its own',
    same function the CE totals with, and prints the basis of the charge instead
    of a DAYS column that says nothing on two of the three tiers. */
 ck('tools are costed by the one tier function, not by hand',
-  /a\.money\(withDays \? toolRowTotal\(r, kwhRate\) : N\(r\.qty\) \* N\(r\.cost\)\)/.test(exp));
+  /a\.money\(withDays \? toolRowTotal\(r, kwhRate, undefined, pwrFrac\(r\)\) : N\(r\.qty\) \* N\(r\.cost\)\)/.test(exp));
 ck('and only tools get a BASIS column', /withDays \? \['BASIS'\] : \[\]/.test(exp),
   'a consumable is not billed by the day, the hour or the project');
 ck('the summary reuses the same rows the app shows', /summaryRows\.forEach/.test(exp),

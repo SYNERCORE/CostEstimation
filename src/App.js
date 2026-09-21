@@ -1286,6 +1286,11 @@ function App({
   const incOn = ceIncentiveOn(ceType);
   /* Each row's share of the ECC under this CE's rule (see eccByRow). */
   const eccMap = useMemo(() => eccByRow(mp, rr), [mp, rr]);
+  /* Shop + Site: which scope items are shop work. A row's Incentive counts
+     only its site share, its tool power only its shop share. */
+  const _workMap = useMemo(() => ceSplitOn(ceType) ? ceWorkMap(sowItems) : null, [ceType, sowItems]);
+  const siteFrac = r => _workMap ? ceSiteFrac(r, _workMap) : 1;
+  const pwrFrac = r => cfg.power === 'shop' ? 1 - siteFrac(r) : 1;
   const calcBen = r => {
     const pax = N(r.pax),
       days = N(r.days),
@@ -1301,7 +1306,7 @@ function App({
        on file has to be migrated to be read back. */
     /* Not on shop work (CE_CFG.shopworks.incentive). The figure stays on the
        row, so switching the CE back to onsite brings it back as it was. */
-    const perdiem = incOn ? N(r.perDiem || 0) * days * pax : 0;
+    const perdiem = incOn ? N(r.perDiem || 0) * days * pax * (cfg.incentive === 'site' ? siteFrac(r) : 1) : 0;
     return {
       thirteenth,
       sss,
@@ -1394,7 +1399,7 @@ function App({
            and the tooltip is where that gets said. */
         daysVary: g.shiftDays.length > 1}))
       .filter(x => x.total > 0);
-  }, [mp, incOn]);
+  }, [mp, incOn, _workMap]);
   const benefitsT = benefitRows.reduce((t, r) => t + r.total, 0);
   /* Tools & Equipment can be charged per day (crane, welding machine, ...).
      `days` is optional and defaults to 1, so any row that never sets it costs
@@ -1406,7 +1411,7 @@ function App({
      of them can disagree about whether power was counted. */
   const powerOn = !!cfg.power && toolPowerEnabled() && featTick >= 0;
   const kwhRate = powerOn ? ceKwhRate(rr) : 0;
-  const toolsT = useMemo(() => tools.reduce((s, r) => s + toolRowTotal(r, kwhRate), 0), [tools, kwhRate]);
+  const toolsT = useMemo(() => tools.reduce((s, r) => s + toolRowTotal(r, kwhRate, undefined, pwrFrac(r)), 0), [tools, kwhRate, _workMap]);
   const matsT = useMemo(() => mats.reduce((s, r) => s + N(r.qty) * N(r.cost), 0), [mats]);
   const ppeT = useMemo(() => ppe.reduce((s, r) => s + N(r.qty) * N(r.cost), 0), [ppe]);
   const miscT = useMemo(() => (MISC_DEF[ceType] || MISC_DEF['onsite']).reduce((s, [k]) => {
@@ -1557,7 +1562,7 @@ function App({
     /* Tools carry a tier. The source figures ride on the row itself, copied
        from the masterlist when it was added, so a later masterlist change
        cannot silently re-price a CE that has already been quoted. */
-    if (kind === 'tools') return toolRowTotal(r, kwhRate);
+    if (kind === 'tools') return toolRowTotal(r, kwhRate, undefined, pwrFrac(r));
     if (kind === 'misc') return miscRowCost(r);
     if (kind !== 'mp') return N(r.qty) * N(r.cost);
     if (!r.role) return 0; /* blank row: no role, no cost (calcBen SIL adds pax*30) */
@@ -2013,7 +2018,7 @@ function App({
     const tlList = masterlist.tools.slice(0, 30).map(r => r.desc).join(', ');
     const mtList = masterlist.materials.slice(0, 30).map(r => r.desc).join(', ');
     try {
-      const prompt = ['Philippine contractor Synergy3 Corp. CE Type: ', ceType.toUpperCase(), '.\nScope description: ', scope, '\n\nAvailable manpower roles & rates: ', rlist, '\nAvailable tools: ', tlList, '\nAvailable materials: ', mtList, '\n\nRespond ONLY in valid JSON (no markdown):\n', AI_PLAN_SCHEMA, AI_PLAN_RULES,'\nBased on the scope description, generate:', '\n- Realistic manpower roles with appropriate pax, days, and rates from available list', '\n- Required tools and equipment', '\n- Necessary materials and consumables', '\n- Required PPE', '\n- Detailed Scope of Work items (main numbered steps and lettered sub-steps)'].join('');
+      const prompt = ['Philippine contractor Synergy3 Corp. CE Type: ', ceTypeLabel(ceType).toUpperCase(), ceSplitOn(ceType) ? ' (part shop work, part site work; tag each main scope item)' : '', '.\nScope description: ', scope, '\n\nAvailable manpower roles & rates: ', rlist, '\nAvailable tools: ', tlList, '\nAvailable materials: ', mtList, '\n\nRespond ONLY in valid JSON (no markdown):\n', AI_PLAN_SCHEMA, AI_PLAN_RULES,'\nBased on the scope description, generate:', '\n- Realistic manpower roles with appropriate pax, days, and rates from available list', '\n- Required tools and equipment', '\n- Necessary materials and consumables', '\n- Required PPE', '\n- Detailed Scope of Work items (main numbered steps and lettered sub-steps)'].join('');
       const raw = await callAI(prompt, AI_MAX_TOKENS);
       const plan = aiLinkPlan(aiParseJSON(raw));
       if (plan.sowItems.length) setSowItems(plan.sowItems);
@@ -2999,7 +3004,7 @@ function App({
      SheetJS build cannot write cell styles, and the formatting is the whole
      point of this export. */
   const handleExport = () => {
-    const cl = ceType === 'onsite' ? 'Onsite' : ceType === 'shopworks' ? 'Shopwork' : 'Supply';
+    const cl = ceType === 'shopworks' ? 'Shopwork' : ceTypeLabel(ceType);
     const S = (v, s, span) => ({v: v, s: s, span: span});
     const COLS = [7, 46, 9, 9, 10, 15, 17];
 
@@ -3157,7 +3162,7 @@ function App({
       s.push(['ITEM', 'DESCRIPTION', 'QTY', 'UOM', 'BASIS', 'UNIT PRICE', 'TOTAL'].map(h => S(h, 'th')));
       toolsActive.forEach((r, i) => s.push([
         S(i + 1, 'tdc'), S(r.desc || '', 'td'), S(N(r.qty) || 1, 'tdc'), S(r.uom || 'Lot', 'tdc'), S(toolBasis(r), 'tdc'),
-        S(N(r.cost), 'tdn'), S(toolRowTotal(r, kwhRate), 'tdnb')]));
+        S(N(r.cost), 'tdn'), S(toolRowTotal(r, kwhRate, undefined, pwrFrac(r)), 'tdnb')]));
       s.push([S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('TOTAL:', 'totlbl'), S(N(toolsT), 'tot')]);
       sheets.push({name: 'BOTE', cols: COLS, rows: s});
     }
@@ -7804,7 +7809,7 @@ function App({
       </td></tr></table>`;
     const docHdr = title => `<table style="border:1px solid #000;margin-bottom:4px;font-size:7.5pt">
       <tr><td colspan="3" style="text-align:center;background:${_br.bar};color:${_br.text};font-weight:bold;font-size:9pt;padding:3px;border:1px solid #000">${title}</td></tr>
-      <tr><td colspan="3" style="border:none;font-size:7.5pt;padding:1px 4px"><div style="display:flex;justify-content:space-between;gap:8px"><span><b>CE TYPE:</b>&nbsp;${ceType.toUpperCase()}</span><span><b>CE No.:</b>&nbsp;${esc(info.ceNum || '')}&nbsp;&nbsp;<b>DATE:</b>&nbsp;${esc(info.date||'')}</span></div></td></tr>
+      <tr><td colspan="3" style="border:none;font-size:7.5pt;padding:1px 4px"><div style="display:flex;justify-content:space-between;gap:8px"><span><b>CE TYPE:</b>&nbsp;${esc(ceTypeLabel(ceType).toUpperCase())}</span><span><b>CE No.:</b>&nbsp;${esc(info.ceNum || '')}&nbsp;&nbsp;<b>DATE:</b>&nbsp;${esc(info.date||'')}</span></div></td></tr>
     </table>`;
 
     const infoTable = `<table class="bdr" style="margin-bottom:5px;font-size:7.5pt">
@@ -7904,7 +7909,7 @@ function App({
     const toolsPage=toolsActive.length?`<div class="blk">
       <div class="sec">BILL OF TOOLS AND EQUIPMENT</div>
       <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:28px">QTY</th><th class="c" style="width:35px">UOM</th><th class="c" style="width:52px">BASIS</th>${powerOn?'<th class="r" style="width:64px">POWER</th>':''}<th class="r" style="width:80px">UNIT PRICE</th><th class="r" style="width:80px">TOTAL</th></tr>
-      ${toolsActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.uom||'Lot')}</td><td class="c">${esc(toolBasis(r))}</td>${powerOn?`<td class="r">${toolPowerCost(r, kwhRate)>0?fmt(toolPowerCost(r, kwhRate)):'&#8212;'}</td>`:''}<td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(toolRowTotal(r, kwhRate))}</td></tr>`).join('')}
+      ${toolsActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.uom||'Lot')}</td><td class="c">${esc(toolBasis(r))}</td>${powerOn?`<td class="r">${(toolPowerCost(r, kwhRate) * pwrFrac(r))>0?fmt((toolPowerCost(r, kwhRate) * pwrFrac(r))):'&#8212;'}</td>`:''}<td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(toolRowTotal(r, kwhRate, undefined, pwrFrac(r)))}</td></tr>`).join('')}
       <tr class="tot"><td colspan="${powerOn?7:6}" class="r b">TOTAL:</td><td class="r b">${fmt(toolsT)}</td></tr></table></div>` : '';
 
     /* Materials &#8212; skip zero rows */
@@ -8209,7 +8214,7 @@ function App({
       a.row({ v: 'COST ESTIMATE SUMMARY' }, '', '', 'Revision No.:', co.revNo);
       a.row('', '', '', 'Revision Date:', co.revDate);
       a.title(title, span);
-      a.row('CE No.:', info.ceNum || '', 'CE TYPE:', ceType.toUpperCase(), 'DATE:', info.date || '');
+      a.row('CE No.:', info.ceNum || '', 'CE TYPE:', ceTypeLabel(ceType).toUpperCase(), 'DATE:', info.date || '');
       a.blank();
     };
 
@@ -8331,8 +8336,8 @@ function App({
           ...(pwrCol ? ['POWER'] : []), 'UNIT PRICE', 'TOTAL');
         rows.forEach((r, i) => {
           a.row(i + 1, r.desc || '', N(r.qty), r.uom || 'Lot', ...(withDays ? [toolBasis(r)] : []),
-            ...(pwrCol ? [a.money(toolPowerCost(r, kwhRate))] : []),
-            a.money(r.cost), a.money(withDays ? toolRowTotal(r, kwhRate) : N(r.qty) * N(r.cost)));
+            ...(pwrCol ? [a.money((toolPowerCost(r, kwhRate) * pwrFrac(r)))] : []),
+            a.money(r.cost), a.money(withDays ? toolRowTotal(r, kwhRate, undefined, pwrFrac(r)) : N(r.qty) * N(r.cost)));
         });
         a.blank();
         a.total('', 'TOTAL:', '', '', ...(withDays ? [''] : []), '', a.money(total));
@@ -8629,7 +8634,7 @@ function App({
         fontSize: 10,
         marginTop: 3
       }
-    }, d.ceType?.toUpperCase(), " \xB7 ", (d.mp || []).length, " manpower \xB7 ", (d.tools || []).length, " tools \xB7 ", (d.mats || []).length, " materials")), /*#__PURE__*/React.createElement("div", {
+    }, ceTypeLabel(d.ceType).toUpperCase(), " \xB7 ", (d.mp || []).length, " manpower \xB7 ", (d.tools || []).length, " tools \xB7 ", (d.mats || []).length, " materials")), /*#__PURE__*/React.createElement("div", {
       style: {
         display: 'flex',
         gap: 5,
@@ -8970,7 +8975,7 @@ function App({
       fontSize: 11,
       transition: 'all .12s'
     }
-  }, ceKey === 'shopworks' ? 'ShopWorks' : ceKey.charAt(0).toUpperCase() + ceKey.slice(1)))), /*#__PURE__*/React.createElement("div", {
+  }, ceTypeLabel(ceKey)))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -9610,6 +9615,17 @@ tab === 'sowbreak' && (() => {
             title: "Service group for the Services summary on the CE (e.g. WELDING WORKS). Items with the same group print as one line; sub-items follow their main item.",
             onChange: e => { const v = e.target.value; setSowItems(p => p.map(x => x.id === it.id ? { ...x, group: v } : x)); }
           }),
+          /* Shop + Site CEs: where this task is done. Site earns the Incentive;
+             Shop is charged the tools' power. Sub-items follow their main item. */
+          it.type === 'main' && ceSplitOn(ceType) && /*#__PURE__*/React.createElement("button", {
+            className: 'shopsite-toggle',
+            style: { ...INP, width: 'auto', fontSize: 10.5, padding: '2px 8px', cursor: 'pointer', fontWeight: 700,
+              color: it.work === 'shop' ? INFO : OK, borderColor: it.work === 'shop' ? INFO : OK },
+            title: it.work === 'shop'
+              ? "Shop work: no Incentive for these days; the tools' power is charged. Click for Site."
+              : "Site work: the Incentive is paid for these days; no tool power is charged. Click for Shop.",
+            onClick: () => setSowItems(p => p.map(x => x.id === it.id ? { ...x, work: x.work === 'shop' ? 'site' : 'shop' } : x))
+          }, it.work === 'shop' ? "🏭 Shop" : "🏗 Site"),
           /*#__PURE__*/React.createElement("span", { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 } },
             /* Collapsed cards hide the note, so flag that one exists. */
             String(it.note || '').trim() && /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: INFO }, title: String(it.note).trim() }, "📝"),
@@ -9857,7 +9873,7 @@ reqForm && (() => {
         /*#__PURE__*/React.createElement("datalist", {id:'req-users'}, reqUsers.map(u => /*#__PURE__*/React.createElement("option", {key:u.username, value:u.name || u.username}))))),
       L("Customer *", inp('client', {placeholder:'e.g. SLTEC'})),
       L("CE Type", /*#__PURE__*/React.createElement("select", {style:INP, value:reqForm.ceType, onChange:e=>set('ceType', e.target.value)},
-        Object.keys(CE_CFG).map(k => /*#__PURE__*/React.createElement("option", {key:k, value:k}, k === 'shopworks' ? 'ShopWorks' : k.charAt(0).toUpperCase() + k.slice(1))))),
+        Object.keys(CE_CFG).map(k => /*#__PURE__*/React.createElement("option", {key:k, value:k}, ceTypeLabel(k))))),
       L("Discipline", /*#__PURE__*/React.createElement("select", {style:INP, value:reqForm.projType, onChange:e=>set('projType', e.target.value)},
         ['Electrical', 'Mechanical', 'Civil', 'General'].map(k => /*#__PURE__*/React.createElement("option", {key:k, value:k}, k)))),
       L("Date received", inp('dateRecv', {type:'date'})),
@@ -11751,7 +11767,7 @@ tab === 'dashboard' && (() => {
       fontSize: 11,
       marginBottom: 2
     }
-  }, "C.1\\u2013C.4 Subtotal"), /*#__PURE__*/React.createElement("div", {
+  }, "C.1\u2013C.4 Subtotal"), /*#__PURE__*/React.createElement("div", {
     style: {
       ...MONO,
       fontWeight: 700,
@@ -11868,7 +11884,9 @@ tab === 'dashboard' && (() => {
       textAlign: 'right',
       width: 90
     }
-  }, "Incentive"), /*#__PURE__*/React.createElement("th", {
+  }, cfg.incentive === 'site' ? /*#__PURE__*/React.createElement("span", {
+    title: "Shop + Site: counted only on rows assigned to Site scope items (SOW Breakdown). Shop days earn none."
+  }, "Incentive (site) ⓘ") : "Incentive"), /*#__PURE__*/React.createElement("th", {
     style: {
       ...THS,
       textAlign: 'right',
@@ -12043,6 +12061,7 @@ tab === 'dashboard' && (() => {
     setDefaultTier: v => setInfo(p => ({...p, toolTier: v})),
     showPower: powerOn,
     kwhRate,
+    pwrFrac,
     /* A rate equal to the default is removed rather than stored, so a CE that
        was never touched is not frozen against a future change to it -- the
        same rule the shift multipliers follow. */
@@ -12626,7 +12645,7 @@ tab === 'dashboard' && (() => {
       color: ceType === ceKey ? ceVal.color : MT,
       fontWeight: ceType === ceKey ? 700 : 400
     }
-  }, ceKey.toUpperCase()))))), /*#__PURE__*/React.createElement("td", {
+  }, ceTypeLabel(ceKey).toUpperCase()))))), /*#__PURE__*/React.createElement("td", {
     style: {
       ...TDS,
       fontWeight: 700,
@@ -13338,7 +13357,7 @@ tab === 'dashboard' && (() => {
        them back when that is what you actually wanted. */
     style: {...btn('def', true), fontSize: 9, padding: '2px 8px', marginLeft: 8, textTransform: 'none', letterSpacing: 0},
     title: 'Replace the notes and signatories with the preset for ' +
-      (ceType === 'onsite' ? 'Onsite' : ceType === 'shopworks' ? 'ShopWorks' : 'Supply') + ' + ' + (info.projType || 'this discipline') +
+      ceTypeLabel(ceType) + ' + ' + (info.projType || 'this discipline') +
       '. Set these up in the Users tab.',
     onClick: () => {
       if (!_defaultsUntouched() && !confirm('Replace the current notes and signatories with the preset for this CE type and discipline?\n\nAnything typed here will be lost.')) return;

@@ -318,6 +318,39 @@ function ceIncentiveOn(ceType) {
   const c = (typeof CE_CFG !== 'undefined' && CE_CFG[ceType]) || {};
   return c.incentive !== false;
 }
+/* Shop + Site CEs: each main scope item is Shop or Site (sub-items take their
+   main item's), Site when untagged. Returns {taskId: 'shop'|'site'}. */
+function ceWorkMap(sowItems) {
+  const out = {};
+  let cur = 'site';
+  (Array.isArray(sowItems) ? sowItems : []).forEach(it => {
+    if (!it) return;
+    if (it.type === 'main') cur = it.work === 'shop' ? 'shop' : 'site';
+    out[it.id] = cur;
+  });
+  return out;
+}
+/* How much of a row is site work, 0..1. A row shared across tasks splits by
+   what each task asked for; a row filed nowhere counts as site work, which is
+   what an unsplit CE would have charged it. */
+function ceSiteFrac(r, workMap) {
+  if (!r) return 1;
+  const map = workMap || {};
+  const sh = Array.isArray(r.shares) && r.shares.length ? r.shares : null;
+  if (sh) {
+    const w = x => Math.max(0, N(x.weight));
+    const tot = sh.reduce((t, x) => t + w(x), 0);
+    const site = sh.filter(x => map[x.taskId] !== 'shop');
+    if (tot <= 0) return site.length / sh.length;
+    return site.reduce((t, x) => t + w(x), 0) / tot;
+  }
+  return map[r.taskId] === 'shop' ? 0 : 1;
+}
+/* Whether a CE type splits its rules by scope item. */
+function ceSplitOn(ceType) {
+  const c = (typeof CE_CFG !== 'undefined' && CE_CFG[ceType]) || {};
+  return c.incentive === 'site' || c.power === 'shop';
+}
 function cePowerOn(ceType) {
   const c = (typeof CE_CFG !== 'undefined' && CE_CFG[ceType]) || {};
   return !!c.power && toolPowerEnabled();
@@ -356,8 +389,11 @@ function miscRowCost(r) {
     return N(r.cost) * r.parts.reduce((t, p) => t + N(p.qty) * (N(p.days) || 1), 0);
   return N(r.qty) * N(r.cost) * (N(r.days) || 1);
 }
-function toolRowTotal(row, kwhRate, src) {
-  return toolRowCost(row, src) + toolPowerCost(row, kwhRate);
+function toolRowTotal(row, kwhRate, src, powerFrac) {
+  /* powerFrac: the share of the row charged for power -- all of it, except
+     on a Shop + Site CE, where only its Shop scope draws on our supply. */
+  const pf = powerFrac === undefined ? 1 : N(powerFrac);
+  return toolRowCost(row, src) + toolPowerCost(row, kwhRate) * pf;
 }
 
 function ceResDays(r) {
@@ -381,7 +417,10 @@ function ceMpRowCost(r, rates, ceType) {
      row). Without it, the old per-row P30. */
   const ecc = rates && rates._ecc && rates._ecc.has(r) ? rates._ecc.get(r) : pax * 30;
   const sil = rate * days * pax * 5 / 12 / 26 + ecc;
-  const perdiem = ceIncentiveOn(ceType) ? N(r.perDiem || 0) * days * pax : 0;
+  /* rates._site: on a Shop + Site CE, the share of this row that is site
+     work -- the only days that earn the Incentive. */
+  const siteF = rates && typeof rates._site === 'function' ? rates._site(r) : 1;
+  const perdiem = ceIncentiveOn(ceType) ? N(r.perDiem || 0) * days * pax * siteF : 0;
   return reg + ot + thirteenth + sss + hdmf + sil + perdiem;
 }
 /* A mobilization / demobilization line. Two kinds share one list (so they
@@ -464,12 +503,14 @@ function computeCEParts(ce) {
   /* The CE's own multipliers, so a recompute reproduces what it was quoted
      at rather than what today's rules would charge. */
   const _rates = ceRates(ce);
-  const _mpRates = { ..._rates, _ecc: eccByRow(arr(ce.mp), _rates) };
+  const _wm = ceSplitOn(ce.ceType) ? ceWorkMap(ce.sowItems) : null;
+  const _siteOf = r => _wm ? ceSiteFrac(r, _wm) : 1;
+  const _mpRates = { ..._rates, _ecc: eccByRow(arr(ce.mp), _rates), ...(cfg.incentive === 'site' ? { _site: _siteOf } : {}) };
   const mpT = arr(ce.mp).reduce((s, r) => s + ceMpRowCost(r, _mpRates, ce.ceType), 0);
   /* Through toolRowCost, so a tiered CE recomputes to what the editor shows.
      A row naming no tier is Tier 2, which is exactly the old expression. */
   const _kwh = cePowerOn(ce.ceType) ? ceKwhRate(_rates) : 0;
-  const toolsT = arr(ce.tools).reduce((s, r) => s + toolRowTotal(r, _kwh), 0);
+  const toolsT = arr(ce.tools).reduce((s, r) => s + toolRowTotal(r, _kwh, undefined, cfg.power === 'shop' ? 1 - _siteOf(r) : 1), 0);
   const matsT = arr(ce.mats).reduce((s, r) => s + N(r.qty) * N(r.cost), 0);
   const ppeT = arr(ce.ppe).reduce((s, r) => s + N(r.qty) * N(r.cost), 0);
   const miscT = Object.keys(ce.misc || {}).reduce((s, k) => {

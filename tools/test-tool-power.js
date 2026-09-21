@@ -37,7 +37,7 @@ const CE_CFG = {
 };
 const SHIFTS = {regular_day: {mult: 1}, regular_night: {mult: 1.25}};
 const src =
-  (help.match(/const OT_MULT_DEFAULT[\s\S]*?\nfunction toolRowTotal\(row, kwhRate, src\) \{[\s\S]*?\n\}/) || [''])[0] + '\n' +
+  (help.match(/const OT_MULT_DEFAULT[\s\S]*?\nfunction toolRowTotal\(row, kwhRate, src, powerFrac\) \{[\s\S]*?\n\}/) || [''])[0] + '\n' +
   (help.match(/function ceResDays\(r\) \{[\s\S]*?\n\}/) || [''])[0] + '\n' +
   (help.match(/const TIER_HOURS_PER_YEAR[\s\S]*?\nfunction toolRowCost\(row, src\) \{[\s\S]*?\n\}/) || [''])[0];
 if (!/function toolPowerCost/.test(src)) { console.error('power helpers not found'); process.exit(1); }
@@ -130,12 +130,12 @@ ck('derived once from the CE type and the company switch', /const powerOn = !!cf
 ck('the switch hides power everywhere, saved CEs included', /return !!c\.power && toolPowerEnabled\(\);/.test(fs.readFileSync('src/helpers.js','utf8')));
 ck('and once from the CE rates', /const kwhRate = powerOn \? ceKwhRate\(rr\) : 0;/.test(app));
 for (const [what, re] of [
-  ['the section total', /toolsT = useMemo\(\(\) => tools\.reduce\(\(s, r\) => s \+ toolRowTotal\(r, kwhRate\), 0\)/],
-  ['the per-task cost', /if \(kind === 'tools'\) return toolRowTotal\(r, kwhRate\);/],
-  ['the recompute', /toolRowTotal\(r, _kwh\)/],
-  ['the printed CE', /fmt\(toolRowTotal\(r, kwhRate\)\)/],
-  ['Export CE', /S\(toolRowTotal\(r, kwhRate\), 'tdnb'\)/],
-  ['Export Detailed', /a\.money\(withDays \? toolRowTotal\(r, kwhRate\)/]
+  ['the section total', /toolsT = useMemo\(\(\) => tools\.reduce\(\(s, r\) => s \+ toolRowTotal\(r, kwhRate, undefined, pwrFrac\(r\)\), 0\)/],
+  ['the per-task cost', /if \(kind === 'tools'\) return toolRowTotal\(r, kwhRate, undefined, pwrFrac\(r\)\);/],
+  ['the recompute', /toolRowTotal\(r, _kwh, undefined, cfg\.power === 'shop' \? 1 - _siteOf\(r\) : 1\)/],
+  ['the printed CE', /fmt\(toolRowTotal\(r, kwhRate, undefined, pwrFrac\(r\)\)\)/],
+  ['Export CE', /S\(toolRowTotal\(r, kwhRate, undefined, pwrFrac\(r\)\), 'tdnb'\)/],
+  ['Export Detailed', /a\.money\(withDays \? toolRowTotal\(r, kwhRate, undefined, pwrFrac\(r\)\)/]
 ]) ck(what + ' goes through toolRowTotal', re.test(what === 'the recompute' ? help : app));
 ck('nothing costs a tool as rental-only any more',
   !/toolRowCost\(r\)(?!\s*\+)/.test(app),

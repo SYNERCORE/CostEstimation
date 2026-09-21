@@ -125,9 +125,9 @@ const reg = fs.readFileSync('src/components/RegisterPage.js', 'utf8');
 
 console.log('\nthere is one costing path, not four:');
 ck('the editor row total goes through it', /const rowTot = r => showDays \? toolRowCost\(r\)/.test(restab));
-ck('so does the CE total', /const toolsT = useMemo\(\(\) => tools\.reduce\(\(s, r\) => s \+ toolRowTotal\(r, kwhRate\), 0\)/.test(app));
-ck('so does the per-task cost', /if \(kind === 'tools'\) return toolRowTotal\(r, kwhRate\);/.test(app));
-ck('and so does the recompute', /arr\(ce\.tools\)\.reduce\(\(s, r\) => s \+ toolRowTotal\(r, _kwh\), 0\)/.test(helpers),
+ck('so does the CE total', /const toolsT = useMemo\(\(\) => tools\.reduce\(\(s, r\) => s \+ toolRowTotal\(r, kwhRate, undefined, pwrFrac\(r\)\), 0\)/.test(app));
+ck('so does the per-task cost', /if \(kind === 'tools'\) return toolRowTotal\(r, kwhRate, undefined, pwrFrac\(r\)\);/.test(app));
+ck('and so does the recompute', /arr\(ce\.tools\)\.reduce\(\(s, r\) => s \+ toolRowTotal\(r, _kwh, undefined, cfg\.power === 'shop' \? 1 - _siteOf\(r\) : 1\), 0\)/.test(helpers),
   'Monitoring and the editor disagreeing on a total is the bug we already had');
 
 console.log('\nthe tier survives a round trip:');
@@ -186,9 +186,9 @@ ck('and no document still prints DAYS for a tool',
   !/'ITEM', 'DESCRIPTION', 'QTY', 'UOM', 'DAYS'/.test(app) && !/>DAYS<\/th><th class="r" style="width:80px">UNIT PRICE/.test(app));
 
 console.log('\nand every printed total is the tiered one:');
-ck('the printed CE', /fmt\(toolRowTotal\(r, kwhRate\)\)/.test(app));
-ck('Export CE', /S\(toolRowTotal\(r, kwhRate\), 'tdnb'\)/.test(app));
-ck('Export Detailed', /a\.money\(withDays \? toolRowTotal\(r, kwhRate\) : N\(r\.qty\) \* N\(r\.cost\)\)/.test(app));
+ck('the printed CE', /fmt\(toolRowTotal\(r, kwhRate, undefined, pwrFrac\(r\)\)\)/.test(app));
+ck('Export CE', /S\(toolRowTotal\(r, kwhRate, undefined, pwrFrac\(r\)\), 'tdnb'\)/.test(app));
+ck('Export Detailed', /a\.money\(withDays \? toolRowTotal\(r, kwhRate, undefined, pwrFrac\(r\)\) : N\(r\.qty\) \* N\(r\.cost\)\)/.test(app));
 ck('none of them recompute qty x days x cost by hand',
   !/N\(r\.qty\) \* N\(r\.cost\) \* resDays\(r\)/.test(app),
   'a document doing its own arithmetic is a document that can disagree with the CE');

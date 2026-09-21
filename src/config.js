@@ -49,11 +49,34 @@ const CE_CFG = {
     mobDemob: false,
     docNo: "SHIC-F-TSG-025",
     hasConc: false
+  },
+  /* One job, part in our shop and part on the client's site -- a component
+     pulled, repaired in the shop, then reinstalled. Each main scope item is
+     tagged Shop or Site, and the two rules that differ between the types
+     follow the tag instead of the whole CE:
+       incentive 'site' -- paid only for the days worked on Site scope;
+       power 'shop'     -- tool electricity charged only on Shop scope. */
+  shopsite: {
+    color: "#F0A429",
+    label: "Shop + Site",
+    mobDemob: true,
+    docNo: "SHIC-F-TSG-025",
+    hasConc: true,
+    incentive: 'site',
+    power: 'shop'
   }
 };
+/* What a CE type is called on screen and on paper. */
+function ceTypeLabel(k) {
+  const c = CE_CFG[k];
+  if (c && c.label) return c.label;
+  if (k === 'shopworks') return 'ShopWorks';
+  return String(k || '').charAt(0).toUpperCase() + String(k || '').slice(1);
+}
 const MISC_DEF = {
   onsite: [["accommodation", "G.1 Accommodation"], ["transportation", "G.2 Transportation"], ["requirements", "G.3 Requirements"], ["adminCost", "G.4 Admin Cost"], ["thirdParty", "G.5 Third Party"], ["insurance", "G.6 Insurances"]],
   shopworks: [["accommodation", "E.1 Accommodation"], ["transportation", "E.2 Transportation"], ["requirements", "E.3 Requirements"], ["adminCost", "E.4 Admin Cost"], ["thirdParty", "E.5 Third Party"], ["insurance", "E.6 Insurances"]],
+  shopsite: [["accommodation", "G.1 Accommodation"], ["transportation", "G.2 Transportation"], ["requirements", "G.3 Requirements"], ["adminCost", "G.4 Admin Cost"], ["thirdParty", "G.5 Third Party"], ["insurance", "G.6 Insurances"]],
   supply: [["allowance", "D.1 Allowance"], ["transportation", "D.2 Transportation"], ["requirements", "E.3 Requirements"], ["adminCost", "E.4 Admin Cost"], ["thirdParty", "E.5 Third Party"], ["insurance", "E.6 Insurances"]]
 };
 const CE_TABS=[{id:"mywork",label:"🏠 My Work"},{id:"info",label:"Project Info"},{id:"sow",label:"Scope of Work"},{id:"sowbreak",label:"SOW Breakdown"},{id:"manpower",label:"Manpower"},{id:"tools",label:"Tools & Equipment"},{id:"materials",label:"Materials"},{id:"ppe",label:"PPE"},{id:"misc",label:"Miscellaneous"},{id:"summary",label:"Summary"},{id:"scopelib",label:"Scope Library"},{id:"masterlist",label:"Masterlist"},{id:"history",label:"CE Monitoring"},{id:"dashboard",label:"📊 Dashboard"}];

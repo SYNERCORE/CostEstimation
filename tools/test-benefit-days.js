@@ -40,11 +40,11 @@ const near = (a, b) => Math.abs(a - b) < 0.005;
 const grab = (re, what) => { const m = app.match(re); if (!m) { console.error('not found in src/App.js: ' + what); process.exit(1); } return m[0]; };
 
 /* The real calcBen and the real merge, lifted out of the component. */
-const body = grab(/const benefitRows = useMemo\(\(\) => \{[\s\S]*?\n  \}, \[mp, incOn\]\);/, 'benefitRows')
+const body = grab(/const benefitRows = useMemo\(\(\) => \{[\s\S]*?\n  \}, \[mp, incOn, _workMap\]\);/, 'benefitRows')
   .replace(/^\s*const benefitRows = useMemo\(\(\) => \{/, '')
-  .replace(/\n\s*\}, \[mp, incOn\]\);$/, '');
+  .replace(/\n\s*\}, \[mp, incOn, _workMap\]\);$/, '');
 const make = new Function('N', 'mp', 'incOn',
-  grab(/const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen').replace(/^/, 'const eccMap = new Map();') + '\n' + body
+  grab(/const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen').replace(/^/, 'const cfg = {}, siteFrac = () => 1, pwrFrac = () => 1, _workMap = null; const eccMap = new Map();') + '\n' + body
 );
 const N = v => parseFloat(v) || 0;
 const rows = (mp, inc) => make(N, mp, inc !== false);

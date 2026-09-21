@@ -73,7 +73,7 @@ function CeDefaultsPanel() {
       React.createElement('div', {style: {flex: 1}},
         React.createElement('label', {style: LBL}, 'CE Type'),
         sel(p.ceType || CE_DEFAULT_ANY, e => edit(i, {ceType: e.target.value}),
-          [[CE_DEFAULT_ANY, 'Any type'], ['onsite', 'Onsite'], ['shopworks', 'ShopWorks'], ['supply', 'Supply']])),
+          [[CE_DEFAULT_ANY, 'Any type'], ['onsite', 'Onsite'], ['shopworks', 'ShopWorks'], ['shopsite', 'Shop + Site'], ['supply', 'Supply']])),
       React.createElement('div', {style: {flex: 1}},
         React.createElement('label', {style: LBL}, 'Discipline'),
         sel(p.discipline || CE_DEFAULT_ANY, e => edit(i, {discipline: e.target.value}),

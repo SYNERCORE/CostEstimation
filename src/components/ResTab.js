@@ -18,6 +18,8 @@ const ResTab = ({
      a shop that sets the rate to 0 still needs somewhere to type the kW. */
   showPower,
   kwhRate,
+  /* Share of a row's power that is charged (Shop + Site: its shop share). */
+  pwrFrac,
   setKwhRate,
   /* Puts rows the Masterlist does not have yet into it, so an item met for the
      first time on a CE is there for the next one. */
@@ -52,7 +54,7 @@ const ResTab = ({
     });
     return out;
   };
-  const rowPwr = r => showPower ? toolPowerCost(r, kwhRate) : 0;
+  const rowPwr = r => showPower ? toolPowerCost(r, kwhRate) * (pwrFrac ? pwrFrac(r) : 1) : 0;
   const rowTot = r => showDays ? toolRowCost(r) + rowPwr(r) : N(r.qty) * N(r.cost);
   const tierOf = r => N(r.tier) || 2;
   /* A Tier 1 or Tier 3 row with nothing to derive from is charged at the daily

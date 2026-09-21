@@ -47,8 +47,8 @@ const grab = (re, what) => {
   return m[0];
 };
 const mpWageSrc = grab(/const mpWageParts = r => \{[\s\S]*?\n  const mpWage = r => mpWageParts\(r\)\.total;/, 'mpWage');
-const calcBenSrc = grab(/const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen').replace(/^/, 'const eccMap = new Map();');
-const benRowsSrc = grab(/const benefitRows = useMemo\(\(\) => \{[\s\S]*?\n  \}, \[mp, incOn\]\);/, 'benefitRows');
+const calcBenSrc = grab(/const calcBen = r => \{[\s\S]*?\n  \};/, 'calcBen').replace(/^/, 'const cfg = {}, siteFrac = () => 1, pwrFrac = () => 1, _workMap = null; const eccMap = new Map();');
+const benRowsSrc = grab(/const benefitRows = useMemo\(\(\) => \{[\s\S]*?\n  \}, \[mp, incOn, _workMap\]\);/, 'benefitRows');
 const shiftSubSrc = grab(/const shiftSub = rows\.reduce\([^\n]*\);/, 'shiftSub');
 
 const sandbox = vm.createContext({console, useMemo: f => f()});
@@ -139,7 +139,7 @@ ck('the ML button still copies it', /perDiem: item\.perDiem \|\| 0/.test(app));
 ck('and so does Sync Rates',
   /rate: f\.rate, perDiem: f\.perDiem !== undefined \? f\.perDiem : r\.perDiem/.test(app));
 ck('the figure is copied onto the row, not read from the list when costing',
-  /const perdiem = incOn \? N\(r\.perDiem \|\| 0\) \* days \* pax : 0;/.test(app),
+  /const perdiem = incOn \? N\(r\.perDiem \|\| 0\) \* days \* pax \* \(cfg\.incentive === 'site' \? siteFrac\(r\) : 1\) : 0;/.test(app),
   'reading the list at cost time would let a Masterlist edit reprice a CE already sent out');
 ck('a row that disagrees with the Masterlist says so on the line',
   /mlIncentive !== null && mlIncentive !== rowIncentive/.test(app),

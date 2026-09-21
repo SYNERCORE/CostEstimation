@@ -34,11 +34,11 @@ const TIERS =
    Undefined here, so it prices at the statutory defaults -- which is what
    every CE saved before they became editable carries. */
 const RATES = helpersSrc.match(
-  new RegExp('const OT_MULT_DEFAULT[\\s\\S]*?\\nfunction toolRowTotal\\(row, kwhRate, src\\) \\{[\\s\\S]*?\\n\\}'))[0];
+  new RegExp('const OT_MULT_DEFAULT[\\s\\S]*?\\nfunction toolRowTotal\\(row, kwhRate, src, powerFrac\\) \\{[\\s\\S]*?\\n\\}'))[0];
 /* kwhRate is the tariff rowCost charges tool power at. Zero here, which is
    what every non-shopworks CE carries -- so the assertions below are the
    rental-only figures they have always been. */
-const make = body => new Function('N', 'SHIFTS', 'sowItems', 'rr', 'kwhRate', RATES + NLC + TIERS + NLC + 'const incOn = true;' + NLC + body);
+const make = body => new Function('N', 'SHIFTS', 'sowItems', 'rr', 'kwhRate', RATES + NLC + TIERS + NLC + 'const cfg = {}, siteFrac = () => 1, pwrFrac = () => 1, _workMap = null; const incOn = true;' + NLC + body);
 
 const api = make(`
   ${resDaysSrc}

@@ -92,7 +92,7 @@
 
   // ─── CE_CFG completeness ───────────────────────────────────────────────────
   function testCeCfg() {
-    const requiredTypes = ['onsite', 'shopworks', 'supply'];
+    const requiredTypes = ['onsite', 'shopworks', 'shopsite', 'supply'];
     const requiredFields = ['color', 'mobDemob', 'docNo', 'hasConc'];
     for (const type of requiredTypes) {
       assert('CE_CFG has ' + type, !!CE_CFG[type]);
@@ -106,7 +106,7 @@
 
   // ─── MISC_DEF completeness ─────────────────────────────────────────────────
   function testMiscDef() {
-    const types = ['onsite', 'shopworks', 'supply'];
+    const types = ['onsite', 'shopworks', 'shopsite', 'supply'];
     for (const type of types) {
       assert('MISC_DEF has ' + type, Array.isArray(MISC_DEF[type]));
       assert('MISC_DEF.' + type + ' non-empty', MISC_DEF[type].length > 0);

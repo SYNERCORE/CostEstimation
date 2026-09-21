@@ -44,7 +44,7 @@ ck('a row with no role carries none', ecc([{ role: '', pax: 3, days: 1 }], { ecc
 console.log('\nwho gets which rule:');
 ck('a CE with no rule stays on the old one', /eccRule: raw\.eccRule === 'month' \? 'month' : 'row'/.test(h));
 ck('a new CE is stamped with the monthly rule', /otMult: s\.otMult, eccRule: 'month' \}/.test(h));
-ck('the saved-CE recompute uses the CE\'s rule', /const _mpRates = \{ \.\.\._rates, _ecc: eccByRow\(arr\(ce\.mp\), _rates\) \};/.test(h) && /ceMpRowCost\(r, _mpRates, ce\.ceType\)/.test(h));
+ck('the saved-CE recompute uses the CE\'s rule', /const _mpRates = \{ \.\.\._rates, _ecc: eccByRow\(arr\(ce\.mp\), _rates\),/.test(h) && /ceMpRowCost\(r, _mpRates, ce\.ceType\)/.test(h));
 ck('and so does the editor', /const eccMap = useMemo\(\(\) => eccByRow\(mp, rr\), \[mp, rr\]\);/.test(app) && /const sil = rate \* days \* pax \* 5 \/ 12 \/ 26 \+ ecc;/.test(app));
 
 ck('a request built out, or a clone, is a new quote on the new rule',

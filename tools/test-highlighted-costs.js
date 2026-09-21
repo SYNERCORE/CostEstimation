@@ -82,7 +82,7 @@ const run = body => {
   const sandbox = Object.assign(vm.createContext({
     console, mp, tools, mats, ppe, mobVehicles, demobVehicles, misc, rr, kwhRate, calcBen,
     unitP: 0, grand: 0, mobSubT: 0, demobSubT: 0, mpTot: 0, toolsT: 0, matsT: 0, ppeT: 0, miscT: 0,
-    ceType: 'shopworks', cfg: {mobDemob: true}, useMemo: (f) => f()
+    ceType: 'shopworks', cfg: {mobDemob: true}, pwrFrac: () => 1, useMemo: (f) => f()
   }), {});
   vm.runInContext(cfgSrc + '\n' + helpSrc, sandbox);
   return vm.runInContext('(function(){' + rowCostSrc + '\n' + body + '})()', sandbox);

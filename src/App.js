@@ -4615,6 +4615,10 @@ function App({
   /* The row whose status panel is open: pick a new status, and read the trail
      of who moved it and when. */
   const [statusPanel, setStatusPanel] = React.useState(null); // ceId or null
+  /* What is being chosen in the Status panel, not yet saved. Picking a status
+     or a date used to write it straight away, so every click on the way to the
+     one you meant went into the history. */
+  const [statusDraft, setStatusDraft] = React.useState(null); // {id, status, date}
   const [attachList, setAttachList] = React.useState([]);
   const [attachBusy, setAttachBusy] = React.useState(false);
   /* Why the list is empty. Without this the panel says "No attachments yet"
@@ -9698,16 +9702,31 @@ statusPanel && (() => {
      that rather than claiming nothing ever happened. */
   const _shown = _log.length ? [..._log].reverse()
     : (_m.statusChangedAt ? [{status: _m.status, at: _m.statusChangedAt, by: _m.statusChangedBy, _legacy: true}] : []);
+  const _d0 = {id: statusPanel, status: _m.status || '', date: monDateInput(_m.statusChangedAt)};
+  const _d = statusDraft && statusDraft.id === statusPanel ? statusDraft : _d0;
+  const _setD = patch => setStatusDraft({..._d, ...patch});
+  const _dirty = _d.status !== _d0.status || _d.date !== _d0.date;
+  const _close = () => { setStatusDraft(null); setStatusPanel(null); };
+  const _saveStatus = () => {
+    if (_d.status !== _d0.status && _d.status) updateMon(statusPanel, 'status', _d.status);
+    /* After the status, which stamps today: the date then puts it right. */
+    if (_d.status && (_d.date !== _d0.date || _d.status !== _d0.status) && _d.date && _d.date !== monDateInput(new Date().toISOString()))
+      updateMon(statusPanel, 'statusChangedAt', new Date(_d.date + 'T12:00:00').toISOString());
+    else if (_d.status === _d0.status && _d.date !== _d0.date)
+      updateMon(statusPanel, 'statusChangedAt', _d.date ? new Date(_d.date + 'T12:00:00').toISOString() : '');
+    showToast('Status saved: ' + (_d.status || '—') + (_d.date ? ' · ' + _d.date : '') + '.');
+    _close();
+  };
   return /*#__PURE__*/React.createElement("div", {
     style:{position:'fixed',inset:0,background:'#000b',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center'},
-    onClick:()=>setStatusPanel(null)
+    onClick:()=>{ if (!_dirty || confirm('Discard the status change you have not saved?')) _close(); }
   }, /*#__PURE__*/React.createElement("div", {
     style:{background:CARD,border:`1px solid ${BDR}`,borderRadius:10,padding:24,minWidth:440,maxWidth:560,maxHeight:'82vh',overflowY:'auto'},
     onClick:ev=>ev.stopPropagation()
   },
     /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}},
       /*#__PURE__*/React.createElement("b", {style:{fontSize:14}}, "⚑ Status"),
-      /*#__PURE__*/React.createElement("button", {style:btn('def',true), onClick:()=>setStatusPanel(null)}, "✕ Close")),
+      /*#__PURE__*/React.createElement("button", {style:btn('def',true), onClick:()=>{ if (!_dirty || confirm('Discard the status change you have not saved?')) _close(); }}, "✕ Close")),
     /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,marginBottom:16,...MONO}}, (_e?.info?.ceNum || _e?.ceNum || '')),
 
     /*#__PURE__*/React.createElement("div", {style:{fontSize:10,color:MT,letterSpacing:.5,marginBottom:6}}, "CURRENT"),
@@ -9722,16 +9741,11 @@ statusPanel && (() => {
            corrected with it. The name is not editable -- who clicked is
            genuinely observed; only the date is being put right. */
         type: "date",
-        key: statusPanel + 'changedAt',
-        disabled: !_m.status,
-        title: _m.status ? 'The date this status actually took effect' : 'Set a status first',
-        style: {...INP, fontSize: 11, padding: '3px 8px', width: 150, opacity: _m.status ? 1 : .4},
-        defaultValue: monDateInput(_m.statusChangedAt),
-        onChange: ev => {
-          if (!_m.status) return;
-          updateMon(statusPanel, 'statusChangedAt', ev.target.value ? new Date(ev.target.value + 'T12:00:00').toISOString() : '');
-          showToast('Status date set to ' + (ev.target.value || 'blank') + '.');
-        }
+        disabled: !_d.status,
+        title: _d.status ? 'The date this status took effect — saved with Save' : 'Pick a status first',
+        style: {...INP, fontSize: 11, padding: '3px 8px', width: 150, opacity: _d.status ? 1 : .4},
+        value: _d.date || '',
+        onChange: ev => _setD({date: ev.target.value})
       }),
       _m.statusChangedBy && /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT}}, "by " + _m.statusChangedBy)),
 
@@ -9739,19 +9753,17 @@ statusPanel && (() => {
     /*#__PURE__*/React.createElement("div", {style:{display:'flex',flexWrap:'wrap',gap:6,marginBottom:20}},
       allStatuses.map(st => /*#__PURE__*/React.createElement("button", {
         key: st,
-        disabled: st === _m.status,
         style:{...btn('def',true), fontSize:11, padding:'4px 12px', borderRadius:12,
-               background: st === _m.status ? getStatusColor(st)+'33' : 'transparent',
-               borderColor: getStatusColor(st)+'66', color: getStatusColor(st),
-               opacity: st === _m.status ? .5 : 1,
-               cursor: st === _m.status ? 'default' : 'pointer'},
-        title: st === _m.status ? 'Already ' + st : 'Set to ' + st,
-        onClick: () => {
-          if (st === _m.status) return;
-          updateMon(statusPanel, 'status', st);
-          showToast('Status set to ' + st + '.');
-        }
-      }, st))),
+               background: st === _d.status ? getStatusColor(st)+'33' : 'transparent',
+               borderColor: st === _d.status ? getStatusColor(st) : getStatusColor(st)+'66', color: getStatusColor(st),
+               fontWeight: st === _d.status ? 700 : 400},
+        title: st === _m.status ? 'The current status' : 'Choose ' + st + ' — saved with Save',
+        onClick: () => _setD({status: st, date: st === _m.status ? _d0.date : monDateInput(new Date().toISOString())})
+      }, (st === _d.status ? '✓ ' : '') + st))),
+    /*#__PURE__*/React.createElement("div", {style:{display:'flex',justifyContent:'flex-end',gap:8,marginTop:-8,marginBottom:18}},
+      _dirty && /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:'var(--status-warning)',marginRight:'auto',alignSelf:'center'}}, 'Not saved yet — nothing is in the history until you press Save.'),
+      /*#__PURE__*/React.createElement("button", {style:btn('def',true), disabled:!_dirty, onClick:()=>setStatusDraft(null)}, "Undo"),
+      /*#__PURE__*/React.createElement("button", {style:{...btn('acc',true), opacity:_dirty?1:.5}, disabled:!_dirty, onClick:_saveStatus}, "Save")),
 
     /*#__PURE__*/React.createElement("div", {style:{fontSize:10,color:MT,letterSpacing:.5,marginBottom:8}}, "HISTORY"),
     _shown.length === 0

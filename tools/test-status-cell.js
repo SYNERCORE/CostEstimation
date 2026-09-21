@@ -35,13 +35,15 @@ ck2('the Status action opens a panel', /setStatusPanel\(statusPanel === e\.id \?
 ck2('it is held back on a draft row', /if \(!e\._draft\) setStatusPanel/.test(src),
   'a draft has no numeric id, so dbSaveMonEntry would post shicCEId NaN');
 ck2('the panel offers every status', /allStatuses\.map\(st =>/.test(src));
-ck2('the current one is not offered again', /disabled: st === _m\.status/.test(src));
+/* Changes are staged until Save, so the current status stays clickable -- it
+   is how a choice is taken back -- and is labelled as the current one. */
+ck2('the current one is marked as current', src.includes("st === _m.status ? 'The current status'"));
 ck2('and the row shows the status as a chip, not a dropdown',
   !/key: e\.id \+ 'status'/.test(src),
   'a select per row is ~900 form controls and still shows no history');
 ck2('the panel can correct when the status changed', /updateMon\(statusPanel, 'statusChangedAt'/.test(src),
   'the row date field went away with the inline dropdown, and nothing replaced it');
-ck2('it is disabled until there is a status to date', /disabled: !_m\.status/.test(src));
+ck2('it is disabled until there is a status to date', src.includes('disabled: !_d.status'));
 ck2('the panel shows the trail', /HISTORY/.test(src) && /_shown\.map\(\(h, i\)/.test(src));
 ck2('with what it moved from, when, and who', /"from " \+ h\.from/.test(src) && /h\.by \|\| /.test(src));
 ck2('a CE tracked before the log existed still shows its last change',

@@ -162,6 +162,8 @@ jobs:
         run: node tools/test-mywork-badge.js
       - name: Printed CE layout
         run: node tools/test-print-layout.js
+      - name: Status panel saves on Save
+        run: node tools/test-status-save.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents
@@ -238,6 +240,8 @@ jobs:
         run: node tools/test-mywork-badge.js
       - name: Printed CE layout
         run: node tools/test-print-layout.js
+      - name: Status panel saves on Save
+        run: node tools/test-status-save.js
       - name: Detailed Excel export mirrors the printed CE
         run: node tools/test-xlsx-export.js src/App.js
       - name: Every host the app calls is allowed by the CSP

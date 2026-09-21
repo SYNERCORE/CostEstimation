@@ -579,7 +579,8 @@ function App({
       return [];
     }
   });
-  const allStatuses = useMemo(() => [...DEFAULT_STATUS_OPTIONS, ...customStatuses], [customStatuses]);
+  /* De-duplicated: a status someone added by hand ("Revised") and then made standard must not show twice. */
+  const allStatuses = useMemo(() => [...new Set([...DEFAULT_STATUS_OPTIONS, ...customStatuses])], [customStatuses]);
   const addStatus = s => {
     if (!s.trim() || allStatuses.includes(s.trim())) return;
     const n = [...customStatuses, s.trim()];
@@ -4484,6 +4485,7 @@ function App({
     'No Quote': '#94A3B8',
     'Pending': '#6B7280',
     'Ongoing': 'var(--status-warning)',
+    'Revised': '#38BDF8',
     'For site insp.': 'var(--accent-violet)',
     'For Approval': 'var(--accent-cyan)',
     'Waiting in...': 'var(--accent-violet)',
@@ -5227,6 +5229,7 @@ function App({
       const statusMap = {
         'done':'Submitted', 'submitted':'Submitted',
         'ongoing':'Ongoing',
+        'revised':'Revised',
         'pending':'Pending',
         'for site insp':'For site insp.',
         'for approval':'For Approval',

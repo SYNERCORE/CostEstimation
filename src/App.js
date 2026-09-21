@@ -9364,6 +9364,11 @@ tab === 'sowbreak' && (() => {
               /* One consolidated crew shown under each task it serves. Without
                  this the same row appearing in two places, at two different
                  costs, would look like a duplicate rather than a share. */
+              /* The same role is on several shifts; say which one this is. */
+              isMp && /*#__PURE__*/React.createElement("div", {
+                className: 'sb-shift-tag',
+                style: { fontSize: 9.5, color: MT, marginTop: 2 }
+              }, (SHIFTS[r.shift || 'regular_day'] || {}).label || r.shift),
               rowShares(r) && /*#__PURE__*/React.createElement("div", {
                 style: { fontSize: 9.5, color: INFO, marginTop: 2 },
                 title: "One consolidated row costed once and split between the tasks that need it. Editing it here changes it everywhere."
@@ -9713,10 +9718,35 @@ tab === 'sowbreak' && (() => {
       unassigned.map(({ t, rows }) => /*#__PURE__*/React.createElement("div", { key: t.key, style: { marginBottom: 8 } },
         /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: MT, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 3 } }, t.label + " (" + rows.length + ")"),
         /*#__PURE__*/React.createElement("table", { style: { width: '100%', borderCollapse: 'collapse', fontSize: 11 } },
-          /*#__PURE__*/React.createElement("tbody", null, rows.map(r =>
+          /*#__PURE__*/React.createElement("tbody", null, (t.key === 'mp'
+            /* Manpower by shift: a day line-up and a night line-up list the
+               same roles, and without the shift they read as duplicates. A
+               whole shift can be ticked, or filed to a task, at once. */
+            ? Object.keys(SHIFTS).concat([...new Set(rows.map(r => r.shift || 'regular_day'))].filter(k => !SHIFTS[k]))
+                .map(sk => ({ sk, g: rows.filter(r => (r.shift || 'regular_day') === sk) })).filter(x => x.g.length)
+                .reduce((out, { sk, g }) => {
+                  const ds = g.map(r => ({ kind: 'res', key: 'mp', id: r.id }));
+                  const allOn = ds.every(d => sbSel[selKey(d.kind, d.key, d.id)]);
+                  out.push(/*#__PURE__*/React.createElement("tr", { key: 'sh_' + sk, className: 'sb-shift-group' },
+                    /*#__PURE__*/React.createElement("td", { style: { ...TDS, textAlign: 'center', background: SURF } },
+                      /*#__PURE__*/React.createElement("input", { type: 'checkbox', checked: allOn, title: 'Tick every ' + ((SHIFTS[sk] || {}).label || sk) + ' row',
+                        onChange: e => setSbSel(p => { const n = { ...p }; ds.forEach(d => { const k = selKey(d.kind, d.key, d.id); if (e.target.checked) n[k] = d; else delete n[k]; }); return n; }) })),
+                    /*#__PURE__*/React.createElement("td", { colSpan: 3, style: { ...TDS, background: SURF, fontWeight: 700, fontSize: 10.5, color: INFO } },
+                      ((SHIFTS[sk] || {}).label || sk) + ' — ' + g.length + ' row' + (g.length === 1 ? '' : 's') + ', ' + g.reduce((a, r) => a + N(r.pax), 0) + ' pax'),
+                    /*#__PURE__*/React.createElement("td", { style: { ...TDS, background: SURF } },
+                      /*#__PURE__*/React.createElement("select", {
+                        style: { ...INP, width: '100%', fontSize: 11, padding: '2px 6px' }, value: '',
+                        onChange: e => { const v = e.target.value; if (!v) return; const ids = new Set(g.map(r => r.id));
+                          setMp(p => p.map(x => ids.has(x.id) ? { ...x, taskId: v } : x));
+                          setSbSel(p => { const n = { ...p }; ds.forEach(d => delete n[selKey(d.kind, d.key, d.id)]); return n; }); }
+                      }, /*#__PURE__*/React.createElement("option", { value: '' }, "— assign whole shift to —"), taskOptions))));
+                  g.forEach(r => out.push(unRow({ kind: 'res', key: t.key, id: r.id }, r[t.nameKey], N(r[t.qtyKey]), 'PAX/S', v => updRow(t.set, r.id, 'taskId', v))));
+                  return out;
+                }, [])
+            : rows.map(r =>
             unRow({ kind: 'res', key: t.key, id: r.id }, r[t.nameKey], N(r[t.qtyKey]), t.key === 'mp' ? 'PAX/S' : r.uom,
               v => updRow(t.set, r.id, 'taskId', v))
-          ))
+          )))
         )
       )),
 

@@ -117,6 +117,22 @@ function apvStripSigs(approvers, sigs) {
   return out;
 }
 
+/* The signatures a CE may show. While a routing is live, a routed line's
+   signature stands only for as long as that line is signed in the current
+   approval: a revision, or a fresh submission, starts with none signed, and
+   the stamped image left over from the round before used to draw on anyway,
+   so a signatory saw their own signature on a CE that was still waiting for
+   it. Lines outside the routing, signed by hand, are untouched. */
+function apvVisibleSigs(approvers, apv, sigs) {
+  const st = (apv && apv.state) || 'none';
+  if (st !== 'pending' && st !== 'approved') return {...(sigs || {})};
+  const signed = (apv && apv.lines) || {};
+  const routed = new Set(apvRoute(approvers).map(l => String(l.id)));
+  const out = {};
+  Object.keys(sigs || {}).forEach(k => { if (!routed.has(String(k)) || signed[k]) out[k] = sigs[k]; });
+  return out;
+}
+
 /* Everything a signatory is putting their name to, not only the totals: the
    header, scope, notes and every priced line. Built from normalised fields
    and sorted, so the same CE gives the same answer whether it came from the

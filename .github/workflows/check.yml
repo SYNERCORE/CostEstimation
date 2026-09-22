@@ -180,6 +180,8 @@ jobs:
         run: node tools/test-apv-signed.js
       - name: Printed CE file name and signature date
         run: node tools/test-print-name.js
+      - name: Only signatures the approval stands on
+        run: node tools/test-visible-sigs.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents
@@ -274,6 +276,8 @@ jobs:
         run: node tools/test-apv-signed.js
       - name: Printed CE file name and signature date
         run: node tools/test-print-name.js
+      - name: Only signatures the approval stands on
+        run: node tools/test-visible-sigs.js
       - name: Detailed Excel export mirrors the printed CE
         run: node tools/test-xlsx-export.js src/App.js
       - name: Every host the app calls is allowed by the CSP

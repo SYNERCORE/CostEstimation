@@ -2773,6 +2773,9 @@ function App({
      approval was written before that and still says pending. */
   const _apvMon = (() => { try { const id = (history.find(h => ((h.info && h.info.ceNum) || h.ceNum) === info.ceNum) || {}).id; return id != null && (monData[id] || {}).apv; } catch (_e) { return null; } })();
   const apvState = (_apvMon && _apvMon.state === 'superseded') ? 'superseded' : ((info.approval && info.approval.state) || 'none');
+  /* The signatures this CE may show: a routed line's stamped image only
+     while that line is signed in the approval on the CE right now. */
+  const visSigs = useMemo(() => apvVisibleSigs(approvers, info.approval, signatures), [approvers, info.approval, signatures]);
   const apvLocked = apvState === 'pending' || apvState === 'approved';
   const _apvMe = () => ({ by: currentUser.username, byName: currentUser.name || currentUser.username, at: new Date().toISOString() });
   /* Store an approval change. Save refuses a CE number that is already saved
@@ -7912,8 +7915,10 @@ function App({
     const SIG_PER_ROW = 4;
     const sigRows = [];
     for (let i = 0; i < approvers.length; i += SIG_PER_ROW) sigRows.push(approvers.slice(i, i + SIG_PER_ROW));
+    /* Only the signatures this approval actually stands on -- see apvVisibleSigs. */
+    const sigShow = apvVisibleSigs(approvers, info.approval, signatures);
     const sigCell = (a, i) => {
-      const sigImg = signatures[a.id || i] ? `<img src="${signatures[a.id || i]}" style="height:52px;max-width:100%;display:block;margin:0 auto 2px"/>` : '';
+      const sigImg = sigShow[a.id || i] ? `<img src="${sigShow[a.id || i]}" style="height:52px;max-width:100%;display:block;margin:0 auto 2px"/>` : '';
       const line = a.id && info.approval && (info.approval.lines || {})[a.id];
       return `<td style="border:1px solid #000;padding:4px 8px;vertical-align:bottom"><div style="min-height:50px;text-align:center">${sigImg}</div><div style="border-top:1px solid #000;padding-top:3px;text-align:center"><b style="font-size:8pt">${esc((line || {}).byName || a.name || '')}</b><br><span style="font-size:7.5pt">${esc(a.title || a.role || '')}</span></div></td>`;
     };
@@ -13583,12 +13588,12 @@ tab === 'dashboard' && (() => {
       l ? '✔ ' + l.byName + ' · ' + apvWhen(l.at) : w ? '⏳ Waiting' : apvState === 'pending' ? 'Step ' + (a.step || i + 1) : '');
   })(),
   /* Feature 11: signature thumbnail + sign button */
-  signatures[a.id||i] && /*#__PURE__*/React.createElement("div",{style:{margin:'4px 0'}},
-    /*#__PURE__*/React.createElement("img",{src:signatures[a.id||i],style:{width:'100%',height:36,objectFit:'contain',background:'#fff',borderRadius:3,border:'1px solid '+BDR}})),
+  visSigs[a.id||i] && /*#__PURE__*/React.createElement("div",{style:{margin:'4px 0'}},
+    /*#__PURE__*/React.createElement("img",{src:visSigs[a.id||i],style:{width:'100%',height:36,objectFit:'contain',background:'#fff',borderRadius:3,border:'1px solid '+BDR}})),
   !a.user && /*#__PURE__*/React.createElement("button",{
-    style:{...btn(signatures[a.id||i]?'ok':'def',true),fontSize:9,padding:'2px 6px',width:'100%',marginTop:4},
+    style:{...btn(visSigs[a.id||i]?'ok':'def',true),fontSize:9,padding:'2px 6px',width:'100%',marginTop:4},
     onClick:()=>setSigModal({...a,id:a.id||i})
-  }, signatures[a.id||i]?'✅ Re-sign':'✍ Sign'),
+  }, visSigs[a.id||i]?'✅ Re-sign':'✍ Sign'),
   approvers.length > 1 && !(apvLocked && a.user) && /*#__PURE__*/React.createElement("button", {
     onClick: () => setApprovers(p => p.filter((_, j) => j !== i)),
     style: {

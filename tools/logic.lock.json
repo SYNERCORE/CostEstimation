@@ -21,6 +21,6 @@
   "src/App.js:rowCost": "6d8f1f59acaf577f",
   "src/App.js:resDays": "21ab8d19b1b29084",
   "src/config.js:SHIFTS": "9c3561660876ca9b",
-  "src/config.js:CE_CLOSED_STATUSES": "79c90d521d28eedc",
-  "src/config.js:DEFAULT_STATUS_OPTIONS": "250a3ad6c627f0e2"
+  "src/config.js:CE_CLOSED_STATUSES": "9a1b52bcbd1bbb02",
+  "src/config.js:DEFAULT_STATUS_OPTIONS": "f3f09668f326ff4e"
 }

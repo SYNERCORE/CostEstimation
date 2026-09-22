@@ -4559,7 +4559,8 @@ function App({
     'Approved': 'var(--status-success)',
     'Cancelled': 'var(--status-danger)',
     'On Hold': '#F97316',
-    'Submitted': '#06B6D4'
+    'Submitted': '#06B6D4',
+    'Awarded': '#16a34a'
   };
   const getStatusColor = s => STATUS_COLOR_MAP[s] || ACC;
   const [newStatusInput, setNewStatusInput] = useState('');
@@ -4625,7 +4626,7 @@ function App({
   const openRequest = () => {
     const today = new Date().toISOString().slice(0, 10);
     setReqForm({ ceNum: nextCeNum(history, null, ceNums), ceType: 'onsite', client: '', description: '',
-      projType: 'Mechanical', dateRecv: today, deadline: '', assignee: '', remarks: '' });
+      projType: 'Mechanical', dateRecv: today, deadline: '', assignee: '', remarks: '', rceNo: '' });
     dbGetUsers().then(u => setReqUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(() => {});
   };
   const submitRequest = async () => {
@@ -4658,7 +4659,7 @@ function App({
       }
       const fields = { status: 'Pending', ceeName: f.assignee.trim(), customer: f.client.trim(),
         jobTitle: String(f.description || '').trim(), designation: f.projType || '', dateRecv: f.dateRecv || '',
-        deadline: f.deadline || '', receivedBy: currentUser.name || currentUser.username || '', remarks: String(f.remarks || '').trim() };
+        deadline: f.deadline || '', receivedBy: currentUser.name || currentUser.username || '', remarks: String(f.remarks || '').trim(), rceNo: String(f.rceNo || '').trim() };
       const mres = await dbSaveMonEntry(saved.id, ceNum, fields, Object.keys(fields));
       setMonData(p => ({ ...p, [saved.id]: (mres && mres.fields) || fields }));
       setCeNums(p => p.indexOf(ceNum) < 0 ? [...p, ceNum] : p);
@@ -4883,7 +4884,7 @@ function App({
       if (monMine && !meNames().includes(String(m.ceeName || m.preparedBy || e.savedBy || '').trim().toUpperCase())) return false;
       if (!monSearch) return true;
       const q = monSearch.toLowerCase();
-      return (e.info?.ceNum || '').toLowerCase().includes(q) || (e.info?.client || '').toLowerCase().includes(q) || (e.info?.description || '').toLowerCase().includes(q) || (m.customer || '').toLowerCase().includes(q) || (m.receivedBy || '').toLowerCase().includes(q) || (m.remarks || '').toLowerCase().includes(q);
+      return (e.info?.ceNum || '').toLowerCase().includes(q) || (e.info?.client || '').toLowerCase().includes(q) || (e.info?.description || '').toLowerCase().includes(q) || (m.customer || '').toLowerCase().includes(q) || (m.receivedBy || '').toLowerCase().includes(q) || (m.rceNo || '').toLowerCase().includes(q) || (m.remarks || '').toLowerCase().includes(q);
     });
     /* What each column actually SHOWS, so sorting agrees with the eye.
 
@@ -4922,6 +4923,7 @@ function App({
         case 'dateSubmitted':return m.dateSubmitted || '';
         case 'status':       return m.status || '';
         case 'receivedBy':   return m.receivedBy || '';
+        case 'rceNo':        return m.rceNo || '';
         case 'remarks':      return m.remarks || '';
         default:             return e.savedAt || '';   /* Date Recv. */
       }
@@ -5299,7 +5301,9 @@ function App({
       const col = n => headers.findIndex(h => h.toLowerCase().replace(/\s+/g,'').includes(n.toLowerCase().replace(/\s+/g,'')));
 
       // Column indices — robust to files with or without CE Date
-      const iCeNum=col('CENo'), iCeName=col('CEName'), iComp=col('CompanyDesignation'),
+      const _hn = h => h.toLowerCase().replace(/[\s.]+/g,'');
+      const iCeNum=headers.findIndex(h => _hn(h)==='ceno') >= 0 ? headers.findIndex(h => _hn(h)==='ceno') : col('CENo'),
+            iRce=headers.findIndex(h => ['rceno','rce','rcenumber'].includes(_hn(h))), iCeName=col('CEName'), iComp=col('CompanyDesignation'),
             iDisc=headers.findIndex(h => { const c=h.toLowerCase().replace(/\s+/g,''); return c==='designation'||c==='discipline'; }), iClient=col('Customer'),
             iTitle=col('JobTitle'), iRecvDate=col('DateRecieved'), iDeadline=col('Deadline'),
             iSubmDate=col('DateSubmitted');
@@ -5321,6 +5325,7 @@ function App({
         'for approval':'For Approval',
         'waiting':'Waiting in...', 'waiting in':'Waiting in...',
         'on hold':'On Hold', 'onhold':'On Hold',
+        'awarded':'Awarded', 'won':'Awarded',
         'cancelled':'Cancelled',
         'sourcing':'Sourcing',
         'no quote':'No Quote',
@@ -5372,6 +5377,7 @@ function App({
           dateSubmitted: parseDate(r[iSubmDate]),
           dateReceived: parseDate(r[iRecvDate]),
           receivedBy: String(r[iRecvBy]||'').trim(),
+          ...(iRce >= 0 && String(r[iRce]||'').trim() ? {rceNo: String(r[iRce]).trim()} : {}),
           remarks: String(r[iRemarks]||'').trim(),
           preparedBy: estimatorName,
           ceeName: estimatorName,
@@ -5635,10 +5641,10 @@ function App({
     style: btn('def', true),
     onClick: () => {
       const ws = XLSX.utils.aoa_to_sheet([
-        ['CE No.','CE Name','Company Designation','Discipline','Customer','Job Title','Date Recieved','Deadline','Date Submitted','Status','Recieved By','Remarks'],
-        ['CE-2826-0001','Juan Dela Cruz','SHIC','Mechanical','Sample Client Inc.','PUMP OVERHAUL AND REPAIR','2026-01-15','2026-01-22','2026-01-21','Submitted','Kenneth Mendoza',''],
+        ['CE No.','CE Name','Company Designation','Discipline','Customer','Job Title','Date Recieved','Deadline','Date Submitted','Status','Recieved By','Remarks','RCE No.'],
+        ['CE-2826-0001','Juan Dela Cruz','SHIC','Mechanical','Sample Client Inc.','PUMP OVERHAUL AND REPAIR','2026-01-15','2026-01-22','2026-01-21','Submitted','Kenneth Mendoza','','RCE-2026-0001'],
       ]);
-      ws['!cols'] = [120,120,120,100,140,200,110,110,110,90,120,140].map(w=>({wch:Math.round(w/7)}));
+      ws['!cols'] = [120,120,120,100,140,200,110,110,110,90,120,140,110].map(w=>({wch:Math.round(w/7)}));
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'CE Monitoring');
       XLSX.writeFile(wb, 'SHIC_CE_Import_Template.xlsx');
@@ -5790,7 +5796,7 @@ function App({
       top: 0,
       zIndex: 2
     }
-  }, /*#__PURE__*/React.createElement("th", {style:{...THS,width:28,padding:'6px 4px',fontSize:10,textAlign:'center'}, title:"Select to compare (max 2)"}, "⚖"), [['ceeName', 'Estimator', 80], ['companyDesig', 'Co.', 60], ['ceNum', 'CE No.', 120], ['designation', 'Discipline', 90], ['customer', 'Customer', 100], ['jobTitle', 'Job Title', 180], ['grand', 'Total (₱)', 110], ['dateRecv', 'Date Recv.', 95], ['deadline', 'Deadline', 95], ['deadlineDays', 'Days Left', 65], ['dateSubmitted', 'Date Submitted', 105], ['status', 'Status', 120], ['receivedBy', 'Received By', 100], ['remarks', 'Remarks', 140]].map(([col, label, w]) => /*#__PURE__*/React.createElement("th", {
+  }, /*#__PURE__*/React.createElement("th", {style:{...THS,width:28,padding:'6px 4px',fontSize:10,textAlign:'center'}, title:"Select to compare (max 2)"}, "⚖"), [['ceeName', 'Estimator', 80], ['companyDesig', 'Co.', 60], ['ceNum', 'CE No.', 120], ['rceNo', 'RCE No.', 100], ['designation', 'Discipline', 90], ['customer', 'Customer', 100], ['jobTitle', 'Job Title', 180], ['grand', 'Total (₱)', 110], ['dateRecv', 'Date Recv.', 95], ['deadline', 'Deadline', 95], ['deadlineDays', 'Days Left', 65], ['dateSubmitted', 'Date Submitted', 105], ['status', 'Status', 120], ['receivedBy', 'Received By', 100], ['remarks', 'Remarks', 140]].map(([col, label, w]) => /*#__PURE__*/React.createElement("th", {
     key: col,
     onClick: () => ['ceNum', 'deadline', 'status', 'grand'].includes(col) && toggleSort(col),
     style: {
@@ -5973,6 +5979,15 @@ function App({
       style: {marginLeft: 5, fontSize: 8, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 8,
               background: alpha(ERR, '22'), color: ERR, border: '1px solid ' + alpha(ERR, '44')}
     }, '⚠ DUPLICATE No.')), /*#__PURE__*/React.createElement("td", {
+      className: 'mon-rce',
+      style: { ...TDS, padding: '4px 6px' }
+    }, editingRow === e.id ? /*#__PURE__*/React.createElement("input", {
+      style: { ...INP, border: 'none', background: 'transparent', padding: '2px 4px', fontSize: 11, width: '100%', ...MONO },
+      key: e.id + 'rceNo',
+      defaultValue: m.rceNo || '',
+      onBlur: ev => { const v = ev.target.value.trim(); if (v !== String(m.rceNo || '')) updateMon(e.id, 'rceNo', v); },
+      placeholder: "RCE No. from Sales"
+    }) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11,...MONO}}, m.rceNo || '—')), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
         padding: '4px 6px'
@@ -9901,6 +9916,7 @@ reqForm && (() => {
       L("Assigned to *", /*#__PURE__*/React.createElement(React.Fragment, null,
         inp('assignee', {list:'req-users', placeholder:'Estimator'}),
         /*#__PURE__*/React.createElement("datalist", {id:'req-users'}, reqUsers.map(u => /*#__PURE__*/React.createElement("option", {key:u.username, value:u.name || u.username}))))),
+      L("RCE No.", inp('rceNo', {placeholder:'From Sales', style:{...INP,...MONO}})),
       L("Customer *", inp('client', {placeholder:'e.g. SLTEC'})),
       L("CE Type", /*#__PURE__*/React.createElement("select", {style:INP, value:reqForm.ceType, onChange:e=>set('ceType', e.target.value)},
         Object.keys(CE_CFG).map(k => /*#__PURE__*/React.createElement("option", {key:k, value:k}, ceTypeLabel(k))))),
@@ -10176,7 +10192,7 @@ tab === 'mywork' && (() => {
   const timed = mine.map(x => ceDeadline(x.m.deadline, x.m.dateSubmitted, x.m.status)).filter(d => d.done && d.days != null);
   const onTime = timed.length ? Math.round(100 * timed.filter(d => !d.late).length / timed.length) : null;
   const yr = mine.filter(x => new Date(x.e.savedAt || 0).getFullYear() === now.getFullYear());
-  const won = yr.filter(x => x.m.status === 'Approved').length, lost = yr.filter(x => ['No Quote', 'Cancelled'].includes(x.m.status)).length;
+  const won = yr.filter(x => x.m.status === 'Awarded').length, lost = yr.filter(x => ['No Quote', 'Cancelled'].includes(x.m.status)).length;
   const overdue = open.filter(x => x.dl.late).length, dueSoon = open.filter(x => !x.dl.late && x.dl.days != null && x.dl.days <= 3).length;
   const peso = v => '₱' + Math.round(N(v)).toLocaleString();
   const kpi = (label, val, sub, col) => /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:'12px 14px',minWidth:0}},

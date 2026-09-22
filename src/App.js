@@ -7915,7 +7915,7 @@ function App({
     const sigCell = (a, i) => {
       const sigImg = signatures[a.id || i] ? `<img src="${signatures[a.id || i]}" style="height:52px;max-width:100%;display:block;margin:0 auto 2px"/>` : '';
       const line = a.id && info.approval && (info.approval.lines || {})[a.id];
-      return `<td style="border:1px solid #000;padding:4px 8px;vertical-align:bottom"><div style="min-height:50px;text-align:center">${sigImg}</div><div style="border-top:1px solid #000;padding-top:3px;text-align:center"><b style="font-size:8pt">${esc((line || {}).byName || a.name || '')}</b><br><span style="font-size:7.5pt">${esc(a.title || a.role || '')}</span>${line ? '<br><span style="font-size:6.5pt;color:#1E7B34">e-signed ' + esc(apvWhen(line.at)) + '</span>' : ''}</div></td>`;
+      return `<td style="border:1px solid #000;padding:4px 8px;vertical-align:bottom"><div style="min-height:50px;text-align:center">${sigImg}</div><div style="border-top:1px solid #000;padding-top:3px;text-align:center"><b style="font-size:8pt">${esc((line || {}).byName || a.name || '')}</b><br><span style="font-size:7.5pt">${esc(a.title || a.role || '')}</span></div></td>`;
     };
     const sigBlock = sigRows.map((row, ri) => {
       /* A short last row keeps the cell width of a full one, so four
@@ -8086,7 +8086,13 @@ function App({
       }
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
     })();`;
-    const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>CE ${esc(info.ceNum||'')}<\/title><style>${pageStyle}<\/style><\/head><body>
+    /* Save as PDF offers the document title as the file name, so name it the
+       way the file is filed: the CE number and what the job is. Anything a
+       file name cannot hold is dropped. */
+    const _jobTitle = String((openCeId != null ? (monData[openCeId] || {}).jobTitle : '') || info.description || '').trim();
+    const printName = [String(info.ceNum || '').trim(), _jobTitle].filter(Boolean).join(' - ')
+      .replace(/[^\w .,()+&#-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Cost Estimate';
+    const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(printName)}<\/title><style>${pageStyle}<\/style><\/head><body>
       <div id="doc" style="display:none">
       <div class="page">
         ${docHdr('COST ESTIMATE SUMMARY')}

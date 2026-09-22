@@ -57,7 +57,20 @@ function apvCanSign(approvers, apv, username) {
 function apvMirror(approvers, apv) {
   const s = apvStatus(approvers, apv);
   const st = (apv && apv.state) || 'none';
-  return { state: st, waiting: st === 'pending' ? s.waiting.map(l => l.user) : [], signed: s.signedN, total: s.total, at: new Date().toISOString() };
+  /* Who has already signed, by username. The waiting list alone was not
+     enough: a mirror left behind by a failed or older write still named a
+     signatory who had signed, so the CE stayed in their For my approval. */
+  const signedBy = Object.values((apv && apv.lines) || {}).map(l => (l && l.by) || '').filter(Boolean);
+  return { state: st, waiting: st === 'pending' ? s.waiting.map(l => l.user) : [], signedBy: signedBy,
+    signed: s.signedN, total: s.total, at: new Date().toISOString() };
+}
+/* Whether the CE on this Monitoring row is waiting on this person's signature.
+   One answer for My Work, the Monitoring filter and the row badge alike. */
+function apvMonWaitsOn(m, username) {
+  const a = (m && m.apv) || null;
+  if (!a || a.state !== 'pending' || !username) return false;
+  if ((a.signedBy || []).includes(username)) return false;
+  return (a.waiting || []).includes(username);
 }
 
 /* Burn who signed and when into the signature image itself: a faint diagonal

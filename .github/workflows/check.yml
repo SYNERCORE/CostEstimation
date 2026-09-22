@@ -176,6 +176,8 @@ jobs:
         run: node tools/test-awarded-rce.js
       - name: RCE No. printed, quantity unit, SIL and ECC
         run: node tools/test-rce-uom-sil.js
+      - name: Signed CEs leave For my approval
+        run: node tools/test-apv-signed.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents
@@ -266,6 +268,8 @@ jobs:
         run: node tools/test-awarded-rce.js
       - name: RCE No. printed, quantity unit, SIL and ECC
         run: node tools/test-rce-uom-sil.js
+      - name: Signed CEs leave For my approval
+        run: node tools/test-apv-signed.js
       - name: Detailed Excel export mirrors the printed CE
         run: node tools/test-xlsx-export.js src/App.js
       - name: Every host the app calls is allowed by the CSP

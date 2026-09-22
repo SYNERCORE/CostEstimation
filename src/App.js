@@ -1128,8 +1128,7 @@ function App({
     /* And any CE routed to them for signature. Without this an approver who is
        not an admin was told a CE waited on them but never received the CE
        itself, so there was nothing to open. */
-    const a = m.apv;
-    if (a && a.state === 'pending' && (a.waiting || []).includes(currentUser?.username)) return true;
+    if (apvMonWaitsOn(m, currentUser?.username)) return true;
     return me.includes(String(m.ceeName || '').trim().toUpperCase()) || me.includes(String(m.receivedBy || '').trim().toUpperCase());
   };
   const loadHist = async () => {
@@ -4792,13 +4791,42 @@ function App({
       .map(g => g.head).filter(e => !e._draft);
     const rows = heads.map(e => ({e: e, m: monData[e.id] || {}}));
     const apv = x => x.m.apv || {};
-    const sign = rows.filter(x => apv(x).state === 'pending' && (apv(x).waiting || []).includes(me));
+    const sign = rows.filter(x => apvMonWaitsOn(x.m, me));
     const returned = rows.filter(x => apv(x).state === 'returned' && apv(x).submittedBy === me);
     /* Only the latest revision of a CE is waiting on anyone. An approval left
        pending on an older revision -- replaced by ↻ Revise, or a CE since
        deleted -- is stale: it showed as "CE #2817" with nothing to sign. */
     return {sign: sign, returned: returned, total: sign.length + returned.length};
   }, [monRows, monData, currentUser]);
+  /* The row summary can fall behind the CE itself -- a signature saved while
+     SharePoint was unreachable, or an older app version that wrote no
+     signedBy. Each CE said to be waiting on this person is checked against
+     its own approval once per session, and the summary put right if it is
+     wrong, so nothing sits in For my approval after it has been signed. */
+  const _apvSyncRef = React.useRef(new Set());
+  useEffect(() => {
+    const me = currentUser && currentUser.username;
+    if (!me || !myTodo.sign.length) return;
+    let stop = false;
+    (async () => {
+      for (const x of myTodo.sign) {
+        const key = String(x.e.id);
+        if (stop || typeof x.e.id !== 'number' || _apvSyncRef.current.has(key)) continue;
+        _apvSyncRef.current.add(key);
+        try {
+          const full = await dbLoadCE(x.e.id);
+          const real = full && apvMirror(full.approvers, (full.info || {}).approval);
+          if (!real) continue;
+          const old = x.m.apv || {};
+          if (real.state !== old.state || (real.waiting || []).join('|') !== (old.waiting || []).join('|') ||
+              (real.signedBy || []).join('|') !== (old.signedBy || []).join('|')) {
+            updateMon(x.e.id, 'apv', {...old, ...real});
+          }
+        } catch (_e) { /* offline: the summary is left as it is */ }
+      }
+    })();
+    return () => { stop = true; };
+  }, [myTodo.sign, currentUser]);
   /* A revision replaced by a newer one is no longer waiting on anyone. Its
      approval is closed as superseded -- in Monitoring, where every user and
      every filter reads it -- rather than left pending for ever. Runs whenever
@@ -4886,7 +4914,7 @@ function App({
          discipline is a real thing to go looking for. */
       if (monDiscFilter !== 'all' && monDisc(e, m).trim().toUpperCase() !== monDiscFilter) return false;
       if (monCustFilter !== 'all' && monCust(e, m).trim().toUpperCase() !== monCustFilter) return false;
-      if (monApvMine && !(((m.apv || {}).state === 'pending') && ((m.apv || {}).waiting || []).includes(currentUser.username))) return false;
+      if (monApvMine && !apvMonWaitsOn(m, currentUser.username)) return false;
       if (monMine && !meNames().includes(String(m.ceeName || m.preparedBy || e.savedBy || '').trim().toUpperCase())) return false;
       if (!monSearch) return true;
       const q = monSearch.toLowerCase();
@@ -5610,7 +5638,7 @@ function App({
     style: btn(monApvMine ? 'acc' : 'def', true),
     title: "Only the CEs waiting on your signature",
     onClick: () => { setMonApvMine(v => !v); setMonPage(0); }
-  }, "✍ Awaiting my signature (" + Object.values(monData || {}).filter(m => m && m.apv && m.apv.state === 'pending' && (m.apv.waiting || []).includes(currentUser.username)).length + ")"),
+  }, "✍ Awaiting my signature (" + Object.values(monData || {}).filter(m => apvMonWaitsOn(m, currentUser.username)).length + ")"),
   (monSearch || monStatusFilter.size > 0 || monTypeFilter !== 'all' || monDiscFilter !== 'all' || monCustFilter !== 'all') && /*#__PURE__*/React.createElement("button", {
     style: {...btn('danger', true), fontSize:10},
     title: "Clear all filters",
@@ -6134,7 +6162,7 @@ function App({
       m.statusChangedAt && /*#__PURE__*/React.createElement("div", {style:{fontSize:9,color:MT,marginTop:2,lineHeight:1.3},title:'Changed by '+(m.statusChangedBy||'unknown')}, new Date(m.statusChangedAt).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}), m.statusChangedBy?' · '+m.statusChangedBy.split(' ')[0]:''),
       m.apv && m.apv.state === 'superseded' && /*#__PURE__*/React.createElement("div", {style:{fontSize:9,marginTop:2,fontWeight:700,color:MT}, title:'This revision was replaced; its approval was closed.'}, '⊘ Superseded' + (m.apv.supersededBy ? ' by ' + m.apv.supersededBy : '')),
       m.apv && ['pending','approved','returned'].includes(m.apv.state) && (() => {
-        const turn = m.apv.state === 'pending' && (m.apv.waiting || []).includes(currentUser.username);
+        const turn = apvMonWaitsOn(m, currentUser.username);
         return /*#__PURE__*/React.createElement("div", {style:{fontSize:9,marginTop:2,fontWeight:700,color:m.apv.state==='approved'?'#16a34a':m.apv.state==='returned'?ERR:'var(--accent-cyan)',cursor:turn?'pointer':'default'},
           title: turn ? 'Open it to approve and sign' : '', onClick: turn ? () => setViewCE({id:e.id,ceNum:e.info?.ceNum||e.ceNum||''}) : undefined},
           m.apv.state === 'approved' ? '✅ Approved' : m.apv.state === 'returned' ? '↩ Returned' : '✍ ' + m.apv.signed + '/' + m.apv.total + ' signed' + (turn ? ' · YOUR TURN' : ''));
@@ -10051,7 +10079,7 @@ viewCE && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset
       /*#__PURE__*/React.createElement("b", null, "👁 " + (viewCE.ceNum || 'CE')),
       /*#__PURE__*/React.createElement("span", {style:{fontSize:11,color:MT}}, viewCE.draft ? "Read-only view of an unsaved DRAFT — figures may still change." : "Read-only view. Takes a few seconds to draw."),
       /*#__PURE__*/React.createElement("span", {style:{marginLeft:'auto'}}),
-      !viewCE.draftKey && ((monData[viewCE.id]||{}).apv||{}).state==='pending' && (((monData[viewCE.id]||{}).apv||{}).waiting||[]).includes(currentUser.username) && /*#__PURE__*/React.createElement("button", {style:btn('ok',true),title:"Sign the CE shown here",onClick:()=>apvStartSign(viewCE.id)}, "✍ Approve & Sign"),
+      !viewCE.draftKey && apvMonWaitsOn(monData[viewCE.id], currentUser.username) && /*#__PURE__*/React.createElement("button", {style:btn('ok',true),title:"Sign the CE shown here",onClick:()=>apvStartSign(viewCE.id)}, "✍ Approve & Sign"),
       !viewCE.draftKey && ((monData[viewCE.id]||{}).apv||{}).state==='pending' && ((((monData[viewCE.id]||{}).apv||{}).waiting||[]).includes(currentUser.username) || isAdmin) && /*#__PURE__*/React.createElement("button", {style:btn('def',true),title:"Send it back to the estimator with a comment",onClick:()=>apvStartReturn(viewCE.id)}, "↩ Return"),
       /*#__PURE__*/React.createElement("button", {style:btn('def',true),title:"Print or save this CE as PDF",onClick:()=>{try{document.getElementById('shic-view-ce').contentWindow.print();}catch(ex){showToast('Could not print: '+ex.message,true);}}}, "🖨 Print"),
       /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setViewCE(null)}, "✕ Close")),

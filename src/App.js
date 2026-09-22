@@ -2046,6 +2046,11 @@ function App({
     return h ? h.id : null;
   }, [history, info.ceNum]);
   const openMonStatus = openCeId != null ? ((monData[openCeId] || {}).status || '') : '';
+  /* Sales' Request for Cost Estimate number. Typed on Project Info it rides
+     with the CE; a CE logged through New Request has it in Monitoring. */
+  const rceNo = String(info.rceNo || (openCeId != null ? (monData[openCeId] || {}).rceNo : '') || '').trim();
+  /* The unit the Quantity is counted in -- a CE for 3 pumps is 3 PCS, not 3 LOT. */
+  const qtyUom = String(info.qtyUom || 'LOT').trim().toUpperCase() || 'LOT';
   /* The document state, as printed on the CE.
 
      Once a CE is tracked in Monitoring, that pipeline status is the source of
@@ -3031,7 +3036,8 @@ function App({
      ['ATTENTION:', info.attention],
      ['END USER:', info.endUser],
      ['MATERIAL:', info.material],
-     ['QUANTITY:', info.qty],
+     ['RCE No.:', rceNo],
+     ['QUANTITY:', (info.qty || 1) + ' ' + qtyUom],
      ['NO. OF DAYS:', info.days],
      ['STATUS:', docStatus]].forEach(([k, v]) => {
       if (v === '' || v === null || v === undefined) return;
@@ -7824,13 +7830,13 @@ function App({
       </td></tr></table>`;
     const docHdr = title => `<table style="border:1px solid #000;margin-bottom:4px;font-size:7.5pt">
       <tr><td colspan="3" style="text-align:center;background:${_br.bar};color:${_br.text};font-weight:bold;font-size:9pt;padding:3px;border:1px solid #000">${title}</td></tr>
-      <tr><td colspan="3" style="border:none;font-size:7.5pt;padding:1px 4px"><div style="display:flex;justify-content:space-between;gap:8px"><span><b>CE TYPE:</b>&nbsp;${esc(ceTypeLabel(ceType).toUpperCase())}</span><span><b>CE No.:</b>&nbsp;${esc(info.ceNum || '')}&nbsp;&nbsp;<b>DATE:</b>&nbsp;${esc(info.date||'')}</span></div></td></tr>
+      <tr><td colspan="3" style="border:none;font-size:7.5pt;padding:1px 4px"><div style="display:flex;justify-content:space-between;gap:8px"><span><b>CE TYPE:</b>&nbsp;${esc(ceTypeLabel(ceType).toUpperCase())}</span><span>${rceNo ? '<b>RCE No.:</b>&nbsp;' + esc(rceNo) + '&nbsp;&nbsp;' : ''}<b>CE No.:</b>&nbsp;${esc(info.ceNum || '')}&nbsp;&nbsp;<b>DATE:</b>&nbsp;${esc(info.date||'')}</span></div></td></tr>
     </table>`;
 
     const infoTable = `<table class="bdr" style="margin-bottom:5px;font-size:7.5pt">
       <tr><td class="b" style="width:110px">PROJECT DESCRIPTION:</td><td colspan="3" class="b c">${esc(info.description||'')}</td></tr>
       <tr><td class="b">CLIENT NAME:</td><td>${esc(info.client||'')}</td><td class="b" style="width:90px">CLIENT LOCATION:</td><td>${esc(info.location||'')}</td></tr>
-      <tr><td class="b">ATTENTION:</td><td>${esc(info.attention||'SALES DEPARTMENT')}</td><td class="b">QUANTITY:</td><td>${esc(info.qty||1)} LOT</td></tr>
+      <tr><td class="b">ATTENTION:</td><td>${esc(info.attention||'SALES DEPARTMENT')}</td><td class="b">QUANTITY:</td><td>${esc(info.qty||1)} ${esc(qtyUom)}</td></tr>
       <tr><td class="b">END USER:</td><td>${esc(info.endUser||'C/O SALES')}</td><td class="b">NO. OF DAYS:</td><td>${esc(info.days||'')} DAYS</td></tr>
     </table>`;
 
@@ -7914,10 +7920,10 @@ function App({
     /* Benefits &#8212; the same rows the Manpower tab shows */
     const benPage=benefitRows.length?`<div class="blk">
       <div class="sec">C.7 &nbsp;BENEFITS AND OTHERS</div>
-      <table><tr style="background:#eee"><th class="c">ITEM</th><th>MANPOWER LOADING</th><th class="c">QTY</th><th class="c">UOM</th><th class="c">TOTAL DAYS</th><th class="r">MONTHLY RATE</th><th class="r">13TH PAY</th><th class="r">SSS</th><th class="r">HDMF&amp;PHIC</th><th class="r">SIL&amp;ECC</th>${incOn?'<th class="r">INCENTIVE</th>':''}<th class="r">TOTAL</th></tr>
-      ${benefitRows.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.role||'')}</td><td class="c">${esc(r.pax)}</td><td class="c">pax</td><td class="c">${esc(r.days)}</td><td class="r">${fmt(r.monthlyRate)}</td><td class="r">${fmt(r.thirteenth)}</td><td class="r">${fmt(r.sss)}</td><td class="r">${fmt(r.hdmf)}</td><td class="r">${fmt(r.sil)}</td>${incOn?`<td class="r">${fmt(r.perdiem)}</td>`:''}<td class="r b">${fmt(r.total)}</td></tr>`).join('')}
-      <tr class="tot"><td colspan="2" class="r b">TOTAL MANPOWER:</td><td class="c b">${esc(benefitRows.reduce((t,r)=>t+N(r.pax),0))}</td><td colspan="${incOn?8:7}" class="r b">BENEFITS &amp; OTHERS SUB TOTAL:</td><td class="r b">${fmt(benefitsT)}</td></tr>
-      <tr class="tot"><td colspan="11" class="r b">TOTAL MANPOWER COST (C.1-C.7):</td><td class="r b">${fmt(mpTot)}</td></tr></table></div>` : '';
+      <table><tr style="background:#eee"><th class="c">ITEM</th><th>MANPOWER LOADING</th><th class="c">QTY</th><th class="c">UOM</th><th class="c">TOTAL DAYS</th><th class="r">MONTHLY RATE</th><th class="r">13TH PAY</th><th class="r">SSS</th><th class="r">HDMF&amp;PHIC</th><th class="r">SIL</th><th class="r">ECC</th>${incOn?'<th class="r">INCENTIVE</th>':''}<th class="r">TOTAL</th></tr>
+      ${benefitRows.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.role||'')}</td><td class="c">${esc(r.pax)}</td><td class="c">pax</td><td class="c">${esc(r.days)}</td><td class="r">${fmt(r.monthlyRate)}</td><td class="r">${fmt(r.thirteenth)}</td><td class="r">${fmt(r.sss)}</td><td class="r">${fmt(r.hdmf)}</td><td class="r">${fmt(r.sil-(r.ecc||0))}</td><td class="r">${fmt(r.ecc||0)}</td>${incOn?`<td class="r">${fmt(r.perdiem)}</td>`:''}<td class="r b">${fmt(r.total)}</td></tr>`).join('')}
+      <tr class="tot"><td colspan="2" class="r b">TOTAL MANPOWER:</td><td class="c b">${esc(benefitRows.reduce((t,r)=>t+N(r.pax),0))}</td><td colspan="${incOn?9:8}" class="r b">BENEFITS &amp; OTHERS SUB TOTAL:</td><td class="r b">${fmt(benefitsT)}</td></tr>
+      <tr class="tot"><td colspan="${incOn?12:11}" class="r b">TOTAL MANPOWER COST (C.1-C.7):</td><td class="r b">${fmt(mpTot)}</td></tr></table></div>` : '';
 
     /* Tools &#8212; skip zero rows */
     const toolsActive=tools.filter(r=>r.desc&&(N(r.cost)>0||r.desc.trim()));
@@ -8238,7 +8244,7 @@ function App({
       docHead(a, 'COST ESTIMATE SUMMARY', 7);
       a.row('PROJECT DESCRIPTION:', info.description || '');
       a.row('CLIENT NAME:', info.client || '', '', 'CLIENT LOCATION:', info.location || '');
-      a.row('ATTENTION:', info.attention || 'SALES DEPARTMENT', '', 'QUANTITY:', (info.qty || 1) + ' LOT');
+      a.row('ATTENTION:', info.attention || 'SALES DEPARTMENT', '', 'QUANTITY:', (info.qty || 1) + ' ' + qtyUom);
       a.row('END USER:', info.endUser || 'C/O SALES', '', 'NO. OF DAYS:', (info.days || '') + ' DAYS');
       a.row('DISCIPLINE:', info.projType || '', '', 'STATUS:', docStatus);
       a.blank();
@@ -8329,10 +8335,10 @@ function App({
       if (benefitRows.length) {
         a.title('BENEFITS AND OTHERS', 12);
         const _inc = incOn ? ['INCENTIVE'] : [];
-        a.head('ITEM', 'MANPOWER LOADING', 'QTY', 'UOM', 'TOTAL DAYS', 'MONTHLY RATE', '13TH PAY', 'SSS', 'HDMF & PHIC', 'SIL & ECC', ..._inc, 'TOTAL');
+        a.head('ITEM', 'MANPOWER LOADING', 'QTY', 'UOM', 'TOTAL DAYS', 'MONTHLY RATE', '13TH PAY', 'SSS', 'HDMF & PHIC', 'SIL', 'ECC', ..._inc, 'TOTAL');
         benefitRows.forEach((r, i) => a.row(i + 1, r.role, r.pax, 'pax', r.days, a.money(r.monthlyRate),
-          a.money(r.thirteenth), a.money(r.sss), a.money(r.hdmf), a.money(r.sil), ...(incOn ? [a.money(r.perdiem)] : []), a.money(r.total)));
-        a.total('', 'TOTAL MANPOWER:', benefitRows.reduce((t, r) => t + N(r.pax), 0), '', '', '', '', '', '', ...(incOn ? [''] : []), 'SUB TOTAL:', a.money(benefitsT));
+          a.money(r.thirteenth), a.money(r.sss), a.money(r.hdmf), a.money(r.sil - (r.ecc || 0)), a.money(r.ecc || 0), ...(incOn ? [a.money(r.perdiem)] : []), a.money(r.total)));
+        a.total('', 'TOTAL MANPOWER:', benefitRows.reduce((t, r) => t + N(r.pax), 0), '', '', '', '', '', '', '', ...(incOn ? [''] : []), 'SUB TOTAL:', a.money(benefitsT));
       }
       a.blank();
       a.total('', 'MANPOWER COST TOTAL:', '', '', '', '', '', '', '', a.money(mpTot));
@@ -10518,10 +10524,11 @@ tab === 'dashboard' && (() => {
     }))
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     style: LBL
-  }, "Quantity (for unit price)"), /*#__PURE__*/React.createElement("input", {
+  }, "Quantity (for unit price)"), /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 6 } }, /*#__PURE__*/React.createElement("input", {
     style: {
       ...INP,
-      ...MONO
+      ...MONO,
+      flex: 1, minWidth: 0
     },
     type: "number",
     min: 1,
@@ -10530,6 +10537,23 @@ tab === 'dashboard' && (() => {
       ...p,
       qty: e.target.value
     }))
+  }), /*#__PURE__*/React.createElement("input", {
+    className: 'qty-uom',
+    list: 'qty-uoms',
+    style: { ...INP, width: 84 },
+    title: "The unit the Quantity is counted in. Prints after it: 3 PCS, 1 LOT.",
+    value: info.qtyUom || 'LOT',
+    onChange: e => setInfo(p => ({ ...p, qtyUom: e.target.value.toUpperCase() }))
+  }), /*#__PURE__*/React.createElement("datalist", { id: 'qty-uoms' },
+    ['LOT', 'PCS', 'SET', 'UNIT', 'EA', 'JOB', 'MANDAYS'].map(u => /*#__PURE__*/React.createElement("option", { key: u, value: u }))))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    style: LBL
+  }, "RCE No."), /*#__PURE__*/React.createElement("input", {
+    className: 'info-rce',
+    style: { ...INP, ...MONO },
+    placeholder: "From Sales",
+    value: info.rceNo !== undefined ? info.rceNo : rceNo,
+    onChange: e => setInfo(p => ({ ...p, rceNo: e.target.value })),
+    onBlur: e => { const v = e.target.value.trim(); if (openCeId != null && v !== String((monData[openCeId] || {}).rceNo || '')) updateMon(openCeId, 'rceNo', v); }
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     style: LBL
   }, "No. of Days"), /*#__PURE__*/React.createElement("input", {
@@ -11924,7 +11948,10 @@ tab === 'dashboard' && (() => {
       textAlign: 'right',
       width: 90
     }
-  }, "SIL & ECC"), incOn && /*#__PURE__*/React.createElement("th", {
+  }, "SIL"), /*#__PURE__*/React.createElement("th", {
+    style: { ...THS, textAlign: 'right', width: 70 },
+    title: rr.eccRule === 'month' ? 'ECC: P30 per person per month, shared across the shifts they work' : 'ECC: P30 per person on each shift entry'
+  }, "ECC"), incOn && /*#__PURE__*/React.createElement("th", {
     style: {
       ...THS,
       textAlign: 'right',
@@ -12003,9 +12030,12 @@ tab === 'dashboard' && (() => {
             /* The flat ECC is charged once per shift entry, so a role on three
                day types carries it three times. Said out loud on the line it
                happens, rather than buried in a subtotal. */
-            title: 'SIL P' + ph(x.sil - x.ecc) + ' + ECC P' + ph(x.ecc) +
-                   (rr.eccRule === 'month' ? ' (this shift\u2019s share of P30 per person per month)' : ' (P30 per person, charged once on each shift entry -- the rule this CE was quoted on)')
-          }, "P", ph(x.sil)),
+            title: 'Service incentive leave, 5 days a year'
+          }, "P", ph(x.sil - x.ecc)),
+          /*#__PURE__*/React.createElement("td", {
+            style: {...TDS, textAlign: 'right', ...MONO, color: MT},
+            title: rr.eccRule === 'month' ? 'This shift\u2019s share of P30 per person per month' : 'P30 per person, charged once on each shift entry -- the rule this CE was quoted on'
+          }, "P", ph(x.ecc)),
           incOn && cell(x.perdiem, {color: MT}),
           cell(x.total, {color: MT})
         )) : [];
@@ -12032,7 +12062,7 @@ tab === 'dashboard' && (() => {
             : undefined
         }, g.days, g.daysVary ? ' *' : ''),
         cell(g.monthlyRate, {color: MT}),
-        cell(g.thirteenth), cell(g.sss), cell(g.hdmf), cell(g.sil),
+        cell(g.thirteenth), cell(g.sss), cell(g.hdmf), cell(g.sil - (g.ecc || 0)), cell(g.ecc || 0),
         incOn && /*#__PURE__*/React.createElement("td", {style: {...TDS, textAlign: 'right'}},
           rowIncentive === null
             ? /*#__PURE__*/React.createElement("span", {
@@ -12075,7 +12105,7 @@ tab === 'dashboard' && (() => {
     /* The headcount the rows above carry -- each role's day plus night crew. */
     style: { ...TDS, ...MONO, color: ACC, textAlign: 'center' }
   }, benefitRows.reduce((t, r) => t + N(r.pax), 0), " pax"), /*#__PURE__*/React.createElement("td", {
-    colSpan: incOn ? 8 : 7,
+    colSpan: incOn ? 9 : 8,
     style: {
       ...TDS,
       textAlign: 'right',

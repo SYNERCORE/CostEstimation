@@ -9,6 +9,7 @@ ck('RCE No. is read from the CE, then Monitoring', app.includes("const rceNo = S
 ck('and printed beside the CE No. when there is one', app.includes("${rceNo ? '<b>RCE No.:</b>&nbsp;' + esc(rceNo)"));
 ck('typed on Project Info it reaches Monitoring too', app.includes("className: 'info-rce'") && app.includes("updateMon(openCeId, 'rceNo', v)"));
 ck('Quantity has a unit, LOT unless chosen', app.includes("const qtyUom = String(info.qtyUom || 'LOT')") && app.includes("className: 'qty-uom'"));
+ck('the unit is a dropdown, every choice always offered', app.includes("const QTY_UOMS = ['LOT', 'PCS'") && app.includes("\"Other…\"") && !app.includes("list: 'qty-uoms'"));
 ck('and the printed CE and exports use it', !app.includes("} LOT</td>") && !app.includes("+ ' LOT')") && app.includes('${esc(info.qty||1)} ${esc(qtyUom)}'));
 ck('SIL and ECC are separate columns on screen', app.includes('}, "SIL"),') && app.includes('}, "ECC"),') && !app.includes('}, "SIL & ECC")'));
 ck('the group row splits them', app.includes('cell(g.sil - (g.ecc || 0)), cell(g.ecc || 0),'));

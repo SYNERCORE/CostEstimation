@@ -10537,15 +10537,24 @@ tab === 'dashboard' && (() => {
       ...p,
       qty: e.target.value
     }))
-  }), /*#__PURE__*/React.createElement("input", {
-    className: 'qty-uom',
-    list: 'qty-uoms',
-    style: { ...INP, width: 84 },
-    title: "The unit the Quantity is counted in. Prints after it: 3 PCS, 1 LOT.",
-    value: info.qtyUom || 'LOT',
-    onChange: e => setInfo(p => ({ ...p, qtyUom: e.target.value.toUpperCase() }))
-  }), /*#__PURE__*/React.createElement("datalist", { id: 'qty-uoms' },
-    ['LOT', 'PCS', 'SET', 'UNIT', 'EA', 'JOB', 'MANDAYS'].map(u => /*#__PURE__*/React.createElement("option", { key: u, value: u }))))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+  }), /* A plain dropdown: a datalist only offered what matched the text
+         already in the box, so with LOT in it LOT was the only choice. */
+  (() => {
+    const QTY_UOMS = ['LOT', 'PCS', 'SET', 'UNIT', 'EA', 'JOB', 'MANDAYS'];
+    const cur = qtyUom;
+    return /*#__PURE__*/React.createElement("select", {
+      className: 'qty-uom',
+      style: { ...INP, width: 100 },
+      title: "The unit the Quantity is counted in. Prints after it: 3 PCS, 1 LOT.",
+      value: cur,
+      onChange: e => {
+        let v = e.target.value;
+        if (v === '__other') { v = String(window.prompt('Unit for the quantity (e.g. METERS, ROLLS):', '') || '').trim().toUpperCase(); if (!v) return; }
+        setInfo(p => ({ ...p, qtyUom: v }));
+      }
+    }, (QTY_UOMS.includes(cur) ? QTY_UOMS : [...QTY_UOMS, cur]).map(u => /*#__PURE__*/React.createElement("option", { key: u, value: u }, u)),
+      /*#__PURE__*/React.createElement("option", { value: '__other' }, "Other…"));
+  })())), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     style: LBL
   }, "RCE No."), /*#__PURE__*/React.createElement("input", {
     className: 'info-rce',

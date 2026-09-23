@@ -8390,21 +8390,45 @@ function App({
         function put(el){
           body.appendChild(el);
           if (fits()) return;
+          var tall = el.offsetHeight > avail;
           /* Taller than a whole sheet however it is placed, so it is cut here
              rather than moved: moving it left the heading above it alone on a
              page of its own with the table starting on the next one. */
-          if (el.offsetHeight > avail || body.children.length === 1) { split(el); return; }
+          if (el.tagName === 'TABLE') {
+            if (tall || body.children.length === 1) { split(el); return; }
+            /* A table moved to the next sheet takes its heading with it, or
+               the heading is left alone at the foot of the page it came
+               from, announcing a table that is not there. */
+            body.removeChild(el);
+            var lead = body.lastElementChild;
+            var carry = (lead && lead.tagName !== 'TABLE' && body.children.length > 1) ? lead : null;
+            if (carry) body.removeChild(carry);
+            fresh();
+            if (carry) body.appendChild(carry);
+            put(el);
+            return;
+          }
+          /* A bill of quantities is a wrapper holding a heading and its table,
+             and a wrapper is not a table, so nothing cut it: one taller than a
+             sheet was laid down whole and everything past the foot of that
+             page was swallowed by the sheet's own overflow -- 281 tools
+             printed as 63, with nothing to say the rest had gone. Taken apart,
+             its heading and its table are each placed on their own terms, and
+             the table is cut between its rows like any other. */
+          if (tall && el.children.length) {
+            body.removeChild(el);
+            [].slice.call(el.children).forEach(put);
+            return;
+          }
+          /* Alone on a sheet and still too big: nothing is gained by moving
+             it, and it must not be dropped. */
+          if (body.children.length === 1) return;
           body.removeChild(el); fresh(); put(el);
         }
         /* A table taller than a page is cut between its rows, and its first
            row -- the column headings -- repeats on the sheet after it. */
         function split(tbl){
-          /* Nothing else can be cut between rows. Give it a sheet of its own,
-             where it has the most room, and let it overrun if it must. */
-          if (tbl.tagName !== 'TABLE') {
-            if (body.children.length > 1) { body.removeChild(tbl); fresh(); body.appendChild(tbl); }
-            return;
-          }
+          if (tbl.tagName !== 'TABLE') return;
           body.removeChild(tbl);
           var rows = [].slice.call(tbl.rows), head = rows.length ? rows[0].cloneNode(true) : null, i = 0;
           while (i < rows.length) {

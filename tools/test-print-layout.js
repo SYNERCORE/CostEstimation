@@ -16,7 +16,13 @@ ck('each sheet carries the header and the footer', /d\.innerHTML = HDR \+ '<div 
 ck('the footer is the document number, then page X of Y', /class="run-ftr"><span>Document No\.[\s\S]{0,80}class="pnum"/.test(app) && /'Page ' \+ \(p \+ 1\) \+ ' of ' \+ n/.test(app));
 ck('nothing is left overflowing a sheet', /if \(!fits\(\) && placed\)/.test(app));
 ck('a long table is cut between rows, headings repeated', /if \(i && head\) tb\.appendChild\(head\.cloneNode\(true\)\)/.test(app));
-ck('and a heading is never left alone above it', /el\.offsetHeight > avail \|\| body\.children\.length === 1/.test(app));
+ck('a table too tall for any sheet is cut where it stands, under its heading',
+  /if \(tall \|\| body\.children\.length === 1\) \{ split\(el\); return; \}/.test(app));
+ck('and one that moves to the next sheet takes its heading with it',
+  /var carry = \(lead && lead\.tagName !== 'TABLE' && body\.children\.length > 1\) \? lead : null;/.test(app) &&
+  /if \(carry\) body\.appendChild\(carry\);/.test(app));
+ck('a section too tall for a sheet is taken apart rather than swallowed by one',
+  /if \(tall && el\.children\.length\) \{[\s\S]{0,120}forEach\(put\);/.test(app));
 ck('the page box is edge to edge, the sheet holds the margins', /@page\{size:A4 portrait;margin:0\}/.test(app));
 /* The header on every page is the company block itself -- logo, title and
    the Document / Revision numbers -- not a line of small print. */

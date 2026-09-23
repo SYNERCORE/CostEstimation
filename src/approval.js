@@ -66,7 +66,14 @@ function apvMirror(approvers, apv) {
   /* Who has already signed, by username. The waiting list alone was not
      enough: a mirror left behind by a failed or older write still named a
      signatory who had signed, so the CE stayed in their For my approval. */
-  const signedBy = Object.values((apv && apv.lines) || {}).map(l => (l && l.by) || '').filter(Boolean);
+  /* Only those with nothing left to sign. One person can hold two lines on a
+     CE -- Reviewed and Approved by the same manager -- and having signed the
+     first, they were listed as done: the CE left their "Awaiting my
+     signature" while it was still waiting on them, with no way to reach it
+     from the list. */
+  const _signed = (apv && apv.lines) || {};
+  const _owes = new Set(s.lines.filter(l => !_signed[l.id] && !((apv && apv.skipped) || {})[l.id]).map(l => l.user));
+  const signedBy = Object.values(_signed).map(l => (l && l.by) || '').filter(u => u && !_owes.has(u));
   return { state: st, waiting: st === 'pending' ? s.waiting.map(l => l.user) : [], signedBy: signedBy,
     signed: s.signedN, total: s.total, at: new Date().toISOString() };
 }

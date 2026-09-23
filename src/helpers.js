@@ -1,4 +1,16 @@
-﻿const N = v => parseFloat(v) || 0;
+﻿/* Anything that is not a finite number is zero. parseFloat lets Infinity
+   through -- '1e999' pasted into a rate, or a stored value that arrived that
+   way -- and one Infinity in a CE turns its total into NaN, which reaches
+   SharePoint as null and takes the figure with it. */
+const N = v => {
+  /* A figure pasted from a quotation or an invoice carries the separators it
+     was printed with: "P1,234.50" read as 1. And parseFloat lets Infinity
+     through -- '1e999' from a paste or an imported cell -- where one Infinity
+     turns a CE's total into NaN, which reaches SharePoint as null and takes
+     the figure with it. Neither is a number anybody typed on purpose. */
+  const n = parseFloat(typeof v === 'string' ? v.replace(/[,\s₱]|(?:^|\s)P(?=[\d.])/g, '') : v);
+  return Number.isFinite(n) ? n : 0;
+};
 const ph = n => (n || 0).toLocaleString("en-PH", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2

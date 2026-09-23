@@ -2554,9 +2554,16 @@ function App({
       showToast('Discipline is required — choose it on Project Info.', true);
       return;
     }
-    const badCost = [...(mp||[]), ...(tools||[]), ...(mats||[]), ...(ppe||[])].find(r => Number(r.cost||r.rate||0) < 0);
+    /* Every figure on a row, not just its price. A negative quantity quietly
+       SUBTRACTED from the CE, and a value that is not a number at all -- from
+       an import, or a paste -- made the whole total NaN. */
+    const _figs = r => [r.cost, r.rate, r.qty, r.pax, r.days, r.otHours, r.hours, r.kw, r.runHrs, r.perDiem];
+    const badCost = [...(mp||[]), ...(tools||[]), ...(mats||[]), ...(ppe||[])]
+      .find(r => r && _figs(r).some(v => v !== undefined && v !== null && v !== '' &&
+        (!Number.isFinite(Number(v)) || Number(v) < 0)));
     if (badCost) {
-      showToast('All cost/rate values must be zero or positive.', true);
+      showToast('Every figure on a line — price, quantity, days, people — must be a number, and zero or more. Check ' +
+        ((badCost.role || badCost.desc || 'the row with no description').slice(0, 40)) + '.', true);
       return;
     }
     if (!confirmZeroCost('Save anyway?')) return;
@@ -5035,16 +5042,22 @@ function App({
   useEffect(() => {
     if (!sharedDrafts.length || !history.length) return;
     const key = n => String(n || '').trim().toUpperCase();
-    const savedAt = {};
+    const savedAt = {}, savedBy = {};
     history.forEach(h => {
       const k = key((h.info && h.info.ceNum) || h.ceNum);
       const t = Date.parse(h.savedAt || '') || 0;
-      if (k && t && t > (savedAt[k] || 0)) savedAt[k] = t;
+      if (k && t && t > (savedAt[k] || 0)) { savedAt[k] = t; savedBy[k] = h.savedBy || ''; }
     });
     const done = sharedDrafts.filter(d => {
       if (_draftPrunedRef.current.has(d.draftId)) return false;
       const k = key(d.info && d.info.ceNum), dt = Date.parse(d.savedAt || '') || 0;
-      return k && dt && savedAt[k] && savedAt[k] > dt;
+      if (!k || !dt || !savedAt[k] || savedAt[k] <= dt) return false;
+      /* Only the draft of the person who then saved that CE: their own work
+         is demonstrably in the saved copy. Somebody ELSE's draft of the same
+         CE may hold changes that never went in, and deleting it on a guess
+         would lose them for good. Those are offered in Resume Work under
+         "CE saved", where a person decides. */
+      return d.savedBy === savedBy[k];
     });
     if (!done.length) return;
     done.forEach(d => _draftPrunedRef.current.add(d.draftId));

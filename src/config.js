@@ -392,7 +392,7 @@ const DEFAULT_ML={
 /* 'Draft' and 'No Quote' were referenced by the app's own logic -- the Open CE
    rule, the dashboard donut and the xlsx import all name them -- but were
    missing from this list, so nobody could actually select them. */
-const DEFAULT_STATUS_OPTIONS = ['Draft', 'Pending', 'Ongoing', 'Revised', 'For site insp.', 'For Approval', 'Waiting in...', 'Approved', 'Cancelled', 'On Hold', 'No Quote', 'Submitted', 'Awarded'];
+const DEFAULT_STATUS_OPTIONS = ['Draft', 'Pending', 'Ongoing', 'Revised', 'For site insp.', 'For Approval', 'Waiting in...', 'Approved', 'Cancelled', 'On Hold', 'No Quote', 'Submitted', 'Awarded', 'Superseded'];
 
 /* WHEN A CE IS FINISHED WITH.
    ===========================
@@ -411,7 +411,9 @@ const DEFAULT_STATUS_OPTIONS = ['Draft', 'Pending', 'Ongoing', 'Revised', 'For s
    One list, used by the dashboard and by the deadline countdown alike. Two
    definitions of "open" would eventually disagree, and the one nobody looked
    at would be the wrong one. */
-const CE_CLOSED_STATUSES = ['Approved', 'Submitted', 'Awarded', 'No Quote', 'Cancelled'];
+/* Superseded closes a revision too: a newer one replaced it, so nobody
+   owes anything on it -- no signature, no deadline, no place in Open CEs. */
+const CE_CLOSED_STATUSES = ['Approved', 'Submitted', 'Awarded', 'No Quote', 'Cancelled', 'Superseded'];
 /* Blank is Draft: a CE nobody has set a status on is work in progress. */
 function ceIsOpen(status) {
   return CE_CLOSED_STATUSES.indexOf(String(status || 'Draft').trim()) < 0;
@@ -452,7 +454,8 @@ const MON_TO_DOC = {
   'Submitted': 'APPROVED',
   'Awarded': 'APPROVED',
   'Cancelled': 'REJECTED',
-  'No Quote': 'REJECTED'
+  'No Quote': 'REJECTED',
+  'Superseded': 'REJECTED'
 };
 /* ── Default notes and signatories, per CE type and discipline ───────────────
    The signatory roster and the notes used to be hardcoded in two places in

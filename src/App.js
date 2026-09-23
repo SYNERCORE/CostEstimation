@@ -4572,7 +4572,8 @@ function App({
     'Cancelled': 'var(--status-danger)',
     'On Hold': '#F97316',
     'Submitted': '#06B6D4',
-    'Awarded': '#16a34a'
+    'Awarded': '#16a34a',
+    'Superseded': '#94A3B8'
   };
   const getStatusColor = s => STATUS_COLOR_MAP[s] || ACC;
   const [newStatusInput, setNewStatusInput] = useState('');
@@ -4846,10 +4847,20 @@ function App({
       if (g.dup || !g.revs.length) return;
       const headNum = (g.head.info && g.head.info.ceNum) || g.head.ceNum || '';
       g.revs.forEach(e => {
-        const a = (monData[e.id] || {}).apv;
-        if (!a || !['pending', 'returned'].includes(a.state) || _supersededRef.current.has(String(e.id))) return;
+        if (_supersededRef.current.has(String(e.id))) return;
+        const m = monData[e.id] || {}, a = m.apv;
+        const closeApv = a && ['pending', 'returned'].includes(a.state);
+        /* The status follows: a replaced revision is finished with, so it
+           leaves Open CEs, the deadline queue and every "waiting on me" list.
+           A revision that was already Approved, Submitted or Awarded keeps
+           that -- what happened to it is a matter of record, and it counts as
+           closed either way. */
+        const st = String(m.status || '').trim();
+        const setStatus = st !== 'Superseded' && ceIsOpen(st);
+        if (!closeApv && !setStatus) return;
         _supersededRef.current.add(String(e.id));
-        updateMon(e.id, 'apv', {...a, state: 'superseded', waiting: [], supersededBy: headNum, at: new Date().toISOString()});
+        if (closeApv) updateMon(e.id, 'apv', {...a, state: 'superseded', waiting: [], supersededBy: headNum, at: new Date().toISOString()});
+        if (setStatus) updateMon(e.id, 'status', 'Superseded');
       });
     });
   }, [monRows, monData]);

@@ -8095,8 +8095,7 @@ function App({
        way the file is filed: the CE number and what the job is. Anything a
        file name cannot hold is dropped. */
     const _jobTitle = String((openCeId != null ? (monData[openCeId] || {}).jobTitle : '') || info.description || '').trim();
-    const printName = [String(info.ceNum || '').trim(), _jobTitle].filter(Boolean).join(' - ')
-      .replace(/[^\w .,()+&#-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Cost Estimate';
+    const printName = ceFileName(info.ceNum, _jobTitle);
     const fullHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(printName)}<\/title><style>${pageStyle}<\/style><\/head><body>
       <div id="doc" style="display:none">
       <div class="page">
@@ -10092,7 +10091,16 @@ viewCE && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset
       /*#__PURE__*/React.createElement("span", {style:{marginLeft:'auto'}}),
       !viewCE.draftKey && apvMonWaitsOn(monData[viewCE.id], currentUser.username) && /*#__PURE__*/React.createElement("button", {style:btn('ok',true),title:"Sign the CE shown here",onClick:()=>apvStartSign(viewCE.id)}, "✍ Approve & Sign"),
       !viewCE.draftKey && ((monData[viewCE.id]||{}).apv||{}).state==='pending' && ((((monData[viewCE.id]||{}).apv||{}).waiting||[]).includes(currentUser.username) || isAdmin) && /*#__PURE__*/React.createElement("button", {style:btn('def',true),title:"Send it back to the estimator with a comment",onClick:()=>apvStartReturn(viewCE.id)}, "↩ Return"),
-      /*#__PURE__*/React.createElement("button", {style:btn('def',true),title:"Print or save this CE as PDF",onClick:()=>{try{document.getElementById('shic-view-ce').contentWindow.print();}catch(ex){showToast('Could not print: '+ex.message,true);}}}, "🖨 Print"),
+      /*#__PURE__*/React.createElement("button", {style:btn('def',true),title:"Print or save this CE as PDF",onClick:()=>{try{
+      /* The viewer prints an iframe, and the browser names the PDF after the
+         page's own title, not the frame's -- it came out "SHIC Cost
+         Estimator". The title is lent to the CE for the print and handed
+         back afterwards. */
+      const _was=document.title;
+      try{document.title=ceFileName(viewCE.ceNum||((monData[viewCE.id]||{}).ceNum), (monData[viewCE.id]||{}).jobTitle||viewCE.jobTitle);}catch(_e){}
+      document.getElementById('shic-view-ce').contentWindow.print();
+      setTimeout(()=>{try{document.title=_was;}catch(_e){}},1000);
+    }catch(ex){showToast('Could not print: '+ex.message,true);}}}, "🖨 Print"),
       /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setViewCE(null)}, "✕ Close")),
     /*#__PURE__*/React.createElement("iframe", {key:viewCE.k||0, id:'shic-view-ce', title:'CE ' + (viewCE.ceNum || ''), src: window.location.pathname + (viewCE.draftKey ? '?viewdraft=' + encodeURIComponent(viewCE.draftKey) + '&as=view' : '?print=' + viewCE.id + '&as=view'), style:{flex:1,width:'100%',border:'1px solid '+BDR,borderRadius:6,background:'#fff'}}))),
 

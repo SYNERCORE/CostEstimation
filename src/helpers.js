@@ -769,3 +769,12 @@ function mergeToolList(items) {
   });
   return [...by.values()];
 }
+
+/* The name a printed CE is saved under: its number and what the job is.
+   Chrome offers the document title as the PDF's file name, so everything a
+   file name cannot hold is dropped and only one name is built, for the print
+   document and for the viewer alike. */
+function ceFileName(ceNum, jobTitle) {
+  return [String(ceNum || '').trim(), String(jobTitle || '').trim()].filter(Boolean).join(' - ')
+    .replace(/[^\w .,()+&#-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Cost Estimate';
+}

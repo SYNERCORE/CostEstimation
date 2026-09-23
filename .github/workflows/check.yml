@@ -213,6 +213,8 @@ jobs:
       - name: Nothing lost in the print
         run: node tools/test-print-nothing-lost.js
       - name: Every workflow step passes
+      - name: The storage warning clears what it can
+        run: node tools/test-storage-warning.js
         run: node tools/check-ci-steps.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
@@ -341,6 +343,8 @@ jobs:
       - name: Nothing lost in the print
         run: node tools/test-print-nothing-lost.js
       - name: Every workflow step passes
+      - name: The storage warning clears what it can
+        run: node tools/test-storage-warning.js
         run: node tools/check-ci-steps.js
       - name: Detailed Excel export mirrors the printed CE
         run: node tools/test-xlsx-export.js src/App.js

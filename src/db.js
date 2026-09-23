@@ -320,11 +320,28 @@ const LS = {
       if (!window._lsWarnShown && Date.now() - (window._lsLastScan || 0) > 60000) {
         window._lsLastScan = Date.now();
         try {
-          let total = 0;
-          for (let i = 0; i < localStorage.length; i++) total += (localStorage.getItem(localStorage.key(i))||'').length * 2;
-          if (total > 4 * 1024 * 1024) {
-            window._lsWarnShown = true;
-            setTimeout(() => (window._shicToast||console.warn)('Storage almost full (' + Math.round(total/1024) + ' KB). Sync to SharePoint or export a backup.', true), 500);
+          const u = LS.usage();
+          if (u.total > LS.WARN_AT) {
+            /* This used to say the storage was almost full and leave it at
+               that. Nothing cleared anything until a write actually failed,
+               so the same warning came back every session with the same
+               number behind it and nothing anyone could do about it.
+               The cached CEs are the one thing here that can go: they are a
+               copy of what SharePoint holds and are fetched again when a CE
+               is opened. Clear them first, then say what happened -- and if
+               the space is being held by something that cannot be thrown
+               away, say what that is instead of asking for a guess. */
+            const freed = LS.pruneCeCache(40);
+            const after = freed ? LS.usage() : u;
+            if (freed && after.total <= LS.WARN_AT) {
+              setTimeout(() => (window._shicToast||console.warn)('Storage was almost full, so ' + freed + ' cached CE(s) were cleared (' +
+                LS.kb(u.total - after.total) + ' freed). They are fetched from SharePoint again when opened.'), 500);
+            } else {
+              window._lsWarnShown = true;
+              setTimeout(() => (window._shicToast||console.warn)('Storage almost full (' + LS.kb(after.total) + ' of about 5,000 KB). ' +
+                (freed ? freed + ' cached CE(s) cleared and it is still full. ' : '') +
+                'Most of it is ' + after.top.name + ' (' + LS.kb(after.top.bytes) + '). Sync to SharePoint or export a backup.', true), 500);
+            }
           }
         } catch {}
       }
@@ -339,6 +356,31 @@ const LS = {
         if (!window._lsFullShown) { window._lsFullShown = true; setTimeout(() => (window._shicToast||console.error)('Storage full! Export a backup or connect SharePoint to free space.', true), 100); }
       }
     }
+  },
+  WARN_AT: 4 * 1024 * 1024,
+  kb: n => Math.round(n / 1024).toLocaleString('en-US') + ' KB',
+  /* What is being held, and by what. A number on its own -- "4102 KB" -- tells
+     nobody which of the things the app keeps is the one filling the browser. */
+  usage: () => {
+    const groups = {}; let total = 0;
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i); if (!k) continue;
+        const n = ((localStorage.getItem(k) || '').length + k.length) * 2;
+        total += n;
+        const name = k.indexOf('shic:ce_cache:') === 0 ? 'cached CEs'
+          : k.indexOf('shic:draft') === 0 ? 'unsaved drafts'
+          : k.indexOf('shic:my_sig') === 0 ? 'signatures'
+          : k.indexOf('shic:refdata:') === 0 ? 'reference data'
+          : k === 'shic:history' || k === 'shic:local_history' || k === 'shic:od_history' ? 'the CE list'
+          : k === 'shic:masterlist' || k === 'shic:ml_trash' ? 'the masterlist'
+          : k === 'shic:auditlog' ? 'the audit log'
+          : 'other settings';
+        groups[name] = (groups[name] || 0) + n;
+      }
+    } catch (_e) {}
+    const top = Object.keys(groups).sort((a, b) => groups[b] - groups[a])[0] || 'other settings';
+    return { total, groups, top: { name: top, bytes: groups[top] || 0 } };
   },
   /* ce_cache: holds one full CE per saved estimate and was never pruned, which
      with 800+ CEs is the bulk of what fills localStorage. Keep the most recent

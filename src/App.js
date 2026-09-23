@@ -1547,7 +1547,11 @@ function App({
   const perJobT = perJobLines.reduce((t, x) => t + x.v, 0);
   const perJobNames = perJobLines.map(x => x.label).join(', ');
   const unitP = (grand - perJobT) / (N(info.qty) || 1);
-  const unitLbl = 'UNIT PRICE (qty ' + (N(info.qty) || 1) + (perJobT ? ', excl. per-job costs' : '') + '):';
+  /* The unit the quantity is counted in reads better than the count itself:
+     "UNIT PRICE PER PCS" says what one of them costs; "(qty 3)" made the
+     reader work it out. Used by the summary, the printed CE and the exports. */
+  const unitLbl = 'UNIT PRICE PER ' + (String(info.qtyUom || 'LOT').trim().toUpperCase() || 'LOT') +
+    (perJobT ? ' (excl. per-job costs)' : '') + ':';
   const perJobLbl = 'PER-JOB COSTS, CHARGED ONCE (' + perJobNames + '):';
   /* At qty 1 the unit price is just the total again, printed under it with a
      different name. On a supply CE covering several different items it reads

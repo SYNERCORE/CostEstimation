@@ -189,6 +189,58 @@ async function dbSaveMonAll(monData, histItems){
 }
 
 
+/* ── duplicate Monitoring rows ──
+   A CE is supposed to have one row. Two is how a status change looked like it
+   reverted: the table read the newest copy and every save wrote the oldest.
+   Both sides take the newest now, so duplicates are harmless -- but they
+   double the list, slow every save, and the older copy may still hold changes
+   nobody ever saw. These two find them and fold them back into one. */
+async function dbFindMonDuplicates(){
+  if(!(USE_SP||getSiteURL()))return [];
+  const r=await spGet(spList('Monitoring'),"Title ne 'config'",'Id,Title,shicCEId,shicMonData');
+  const by={};
+  r.forEach(it=>{const cid=String(it.shicCEId);if(!cid||cid==='null'||cid==='0')return;(by[cid]=by[cid]||[]).push(it);});
+  return Object.keys(by).filter(cid=>by[cid].length>1).map(cid=>{
+    const rows=by[cid].slice().sort((a,b)=>b.Id-a.Id);
+    const parse=x=>{try{return x.shicMonData?JSON.parse(x.shicMonData):{};}catch(_e){return {};}};
+    return {ceId:cid,title:rows[0].Title||cid,keep:rows[0].Id,drop:rows.slice(1).map(x=>x.Id),
+      rows:rows.map(x=>({Id:x.Id,data:parse(x)}))};
+  });
+}
+/* Everything the two copies know, in one row. The copy the table has been
+   showing wins where they disagree, EXCEPT on the status: a change written to
+   the other copy and never seen is the one being rescued here, so the later
+   of the two stamps is the one that stands. Both trails are kept. */
+function _monMergeRow(keep,other){
+  const k=keep||{},o=other||{};
+  const out={...o,...k};
+  const kAt=Date.parse(k.statusChangedAt||'')||0,oAt=Date.parse(o.statusChangedAt||'')||0;
+  if(o.status&&oAt>kAt){out.status=o.status;out.statusChangedAt=o.statusChangedAt;out.statusChangedBy=o.statusChangedBy||'';}
+  const sl=_monMergeLog(o.statusLog,k.statusLog);if(sl.length)out.statusLog=sl;
+  const rl=_monMergeLog(o.remarksLog,k.remarksLog);
+  if(rl.length){out.remarksLog=rl;const last=rl[rl.length-1];if(last&&last.text)out.remarks=last.text;}
+  return out;
+}
+/* Fold each group into its newest row, then delete the copies. onStep is told
+   what happened to every CE, so the panel can show the work as it goes. */
+async function dbTidyMonDuplicates(groups,onStep){
+  let merged=0,dropped=0,failed=0;
+  for(const g of groups||[]){
+    try{
+      let data=(g.rows[0]||{}).data||{};
+      for(const r of g.rows.slice(1))data=_monMergeRow(data,r.data||{});
+      await spWithRetry(()=>spPatch(spList('Monitoring'),g.keep,{shicMonData:JSON.stringify(data)}));
+      merged++;
+      for(const id of g.drop){
+        await spWithRetry(()=>spDelete(spList('Monitoring'),id));
+        dropped++;delete _monSpIdCache[g.ceId];
+        await new Promise(r=>setTimeout(r,120));
+      }
+      if(onStep)onStep({ceId:g.ceId,title:g.title,ok:true,kept:g.keep,dropped:g.drop.length,status:data.status||''});
+    }catch(e){failed++;if(onStep)onStep({ceId:g.ceId,title:g.title,ok:false,reason:e.message});}
+  }
+  return {merged,dropped,failed};
+}
 async function dbGetMon(){
   if(!(USE_SP||getSiteURL()))return null;
   try{

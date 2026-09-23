@@ -1,3 +1,59 @@
+/* One CE, one Monitoring row. Where a CE has two, the table read one copy and
+   a save wrote the other, so a status change looked like it reverted. The app
+   copes with them now; this folds them back into one and clears them out. */
+function MonDupTidy() {
+  const [busy, setBusy] = React.useState(false);
+  const [dups, setDups] = React.useState(null);
+  const [log, setLog] = React.useState([]);
+  const add = m => setLog(p => [...p, m]);
+  const look = async () => {
+    setBusy(true); setLog([]);
+    try {
+      const g = await dbFindMonDuplicates();
+      setDups(g);
+      add(g.length ? 'Found ' + g.length + ' CE(s) with more than one row — ' +
+        g.reduce((n, x) => n + x.drop.length, 0) + ' extra row(s) to clear.'
+        : '✅ Every CE has one row. Nothing to tidy.');
+      g.slice(0, 40).forEach(x => add('  • ' + x.title + ': keeping row ' + x.keep + ', clearing ' + x.drop.join(', ')));
+      if (g.length > 40) add('  … and ' + (g.length - 40) + ' more.');
+    } catch (e) { add('❌ Could not read the Monitoring list: ' + e.message); }
+    setBusy(false);
+  };
+  const tidy = async () => {
+    if (!dups || !dups.length) return;
+    const extra = dups.reduce((n, x) => n + x.drop.length, 0);
+    if (!window.confirm('Tidy ' + dups.length + ' CE(s)?' + String.fromCharCode(10,10) +
+      'Everything both copies know is written to the row the table reads, then ' +
+      extra + ' older row(s) are deleted. Deleting cannot be undone.')) return;
+    setBusy(true); add('Tidying…');
+    try {
+      const res = await dbTidyMonDuplicates(dups, st => add(st.ok
+        ? '  ✓ ' + st.title + ': ' + st.dropped + ' row(s) cleared' + (st.status ? ' · status ' + st.status : '')
+        : '  ✗ ' + st.title + ': ' + st.reason));
+      add(res.failed ? '⚠ ' + res.merged + ' tidied, ' + res.dropped + ' row(s) cleared, ' + res.failed + ' left alone.'
+        : '🎉 ' + res.merged + ' CE(s) tidied, ' + res.dropped + ' row(s) cleared. Press ↻ Refresh to reload the table.');
+      if (!res.failed) setDups([]);
+    } catch (e) { add('❌ ' + e.message); }
+    setBusy(false);
+  };
+  const connected = !!getSiteURL();
+  return React.createElement('div', {style:{marginTop:18,paddingTop:14,borderTop:'1px solid '+BDR}},
+    React.createElement('div', {style:{fontWeight:700,fontSize:13,marginBottom:4}}, '🧹 Tidy duplicate Monitoring rows'),
+    React.createElement('div', {style:{fontSize:11,color:MT,marginBottom:10,lineHeight:1.6}},
+      'A CE should have one row in the Monitoring list. Two is how a status change came to look like it reverted: the table read one copy and the save wrote the other. Look first — nothing is deleted until you have seen the list and confirmed it.'),
+    React.createElement('div', {style:{display:'flex',gap:8,flexWrap:'wrap'}},
+      React.createElement('button', {style:{...btn('def'), opacity: connected ? 1 : 0.5}, disabled: busy || !connected, onClick: look},
+        busy ? 'Working…' : '🔍 Look for duplicates'),
+      dups && dups.length > 0 && React.createElement('button', {style:btn('danger'), disabled: busy, onClick: tidy},
+        '🧹 Tidy ' + dups.length + ' CE(s)')),
+    log.length > 0 && React.createElement('div', {
+      style:{marginTop:10,maxHeight:220,overflowY:'auto',background:SURF,border:'1px solid '+BDR,borderRadius:6,padding:'8px 10px'}
+    }, log.map((l, i) => React.createElement('div', {key:i, style:{
+      fontSize:11, fontFamily:"'JetBrains Mono',monospace", marginBottom:2,
+      color: (l.startsWith('❌') || l.startsWith('  ✗')) ? ERR : (l.startsWith('⚠')) ? 'var(--status-warning)'
+           : (l.startsWith('✅') || l.startsWith('  ✓') || l.startsWith('🎉')) ? OK : MT
+    }}, l))));
+}
 function LocalToSPSync() {
   const [busy, setBusy] = React.useState(false);
   const [log, setLog] = React.useState([]);
@@ -187,6 +243,7 @@ function LocalToSPSync() {
     }, counts.fail === 0
       ? `✅ All ${counts.ok} item(s) pushed successfully. Other users can now refresh and log in.`
       : `⚠ ${counts.ok} pushed, ${counts.fail} had issues. Items marked ✗/⚠ above were NOT synced.`
-    )
+    ),
+    React.createElement(MonDupTidy, null)
   );
 }

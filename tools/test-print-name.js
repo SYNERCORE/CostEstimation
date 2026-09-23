@@ -21,7 +21,12 @@ ck('the document title carries it, not "CE <number>"',
 /* The viewer prints an iframe, and the browser names the PDF after the page's
    own title, not the frame's, so the page lends its title for the print. */
 ck('the viewer lends its title to the CE while it prints',
-  app.includes('document.title=ceFileName(viewCE.ceNum||((monData[viewCE.id]||{}).ceNum), (monData[viewCE.id]||{}).jobTitle||viewCE.jobTitle);'));
+  app.includes('document.title=ceFileNameFor(viewCE.id, viewCE.ceNum);'));
+/* The job title is typed on Monitoring on some CEs and on the CE itself on
+   others; the viewer printed the number alone when it read only Monitoring. */
+ck('and finds the job title wherever it is kept',
+  app.includes("return ceFileName(ceNum || e.info?.ceNum || e.ceNum, m.jobTitle || e.info?.description || '');") &&
+  app.includes('const e = (history || []).find(h => h && h.id === id) || {};'));
 ck('and takes it back afterwards', app.includes('setTimeout(()=>{try{document.title=_was;}catch(_e){}},1000);'));
 
 /* The signature image is stamped with the date already; the line beneath the

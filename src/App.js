@@ -4869,6 +4869,14 @@ function App({
      filtered out by a value the column does not show. */
   const monDisc = (e, m) => m.designation || m.discipline || e.info?.discipline || e.info?.projType || '';
   const monCust = (e, m) => m.customer || e.info?.client || '';
+  /* The name a saved CE prints under. The job title is typed on Monitoring on
+     some CEs and only on the CE itself on others, so both are looked at --
+     the same fallback the Job Title column shows. */
+  const ceFileNameFor = (id, ceNum) => {
+    const e = (history || []).find(h => h && h.id === id) || {};
+    const m = monData[id] || {};
+    return ceFileName(ceNum || e.info?.ceNum || e.ceNum, m.jobTitle || e.info?.description || '');
+  };
   /* Every prefix on file, plus any a CE already carries -- an old CE from a
      company since removed must still be filterable by its own label.
 
@@ -10097,7 +10105,7 @@ viewCE && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset
          Estimator". The title is lent to the CE for the print and handed
          back afterwards. */
       const _was=document.title;
-      try{document.title=ceFileName(viewCE.ceNum||((monData[viewCE.id]||{}).ceNum), (monData[viewCE.id]||{}).jobTitle||viewCE.jobTitle);}catch(_e){}
+      try{document.title=ceFileNameFor(viewCE.id, viewCE.ceNum);}catch(_e){}
       document.getElementById('shic-view-ce').contentWindow.print();
       setTimeout(()=>{try{document.title=_was;}catch(_e){}},1000);
     }catch(ex){showToast('Could not print: '+ex.message,true);}}}, "🖨 Print"),

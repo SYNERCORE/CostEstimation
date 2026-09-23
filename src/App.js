@@ -2339,6 +2339,54 @@ function App({
     showToast('Draft deleted.');
   };
 
+  /* Clearing out Resume Work in one go, by the two things that make a draft
+     dead: its CE has since been saved, or nobody has touched it in a month.
+     Each is counted and named before anything goes, and a draft belonging to
+     somebody else is only ever touched by an admin -- the same rule the one
+     Delete button has always followed. */
+  const draftTidyGroups = () => {
+    const key = n => String(n || '').trim().toUpperCase();
+    const saved = new Set((history || []).map(h => key((h.info && h.info.ceNum) || h.ceNum)).filter(Boolean));
+    const mine = d => d.savedBy === currentUser.username;
+    const canTouch = d => mine(d) || isAdmin;
+    const month = Date.now() - 30 * 24 * 3600 * 1000;
+    const all = (sharedDrafts || []).filter(canTouch);
+    return {
+      savedCE: all.filter(d => saved.has(key(d.info && d.info.ceNum))),
+      old: all.filter(d => { const t = Date.parse(d.savedAt || '') || 0; return t && t < month; }),
+      mineN: (sharedDrafts || []).filter(mine).length,
+      othersN: (sharedDrafts || []).filter(d => !mine(d)).length
+    };
+  };
+  const [draftTidyBusy, setDraftTidyBusy] = useState(false);
+  const tidyDrafts = async which => {
+    const g = draftTidyGroups();
+    const list = which === 'old' ? g.old : g.savedCE;
+    if (!list.length) { showToast('Nothing to clear there.'); return; }
+    const notMine = list.filter(d => d.savedBy !== currentUser.username).length;
+    const what = which === 'old'
+      ? list.length + ' draft(s) nobody has touched in 30 days'
+      : list.length + ' draft(s) whose CE has since been saved';
+    if (!confirm('Clear ' + what + '?' + String.fromCharCode(10, 10) +
+      list.slice(0, 12).map(d => '  \u2022 ' + ((d.info && d.info.ceNum) || '(no CE#)') + ' \u2014 ' + (d.savedByName || d.savedBy || '')).join(String.fromCharCode(10)) +
+      (list.length > 12 ? String.fromCharCode(10) + '  \u2026 and ' + (list.length - 12) + ' more' : '') +
+      String.fromCharCode(10, 10) + (notMine ? notMine + ' of them belong to somebody else. ' : '') +
+      'Whatever they hold that was never saved is lost for good. The saved CEs and their Monitoring rows are not touched.')) return;
+    setDraftTidyBusy(true);
+    const removed = new Set();
+    let kept = 0;
+    for (const d of list) {
+      try { await dbDeleteDraft(d.draftId); removed.add(d.draftId); } catch (_e) { kept++; }
+    }
+    const gone = removed.size;
+    /* Only the ones that actually went: a draft the site would not let go of
+       has to stay on the list, or it comes back on the next refresh looking
+       like it returned from the dead. */
+    setSharedDrafts(p => p.filter(x => !removed.has(x.draftId)));
+    setDraftTidyBusy(false);
+    showToast(gone + ' draft(s) cleared' + (kept ? ', ' + kept + ' could not be reached and are still there' : '') + '.', !!kept);
+    loadSharedDrafts(true);
+  };
   /* \u2500\u2500 Resume a draft \u2500\u2500 */
   const resumeDraft = d => {
     if (confirm('Resume draft by ' + d.savedByName + '? This will replace your current unsaved work.')) {
@@ -8873,7 +8921,20 @@ function App({
       fontSize: 11,
       flex: 1
     }
-  }, 'Unsaved work in progress, shared via SharePoint'), /*#__PURE__*/React.createElement("button", {
+  }, 'Unsaved work in progress, shared via SharePoint'),
+  (() => {
+    const g = draftTidyGroups();
+    const tb = (t, title, on, n) => /*#__PURE__*/React.createElement("button", {
+      style: {...btn('def', true), fontSize: 10, padding: '3px 8px', opacity: (n && !draftTidyBusy) ? 1 : .45},
+      disabled: !n || draftTidyBusy, title, onClick: on
+    }, t + ' (' + n + ')');
+    return /*#__PURE__*/React.createElement("span", {style: {display: 'flex', gap: 6, marginRight: 6}},
+      tb('\uD83E\uDDF9 CE saved', 'Clear the drafts whose CE has since been saved. What they hold that was never saved is lost.',
+        () => tidyDrafts('saved'), g.savedCE.length),
+      tb('\uD83E\uDDF9 Over 30 days', 'Clear the drafts nobody has touched in a month.',
+        () => tidyDrafts('old'), g.old.length));
+  })(),
+  /*#__PURE__*/React.createElement("button", {
     onClick: () => loadSharedDrafts(),
     style: btn('def', true),
     title: "Refresh"

@@ -208,6 +208,8 @@ jobs:
         run: node tools/test-draft-tidy.js
       - name: Audit hardening
         run: node tools/test-audit-hardening.js
+      - name: Print last row
+        run: node tools/test-print-lastrow.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents
@@ -330,6 +332,8 @@ jobs:
         run: node tools/test-draft-tidy.js
       - name: Audit hardening
         run: node tools/test-audit-hardening.js
+      - name: Print last row
+        run: node tools/test-print-lastrow.js
       - name: Detailed Excel export mirrors the printed CE
         run: node tools/test-xlsx-export.js src/App.js
       - name: Every host the app calls is allowed by the CSP

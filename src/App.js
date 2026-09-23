@@ -8168,7 +8168,7 @@ function App({
       color:   coInfo.color   || '#cc0000'
     };
     const logoCell = co.logo
-      ? `<img src="${esc(co.logo)}" style="max-width:70px;max-height:36px;object-fit:contain">`
+      ? `<img src="${esc(co.logo)}" width="70" height="36" style="width:70px;height:36px;object-fit:contain">`
       : `<div style="font-weight:900;font-size:10pt;color:${esc(co.color)};line-height:1.1">${esc(co.name)}<br><span style="font-size:6pt">${esc(co.sub)}</span></div>`;
 
     /* The logo / title / document-number block. It is the header of every
@@ -8372,6 +8372,9 @@ function App({
         var sections = [].slice.call(src.children);
         var sh = null, body = null, avail = 0;
         function fresh(){ sh = sheet(); body = sh.querySelector('.sbody'); avail = body.clientHeight; }
+        /* scrollHeight never reports less than the box itself, so the test
+           is <= and not < : a page taking "avail - 1" would fit nothing at
+           all, one row to a sheet, for ever. */
         function fits(){ return body.scrollHeight <= avail; }
         function put(el){
           body.appendChild(el);
@@ -8414,7 +8417,23 @@ function App({
         }
         document.body.setAttribute('data-paged', '1');
       }
-      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
+      /* Not before the images are in. The running header carries the company
+         logo, and a logo that has not loaded measures as nothing: every sheet
+         was given the height of a header without it, and when it arrived the
+         header grew and pushed the last row of each page under the footer --
+         which is what a row sliced in half at the foot of a page was. */
+      var ran = false;
+      function go(){ if (ran) return; ran = true; run(); }
+      function whenLoaded(){
+        var imgs = [].slice.call(document.images).filter(function(i){ return !i.complete; });
+        if (!imgs.length) return go();
+        var left = imgs.length;
+        function one(){ if (--left <= 0) go(); }
+        imgs.forEach(function(i){ i.addEventListener('load', one); i.addEventListener('error', one); });
+        /* A logo that never arrives must not leave the CE blank. */
+        setTimeout(go, 4000);
+      }
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', whenLoaded); else whenLoaded();
     })();`;
     /* Save as PDF offers the document title as the file name, so name it the
        way the file is filed: the CE number and what the job is. Anything a
@@ -8447,7 +8466,16 @@ function App({
     const w=window.open('','_blank');
     w.document.write(fullHtml);
     w.document.close();
-    setTimeout(() => w.print(), 800);
+    /* Print when the sheets are laid out, not 800ms in: the paginator now
+       waits for the logo, and printing before it finished would print the
+       document unpaginated. */
+    (function _waitThenPrint(n){
+      try {
+        if (w.closed) return;
+        if ((w.document.body && w.document.body.getAttribute('data-paged')) || n > 40) { w.print(); return; }
+      } catch (_e) { return; }
+      setTimeout(() => _waitThenPrint(n + 1), 150);
+    })(0);
     window.__lastCEHtml = fullHtml;
   };
   /* Feature 1: Print Preview (no auto-print) */
@@ -10483,8 +10511,15 @@ viewCE && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset
          back afterwards. */
       const _was=document.title;
       try{document.title=ceFileNameFor(viewCE.id, viewCE.ceNum);}catch(_e){}
-      document.getElementById('shic-view-ce').contentWindow.print();
-      setTimeout(()=>{try{document.title=_was;}catch(_e){}},1000);
+      /* Wait for the frame to finish laying itself into sheets, the same way
+         the print window does: printing mid-layout prints it unpaginated. */
+      const _w=document.getElementById('shic-view-ce').contentWindow;
+      (function _go(n){
+        let paged=false;
+        try{paged=!!(_w.document.body&&_w.document.body.getAttribute('data-paged'));}catch(_e){paged=true;}
+        if(paged||n>40){_w.print();setTimeout(()=>{try{document.title=_was;}catch(_e){}},1000);return;}
+        setTimeout(()=>_go(n+1),150);
+      })(0);
     }catch(ex){showToast('Could not print: '+ex.message,true);}}}, "🖨 Print"),
       /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setViewCE(null)}, "✕ Close")),
     /*#__PURE__*/React.createElement("iframe", {key:viewCE.k||0, id:'shic-view-ce', title:'CE ' + (viewCE.ceNum || ''), src: window.location.pathname + (viewCE.draftKey ? '?viewdraft=' + encodeURIComponent(viewCE.draftKey) + '&as=view' : '?print=' + viewCE.id + '&as=view'), style:{flex:1,width:'100%',border:'1px solid '+BDR,borderRadius:6,background:'#fff'}}))),

@@ -597,7 +597,22 @@ function App({
     } catch {}
   };
   const MON_KEY = 'shic:monitoring';
+  /* When each CE's row was last changed here. A fetch that was already in
+     flight when someone changed a status came back holding the row from
+     before it and replaced the table wholesale -- the change was on screen,
+     then gone the next time the tab was opened. A row changed since a fetch
+     began is kept as this browser has it; the write is on its way to the
+     site and the next fetch will carry it. */
+  const _monWroteAt = React.useRef({});
   const loadMonData = async () => {
+    const _fetchAt = Date.now();
+    const _keepMine = incoming => {
+      const mine = _monWroteAt.current, out = {...incoming};
+      let kept = 0;
+      Object.keys(mine).forEach(id => { if (mine[id] && mine[id].at >= _fetchAt) { out[id] = mine[id].row; kept++; } });
+      if (kept) console.warn('monitoring: kept ' + kept + ' row(s) changed here while the list was loading');
+      return out;
+    };
     /* Always fetch from SP first; only fall back to localStorage if SP is unreachable */
     setSyncStatus({monitoring:'saving'});
     /* Show the cached monitoring table straight away; the SP result below
@@ -609,7 +624,7 @@ function App({
     try {
       /* Clear stale cache before every fetch so deleted SP items are not reused */
       Object.keys(_monSpIdCache).forEach(k => delete _monSpIdCache[k]);
-      const r = await dbGetMon();
+      let r = await dbGetMon();
       if (r && r.parseFailed) {
         /* Items exist in SharePoint but none had readable shicMonData — almost
            always a missing/unpopulated column, not an empty list. Keep whatever
@@ -624,6 +639,7 @@ function App({
         setSyncStatus({monitoring:'local', lastSyncAt: new Date().toISOString(), sp:'connected'});
         if (localCount) showToast('SharePoint monitoring list is empty — showing ' + localCount + ' local row(s). Use Push Local Data to upload them.', true);
       } else if (r && r.data && Object.keys(r.data).length > 0) {
+        r = {...r, data: _keepMine(r.data)};
         setMonData(r.data);
         setMonSpIds(new Set(Object.keys(_monSpIdCache)));
         try { localStorage.setItem(MON_KEY, JSON.stringify(r.data)); } catch (e) { console.warn('monitoring not cached locally:', e && e.message); }
@@ -731,6 +747,7 @@ function App({
       }
     };
     try {
+      _monWroteAt.current[ceId] = { at: Date.now(), row: n[ceId] };
       localStorage.setItem(MON_KEY, JSON.stringify(n));
       /* Save only the one changed CE entry, not the whole blob -- and within
          that entry, only the fields this edit touched, so a colleague's

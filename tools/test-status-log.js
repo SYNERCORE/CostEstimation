@@ -28,11 +28,14 @@ const dbSaveMonEntry=(a,b,c)=>{saved=c;return{then:()=>({catch:()=>{}})};};
 const LS={}, MON_KEY='k', localStorage={setItem:()=>{}};
 const history=[{id:7,info:{ceNum:'CE-1'}}];
 const setSyncStatus=()=>{};
+/* The ref that remembers when this browser last changed each row, so a list
+   fetch already in flight cannot replace it with the row from before. */
+const _monWroteAt={current:{}};
 let state={};
 const setMonData=fn=>{state=fn(state);};
-const upd=new Function('setMonData','currentUser','dbSaveMonEntry','localStorage','MON_KEY','history','setSyncStatus',
+const upd=new Function('setMonData','currentUser','dbSaveMonEntry','localStorage','MON_KEY','history','setSyncStatus','_monWroteAt',
   'return '+body.replace(/^const updateMon = /,'').replace(/;$/,''))
-  (setMonData,currentUser,dbSaveMonEntry,localStorage,MON_KEY,history,setSyncStatus);
+  (setMonData,currentUser,dbSaveMonEntry,localStorage,MON_KEY,history,setSyncStatus,_monWroteAt);
 
 let bad=0; const ck=(n,c,x)=>{ if(c)console.log('  PASS  '+n); else {console.log('  FAIL  '+n+(x?'  -> '+x:''));bad++;} };
 upd(7,'status','Pending');
@@ -57,6 +60,8 @@ ck('the log is capped so a busy CE cannot grow without bound', state[7].statusLo
 ck('and the cap drops the oldest, keeping the recent ones',
    state[7].statusLog[59].status==='Ongoing79');
 ck('it is persisted with the rest of the monitoring record', saved && Array.isArray(saved.statusLog));
+ck('and the moment of the change is remembered, so a fetch in flight cannot undo it',
+   !!(_monWroteAt.current[7] && _monWroteAt.current[7].at && _monWroteAt.current[7].row));
 
 /* Correcting the date on a CE entered long after the fact must correct the
    trail too, or the history still shows the day it was recorded here rather

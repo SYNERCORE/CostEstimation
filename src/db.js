@@ -101,17 +101,19 @@ async function dbSaveMonEntry(ceId, ceNum, monFields, changed){
   try{
     const numId=Number(ceId);
     let spId=_monSpIdCache[ceId];
-    let theirs=null;
-    if(!spId){
-      const r=await spGet(spList('Monitoring'),`shicCEId eq ${numId}`,'Id,shicMonData');
-      if(r.length){spId=r[0].Id;_monSpIdCache[ceId]=spId;
-        try{theirs=r[0].shicMonData?JSON.parse(r[0].shicMonData):null;}catch(_e){}}
-    }else if(changed&&changed!=='ensure'&&changed.length){
-      /* The id was cached, so the row was never read this time round. Read it,
-         or the merge below has nothing to merge against. */
-      try{const r=await spGet(spList('Monitoring'),`shicCEId eq ${numId}`,'Id,shicMonData');
-        if(r.length){spId=r[0].Id;_monSpIdCache[ceId]=spId;
-          theirs=r[0].shicMonData?JSON.parse(r[0].shicMonData):null;}}catch(_e){}
+    let theirs=null,alsoWrite=[];
+    /* Always read the row before writing it -- and take the same copy the
+       table reads, the newest, when the CE has more than one. */
+    if(!spId||(changed&&changed!=='ensure'&&changed.length)){
+      try{
+        const r=await spGet(spList('Monitoring'),`shicCEId eq ${numId}`,'Id,shicMonData');
+        if(r.length){
+          const sorted=r.slice().sort((a,b)=>b.Id-a.Id);
+          spId=sorted[0].Id;_monSpIdCache[ceId]=spId;
+          alsoWrite=sorted.slice(1).map(x=>x.Id);
+          try{theirs=sorted[0].shicMonData?JSON.parse(sorted[0].shicMonData):null;}catch(_e){}
+        }
+      }catch(_e){if(!spId)throw _e;}
     }
     /* 'ensure' means the caller only needs the row to EXIST -- the attachment
        upload needs an item id to attach to. If the site already has one, its
@@ -135,6 +137,11 @@ async function dbSaveMonEntry(ceId, ceNum, monFields, changed){
     if(spId){
       try{
         await spWithRetry(()=>spPatch(spList('Monitoring'),spId,payload));
+        /* The older copies of the same CE are written too, so whichever one
+           a colleague's table happens to read says the same thing. */
+        for(const other of alsoWrite){
+          try{await spPatch(spList('Monitoring'),other,payload);}catch(_e){console.warn('duplicate monitoring row '+other+' not updated:',_e.message);}
+        }
       }catch(patchErr){
         /* 404 = item was deleted in SP; clear cache and create fresh */
         if(patchErr.message&&patchErr.message.includes('404')){
@@ -188,14 +195,21 @@ async function dbGetMon(){
     /* Fetch all per-CE items */
     const r=await spGet(spList('Monitoring'),"Title ne 'config'",'Id,Title,shicCEId,shicMonData,Modified');
     if(r.length){
-      const data={};let latest=null;
+      const data={};let latest=null;const seen={};let dups=0;
       for(const item of r){
         const cid=String(item.shicCEId);
         if(cid&&cid!=='null'&&cid!=='0'&&item.shicMonData){
+          /* A CE with two rows in the list is how a status change came to
+             "revert": the read showed one row and the write went to the
+             other. Both sides now take the same one -- the newest -- and a
+             save writes every copy, so the two cannot drift apart. */
+          if(seen[cid]!=null){dups++;if(item.Id<seen[cid])continue;}
+          seen[cid]=item.Id;
           try{data[cid]=JSON.parse(item.shicMonData);_monSpIdCache[cid]=item.Id;}catch{}
         }
         if(!latest||item.Modified>latest)latest=item.Modified;
       }
+      if(dups)console.warn('dbGetMon: '+dups+' duplicate monitoring row(s); the newest of each is used');
       if(Object.keys(data).length)return{data,modifiedAt:latest};
       /* Items exist but none carried readable shicMonData. This is NOT an empty
          list — it usually means the shicMonData column is missing or unpopulated

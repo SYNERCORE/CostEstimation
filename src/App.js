@@ -2784,6 +2784,12 @@ function App({
       : {name: d.docRef.name, spUrl: d.docRef.spUrl, text: '', size: 0}) : null);
     setDocPreview(false);
     setTab('info');
+    /* Opening a CE is not work in progress. The auto-save only asks whether
+       the CE has CHANGED since it last wrote, and a CE just loaded had --
+       from whatever was on screen before it -- so merely opening one wrote a
+       draft of it. Every CE anybody opened ended up in Resume Work. What was
+       just loaded is what is saved, so it is recorded as already written. */
+    setTimeout(() => { try { if (_live.current) _lastAutoSig.current = _live.current.sig; } catch (_e) {} }, 400);
     showToast('Loaded: ' + (d.info?.ceNum || ''));
   };
   const handleClone = (e) => {
@@ -4884,6 +4890,39 @@ function App({
     const missing = Object.keys(monData || {}).filter(id => !have.has(String(id)) && mineToSee(id)).sort().join(',');
     if (missing && missing !== _assignedKey.current) { _assignedKey.current = missing; loadHist(); }
   }, [monData, history, isAdmin]);
+  /* A draft is work in progress. Once the CE has been saved the work is in
+     history and the draft is finished with -- but it was only ever retired by
+     the person who saved it, in the session that saved it, so drafts of CEs
+     saved long ago piled up in Resume Work by the hundred. Any draft written
+     BEFORE the CE was saved is cleared here, by whoever next opens the list.
+     A draft written after the save is somebody's newer work and is left. */
+  const _draftPrunedRef = React.useRef(new Set());
+  useEffect(() => {
+    if (!sharedDrafts.length || !history.length) return;
+    const key = n => String(n || '').trim().toUpperCase();
+    const savedAt = {};
+    history.forEach(h => {
+      const k = key((h.info && h.info.ceNum) || h.ceNum);
+      const t = Date.parse(h.savedAt || '') || 0;
+      if (k && t && t > (savedAt[k] || 0)) savedAt[k] = t;
+    });
+    const done = sharedDrafts.filter(d => {
+      if (_draftPrunedRef.current.has(d.draftId)) return false;
+      const k = key(d.info && d.info.ceNum), dt = Date.parse(d.savedAt || '') || 0;
+      return k && dt && savedAt[k] && savedAt[k] > dt;
+    });
+    if (!done.length) return;
+    done.forEach(d => _draftPrunedRef.current.add(d.draftId));
+    (async () => {
+      let gone = 0;
+      for (const d of done) {
+        try { await dbDeleteDraft(d.draftId); gone++; } catch (_e) { /* left for next time */ }
+      }
+      if (!gone) return;
+      setSharedDrafts(p => p.filter(x => !done.some(d => d.draftId === x.draftId)));
+      showToast('Resume Work: ' + gone + ' finished draft' + (gone === 1 ? '' : 's') + ' cleared — the CE' + (gone === 1 ? ' was' : 's were') + ' saved after the draft was written.');
+    })();
+  }, [sharedDrafts, history]);
   const monRows = useMemo(() => {
     const saved = new Set(history.map(h => String(h.info?.ceNum || h.ceNum || '').trim().toUpperCase()).filter(Boolean));
     const draftRows = (sharedDrafts || [])
@@ -8777,6 +8816,10 @@ function App({
     const age = Math.round((Date.now() - new Date(d.savedAt).getTime()) / 60000);
     const ageStr = age < 60 ? age + 'm ago' : age < 1440 ? Math.round(age / 60) + 'h ago' : Math.round(age / 1440) + 'd ago';
     const isOwn = d.savedBy === currentUser.username;
+    /* A draft of a CE that has since been saved, and written after that save:
+       it is newer than the saved copy, so it is kept -- but say so, or nobody
+       can tell it from work that was never saved at all. */
+    const _savedCE = (history || []).some(h => String((h.info && h.info.ceNum) || h.ceNum || '').trim().toUpperCase() === String(d.info?.ceNum || '').trim().toUpperCase());
     return /*#__PURE__*/React.createElement("div", {
       key: d.draftId,
       style: {
@@ -8805,7 +8848,10 @@ function App({
         fontWeight: 700,
         fontSize: 13
       }
-    }, d.info?.ceNum || '(No CE#)'), /*#__PURE__*/React.createElement("span", {
+    }, d.info?.ceNum || '(No CE#)'), _savedCE && /*#__PURE__*/React.createElement("span", {
+      title: "This CE is saved. The draft was written after that save, so it holds changes the saved CE does not.",
+      style: {fontSize: 9, padding: '2px 6px', borderRadius: 4, background: '#F0A42922', color: ACC, whiteSpace: 'nowrap'}
+    }, "newer than the saved CE"), /*#__PURE__*/React.createElement("span", {
       style: {
         background: isOwn ? '#8B5CF622' : '#F0A42922',
         color: isOwn ? 'var(--accent-violet)' : ACC,

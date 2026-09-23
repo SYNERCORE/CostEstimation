@@ -41,7 +41,7 @@ ck2('the current one is marked as current', src.includes("st === _m.status ? 'Th
 ck2('and the row shows the status as a chip, not a dropdown',
   !/key: e\.id \+ 'status'/.test(src),
   'a select per row is ~900 form controls and still shows no history');
-ck2('the panel can correct when the status changed', /updateMon\(statusPanel, 'statusChangedAt'/.test(src),
+ck2('the panel can correct when the status changed', /_w\.statusChangedAt = new Date\(_d\.date \+ 'T12:00:00'\)/.test(src),
   'the row date field went away with the inline dropdown, and nothing replaced it');
 ck2('it is disabled until there is a status to date', src.includes('disabled: !_d.status'));
 ck2('the panel shows the trail', /HISTORY/.test(src) && /_shown\.map\(\(h, i\)/.test(src));
@@ -52,17 +52,17 @@ ck2('a CE tracked before the log existed still shows its last change',
 
 const upd = src.match(/const updateMon = \(ceId, field, val\) => setMonData\(prev => \{[\s\S]*?return n;/)[0];
 console.log('\nthe stamp:');
-ck('fires on every status change, not a hand-picked list', /if \(field === 'status' && val\) \{/.test(upd),
+ck('fires on every status change, not a hand-picked list', /if \(_has\('status'\) && fields\.status\) \{/.test(upd),
   'Ongoing and For site insp. recorded nothing');
-ck('records when', /extra\.statusChangedAt = new Date\(\)\.toISOString\(\)/.test(upd));
+ck('records when', /extra\.statusChangedAt = \(_has\('statusChangedAt'\) && fields\.statusChangedAt\) \|\| new Date\(\)\.toISOString\(\)/.test(upd));
 ck('records who', /extra\.statusChangedBy = currentUser/.test(upd));
-ck('but not for clearing the status back to blank', !/if \(field === 'status'\) \{/.test(upd));
+ck('but not for clearing the status back to blank', !/if \(_has\('status'\)\) \{/.test(upd));
 /* The save takes the list of fields this edit touched now, so only those are
    written over the site's copy -- see tools/test-monitoring-merge.js. The
    stamps count as part of the edit, which is what `extra` holds. */
 ck('and persists through the same one-entry save', /dbSaveMonEntry\(ceId, ceNum, n\[ceId\], changed\)/.test(upd));
 ck('naming the status stamps as part of the change',
-  /const changed = \[field, \.\.\.Object\.keys\(extra\)\];/.test(upd),
+  /const changed = \[\.\.\.Object\.keys\(fields\), \.\.\.Object\.keys\(extra\)\];/.test(upd),
   'left out, the trail would be written and then merged away');
 
 console.log(bad?'\n'+bad+' FAILURE(S)':'\nstatus cell OK');

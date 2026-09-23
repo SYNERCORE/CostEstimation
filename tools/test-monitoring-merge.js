@@ -108,7 +108,7 @@ const log = (status, at) => ({status, at, by: 'someone'});
 
   console.log('\nThe monitoring table acts on all of that:');
   ck('the edit names the fields it touched',
-    /const changed = \[field, \.\.\.Object\.keys\(extra\)\];/.test(app),
+    /const changed = \[\.\.\.Object\.keys\(fields\), \.\.\.Object\.keys\(extra\)\];/.test(app),
     'the stamps a status change adds are part of that edit too');
   ck('and passes them to the save', /dbSaveMonEntry\(ceId, ceNum, n\[ceId\], changed\)/.test(app));
   ck('what came back is shown', /if \(res\.fields\) setMonData/.test(app));

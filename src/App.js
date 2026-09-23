@@ -656,7 +656,15 @@ function App({
     const d = new Date(v);
     return isNaN(d.getTime()) ? '' : new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   };
+  /* One edit, one write. Two calls in the same tick each read the SharePoint
+     row, put their own field on what they read and patch it back -- so the
+     one that lands second carries a copy of the row from before the first,
+     and the first field is lost. That is how a status set alongside an
+     approval (signed, submitted, superseded) failed to reach the site while
+     the browser showed it happily. Pass an object to write several fields as
+     one change. */
   const updateMon = (ceId, field, val) => setMonData(prev => {
+    const fields = (field && typeof field === 'object') ? field : { [field]: val };
     const extra = {};
     /* Stamp who moved a CE and when, on EVERY status change.
 
@@ -668,8 +676,12 @@ function App({
 
        Clearing the status back to blank is not a change worth attributing, so
        it is left unstamped. */
-    if (field === 'status' && val) {
-      extra.statusChangedAt = new Date().toISOString();
+    const _has = k => Object.prototype.hasOwnProperty.call(fields, k);
+    if (_has('status') && fields.status) {
+      const val = fields.status;
+      /* A date given with the status is the date it happened -- the panel
+         sends both together, and the stamp must not talk over it. */
+      extra.statusChangedAt = (_has('statusChangedAt') && fields.statusChangedAt) || new Date().toISOString();
       extra.statusChangedBy = currentUser?.name || currentUser?.username || '';
       /* The whole trail, not just the latest change. statusChangedAt only ever
          held the most recent one, so "who moved this to Submitted, and when did
@@ -691,7 +703,8 @@ function App({
     /* Remarks keep a trail like status does: every remark, who wrote it and
        when. The remark already on a CE from before the trail existed becomes
        its first entry, undated, rather than being lost to the next edit. */
-    if (field === 'remarks') {
+    if (_has('remarks')) {
+      const val = fields.remarks;
       const before = prev[ceId] || {};
       let log = Array.isArray(before.remarksLog) ? before.remarksLog : [];
       if (!log.length && String(before.remarks || '').trim()) log = [{ text: String(before.remarks), at: '', by: '' }];
@@ -702,7 +715,8 @@ function App({
        history would still show the day it was recorded here rather than the day
        it happened -- which is the whole point of correcting it on a CE entered
        long after the fact. */
-    if (field === 'statusChangedAt') {
+    if (_has('statusChangedAt') && !(_has('status') && fields.status)) {
+      const val = fields.statusChangedAt;
       const log0 = (prev[ceId] || {}).statusLog;
       if (Array.isArray(log0) && log0.length) {
         extra.statusLog = log0.map((h, i) => i === log0.length - 1 ? {...h, at: val} : h);
@@ -712,7 +726,7 @@ function App({
       ...prev,
       [ceId]: {
         ...prev[ceId],
-        [field]: val,
+        ...fields,
         ...extra
       }
     };
@@ -723,7 +737,7 @@ function App({
          deadline is not written back as it stood when this page was opened. */
       const h = history.find(x => String(x.id) === String(ceId));
       const ceNum = h?.info?.ceNum || h?.ceNum || String(ceId);
-      const changed = [field, ...Object.keys(extra)];
+      const changed = [...Object.keys(fields), ...Object.keys(extra)];
       dbSaveMonEntry(ceId, ceNum, n[ceId], changed).then(res => {
         if (res && res.ok) {
           /* Show the row the site now holds: anything somebody else changed on
@@ -2543,11 +2557,15 @@ function App({
       try {
         const saved = await dbFindCEByNum(ceNum);
         const mapped = DOC_TO_MON[info.status];
-        if (saved && saved.id != null && mapped && !(monData[saved.id] || {}).status) updateMon(saved.id, 'status', mapped);
         const _a = _entry.info.approval;
-        if (saved && saved.id != null && _a) {
-          updateMon(saved.id, 'apv', apvMirror(_entry.approvers, _a));
-          if (_a.state === 'pending' && !Object.keys(_a.lines || {}).length && (monData[saved.id] || {}).status !== 'For Approval') updateMon(saved.id, 'status', 'For Approval');
+        if (saved && saved.id != null) {
+          const _m = monData[saved.id] || {}, _w = {};
+          if (mapped && !_m.status) _w.status = mapped;
+          if (_a) {
+            _w.apv = apvMirror(_entry.approvers, _a);
+            if (_a.state === 'pending' && !Object.keys(_a.lines || {}).length && _m.status !== 'For Approval') _w.status = 'For Approval';
+          }
+          if (Object.keys(_w).length) updateMon(saved.id, _w);
         }
       } catch (_e) { console.warn('status seed skipped:', _e.message); }
       clearDraft();
@@ -2820,8 +2838,10 @@ function App({
       }
       const res = await spWithRetry(() => dbSaveHistory(e));
       setSignatures(sigs); setInfo(p => ({...p, ceNum: num, approval: apv}));
-      updateMon(dup.id, 'apv', apvMirror(e.approvers, apv));
-      if (apv.state === 'pending' && !Object.keys(apv.lines || {}).length && (monData[dup.id] || {}).status !== 'For Approval') updateMon(dup.id, 'status', 'For Approval');
+      updateMon(dup.id, {
+        apv: apvMirror(e.approvers, apv),
+        ...(apv.state === 'pending' && !Object.keys(apv.lines || {}).length && (monData[dup.id] || {}).status !== 'For Approval' ? { status: 'For Approval' } : {})
+      });
       loadHist();
       if (res && res.sp === false) { showToast('Stored in this browser only — SharePoint did not accept it, so approvers cannot see it yet.', true); return false; }
       return true;
@@ -2908,9 +2928,11 @@ function App({
       }
       inf.approval = apv;
       const res = await spWithRetry(() => dbSaveHistory({...full, info: inf, signatures: sigs, grand: N(full.grand) || computeCEGrand(full)}));
-      updateMon(ceId, 'apv', apvMirror(full.approvers, apv));
-      if (action === 'return') updateMon(ceId, 'remarks', '↩ Returned by ' + me.byName + ': ' + opt.comment);
-      else if (apv.state === 'approved') updateMon(ceId, 'status', 'Approved');
+      updateMon(ceId, {
+        apv: apvMirror(full.approvers, apv),
+        ...(action === 'return' ? { remarks: '↩ Returned by ' + me.byName + ': ' + opt.comment }
+          : apv.state === 'approved' ? { status: 'Approved' } : {})
+      });
       auditLog('apv_' + action, inf.ceNum + (opt.comment ? ': ' + opt.comment : ''), currentUser?.username);
       if (opt.fromEditor) { setInfo(p => ({...p, approval: apv})); setSignatures(sigs); }
       setViewCE(v => v ? {...v, k: Date.now()} : v);
@@ -4865,8 +4887,10 @@ function App({
         const setStatus = st !== 'Superseded' && ceIsOpen(st);
         if (!closeApv && !setStatus) return;
         _supersededRef.current.add(String(e.id));
-        if (closeApv) updateMon(e.id, 'apv', {...a, state: 'superseded', waiting: [], supersededBy: headNum, at: new Date().toISOString()});
-        if (setStatus) updateMon(e.id, 'status', 'Superseded');
+        updateMon(e.id, {
+          ...(closeApv ? { apv: {...a, state: 'superseded', waiting: [], supersededBy: headNum, at: new Date().toISOString()} } : {}),
+          ...(setStatus ? { status: 'Superseded' } : {})
+        });
       });
     });
   }, [monRows, monData]);
@@ -9895,12 +9919,16 @@ statusPanel && (() => {
   const _dirty = _d.status !== _d0.status || _d.date !== _d0.date;
   const _close = () => { setStatusDraft(null); setStatusPanel(null); };
   const _saveStatus = () => {
-    if (_d.status !== _d0.status && _d.status) updateMon(statusPanel, 'status', _d.status);
-    /* After the status, which stamps today: the date then puts it right. */
+    /* One write, both fields. Sent as two, the second read SharePoint before
+       the first had landed and patched the row back without the new status --
+       so the browser showed the change and the site never received it. */
+    const _w = {};
+    if (_d.status !== _d0.status && _d.status) _w.status = _d.status;
     if (_d.status && (_d.date !== _d0.date || _d.status !== _d0.status) && _d.date && _d.date !== monDateInput(new Date().toISOString()))
-      updateMon(statusPanel, 'statusChangedAt', new Date(_d.date + 'T12:00:00').toISOString());
+      _w.statusChangedAt = new Date(_d.date + 'T12:00:00').toISOString();
     else if (_d.status === _d0.status && _d.date !== _d0.date)
-      updateMon(statusPanel, 'statusChangedAt', _d.date ? new Date(_d.date + 'T12:00:00').toISOString() : '');
+      _w.statusChangedAt = _d.date ? new Date(_d.date + 'T12:00:00').toISOString() : '';
+    if (Object.keys(_w).length) updateMon(statusPanel, _w);
     showToast('Status saved: ' + (_d.status || '—') + (_d.date ? ' · ' + _d.date : '') + '.');
     _close();
   };

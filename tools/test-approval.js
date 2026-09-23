@@ -52,7 +52,8 @@ const sub = (app.match(/const apvSubmit = async \(\) => \{[\s\S]*?\n  \};/) || [
 ck('submit does not go through Save, which refuses a saved number', !/setSaveReq/.test(sub) && /await apvPersist\(/.test(sub));
 ck('a saved CE is updated directly', /const dup = await dbFindCEByNum\(num\)[\s\S]{0,1500}dbSaveHistory\(e\)/.test(app));
 ck('only while its figures match the saved ones', /apvFigSig\(full\) !== apvFigSig\(e\)/.test(app));
-ck('and Monitoring learns who it waits on', /updateMon\(dup\.id, 'apv', apvMirror/.test(app));
+ck('and Monitoring learns who it waits on, in one write with the status',
+  /updateMon\(dup\.id, \{\s*apv: apvMirror\(e\.approvers, apv\),/.test(app));
 ck('approvers are told when they open the app', /waiting for your signature/.test(app) && /see My Work/.test(app));
 
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\napproval OK');

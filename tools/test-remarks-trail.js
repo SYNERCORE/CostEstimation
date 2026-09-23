@@ -8,7 +8,7 @@ let bad = 0;
 const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 const merge = new Function(db.match(/function _monMergeLog\(theirs,mine\)\{[\s\S]*?\n\}/)[0] + ';return _monMergeLog;')();
 
-ck('a remark is appended to remarksLog with who and when', /if \(field === 'remarks'\) \{[\s\S]{0,600}extra\.remarksLog = log\.slice\(-60\);/.test(app));
+ck('a remark is appended to remarksLog with who and when', /if \(_has\('remarks'\)\) \{[\s\S]{0,700}extra\.remarksLog = log\.slice\(-60\);/.test(app));
 ck('the remark from before the trail becomes its first entry', /if \(!log\.length && String\(before\.remarks \|\| ''\)\.trim\(\)\) log = \[\{ text: String\(before\.remarks\)/.test(app));
 ck('the row has a Remarks button that opens the trail', /'💬 Remarks'/.test(app) && /setRemarksPanel\(\{ id: e\.id,/.test(app));
 

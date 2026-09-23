@@ -19,11 +19,11 @@ ck('drawn in red, not the dim row-count style', /t\.id === 'mywork' \? ERR :/.te
 ck('the browser tab title shows it too', /document\.title = myTodo\.total \?/.test(app));
 ck('and a new item says so, not just the first one of the session', /if \(n > was && was >= 0\)/.test(app));
 /* Replaced revisions have their approval closed, not left pending for ever. */
-ck('an older revision approval is marked superseded', app.includes("updateMon(e.id, 'apv', {...a, state: 'superseded', waiting: [], supersededBy: headNum"));
+ck('an older revision approval is marked superseded', app.includes("apv: {...a, state: 'superseded', waiting: [], supersededBy: headNum"));
 ck('only an approval still running is cancelled, and once', app.includes("const closeApv = a && ['pending', 'returned'].includes(a.state);") &&
   app.includes("if (_supersededRef.current.has(String(e.id))) return;"));
 /* The row keeps saying For Approval while the revision was long replaced. */
-ck('and the replaced revision is closed by status too', app.includes("if (setStatus) updateMon(e.id, 'status', 'Superseded');") &&
+ck('and the replaced revision is closed by status too', app.includes("...(setStatus ? { status: 'Superseded' } : {})") &&
   app.includes("const setStatus = st !== 'Superseded' && ceIsOpen(st);"));
 ck('Monitoring shows it', app.includes("'⊘ Superseded' + (m.apv.supersededBy ? ' by ' + m.apv.supersededBy : '')"));
 ck('and opening the old revision says so', app.includes("superseded: '⊘ Superseded'"));

@@ -40,21 +40,23 @@ const data = {
   e: { status: 'Superseded', apv: { state: 'superseded' } },
   f: { status: 'Awarded', apv: null }
 };
-run(data, ceIsOpen, (id, field, val) => calls.push([id, field, val]), 'SY3-CE-2026-1129-R6', new Set());
-const of = id => calls.filter(c => c[0] === id);
+run(data, ceIsOpen, (id, fields) => calls.push([id, fields]), 'SY3-CE-2026-1129-R6', new Set());
+/* One write per revision, carrying whatever changed -- two writes raced each
+   other on SharePoint and one field was lost. */
+const of = id => { const c = calls.filter(x => x[0] === id); return c.length === 1 ? c[0][1] : null; };
 ck('a revision waiting for signatures has its approval cancelled',
-  of('a').some(c => c[1] === 'apv' && c[2].state === 'superseded' && c[2].waiting.length === 0 && c[2].supersededBy === 'SY3-CE-2026-1129-R6'));
-ck('and its status set to Superseded', of('a').some(c => c[1] === 'status' && c[2] === 'Superseded'));
-ck('a draft revision is closed the same way', of('b').some(c => c[1] === 'status' && c[2] === 'Superseded'));
-ck('one already approved keeps that on the record', !of('c').some(c => c[1] === 'status'));
-ck('and one already awarded keeps that too', !of('f').some(c => c[1] === 'status'));
-ck('a revision with no status at all is closed', of('d').some(c => c[1] === 'status' && c[2] === 'Superseded'));
-ck('nothing is written twice', of('e').length === 0);
+  of('a') && of('a').apv.state === 'superseded' && of('a').apv.waiting.length === 0 && of('a').apv.supersededBy === 'SY3-CE-2026-1129-R6');
+ck('and its status set to Superseded, in the same write', of('a') && of('a').status === 'Superseded');
+ck('a draft revision is closed the same way', of('b') && of('b').status === 'Superseded');
+ck('one already approved keeps that on the record, untouched', !calls.some(c => c[0] === 'c'));
+ck('and one already awarded keeps that too', !calls.some(c => c[0] === 'f'));
+ck('a revision with no status at all is closed', of('d') && of('d').status === 'Superseded');
+ck('nothing is written twice', !calls.some(c => c[0] === 'e'));
 
 /* And it does not keep rewriting what it has already written. */
 const calls2 = [];
 const seen = new Set(['a']);
-run(data, ceIsOpen, (id, field, val) => calls2.push([id, field, val]), 'X', seen);
+run(data, ceIsOpen, (id, fields) => calls2.push([id, fields]), 'X', seen);
 ck('a revision handled once is left alone after that', !calls2.some(c => c[0] === 'a'));
 
 /* A cancelled approval cannot wait on anyone -- the reported fault. */

@@ -212,6 +212,8 @@ jobs:
         run: node tools/test-print-lastrow.js
       - name: Nothing lost in the print
         run: node tools/test-print-nothing-lost.js
+      - name: Every workflow step passes
+        run: node tools/check-ci-steps.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents
@@ -338,6 +340,8 @@ jobs:
         run: node tools/test-print-lastrow.js
       - name: Nothing lost in the print
         run: node tools/test-print-nothing-lost.js
+      - name: Every workflow step passes
+        run: node tools/check-ci-steps.js
       - name: Detailed Excel export mirrors the printed CE
         run: node tools/test-xlsx-export.js src/App.js
       - name: Every host the app calls is allowed by the CSP

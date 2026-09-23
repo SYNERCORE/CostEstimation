@@ -52,9 +52,12 @@ ck('nor one that lands exactly on it, which a printer would push over', fits(982
 ck('the last row that truly fits is still taken', fits(978, 982) === true);
 
 /* ---- a block that cannot be cut ---- */
-ck('only a table is cut between its rows', pg.includes("if (tbl.tagName !== 'TABLE') {"));
-ck('anything else is given the sheet with the most room rather than overrunning a full one',
-  pg.includes('if (body.children.length > 1) { body.removeChild(tbl); fresh(); body.appendChild(tbl); }'));
+/* Only rows can be cut between, so a section too tall for a sheet is taken
+   apart and its heading and table placed separately -- see
+   tools/test-print-nothing-lost.js, which lays such a CE out and counts it. */
+ck('only a table is cut between its rows', pg.includes("if (tbl.tagName !== 'TABLE') return;"));
+ck('a section too tall for a sheet is taken apart rather than laid down whole',
+  pg.includes('if (tall && el.children.length) {') && pg.includes("[].slice.call(el.children).forEach(put);"));
 
 /* ---- printing waits for the sheets ---- */
 ck('the print window waits until the sheets are laid out',

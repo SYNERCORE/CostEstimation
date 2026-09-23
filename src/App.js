@@ -972,11 +972,16 @@ function App({
   const _live = useRef(null);       /* current state for the auto-save timer */
   /* The owner holds every admin power on top of being unmanageable by them. */
   const isAdmin = hasAdminPowers(currentUser.role);
+  /* A requestor raises a request and hands it over. The costing tabs are not
+     theirs -- there is nothing on them they are allowed to change -- but a CE
+     that comes back is theirs to read in full, which is what View is for. */
+  const isRequestor = isRequestorRole(currentUser.role);
+  const REQUESTOR_TABS = ['mywork', 'info', 'sow', 'history', 'dashboard'];
   /* Every CE number in use, not just this user's. See dbGetCeNumbers. */
   const [ceNums, setCeNums] = useState([]);
   const isOwner = isOwnerRole(currentUser.role);
   const cfg = CE_CFG[ceType] || CE_CFG.onsite || {};
-  const TABS = [...CE_TABS, ...(isAdmin ? [{
+  const TABS = [...(isRequestor ? CE_TABS.filter(t => REQUESTOR_TABS.indexOf(t.id) >= 0) : CE_TABS), ...(isAdmin ? [{
     id: 'admin',
     label: 'Users'
   }] : [])];
@@ -2534,8 +2539,27 @@ function App({
       catch (ex) { showToast('Could not produce the document: ' + ex.message, true); }
     }, 250);
   }, [autoPrint, info.ceNum, mp, tools, mats, ppe]);
+  /* What a requestor may save: their own request, while it is still one.
+     Hiding the costing tabs is how it looks; this is how it holds. Every save
+     comes through here, so a control that slips through, a keyboard shortcut
+     and an auto-save are all answered in the same place and with the same
+     words -- and once an estimator has costed it, it is no longer a request
+     and is out of the requestor's hands. */
+  const requestorSaveRefusal = (e) => {
+    if (!isRequestor) return null;
+    const i = (e && e.info) || {};
+    if (!i.request) return "Costing is the estimator's. You can raise a request from CE Monitoring, and read this CE in full, but not change it.";
+    if (e && e.savedBy && e.savedBy !== currentUser.username) return 'This request was raised by ' + (e.savedByName || e.savedBy) + '. Only they or an admin can change it.';
+    return null;
+  };
   const handleSave = async () => {
     let _overwrote = null; /* set when bulk mode lets a save replace an existing CE */
+    /* Whose request it is, is what was saved, not what is on screen: a save
+       stamps savedBy with whoever is saving, so asking the open CE would let
+       anyone become its owner by opening it. */
+    const _rec = (history || []).find(h => String(h.ceNum || '').trim().toUpperCase() === (info.ceNum || '').trim().toUpperCase());
+    const _no = requestorSaveRefusal({ info, savedBy: _rec && _rec.savedBy, savedByName: _rec && _rec.savedByName });
+    if (_no) { showToast(_no, true); return; }
     const ceNum = (info.ceNum || '').trim().toUpperCase();
     if (ceNum !== (info.ceNum || '').trim()) setInfo(p => ({...p, ceNum}));
     if (!ceNum) {
@@ -3021,6 +3045,12 @@ function App({
     if (!h) { showToast('Could not find the saved copy of this CE.', true); return null; }
     return h.id;
   };
+  /* Signing reads the CE back, merges the signature into it, writes it, writes
+     the Monitoring row and reloads the list -- seconds, over SharePoint, with
+     the signature pad already closed. Nothing said so, so the screen simply sat
+     there and the CE reappeared signed a moment later, by which time you had
+     no way of knowing whether your click had registered or you had missed. */
+  const [apvBusy, setApvBusy] = useState(null);
   const apvStartSign = (ceId) => {
     const fromEditor = ceId == null;
     const id = fromEditor ? _apvEditorId() : ceId;
@@ -3037,6 +3067,8 @@ function App({
     apvAct(id, 'return', { comment: c.trim(), fromEditor });
   };
   const apvAct = async (ceId, action, opt = {}) => {
+    if (apvBusy) return false;
+    setApvBusy(action === 'return' ? 'Returning the CE to the estimator' : 'Signing the CE');
     try {
       const full = await dbLoadCE(ceId);
       if (!full) { showToast('Could not open that CE.', true); return false; }
@@ -3104,6 +3136,7 @@ function App({
       showToast(action === 'return' ? 'Returned with your comment.' : apv.state === 'approved' ? 'Signed — the CE is fully approved.' : 'Signed. It moves on to the next signatory.', res && res.sp === false);
       return true;
     } catch (ex) { showToast('Could not record that: ' + ex.message, true); return false; }
+    finally { setApvBusy(null); }
   };
   /* Whether it is my turn on the CE open in the viewer. The button used to
      ask Monitoring alone, so an approver whose mirror was never written, or
@@ -3190,7 +3223,7 @@ function App({
       !apvLocked && b('All at once', 'Every linked signatory can sign straight away, in any order', () => setApprovers(p => p.map(x => ({...x, step: 1})))),
       !apvLocked && b('📤 Submit for approval', s.total > 0 ? 'Save and send to the linked signatories. Changing the figures later clears their signatures.' : 'First pick a user in the dropdown on at least one signatory card below', apvSubmit, 'acc'),
       apvLocked && (isAdmin || (a && a.submittedBy === me)) && b('Withdraw', 'Take it back out of approval and clear the signatures', apvWithdraw),
-      mine && b('✍ Approve & Sign', 'Sign the saved CE as ' + (mine.role || 'signatory'), () => apvStartSign(null), 'ok'),
+      mine && b(apvBusy ? '✍ Signing…' : '✍ Approve & Sign', apvBusy ? 'Saving your signature — a moment' : 'Sign the saved CE as ' + (mine.role || 'signatory'), () => { if (!apvBusy) apvStartSign(null); }, 'ok'),
       apvState === 'pending' && (mine || isAdmin) && b('↩ Return', 'Send it back to the estimator with a comment', () => apvStartReturn(null)),
       apvState === 'pending' && isAdmin && s.waiting.length > 0 && b('👤 Signatory away', 'Hand a waiting line to somebody else, or take it out of the routing', () => setApvAbsent({to: ''})),
       s.skippedN > 0 && /*#__PURE__*/React.createElement("span", {style: {fontSize: 10, color: MT, textTransform: 'none', letterSpacing: 0}}, '· ' + s.skippedN + ' skipped'));
@@ -10542,7 +10575,7 @@ viewCE && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset
       /*#__PURE__*/React.createElement("b", null, "👁 " + (viewCE.ceNum || 'CE')),
       /*#__PURE__*/React.createElement("span", {style:{fontSize:11,color:MT}}, viewCE.draft ? "Read-only view of an unsaved DRAFT — figures may still change." : "Read-only view. Takes a few seconds to draw."),
       /*#__PURE__*/React.createElement("span", {style:{marginLeft:'auto'}}),
-      !viewCE.draftKey && (apvMonWaitsOn(monData[viewCE.id], currentUser.username) || viewApvTurn) && /*#__PURE__*/React.createElement("button", {style:btn('ok',true),title:"Sign the CE shown here",onClick:()=>apvStartSign(viewCE.id)}, "✍ Approve & Sign"),
+      !viewCE.draftKey && (apvMonWaitsOn(monData[viewCE.id], currentUser.username) || viewApvTurn) && /*#__PURE__*/React.createElement("button", {style:{...btn('ok',true),opacity:apvBusy?.6:1},disabled:!!apvBusy,title:apvBusy?"Saving your signature — a moment":"Sign the CE shown here",onClick:()=>{if(!apvBusy)apvStartSign(viewCE.id);}}, apvBusy ? "✍ Signing…" : "✍ Approve & Sign"),
       !viewCE.draftKey && ((monData[viewCE.id]||{}).apv||{}).state==='pending' && ((((monData[viewCE.id]||{}).apv||{}).waiting||[]).includes(currentUser.username) || isAdmin) && /*#__PURE__*/React.createElement("button", {style:btn('def',true),title:"Send it back to the estimator with a comment",onClick:()=>apvStartReturn(viewCE.id)}, "↩ Return"),
       /*#__PURE__*/React.createElement("button", {style:btn('def',true),title:"Print or save this CE as PDF",onClick:()=>{try{
       /* The viewer prints an iframe, and the browser names the PDF after the
@@ -10655,6 +10688,14 @@ mlTrash && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inse
           isAdmin && /*#__PURE__*/React.createElement("button", {style:{...btn('danger',true),padding:'2px 6px'},title:'Delete permanently',onClick:()=>mlPurge([e])}, "✕"));
       }) : /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:MT,textAlign:'center',padding:20}}, "Trash is empty.")))),
 
+/* Said over everything, because the pad it was started from has already
+   closed and the CE underneath looks exactly as it did before. */
+apvBusy && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset:0,background:'#000a',zIndex:3400,display:'flex',alignItems:'center',justifyContent:'center'}},
+  /*#__PURE__*/React.createElement("div", {style:{background:'var(--panel,#161B22)',border:'1px solid '+BDR,borderRadius:10,padding:'18px 22px',display:'flex',gap:12,alignItems:'center',boxShadow:'0 10px 40px #000a'}},
+    /*#__PURE__*/React.createElement("div", {style:{width:18,height:18,borderRadius:'50%',border:'2px solid '+alpha(OK,'44'),borderTopColor:OK,animation:'spin .7s linear infinite'}}),
+    /*#__PURE__*/React.createElement("div", null,
+      /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:13}}, apvBusy + '…'),
+      /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,marginTop:2}}, 'Saving to SharePoint. This takes a few seconds — do not close the CE.')))),
 sigModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset:0,background:'#000b',zIndex:3100,display:'flex',alignItems:'center',justifyContent:'center'},onClick:()=>setSigModal(null)},
   /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid #A78BFA',borderRadius:10,padding:20,width:460},onClick:e=>e.stopPropagation()},
     /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}},

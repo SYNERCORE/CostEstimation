@@ -214,6 +214,10 @@ jobs:
         run: node tools/test-print-nothing-lost.js
       - name: Every workflow step passes
       - name: The storage warning clears what it can
+      - name: The Requestor role
+        run: node tools/test-requestor-role.js
+      - name: Signing says it is working
+        run: node tools/test-sign-indicator.js
         run: node tools/test-storage-warning.js
         run: node tools/check-ci-steps.js
       - name: Tool power usage
@@ -344,6 +348,10 @@ jobs:
         run: node tools/test-print-nothing-lost.js
       - name: Every workflow step passes
       - name: The storage warning clears what it can
+      - name: The Requestor role
+        run: node tools/test-requestor-role.js
+      - name: Signing says it is working
+        run: node tools/test-sign-indicator.js
         run: node tools/test-storage-warning.js
         run: node tools/check-ci-steps.js
       - name: Detailed Excel export mirrors the printed CE

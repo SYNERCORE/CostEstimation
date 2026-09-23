@@ -1333,11 +1333,22 @@ async function ensureAdmin() {
    app, and every attempt is audit-logged. It is not a defence against someone
    with direct list access. Restrict write access to the Users list in
    SharePoint if that matters.                                                */
-const ROLE_OWNER='owner', ROLE_ADMIN='admin', ROLE_USER='user';
+const ROLE_OWNER='owner', ROLE_ADMIN='admin', ROLE_USER='user', ROLE_REQUESTOR='requestor';
 const _role=u=>String((u&&u.role)||u||'').toLowerCase();
 const isOwnerRole=r=>_role(r)===ROLE_OWNER;
 /* The owner keeps every admin power; `admin` alone is the delegated tier. */
 const hasAdminPowers=r=>{const x=_role(r);return x===ROLE_OWNER||x===ROLE_ADMIN;};
+/* A requestor raises the request -- the CE number, the customer, what the job
+   is, when it is wanted and who is to cost it -- and hands it over there. They
+   see everything that comes back, and change none of it: the one thing they
+   may save is their own request, and only while it is still a request. */
+const isRequestorRole=r=>_role(r)===ROLE_REQUESTOR;
+const canCostCE=r=>!isRequestorRole(r);
+const ROLE_NAMES={owner:'Owner',admin:'Admin',user:'Estimator',requestor:'Requestor'};
+const roleName=r=>ROLE_NAMES[_role(r)]||_role(r)||'user';
+/* Every role an admin may hand out. The owner is reached by transfer alone, so
+   it is not among them: this cannot mint a second owner. */
+const ASSIGNABLE_ROLES=[ROLE_USER,ROLE_REQUESTOR,ROLE_ADMIN];
 const findOwner=users=>(users||[]).find(u=>u&&isOwnerRole(u.role))||null;
 const sameUser=(a,b)=>{const x=String((a&&a.username)||a||'').toLowerCase(),y=String((b&&b.username)||b||'').toLowerCase();return !!x&&x===y;};
 

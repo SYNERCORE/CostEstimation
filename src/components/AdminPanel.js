@@ -167,11 +167,20 @@
   };
   const toggleRole = async u => {
     if (!allow(u, 'role')) return;
-    /* Only ever moves between user and admin. The owner role is reachable by
-       transfer alone, so this cannot mint a second owner or strand the app
-       without one. */
-    const r = u.role === 'admin' ? 'user' : 'admin';
-    if (!confirm(`Change "${u.username}" role to ${r}?`)) return;
+    /* Estimator -> Requestor -> Admin, and round again. The owner role is
+       reachable by transfer alone, so this cannot mint a second owner or
+       strand the app without one. */
+    const cur = String(u.role || 'user').toLowerCase();
+    const at = ASSIGNABLE_ROLES.indexOf(cur);
+    const r = ASSIGNABLE_ROLES[(at < 0 ? 0 : at + 1) % ASSIGNABLE_ROLES.length];
+    const says = {
+      user: 'an Estimator: builds and costs CEs.',
+      requestor: 'a Requestor: raises requests for estimation and reads what comes back. No costing, and no CE of anyone else is theirs to change.',
+      admin: 'an Admin: every CE, every account.'
+    }[r] || r;
+    if (!confirm(`Make "${u.username}" ${roleName(r)}?
+
+They become ` + says)) return;
     await userAction('change the role of ' + u.username, async () => {
       await dbUpdateUser(u.id, { role: r });
       auditLog('role_change', `${u.username} → ${r}`, currentUser?.username);
@@ -405,12 +414,13 @@
     style: TDS
   }, /*#__PURE__*/React.createElement("span", {
     style: {
-      color: isOwnerRole(u.role) ? 'var(--accent-violet)' : (u.role === 'admin' ? ACC : MT),
+      color: isOwnerRole(u.role) ? 'var(--accent-violet)' : (u.role === 'admin' ? ACC : (isRequestorRole(u.role) ? INFO : MT)),
       fontWeight: hasAdminPowers(u.role) ? 700 : 400,
       fontSize: 11
     },
-    title: isOwnerRole(u.role) ? 'Owner — cannot be changed by other admins' : undefined
-  }, isOwnerRole(u.role) ? '★ owner' : u.role)), /*#__PURE__*/React.createElement("td", {
+    title: isOwnerRole(u.role) ? 'Owner — cannot be changed by other admins'
+      : (isRequestorRole(u.role) ? 'Raises requests for estimation and reads what comes back — no costing' : 'Click the role to change it')
+  }, isOwnerRole(u.role) ? '★ owner' : roleName(u.role))), /*#__PURE__*/React.createElement("td", {
     style: TDS
   }, /*#__PURE__*/React.createElement(SBadge, {
     s: u.status

@@ -1046,7 +1046,11 @@ function App({
            monitoring AND drafts as 'saving', so anything not resolved here stays
            amber forever. The finally downgrades whatever is still in-flight. */
         try {
-          await Promise.all([loadHist(), loadMonData(), loadML(), loadSowLib()]);
+          /* Drafts belong in here. Refresh marks them syncing and only the
+             Drafts screen ever fetched them, so the finally below downgraded
+             them to "this device only" on every refresh -- an amber warning
+             about nothing, on a connection that was working. */
+          await Promise.all([loadHist(), loadMonData(), loadML(), loadSowLib(), loadSharedDrafts(true)]);
         } finally {
           const st = getSyncStatus(), fix = {};
           ['masterlist','monitoring','drafts','sowlib'].forEach(k => { if (st[k] === 'saving') fix[k] = 'local'; });
@@ -2268,13 +2272,15 @@ function App({
   };
 
   /* \u2500\u2500 Load shared drafts list from SharePoint \u2500\u2500 */
-  const loadSharedDrafts = async () => {
+  const loadSharedDrafts = async (quiet) => {
     setSyncStatus({drafts:'saving'});
     try {
       const list = await dbGetDrafts();
       setSharedDrafts(list);
       setSyncStatus({drafts:'synced', lastSyncAt: new Date().toISOString(), sp:'connected'});
-      if (list.length === 0) showToast('Nothing in progress — every CE has been saved.');
+      /* Quiet when it runs as part of a full refresh: "nothing in progress"
+         is an answer to opening the Drafts list, not to pressing Refresh. */
+      if (!quiet && list.length === 0) showToast('Nothing in progress — every CE has been saved.');
     } catch (e) {
       setSharedDrafts([]);
       setSyncStatus({drafts:'error'});

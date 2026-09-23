@@ -80,13 +80,28 @@ async function _loadMSAL(){
   ];
   for(const url of cdns){
     try{
+      /* onerror catches a request that failed. It does not catch a request
+         that succeeded and returned something that is not JavaScript -- a
+         proxy's block page, a captive portal, a sign-in redirect. The browser
+         parses that as a script and throws a SyntaxError that belongs to no
+         file anyone can name, and onload never comes, so the wait used to sit
+         until the whole attempt was abandoned without saying why.
+         A <script> tag is kept rather than fetch+eval: it needs no CORS, and
+         this is the fallback for when the local copy is missing. */
       await new Promise((res,rej)=>{
         const s=document.createElement('script');
-        s.src=url;s.onload=()=>setTimeout(res,100);s.onerror=rej;
+        let done=false;
+        const end=(ok,why)=>{if(done)return;done=true;ok?setTimeout(res,100):rej(new Error(why));};
+        s.src=url;
+        s.onload=()=>end(true);
+        s.onerror=()=>end(false,'could not be fetched');
+        /* Whatever came back neither ran nor failed: say so and move on. */
+        setTimeout(()=>end(false,'no answer in 15s -- blocked, or not JavaScript'),15000);
         document.head.appendChild(s);
       });
       if(typeof msal!=='undefined')return true;
-    }catch(e){console.warn('MSAL CDN failed:',url);}
+      throw new Error('loaded but defined nothing -- a page was served where the library should be');
+    }catch(e){console.warn('MSAL CDN failed:',url,(e&&e.message)||e);}
   }
   return false;
 }

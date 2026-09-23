@@ -1,4 +1,4 @@
-const CACHE='shic-ce-v271';
+const CACHE='shic-ce-v272';
 /* The libraries now ship in ./vendor and are precached as part of APP, so the
    app no longer needs the public internet at all after its first load. Only
    MSAL is still fetched remotely, and only as a fallback behind the local copy
@@ -16,39 +16,39 @@ const EXTRA=['./vendor/pdf.worker.min.js','./vendor/msal-browser.min.js'];
    app did. Kept in step with index.html by tools/check-sw-precache.js.
    APP_START */
 const APP=[
-  './vendor/react.production.min.js?v=271',
-  './vendor/react-dom.production.min.js?v=271',
-  './vendor/xlsx.full.min.js?v=271',
-  './vendor/pdf.min.js?v=271',
-  './vendor/mammoth.browser.min.js?v=271',
-  './src/constants.js?v=271',
-  './src/helpers.js?v=271',
-  './src/approval.js?v=271',
-  './src/xlsx-styled.js?v=271',
-  './src/ai.js?v=271',
-  './src/ai_models.js?v=271',
-  './src/config.js?v=271',
-  './src/update.js?v=271',
-  './src/qr.js?v=271',
-  './src/sp.js?v=271',
-  './src/idb.js?v=271',
-  './src/db.js?v=271',
-  './src/auth.js?v=271',
-  './src/components/LoginPage.js?v=271',
-  './src/components/RegisterPage.js?v=271',
-  './src/components/CompanyDBPanel.js?v=271',
-  './src/components/CeDefaultsPanel.js?v=271',
-  './src/components/ShiftRatesPanel.js?v=271',
-  './src/components/FbSetupPanel.js?v=271',
-  './src/components/LocalToSPSync.js?v=271',
-  './src/components/ChangePasswordModal.js?v=271',
-  './src/components/UpdatePublisher.js?v=271',
-  './src/components/AdminPanel.js?v=271',
-  './src/components/ResTab.js?v=271',
-  './src/App.js?v=271',
-  './src/widgets.js?v=271',
-  './src/tests.js?v=271',
-  './src/ml_utils.js?v=271'
+  './vendor/react.production.min.js?v=272',
+  './vendor/react-dom.production.min.js?v=272',
+  './vendor/xlsx.full.min.js?v=272',
+  './vendor/pdf.min.js?v=272',
+  './vendor/mammoth.browser.min.js?v=272',
+  './src/constants.js?v=272',
+  './src/helpers.js?v=272',
+  './src/approval.js?v=272',
+  './src/xlsx-styled.js?v=272',
+  './src/ai.js?v=272',
+  './src/ai_models.js?v=272',
+  './src/config.js?v=272',
+  './src/update.js?v=272',
+  './src/qr.js?v=272',
+  './src/sp.js?v=272',
+  './src/idb.js?v=272',
+  './src/db.js?v=272',
+  './src/auth.js?v=272',
+  './src/components/LoginPage.js?v=272',
+  './src/components/RegisterPage.js?v=272',
+  './src/components/CompanyDBPanel.js?v=272',
+  './src/components/CeDefaultsPanel.js?v=272',
+  './src/components/ShiftRatesPanel.js?v=272',
+  './src/components/FbSetupPanel.js?v=272',
+  './src/components/LocalToSPSync.js?v=272',
+  './src/components/ChangePasswordModal.js?v=272',
+  './src/components/UpdatePublisher.js?v=272',
+  './src/components/AdminPanel.js?v=272',
+  './src/components/ResTab.js?v=272',
+  './src/App.js?v=272',
+  './src/widgets.js?v=272',
+  './src/tests.js?v=272',
+  './src/ml_utils.js?v=272'
 ];
 /* APP_END */
 self.addEventListener('install',e=>{
@@ -60,7 +60,11 @@ self.addEventListener('install',e=>{
          404 or flaky response rejects the whole batch and leaves NOTHING
          cached, so one bad entry silently cost the app its entire offline
          capability. Cache what we can and report what we could not. */
-      Promise.all(APP.concat(EXTRA).map(u=>fetch(u,{cache:'reload'}).then(r=>r.ok?c.put(u,r):Promise.reject(r.status)).catch(err=>{console.warn('SW: precache failed for',u,err);})))
+      /* status===200, not r.ok: 206 Partial Content is "ok" and is half a
+         file. A partial script stored here is served whole builds later and
+         fails to parse -- an unexplained SyntaxError on load, pointing at
+         nothing. Only a complete response is worth keeping. */
+      Promise.all(APP.concat(EXTRA).map(u=>fetch(u,{cache:'reload'}).then(r=>r.status===200?c.put(u,r):Promise.reject(r.status)).catch(err=>{console.warn('SW: precache failed for',u,err);})))
         /* Fetch the shell with cache:'reload'. c.addAll() goes through the
            browser's own http cache, so a stale index.html could be copied into
            the SW cache — and index.html is what pins the ?v= every script is
@@ -93,8 +97,8 @@ self.addEventListener('fetch',e=>{
      served without revalidation; a miss falls through to the network and is
      stored for next time. */
   if(url.indexOf(self.registration.scope)===0&&/\/(src|vendor)\/.+\.js(\?|$)/.test(url)){
-    e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>{
-      if(res&&res.ok){const clone=res.clone();caches.open(CACHE).then(c=>c.put(e.request,clone));}
+    e.respondWith(caches.match(e.request).then(r=>(r&&r.status===200)?r:fetch(e.request).then(res=>{
+      if(res&&res.status===200){const clone=res.clone();caches.open(CACHE).then(c=>c.put(e.request,clone));}
       return res;
     }).catch(()=>caches.match(e.request))));
     return;
@@ -129,3 +133,8 @@ self.addEventListener('fetch',e=>{
     }).catch(()=>caches.match(e.request).then(r=>r||caches.match('./index.html'))));
   }
 });
+/* The service worker's own failures reached nobody: it runs in its own scope,
+   so a rejection here is not the page's error and is not reported anywhere the
+   page can see. Say which URL it was. */
+self.addEventListener('error',e=>{console.warn('SW error:',(e&&e.message)||e);});
+self.addEventListener('unhandledrejection',e=>{console.warn('SW unhandled:',(e&&e.reason&&e.reason.message)||(e&&e.reason));});

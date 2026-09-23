@@ -218,6 +218,8 @@ jobs:
         run: node tools/test-requestor-role.js
       - name: Signing says it is working
         run: node tools/test-sign-indicator.js
+      - name: A load error names itself
+        run: node tools/test-load-errors.js
         run: node tools/test-storage-warning.js
         run: node tools/check-ci-steps.js
       - name: Tool power usage
@@ -352,6 +354,8 @@ jobs:
         run: node tools/test-requestor-role.js
       - name: Signing says it is working
         run: node tools/test-sign-indicator.js
+      - name: A load error names itself
+        run: node tools/test-load-errors.js
         run: node tools/test-storage-warning.js
         run: node tools/check-ci-steps.js
       - name: Detailed Excel export mirrors the printed CE

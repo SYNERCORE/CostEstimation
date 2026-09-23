@@ -8372,10 +8372,21 @@ function App({
         var sections = [].slice.call(src.children);
         var sh = null, body = null, avail = 0;
         function fresh(){ sh = sheet(); body = sh.querySelector('.sbody'); avail = body.clientHeight; }
-        /* scrollHeight never reports less than the box itself, so the test
-           is <= and not < : a page taking "avail - 1" would fit nothing at
-           all, one row to a sheet, for ever. */
-        function fits(){ return body.scrollHeight <= avail; }
+        /* What is measured is the bottom of the content, not scrollHeight:
+           scrollHeight is a whole number and never reports less than the box
+           itself, so it can neither see a row overflowing by half a line nor
+           be asked for any room in hand -- "avail - 1" against it fits
+           nothing at all, one row to a sheet, for ever.
+           The room in hand is what a printer needs. A sheet filled to its
+           last pixel on screen is a sheet whose final row a printer's own
+           rounding of 297mm pushes under the footer, which is a row sliced
+           in half at the foot of a page. GAP is about a millimetre. */
+        var GAP = 4;
+        function fits(){
+          var last = body.lastElementChild;
+          if (!last) return true;
+          return last.getBoundingClientRect().bottom - body.getBoundingClientRect().top <= avail - GAP;
+        }
         function put(el){
           body.appendChild(el);
           if (fits()) return;
@@ -8388,7 +8399,12 @@ function App({
         /* A table taller than a page is cut between its rows, and its first
            row -- the column headings -- repeats on the sheet after it. */
         function split(tbl){
-          if (tbl.tagName !== 'TABLE') return;
+          /* Nothing else can be cut between rows. Give it a sheet of its own,
+             where it has the most room, and let it overrun if it must. */
+          if (tbl.tagName !== 'TABLE') {
+            if (body.children.length > 1) { body.removeChild(tbl); fresh(); body.appendChild(tbl); }
+            return;
+          }
           body.removeChild(tbl);
           var rows = [].slice.call(tbl.rows), head = rows.length ? rows[0].cloneNode(true) : null, i = 0;
           while (i < rows.length) {

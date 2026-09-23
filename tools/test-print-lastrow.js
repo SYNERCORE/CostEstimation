@@ -30,16 +30,31 @@ ck('a page already loaded is laid out at once, not only on DOMContentLoaded',
   pg.includes("if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', whenLoaded); else whenLoaded();"));
 
 /* ---- the fit test itself ---- */
-ck('a page is full when its content reaches the bottom, not one pixel before',
-  pg.includes('function fits(){ return body.scrollHeight <= avail; }'));
-/* scrollHeight never reports less than the box: avail - 1 can never be met, so
-   every sheet would close after a single row. Guard the shape, not the words. */
-ck('the fit test cannot be tightened into one row a page', !/scrollHeight\s*<=?\s*avail\s*-/.test(pg));
+ck('a page is full by where its content ends, not by scrollHeight',
+  pg.includes('function fits(){') && pg.includes('last.getBoundingClientRect().bottom - body.getBoundingClientRect().top <= avail - GAP'));
+/* scrollHeight is a whole number and never reports less than the box itself:
+   it cannot see a row overflowing by half a line, and cannot be asked for any
+   room in hand -- "avail - 1" against it is met by nothing, one row a sheet. */
+ck('and not by scrollHeight again, which can be neither fractional nor reduced', !/body.scrollHeight/.test(pg));
+ck('a millimetre is kept back for the printer, whose 297mm is not the screen mm', pg.includes('var GAP = 4;'));
 
-/* the real fits(), against what a flex body actually reports */
-const fits = new Function('body', 'avail', pg.slice(pg.indexOf('function fits(){'), pg.indexOf('}', pg.indexOf('function fits(){')) + 1) + '\n return fits();');
-ck('an empty page, whose scrollHeight is its own height, still takes a row', fits({ scrollHeight: 982 }, 982) === true);
-ck('a page one pixel over does not', fits({ scrollHeight: 983 }, 982) === false);
+/* the real fits(), against what the boxes actually report */
+const cut = pg.slice(pg.indexOf('var GAP = 4;'), pg.indexOf('function put(el)'));
+const mkBody = bottom => ({
+  lastElementChild: bottom === null ? null : { getBoundingClientRect: () => ({ bottom }) },
+  getBoundingClientRect: () => ({ top: 0 })
+});
+const fits = (bottom, avail) => new Function('body', 'avail', cut + ' return fits();')(mkBody(bottom), avail);
+ck('an empty page takes a row', fits(null, 982) === true);
+ck('a page with room to spare takes another', fits(900, 982) === true);
+ck('a row ending half a line past the bottom does not fit', fits(982.6, 982) === false);
+ck('nor one that lands exactly on it, which a printer would push over', fits(982, 982) === false);
+ck('the last row that truly fits is still taken', fits(978, 982) === true);
+
+/* ---- a block that cannot be cut ---- */
+ck('only a table is cut between its rows', pg.includes("if (tbl.tagName !== 'TABLE') {"));
+ck('anything else is given the sheet with the most room rather than overrunning a full one',
+  pg.includes('if (body.children.length > 1) { body.removeChild(tbl); fresh(); body.appendChild(tbl); }'));
 
 /* ---- printing waits for the sheets ---- */
 ck('the print window waits until the sheets are laid out',

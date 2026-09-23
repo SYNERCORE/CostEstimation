@@ -2563,7 +2563,13 @@ function App({
           if (mapped && !_m.status) _w.status = mapped;
           if (_a) {
             _w.apv = apvMirror(_entry.approvers, _a);
-            if (_a.state === 'pending' && !Object.keys(_a.lines || {}).length && _m.status !== 'For Approval') _w.status = 'For Approval';
+            /* Saving a CE that happens to be out for approval must not put
+               the pipeline status back to For Approval: whoever moved it on
+               to Submitted, Ongoing or Awarded watched it snap back every
+               time the CE was saved. Only a status nobody has chosen -- blank
+               or still Draft -- is moved on. */
+            const _st = String(_m.status || '').trim();
+            if (_a.state === 'pending' && !Object.keys(_a.lines || {}).length && (!_st || _st === 'Draft')) _w.status = 'For Approval';
           }
           if (Object.keys(_w).length) updateMon(saved.id, _w);
         }

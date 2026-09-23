@@ -57,7 +57,7 @@ for (const m of rest.matchAll(/autoFocus\s*:/g)) {
      is clicked, so its filter box only ever mounts because someone asked for
      it -- the same shape as selProv, and the reason autoFocus is safe there. */
   ck('an autoFocus at ' + m.index + ' sits in a modal or picker',
-    /Picker|modal|Modal|selProv|hlPick|remarksPanel|position: 'fixed'/.test(near),
+    /Picker|modal|Modal|selProv|hlPick|remarksPanel|assignPanel|apvAbsent|position: 'fixed'/.test(near),
     'autofocusing something always on screen takes the caret from wherever the person meant to be');
 }
 

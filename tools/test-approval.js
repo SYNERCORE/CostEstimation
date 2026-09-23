@@ -40,7 +40,9 @@ console.log('\nsignatures follow the figures:');
 ck('the fingerprint changes with the total', A.apvFigSig({ t: 100 }) !== A.apvFigSig({ t: 101 }));
 const kept = A.apvStripSigs(ap, { a: 'x', b: 'y', e: 'z' });
 ck('clearing drops routed signatures only', !kept.a && !kept.b && kept.e === 'z');
-ck('a save with changed figures resets to step 1', /apvFigSig\(_entry\) !== _apv\.figSig[\s\S]{0,500}lines: \{\}/.test(app));
+ck('a save with changed figures resets to step 1',
+  /apvFigSig\(_entry\) !== _apv\.figSig/.test(app) &&
+  /const _na = \{\.\.\._apv, state: 'pending', figSig: apvFigSig\(_entry\), contentSig: apvContentSig\(_entry\), lines: \{\}/.test(app));
 ck('a revision starts unapproved', /revSuffix \? \{ info: \(\(\{approval, \.\.\.r\}\)/.test(app));
 ck('clone and revise start unapproved', (app.match(/approval: undefined/g) || []).length >= 2);
 ck('signing checks the saved figures first', /apvFigSig\(full\) !== a0\.figSig/.test(app));
@@ -50,7 +52,7 @@ ck('the signature is stamped with who and when', /apvStamp\(opt\.sig, me\.byName
 console.log('\nsubmitting a CE that is already saved:');
 const sub = (app.match(/const apvSubmit = async \(\) => \{[\s\S]*?\n  \};/) || [''])[0];
 ck('submit does not go through Save, which refuses a saved number', !/setSaveReq/.test(sub) && /await apvPersist\(/.test(sub));
-ck('a saved CE is updated directly', /const dup = await dbFindCEByNum\(num\)[\s\S]{0,1500}dbSaveHistory\(e\)/.test(app));
+ck('a saved CE is updated directly', /const dup = await dbFindCEByNum\(num\)[\s\S]{0,3000}dbSaveHistory\(e\)/.test(app));
 ck('only while its figures match the saved ones', /apvFigSig\(full\) !== apvFigSig\(e\)/.test(app));
 ck('and Monitoring learns who it waits on, in one write with the status',
   /updateMon\(dup\.id, \{\s*apv: apvMirror\(e\.approvers, apv\),/.test(app));

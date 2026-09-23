@@ -2550,7 +2550,27 @@ function App({
       /* A signature belongs to the figures it approved. If they changed, every
          routed signature goes and the routing starts again from the first step. */
       const _apv = _entry.info.approval;
-      if (_apv && (_apv.state === 'pending' || _apv.state === 'approved') && (apvFigSig(_entry) !== _apv.figSig || (_apv.contentSig && apvContentSig(_entry) !== _apv.contentSig))) {
+      const _wipes = !!(_apv && (_apv.state === 'pending' || _apv.state === 'approved') &&
+        (apvFigSig(_entry) !== _apv.figSig || (_apv.contentSig && apvContentSig(_entry) !== _apv.contentSig)));
+      /* Asked BEFORE the save, not reported 1.5 seconds after it. Signatures
+         that took a week to collect were gone before anyone knew the edit
+         counted as a change, with nothing to undo it. */
+      if (_wipes) {
+        const _lost = apvStatus(_entry.approvers, _apv);
+        const _who = Object.values(_apv.lines || {}).map(l => (l && l.byName) || (l && l.by) || '').filter(Boolean);
+        const _hand = Object.keys(_entry.signatures || {}).length - _who.length;
+        if (_who.length || _hand > 0) {
+          const _msg = 'Saving clears ' + (_who.length ? _who.length + ' signature(s) — ' + _who.join(', ') : '') +
+            (_who.length && _hand > 0 ? ' and ' : '') + (_hand > 0 ? _hand + ' signed by hand' : '') + '.' + String.fromCharCode(10, 10) +
+            'The figures or the wording changed since ' + (_apv.state === 'approved' ? 'it was approved' : 'it was submitted') +
+            ', and a signature belongs to the CE it was put to. ' +
+            (_lost.total ? 'Routing starts again from the first step, and all ' + _lost.total + ' signatory(ies) sign again.' : '') +
+            String.fromCharCode(10, 10) + 'Save and clear them?' + String.fromCharCode(10) +
+            'Cancel to keep them — use ↻ Revise to save your changes as a new revision instead.';
+          if (!confirm(_msg)) { showToast('Not saved — the signatures on ' + ceNum + ' are untouched.'); return; }
+        }
+      }
+      if (_wipes) {
         const _now = new Date().toISOString(), _had = Object.keys(_apv.lines || {}).length;
         const _na = {..._apv, state: 'pending', figSig: apvFigSig(_entry), contentSig: apvContentSig(_entry), lines: {}, submittedAt: _now,
           log: [...(_apv.log || []), {at: _now, by: currentUser.username, byName: currentUser.name || currentUser.username, action: 'reset', comment: 'CE changed'}]};
@@ -2863,8 +2883,15 @@ function App({
       /* Anything edited since the saved copy -- scope, notes, a line's text --
          and no signature on it stands, hand-drawn ones included. */
       if (full && apvContentSig(full) !== apvContentSig(e) && Object.keys(e.signatures || {}).length) {
+        /* Asked first, and only then cleared. And the signed lines go with the
+           images: a line marked signed with no signature on it shows an
+           approval nobody can see. */
+        if (!confirm('This clears ' + Object.keys(e.signatures).length + ' signature(s) on ' + num + '.' + String.fromCharCode(10, 10) +
+          'The wording changed since it was saved, and a signature belongs to the CE it was put to.' + String.fromCharCode(10, 10) +
+          'Go on and clear them?')) { showToast('Nothing was changed — the signatures on ' + num + ' stand.'); return false; }
         e.signatures = {}; sigs = {};
-        setTimeout(() => showToast('The CE was edited since it was saved, so every signature on it was cleared.', true), 1500);
+        apv = {...apv, lines: {}};
+        e.info = {...e.info, approval: apv};
       }
       const res = await spWithRetry(() => dbSaveHistory(e));
       /* The fingerprint has to describe the CE as it comes BACK, not as it
@@ -2909,13 +2936,21 @@ function App({
     { const newer = apvNewerRevision(info.ceNum);
       if (newer) { showToast(info.ceNum + ' has been revised — ' + newer + ' is the latest. Load ' + newer + ' and submit that.', true); return; } }
     const me = _apvMe();
-    const apv = { state: 'pending', submittedAt: me.at, submittedBy: me.by, submittedByName: me.byName, figSig: apvFigSig(mkEntry()), contentSig: apvContentSig(mkEntry()), lines: {},
-      log: [...((info.approval && info.approval.log) || []), {...me, action: 'submitted'}] };
-    const ok = await apvPersist(apv, apvStripSigs(approvers, signatures));
+    /* Submitted again after a Return, with the figures and the wording exactly
+       as they were signed: the signatures already given still count, and only
+       the signatories who had not reached it yet are asked. */
+    const _e0 = mkEntry();
+    const _kept = apvResume(_e0, info.approval);
+    const _keptN = Object.keys(_kept).length;
+    const apv = { state: 'pending', submittedAt: me.at, submittedBy: me.by, submittedByName: me.byName, figSig: apvFigSig(_e0), contentSig: apvContentSig(_e0), lines: _kept,
+      skipped: (info.approval && info.approval.skipped) || {},
+      log: [...((info.approval && info.approval.log) || []), {...me, action: 'submitted', kept: _keptN}] };
+    const ok = await apvPersist(apv, _keptN ? {...signatures} : apvStripSigs(approvers, signatures));
     if (!ok) return;
     auditLog('apv_submit', info.ceNum, currentUser?.username);
     const s0 = apvStatus(approvers, apv);
-    showToast('Submitted for approval — waiting on ' + s0.waiting.map(l => l.name || l.user).join(', ') + '.');
+    showToast('Submitted for approval — waiting on ' + s0.waiting.map(l => l.name || l.user).join(', ') + '.' +
+      (_keptN ? ' ' + _keptN + ' signature(s) from before the return still stand.' : ''));
   };
   const apvWithdraw = () => {
     if (!confirm('Withdraw this CE from approval?\n\nSignatures collected so far are cleared.')) return;
@@ -2971,9 +3006,14 @@ function App({
         if (apvStatus(full.approvers, apv).done) apv.state = 'approved';
       } else {
         if (!line && !isAdmin) { showToast('Only the signatory whose turn it is can return this CE.', true); return false; }
-        sigs = apvStripSigs(full.approvers, sigs);
-        apv.lines = {}; apv.state = 'returned';
-        apv.log.push({...me, action: 'returned', comment: opt.comment});
+        /* A Return no longer wipes the signatures already collected. Sending a
+           CE back for a wording change made three people sign again for a
+           change none of them had asked about. They stand while the CE they
+           were put to stands: the estimator's next save clears them if, and
+           only if, the figures or the wording change. */
+        apv.lines = apvKeepOnReturn(full.approvers, apv, sigs);
+        apv.state = 'returned';
+        apv.log.push({...me, action: 'returned', comment: opt.comment, kept: Object.keys(apv.lines).length});
       }
       inf.approval = apv;
       /* Two signatories signing in the same minute: the second read the CE
@@ -3032,6 +3072,51 @@ function App({
     })();
     return () => { off = true; };
   }, [viewCE && viewCE.id, viewCE && viewCE.k, currentUser && currentUser.username]);
+  /* A signatory who is away holds up everyone behind them. An admin can hand
+     the line to somebody else, or take it out of the routing altogether.
+     Neither touches the figures, and both are written to the CE's own trail,
+     so what happened to the line is on the record. A line already signed is
+     left alone: a signature is not an admin's to move. */
+  const [apvAbsent, setApvAbsent] = useState(null);
+  const apvAdminLine = async (action, lineId, arg) => {
+    const ceId = _apvEditorId();
+    if (ceId == null) return false;
+    try {
+      const full = await dbLoadCE(ceId);
+      if (!full) { showToast('Could not open that CE.', true); return false; }
+      if (full._partial) { showToast('This CE did not arrive complete - refresh and open it again.', true); return false; }
+      const inf = {...(full.info || {})}, a0 = inf.approval;
+      if (!a0 || a0.state !== 'pending') { showToast('This CE is not waiting for approval.', true); return false; }
+      const me = _apvMe();
+      const appr = (full.approvers || []).map(x => ({...x}));
+      const ln = appr.find(x => String(x.id) === String(lineId));
+      if (!ln) { showToast('That signatory is no longer on this CE.', true); return false; }
+      if ((a0.lines || {})[lineId]) { showToast((ln.name || ln.user) + ' has already signed - that cannot be undone from here.', true); return false; }
+      const apvN = {...a0, lines: {...(a0.lines || {})}, skipped: {...(a0.skipped || {})}, log: [...(a0.log || [])]};
+      let said = '';
+      if (action === 'skip') {
+        apvN.skipped[lineId] = {at: me.at, by: me.by, byName: me.byName, reason: String(arg || '')};
+        apvN.log.push({...me, action: 'skipped', role: ln.role, comment: (ln.name || ln.user || 'that line') + (arg ? ': ' + arg : '')});
+        said = (ln.name || ln.user) + ' was taken out of the routing - it moves on without them.';
+      } else {
+        const u = arg || {};
+        if (!u.username) { showToast('Pick who it goes to.', true); return false; }
+        if (u.username === ln.user) { showToast('It is already with ' + (ln.name || ln.user) + '.', true); return false; }
+        apvN.log.push({...me, action: 'reassigned', role: ln.role, comment: (ln.name || ln.user || 'nobody') + ' -> ' + (u.name || u.username)});
+        said = (ln.title || ln.role || 'The line') + ' now waits on ' + (u.name || u.username) + '.';
+        ln.user = u.username; ln.name = u.name || u.username;
+        delete apvN.skipped[lineId];
+      }
+      if (apvStatus(appr, apvN).done) apvN.state = 'approved';
+      const res = await spWithRetry(() => dbSaveHistory({...full, approvers: appr, info: {...inf, approval: apvN}, grand: N(full.grand) || computeCEGrand(full)}));
+      updateMon(ceId, {apv: apvMirror(appr, apvN), ...(apvN.state === 'approved' ? {status: 'Approved'} : {})});
+      auditLog('apv_' + action, inf.ceNum + ' - ' + (ln.title || ln.role || lineId), currentUser?.username);
+      setApprovers(appr); setInfo(p => ({...p, approval: apvN}));
+      loadHist();
+      showToast(said + (apvN.state === 'approved' ? ' The CE is now fully approved.' : ''), res && res.sp === false);
+      return true;
+    } catch (ex) { showToast('Could not change that signatory: ' + ex.message, true); return false; }
+  };
   const apvBar = () => {
     const a = info.approval, s = apvStatus(approvers, a), me = currentUser.username;
     const mine = apvCanSign(approvers, a, me);
@@ -3051,7 +3136,9 @@ function App({
       !apvLocked && b('📤 Submit for approval', s.total > 0 ? 'Save and send to the linked signatories. Changing the figures later clears their signatures.' : 'First pick a user in the dropdown on at least one signatory card below', apvSubmit, 'acc'),
       apvLocked && (isAdmin || (a && a.submittedBy === me)) && b('Withdraw', 'Take it back out of approval and clear the signatures', apvWithdraw),
       mine && b('✍ Approve & Sign', 'Sign the saved CE as ' + (mine.role || 'signatory'), () => apvStartSign(null), 'ok'),
-      apvState === 'pending' && (mine || isAdmin) && b('↩ Return', 'Send it back to the estimator with a comment', () => apvStartReturn(null)));
+      apvState === 'pending' && (mine || isAdmin) && b('↩ Return', 'Send it back to the estimator with a comment', () => apvStartReturn(null)),
+      apvState === 'pending' && isAdmin && s.waiting.length > 0 && b('👤 Signatory away', 'Hand a waiting line to somebody else, or take it out of the routing', () => setApvAbsent({to: ''})),
+      s.skippedN > 0 && /*#__PURE__*/React.createElement("span", {style: {fontSize: 10, color: MT, textTransform: 'none', letterSpacing: 0}}, '· ' + s.skippedN + ' skipped'));
   };
   /* Put the matching preset's notes and signatories on the CE.
 
@@ -10016,6 +10103,42 @@ tab === 'history' && HistPanel(),   /* invoked, not rendered — see its declara
    control on every one of 900 rows and still had nowhere to show the history:
    statusChangedAt only ever held the most recent change, so the previous one
    was overwritten the moment the next landed. */
+apvAbsent && (() => {
+  const _s = apvStatus(approvers, info.approval);
+  const _to = String(apvAbsent.to || '').trim().toLowerCase();
+  const _pick = (reqUsers || []).find(u => String(u.name || '').trim().toLowerCase() === _to || String(u.username || '').trim().toLowerCase() === _to);
+  return /*#__PURE__*/React.createElement("div", {
+    style:{position:'fixed',inset:0,background:'#000b',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center',padding:16},
+    onClick:()=>setApvAbsent(null)
+  }, /*#__PURE__*/React.createElement("div", {style:{...CS, width:'min(520px,100%)'}, onClick:ev=>ev.stopPropagation()},
+    /*#__PURE__*/React.createElement("b", {style:{fontSize:14}}, "👤 Signatory away"),
+    /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,margin:'4px 0 12px',lineHeight:1.6}},
+      "Waiting on " + _s.waiting.map(l => l.name || l.user).join(', ') + ". Hand a line to somebody else, or take it out of the routing so the CE moves on without it. Signatures already given are not touched, and both go on the CE's trail."),
+    _s.waiting.map(l => /*#__PURE__*/React.createElement("div", {key:l.id, style:{border:'1px solid '+BDR,borderRadius:6,padding:'8px 10px',marginBottom:8}},
+      /*#__PURE__*/React.createElement("div", {style:{fontSize:12,fontWeight:700,marginBottom:6}}, (l.title || l.role || 'Signatory') + ' — ' + (l.name || l.user)),
+      /*#__PURE__*/React.createElement("div", {style:{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}},
+        /*#__PURE__*/React.createElement("input", {
+          list:'req-users', style:{...INP, flex:1, minWidth:160}, placeholder:'Hand it to…',
+          value: apvAbsent.line === l.id ? (apvAbsent.to || '') : '',
+          onChange: ev => setApvAbsent({line: l.id, to: ev.target.value})
+        }),
+        /*#__PURE__*/React.createElement("button", {
+          style:{...btn('acc'), opacity: (apvAbsent.line === l.id && _pick) ? 1 : .5},
+          disabled: !(apvAbsent.line === l.id && _pick),
+          onClick: async () => { if (await apvAdminLine('reassign', l.id, _pick)) setApvAbsent(null); }
+        }, "Hand over"),
+        /*#__PURE__*/React.createElement("button", {
+          style:btn('danger'),
+          onClick: async () => {
+            const why = prompt('Take ' + (l.name || l.user) + ' out of the routing for this CE?' + String.fromCharCode(10,10) + 'Why? (goes on the record, required)');
+            if (why == null) return;
+            if (!why.trim()) { showToast('A reason is required to skip a signatory.', true); return; }
+            if (await apvAdminLine('skip', l.id, why.trim())) setApvAbsent(null);
+          }
+        }, "Skip this line")))),
+    /*#__PURE__*/React.createElement("div", {style:{display:'flex',justifyContent:'flex-end',marginTop:6}},
+      /*#__PURE__*/React.createElement("button", {style:btn('def'), onClick:()=>setApvAbsent(null)}, "Close"))));
+})(),
 assignPanel && /*#__PURE__*/React.createElement("div", {
   style:{position:'fixed',inset:0,background:'#000b',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center',padding:16},
   onClick:()=>setAssignPanel(null)

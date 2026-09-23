@@ -202,6 +202,8 @@ jobs:
         run: node tools/test-mon-dup-tidy.js
       - name: Draft pile-up
         run: node tools/test-draft-pileup.js
+      - name: Absent signatory and returns
+        run: node tools/test-apv-absent-return.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents
@@ -318,6 +320,8 @@ jobs:
         run: node tools/test-mon-dup-tidy.js
       - name: Draft pile-up
         run: node tools/test-draft-pileup.js
+      - name: Absent signatory and returns
+        run: node tools/test-apv-absent-return.js
       - name: Detailed Excel export mirrors the printed CE
         run: node tools/test-xlsx-export.js src/App.js
       - name: Every host the app calls is allowed by the CSP

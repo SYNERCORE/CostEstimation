@@ -40,10 +40,16 @@ function apvRoute(approvers) {
 function apvStatus(approvers, apv) {
   const lines = apvRoute(approvers);
   const signed = (apv && apv.lines) || {};
-  const open = lines.filter(l => !signed[l.id]);
+  /* A signatory who is away and holding everyone up can be skipped by an
+     admin. The line is not signed -- it never will be -- but it no longer
+     waits on anybody, so the routing moves on. */
+  const skipped = (apv && apv.skipped) || {};
+  const open = lines.filter(l => !signed[l.id] && !skipped[l.id]);
   const step = open.length ? Math.min.apply(null, open.map(l => l.step)) : null;
   const waiting = open.filter(l => l.step === step);
-  return { lines, signedN: lines.length - open.length, total: lines.length, step, waiting, done: lines.length > 0 && !open.length };
+  const signedN = lines.filter(l => signed[l.id]).length;
+  return { lines, signedN, skippedN: lines.filter(l => skipped[l.id]).length, total: lines.length,
+    step, waiting, done: lines.length > 0 && !open.length };
 }
 
 /* The line this user may sign now, or null. */
@@ -167,4 +173,28 @@ function apvMergeLog(a, b) {
     seen.add(k); out.push(l);
   });
   return out.sort((x, y) => String(x.at || '').localeCompare(String(y.at || '')));
+}
+
+/* What a Return keeps. A CE sent back for a wording change used to lose every
+   signature on it, so three people signed again for a change none of them had
+   asked about. The signatures stand while the CE they were put to stands: the
+   estimator's next save clears them if -- and only if -- the figures or the
+   wording actually change, which is the same rule as everywhere else.
+
+   Returning is still a full stop: the approval leaves 'pending', so nobody is
+   waiting on anything until it is submitted again. */
+function apvKeepOnReturn(approvers, apv, sigs) {
+  const lines = {}, route = apvRoute(approvers);
+  const signed = (apv && apv.lines) || {};
+  route.forEach(l => { if (signed[l.id] && (sigs || {})[l.id]) lines[l.id] = signed[l.id]; });
+  return lines;
+}
+/* Submitting again after a Return. The signatures already collected count
+   only while the CE is the one they were put to; anything else starts over. */
+function apvResume(ce, prev) {
+  const a = prev || {};
+  if (a.state !== 'returned' || !Object.keys(a.lines || {}).length) return {};
+  if (!a.contentSig || apvContentSig(ce) !== a.contentSig) return {};
+  if (!a.figSig || apvFigSig(ce) !== a.figSig) return {};
+  return {...(a.lines || {})};
 }

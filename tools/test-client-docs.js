@@ -19,7 +19,7 @@ ck('each file can be removed on its own', app.includes('onClick: () => removeDoc
 console.log('\nsubmitting an old revision:');
 ck('a later revision is looked for', app.includes('const apvNewerRevision = num =>') && app.includes('g.key === f.key && g.rev > f.rev'));
 ck('and submit refuses, naming the latest', /const newer = apvNewerRevision\(info\.ceNum\);\s*if \(newer\) \{ showToast\(/.test(app));
-ck('before anything is stored', app.indexOf('const newer = apvNewerRevision(info.ceNum)') < app.indexOf('const ok = await apvPersist(apv, apvStripSigs(approvers, signatures))'));
+ck('before anything is stored', app.indexOf('const newer = apvNewerRevision(info.ceNum)') < app.indexOf('const ok = await apvPersist(apv, _keptN ? {...signatures} : apvStripSigs(approvers, signatures))'));
 
 console.log('\nreading a PDF:');
 ck('every page is read, not the first 30', app.includes('const PDF_MAX_PAGES = 200;') && !app.includes('Math.min(pdf.numPages, 30)'));

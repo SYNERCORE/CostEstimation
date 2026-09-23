@@ -184,6 +184,8 @@ jobs:
         run: node tools/test-visible-sigs.js
       - name: Unit price labelled with its UOM
         run: node tools/test-unit-price-uom.js
+      - name: Setting up a phone or tablet
+        run: node tools/test-device-setup.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents
@@ -282,6 +284,8 @@ jobs:
         run: node tools/test-visible-sigs.js
       - name: Unit price labelled with its UOM
         run: node tools/test-unit-price-uom.js
+      - name: Setting up a phone or tablet
+        run: node tools/test-device-setup.js
       - name: Detailed Excel export mirrors the printed CE
         run: node tools/test-xlsx-export.js src/App.js
       - name: Every host the app calls is allowed by the CSP

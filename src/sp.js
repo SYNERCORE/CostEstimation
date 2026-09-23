@@ -1,12 +1,49 @@
-﻿const SITE_URL = getSiteURL();
-const USE_SP = !!getSiteURL();
-
+﻿
 /* &#9472;&#9472; SharePoint Config &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472; */
 const SP_CFG_KEY = 'shic_sp_config';
 function getSPConfig(){try{const v=localStorage.getItem(SP_CFG_KEY);return v?JSON.parse(v):{};}catch{return{};}}
 function saveSPConfig(cfg){try{localStorage.setItem(SP_CFG_KEY,JSON.stringify(cfg));}catch{}}
 function getSiteURL(){const cfg=getSPConfig();if(cfg.siteUrl)return cfg.siteUrl.replace(/\/$/,'');const m=window.location.href.match(/(https:\/\/[^\/]+\/sites\/[^\/]+)/);return m?m[1]:null;}
 function spList(n){const cfg=getSPConfig();const p=(cfg.listPrefix||'SHICCE').replace(/[^a-zA-Z0-9_]/g,'');return p+'_'+n;}
+/* A phone or tablet opening the app for the first time has no SharePoint
+   settings, and the panel that holds them sits behind an admin sign-in that
+   needs SharePoint -- so a new device could not be set up at all. A setup
+   link carries the settings in its address: scanned from the QR code on the
+   admin's screen, or tapped from a message, the device stores them and
+   carries on to the sign-in page. Nothing secret travels: the site address
+   and the Azure client id are public identifiers, and the person still has
+   to sign in with their own account. */
+function spAdoptSetupLink(){
+  try{
+    const q = new URLSearchParams(window.location.search);
+    const raw = q.get('setup');
+    if(!raw) return false;
+    const j = JSON.parse(decodeURIComponent(escape(atob(raw.replace(/-/g,'+').replace(/_/g,'/')))));
+    if(!j || !/^https:\/\/[^\/]+\//.test(String(j.s||''))) return false;
+    const cur = getSPConfig();
+    saveSPConfig({...cur, siteUrl: String(j.s).replace(/\/$/,''), clientId: String(j.c||cur.clientId||''),
+      ...(j.p ? {listPrefix: String(j.p)} : {})});
+    /* The address is tidied so a shared screenshot of it is not a second,
+       stale copy of the settings, and a reload does not run this again. */
+    q.delete('setup');
+    try{ window.history.replaceState({}, '', window.location.pathname + (q.toString() ? '?' + q : '') + window.location.hash); }catch(_e){}
+    return true;
+  }catch(_e){ return false; }
+}
+/* The link an admin hands to a new device. */
+function spSetupLink(cfg){
+  const c = cfg || getSPConfig();
+  if(!c.siteUrl) return '';
+  const j = JSON.stringify({s: c.siteUrl, c: c.clientId || '', ...(c.listPrefix && c.listPrefix !== 'SHICCE' ? {p: c.listPrefix} : {})});
+  const b64 = btoa(unescape(encodeURIComponent(j))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  return window.location.origin + window.location.pathname + '?setup=' + b64;
+}
+/* Read before anything asks where the site is. It has to run after the
+   settings helpers above are in hand: called from the top of the file it
+   fell into the dead zone of SP_CFG_KEY and quietly did nothing. */
+spAdoptSetupLink();
+const SITE_URL = getSiteURL();
+const USE_SP = !!getSiteURL();
 let _spMsalApp=null,_spToken=null,_spExpiry=0;
 /* True once a silent token refresh has failed while the app is otherwise
    online. The UI reads this to offer a Sign in button; without it the user is

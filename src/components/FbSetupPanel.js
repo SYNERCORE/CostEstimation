@@ -152,6 +152,13 @@
     })();
     return()=>{cancelled=true;};
   },[]);
+  /* Setting up a phone or tablet: the settings live in this browser only, and
+     the panel that holds them is behind an admin sign-in that needs them, so
+     a new device had no way in. The link below carries them; the QR code is
+     there because nobody types a 200-character address on a tablet. */
+  const[devLink,setDevLink]=React.useState('');
+  const saved=getSPConfig();
+  const qr=React.useMemo(()=>{ if(!devLink) return null; try{ return qrMatrix(devLink); }catch(_e){ return null; } },[devLink]);
   const pfx=cfg.listPrefix||'SHICCE';const stC=status==='connected'?OK:status.startsWith('error')?ERR:MT;
   return React.createElement('div',null,
     React.createElement('div',{style:{fontWeight:700,marginBottom:12,fontSize:13,display:'flex',alignItems:'center',gap:8}},'SP SharePoint Sync',React.createElement('span',{style:{fontSize:10,padding:'2px 8px',borderRadius:10,background:alpha(stC, '22'),color:stC,fontWeight:700,marginLeft:4}},status)),
@@ -179,6 +186,25 @@
       status==='connected'&&React.createElement('button',{style:btn('def'),disabled:busy,title:'Lists every CE that has a stored total but no line items behind it — the state a save leaves when it fails after writing the header. Read-only.',onClick:handleFindOrphans},busy?'Working...':'Find CEs missing line items'),
       status==='connected'&&React.createElement('button',{style:btn('info'),disabled:busy,title:'Stores every CE in this browser so any of them can be opened, printed and exported with no connection. Reads the three lists once each rather than two requests per CE. Safe to re-run: only CEs that have changed are written.',onClick:handleCacheAll},busy?'Working...':'⬇ Download all CEs for offline')
     ),
+    /* ---- Set up a phone or tablet ---- */
+    React.createElement('div',{style:{marginTop:10,padding:'10px 12px',background:SURF,borderRadius:6}},
+      React.createElement('div',{style:{fontWeight:700,fontSize:12,marginBottom:6}},'Set up a phone or tablet'),
+      React.createElement('div',{style:{fontSize:11,color:MT,lineHeight:1.7,marginBottom:8}},
+        'A new device starts with no connection settings and cannot reach this panel to be given them. Scan this code on the device, or send it the link: it stores the site address and client id, then asks the person to sign in as usual. It carries no password and no data.'),
+      React.createElement('button',{style:btn('acc'),disabled:!saved.siteUrl,
+        title:saved.siteUrl?'Uses the settings as they are saved here — press Connect first if you changed them':'Save the settings first with Connect & Auto-Setup',
+        onClick:()=>setDevLink(l=>l?'':spSetupLink())},devLink?'Hide the setup code':'Show the setup code'),
+      devLink&&React.createElement('div',{style:{marginTop:10,display:'flex',gap:14,flexWrap:'wrap',alignItems:'flex-start'}},
+        qr&&React.createElement('div',{style:{background:'#fff',padding:10,borderRadius:6,lineHeight:0}},
+          React.createElement('svg',{width:180,height:180,viewBox:'0 0 '+qr.size+' '+qr.size,shapeRendering:'crispEdges',role:'img','aria-label':'Setup code'},
+            React.createElement('rect',{width:qr.size,height:qr.size,fill:'#fff'}),
+            qr.modules.map((row,r)=>row.map((on,c)=>on&&React.createElement('rect',{key:r+'-'+c,x:c,y:r,width:1,height:1,fill:'#000'}))))),
+        React.createElement('div',{style:{flex:1,minWidth:220}},
+          React.createElement('div',{style:{fontSize:10,color:MT,wordBreak:'break-all',fontFamily:"'JetBrains Mono',monospace",background:BG,padding:'6px 8px',borderRadius:4,marginBottom:8}},devLink),
+          React.createElement('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+            React.createElement('button',{style:btn('def'),onClick:()=>{try{navigator.clipboard.writeText(devLink);addLog('Setup link copied.');}catch(_e){addLog('Copy failed — select the link and copy it by hand.');}}},'Copy link'),
+            navigator.share&&React.createElement('button',{style:btn('def'),onClick:()=>{try{navigator.share({title:'SHIC Cost Estimator setup',url:devLink});}catch(_e){}}},'Share')))
+      )),
     offline&&React.createElement('div',{style:{marginTop:10,padding:'10px 12px',background:SURF,borderRadius:6}},
       React.createElement('div',{style:{fontWeight:700,fontSize:12,marginBottom:6,color:OK}},'Offline copy ready'),
       React.createElement('div',{style:{fontSize:11,color:MT,lineHeight:1.7}},

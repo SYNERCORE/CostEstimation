@@ -153,6 +153,20 @@ async function dbSaveMonEntry(ceId, ceNum, monFields, changed){
   }catch(e){console.warn('dbSaveMonEntry:',e.message);return {ok:false,reason:e.message};}
 }
 
+/* Write just the info column of a saved CE. The approval's fingerprint is
+   corrected right after a submit, and rewriting every line item to store one
+   string risks the rows for nothing. */
+async function dbPatchCEInfo(ceId,info){
+  if(!(USE_SP||getSiteURL()))return false;
+  try{
+    const r=await spGet(spList('CEs'),`Id eq ${Number(ceId)}`,'Id');
+    if(!r.length)return false;
+    await spWithRetry(()=>spPatch(spList('CEs'),r[0].Id,{shicInfo:JSON.stringify(info||{})}));
+    try{const loc=await _ceLoadLocal(ceId);if(loc)await cePut({...loc,info:info,ceNum:(info&&info.ceNum)||loc.ceNum});}catch(_e){}
+    return true;
+  }catch(e){console.warn('dbPatchCEInfo:',e.message);return false;}
+}
+
 /* Batch-save all entries (import / migration). histItems needed for ceNum lookup. */
 async function dbSaveMonAll(monData, histItems){
   if(!(USE_SP||getSiteURL()))return;
@@ -660,7 +674,7 @@ if(_missing&&typeof computeCEGrand==='function'){
   let _loc=null;try{_loc=(await ceAll()).filter(r=>r&&String((r.info&&r.info.ceNum)||r.ceNum||'').trim().toUpperCase()===_num)
     .find(r=>Math.abs(computeCEGrand(r)-_tgt)<=Math.max(1,_tgt*0.001));}catch(_){}
   if(_loc){_ce={..._loc,id:h.Id};setTimeout(()=>(window._shicToast||console.warn)(_ce.info.ceNum+': only part of its last save reached SharePoint. Opened the complete copy kept in this browser — SAVE it now to upload the missing lines.',true),800);}
-  else{_partial=true;setTimeout(()=>(window._shicToast||console.warn)(_ce.info.ceNum+': its last save was interrupted — '+_missing+' line(s) never reached SharePoint, so it adds up to less than its saved total. Do not save it from here. The complete copy is in the browser of '+(h.shicSavedBy||'whoever saved it')+': they should open the app and run Push All Local Data (Users tab).',true),800);}
+  else{_partial=true;_ce._partial=true;_ce._missingRows=_missing;setTimeout(()=>(window._shicToast||console.warn)(_ce.info.ceNum+': its last save was interrupted — '+_missing+' line(s) never reached SharePoint, so it adds up to less than its saved total. Do not save it from here. The complete copy is in the browser of '+(h.shicSavedBy||'whoever saved it')+': they should open the app and run Push All Local Data (Users tab).',true),800);}
   }
 if(_extra&&typeof computeCEGrand==='function'){
   _rowDrop=true;const _slim=_assembleCE(h,mR,rR);_rowDrop=false;

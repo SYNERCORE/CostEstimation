@@ -18,7 +18,7 @@ ck('the status panel sends the status and its date together',
   app.includes('if (Object.keys(_w).length) updateMon(statusPanel, _w);') &&
   !app.includes("updateMon(statusPanel, 'status', _d.status)"));
 ck('signing sends the approval and the status it implies together',
-  app.includes('apv: apvMirror(full.approvers, apv),') &&
+  app.includes('apv: apvMirror(out.approvers || full.approvers, apv),') &&
   app.includes(": apv.state === 'approved' ? { status: 'Approved' } : {})"));
 ck('submitting for approval does too',
   app.includes("apv: apvMirror(e.approvers, apv),") && app.includes("? { status: 'For Approval' } : {})"));

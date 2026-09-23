@@ -2811,7 +2811,8 @@ function App({
      and Withdraw on any saved CE failed with "already taken", nothing was
      stored, and approvers never saw it. A saved CE is updated directly
      instead, and only while its figures are the ones on screen. */
-  const apvPersist = async (apv, sigs) => {
+  const apvPersist = async (apvIn, sigs) => {
+    let apv = apvIn;
     const e = mkEntry();
     e.info = {...e.info, approval: apv};
     e.signatures = sigs;
@@ -2837,6 +2838,19 @@ function App({
         setTimeout(() => showToast('The CE was edited since it was saved, so every signature on it was cleared.', true), 1500);
       }
       const res = await spWithRetry(() => dbSaveHistory(e));
+      /* The fingerprint has to describe the CE as it comes BACK, not as it
+         went in: a figure that returns from SharePoint even slightly
+         differently left every approver refused with "The figures changed
+         after it was submitted", with nothing they could do about it. */
+      if (apv.state === 'pending' && !(res && res.sp === false)) {
+        try {
+          const back = await dbLoadCE(dup.id);
+          if (back && !back._partial && apvFigSig(back) !== apv.figSig) {
+            const fixed = {...apv, figSig: apvFigSig(back), contentSig: apvContentSig(back)};
+            if (await dbPatchCEInfo(dup.id, {...(back.info || {}), approval: fixed})) apv = fixed;
+          }
+        } catch (_e) {}
+      }
       setSignatures(sigs); setInfo(p => ({...p, ceNum: num, approval: apv}));
       updateMon(dup.id, {
         apv: apvMirror(e.approvers, apv),
@@ -2909,10 +2923,16 @@ function App({
       if (!full) { showToast('Could not open that CE.', true); return false; }
       const inf = {...(full.info || {})}, a0 = inf.approval;
       if (!a0 || a0.state !== 'pending') { showToast('This CE is not waiting for approval.', true); return false; }
-      if (apvFigSig(full) !== a0.figSig) { showToast('The figures changed after it was submitted — it has to be submitted again.', true); return false; }
+      /* Signing writes the whole CE back, so a CE that only half arrived
+         would be saved with its missing lines gone for good. */
+      if (full._partial) { showToast('This CE did not arrive complete — ' + (full._missingRows || 'some') + ' line(s) are missing, and signing it would save it that way. Refresh and open it again.', true); return false; }
+      if (apvFigSig(full) !== a0.figSig) {
+        showToast('The figures changed after it was submitted (it now totals ' + 'P' + N(N(full.grand) || computeCEGrand(full)).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ') — it has to be submitted again.', true);
+        return false;
+      }
       const me = _apvMe();
       const line = apvCanSign(full.approvers, a0, me.by);
-      const apv = {...a0, lines: {...(a0.lines || {})}, log: [...(a0.log || [])]};
+      let apv = {...a0, lines: {...(a0.lines || {})}, log: [...(a0.log || [])]};
       let sigs = {...(full.signatures || {})};
       if (action === 'approve') {
         if (!line) { showToast('It is not your turn to sign this CE.', true); return false; }
@@ -2927,9 +2947,29 @@ function App({
         apv.log.push({...me, action: 'returned', comment: opt.comment});
       }
       inf.approval = apv;
-      const res = await spWithRetry(() => dbSaveHistory({...full, info: inf, signatures: sigs, grand: N(full.grand) || computeCEGrand(full)}));
+      /* Two signatories signing in the same minute: the second read the CE
+         before the first had written, and writing the whole CE back dropped
+         the first signature. Read it once more at the last moment and fold
+         the two together. */
+      let out = {...full, info: inf, signatures: sigs};
+      try {
+        const now = await dbLoadCE(ceId);
+        const aN = now && now.info && now.info.approval;
+        if (now && !now._partial && aN && aN.state === 'pending' && !(action === 'approve' && aN.lines && aN.lines[line.id])) {
+          const appr = now.approvers || full.approvers;
+          const merged = {...apv, lines: {...(aN.lines || {}), ...apv.lines}, log: apvMergeLog(aN.log, apv.log)};
+          if (action === 'approve') {
+            merged.state = apvStatus(appr, merged).done ? 'approved' : 'pending';
+            out = {...now, info: {...(now.info || {}), approval: merged}, signatures: {...(now.signatures || {}), [line.id]: sigs[line.id]}};
+          } else {
+            out = {...now, info: {...(now.info || {}), approval: merged}, signatures: apvStripSigs(appr, now.signatures || {})};
+          }
+          apv = merged; sigs = out.signatures;
+        }
+      } catch (_e) {}
+      const res = await spWithRetry(() => dbSaveHistory({...out, grand: N(out.grand) || computeCEGrand(out)}));
       updateMon(ceId, {
-        apv: apvMirror(full.approvers, apv),
+        apv: apvMirror(out.approvers || full.approvers, apv),
         ...(action === 'return' ? { remarks: '↩ Returned by ' + me.byName + ': ' + opt.comment }
           : apv.state === 'approved' ? { status: 'Approved' } : {})
       });
@@ -2941,6 +2981,28 @@ function App({
       return true;
     } catch (ex) { showToast('Could not record that: ' + ex.message, true); return false; }
   };
+  /* Whether it is my turn on the CE open in the viewer. The button used to
+     ask Monitoring alone, so an approver whose mirror was never written, or
+     was written stale, had no way to sign at all. Ask the CE itself, and
+     put the mirror right while we are there. */
+  const [viewApvTurn, setViewApvTurn] = useState(false);
+  useEffect(() => {
+    setViewApvTurn(false);
+    const id = (viewCE && !viewCE.draftKey) ? viewCE.id : null;
+    if (id == null || !currentUser || apvMonWaitsOn(monData[id], currentUser.username)) return;
+    let off = false;
+    (async () => {
+      try {
+        const full = await dbLoadCE(id);
+        const a = full && full.info && full.info.approval;
+        if (off || !a || a.state !== 'pending') return;
+        if (apvCanSign(full.approvers, a, currentUser.username)) setViewApvTurn(true);
+        const fresh = apvMirror(full.approvers, a);
+        if (JSON.stringify(fresh) !== JSON.stringify(((monData[id] || {}).apv) || null)) updateMon(id, { apv: fresh });
+      } catch (_e) {}
+    })();
+    return () => { off = true; };
+  }, [viewCE && viewCE.id, viewCE && viewCE.k, currentUser && currentUser.username]);
   const apvBar = () => {
     const a = info.approval, s = apvStatus(approvers, a), me = currentUser.username;
     const mine = apvCanSign(approvers, a, me);
@@ -10146,7 +10208,7 @@ viewCE && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset
       /*#__PURE__*/React.createElement("b", null, "👁 " + (viewCE.ceNum || 'CE')),
       /*#__PURE__*/React.createElement("span", {style:{fontSize:11,color:MT}}, viewCE.draft ? "Read-only view of an unsaved DRAFT — figures may still change." : "Read-only view. Takes a few seconds to draw."),
       /*#__PURE__*/React.createElement("span", {style:{marginLeft:'auto'}}),
-      !viewCE.draftKey && apvMonWaitsOn(monData[viewCE.id], currentUser.username) && /*#__PURE__*/React.createElement("button", {style:btn('ok',true),title:"Sign the CE shown here",onClick:()=>apvStartSign(viewCE.id)}, "✍ Approve & Sign"),
+      !viewCE.draftKey && (apvMonWaitsOn(monData[viewCE.id], currentUser.username) || viewApvTurn) && /*#__PURE__*/React.createElement("button", {style:btn('ok',true),title:"Sign the CE shown here",onClick:()=>apvStartSign(viewCE.id)}, "✍ Approve & Sign"),
       !viewCE.draftKey && ((monData[viewCE.id]||{}).apv||{}).state==='pending' && ((((monData[viewCE.id]||{}).apv||{}).waiting||[]).includes(currentUser.username) || isAdmin) && /*#__PURE__*/React.createElement("button", {style:btn('def',true),title:"Send it back to the estimator with a comment",onClick:()=>apvStartReturn(viewCE.id)}, "↩ Return"),
       /*#__PURE__*/React.createElement("button", {style:btn('def',true),title:"Print or save this CE as PDF",onClick:()=>{try{
       /* The viewer prints an iframe, and the browser names the PDF after the

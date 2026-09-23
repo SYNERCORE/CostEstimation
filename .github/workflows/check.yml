@@ -192,6 +192,8 @@ jobs:
         run: node tools/test-refresh-drafts.js
       - name: One Monitoring edit, one write
         run: node tools/test-mon-one-write.js
+      - name: Approval blockers
+        run: node tools/test-apv-blockers.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
       - name: Logic guard extents
@@ -298,6 +300,8 @@ jobs:
         run: node tools/test-refresh-drafts.js
       - name: One Monitoring edit, one write
         run: node tools/test-mon-one-write.js
+      - name: Approval blockers
+        run: node tools/test-apv-blockers.js
       - name: Detailed Excel export mirrors the printed CE
         run: node tools/test-xlsx-export.js src/App.js
       - name: Every host the app calls is allowed by the CSP

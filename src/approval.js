@@ -154,3 +154,17 @@ function apvContentSig(ce) {
   for (let i = 0; i < txt.length; i++) h = ((h * 33) ^ txt.charCodeAt(i)) >>> 0;
   return h.toString(36) + '.' + txt.length;
 }
+
+/* Two approvers signing at the same moment each wrote back the whole CE, so
+   the one that landed second carried the trail from before the first. The
+   two trails are folded into one, in order, with nothing counted twice. */
+function apvMergeLog(a, b) {
+  const out = [], seen = new Set();
+  [...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])].forEach(l => {
+    if (!l) return;
+    const k = [l.at, l.by, l.action, l.role || '', l.comment || ''].join('|');
+    if (seen.has(k)) return;
+    seen.add(k); out.push(l);
+  });
+  return out.sort((x, y) => String(x.at || '').localeCompare(String(y.at || '')));
+}

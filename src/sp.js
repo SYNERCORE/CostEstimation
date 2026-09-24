@@ -3,7 +3,7 @@
 const SP_CFG_KEY = 'shic_sp_config';
 function getSPConfig(){try{const v=localStorage.getItem(SP_CFG_KEY);return v?JSON.parse(v):{};}catch{return{};}}
 function saveSPConfig(cfg){try{localStorage.setItem(SP_CFG_KEY,JSON.stringify(cfg));}catch{}}
-function getSiteURL(){const cfg=getSPConfig();if(cfg.siteUrl)return cfg.siteUrl.replace(/\/$/,'');const m=window.location.href.match(/(https:\/\/[^\/]+\/sites\/[^\/]+)/);return m?m[1]:null;}
+function getSiteURL(){/* Test mode is local only. Without this line a sandbox opened from the SharePoint-hosted copy would match its own address below and talk to the live site -- the one thing test mode exists to prevent. */if(typeof isTestMode==='function'&&isTestMode())return null;const cfg=getSPConfig();if(cfg.siteUrl)return cfg.siteUrl.replace(/\/$/,'');const m=window.location.href.match(/(https:\/\/[^\/]+\/sites\/[^\/]+)/);return m?m[1]:null;}
 function spList(n){const cfg=getSPConfig();const p=(cfg.listPrefix||'SHICCE').replace(/[^a-zA-Z0-9_]/g,'');return p+'_'+n;}
 /* A phone or tablet opening the app for the first time has no SharePoint
    settings, and the panel that holds them sits behind an admin sign-in that

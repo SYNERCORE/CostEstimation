@@ -202,3 +202,64 @@ function uomOptionEls(current) {
   }
   return groups;
 }
+/* ── Test mode ──────────────────────────────────────────────────────────
+   A sandbox for trying the app out without touching anything real. It is
+   local only: SharePoint is switched off, so nothing a test CE holds can
+   reach the site or be seen by anyone else.
+
+   Keeping test data apart could have meant renaming the localStorage prefix
+   at every one of the ~50 places that spell out 'shic:' -- nine files, and
+   one missed line would write test data into the live store. So instead the
+   whole localStorage object is swapped for one that lives under its own
+   prefix. Every existing line works unchanged, and in test mode the real
+   keys are not merely ignored: they cannot be read, written, counted or
+   enumerated at all, so a wipe or a quota sweep can only ever reach test
+   data.
+
+   The flag itself sits outside both stores, because it has to be read
+   before either one is chosen. */
+const TEST_MODE_KEY = 'shic.testmode';
+const TEST_NS = 'shictest|';
+/* The flag is read from the REAL store, never through the swap below. Read
+   through the sandbox it would be looked up inside the sandbox, come back
+   empty, and every caller -- the banner, and the SharePoint refusal in
+   getSiteURL -- would be told the app was live while it was not. */
+function _shicLS(){ return window._shicRealLS || window.localStorage; }
+function isTestMode(){ try { return _shicLS().getItem(TEST_MODE_KEY) === '1'; } catch (e) { return false; } }
+function setTestMode(on){ try { const s = _shicLS(); if (on) s.setItem(TEST_MODE_KEY, '1'); else s.removeItem(TEST_MODE_KEY); return true; } catch (e) { return false; } }
+/* Counts what the sandbox is holding, for the banner and the wipe. Reads the
+   REAL store by name, so it keeps working after the swap below. */
+function testDataKeys(real){
+  const s = real || _shicLS(); const out = [];
+  try { for (let i = 0; i < s.length; i++) { const k = s.key(i); if (k && k.indexOf(TEST_NS) === 0) out.push(k); } } catch (e) {}
+  return out;
+}
+function wipeTestData(){
+  const s = _shicLS(); const ks = testDataKeys(s);
+  ks.forEach(k => { try { s.removeItem(k); } catch (e) {} });
+  return ks.length;
+}
+(function installTestStore(){
+  try {
+    const real = window.localStorage;
+    window._shicRealLS = real;
+    if (real.getItem(TEST_MODE_KEY) !== '1') return;
+    const P = TEST_NS;
+    const mine = () => { const o = []; for (let i = 0; i < real.length; i++) { const k = real.key(i); if (k && k.indexOf(P) === 0) o.push(k.slice(P.length)); } return o; };
+    const shim = {
+      getItem: k => real.getItem(P + k),
+      setItem: (k, v) => real.setItem(P + k, v),
+      removeItem: k => real.removeItem(P + k),
+      /* clear() empties the SANDBOX, never the live store -- a "reset
+         everything" button inside test mode must not take the real data
+         with it. */
+      clear: () => { mine().forEach(k => real.removeItem(P + k)); },
+      key: i => { const o = mine(); return i >= 0 && i < o.length ? o[i] : null; },
+      get length(){ return mine().length; }
+    };
+    Object.defineProperty(window, 'localStorage', { value: shim, configurable: true, writable: false });
+  } catch (e) { /* a browser that will not let the property be redefined keeps
+                   the real store -- and getSiteURL() still refuses SharePoint,
+                   so the worst case is test data sitting beside live data
+                   rather than test data reaching the site. */ }
+})();

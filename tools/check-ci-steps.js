@@ -17,6 +17,29 @@ const SELF = 'tools/check-ci-steps.js';
 const steps = [...new Set((yml.match(/^\s*run: node tools\/.*$/gm) || [])
   .map(l => l.replace(/^\s*run:\s*/, '').trim()))].filter(s => s.split(/\s+/)[1] !== SELF);
 
+/* A step is one `- name:` and one `run:`. Two `run:` lines under a single
+   name are a duplicate YAML key, and only the LAST of them survives -- so the
+   others never run on GitHub while still looking present in the file, and
+   while this checker, which reads the lines rather than the YAML, still
+   reports them as covered. That is exactly how test-request-docs.js and
+   test-storage-warning.js sat in the workflow for two builds without ever
+   running. Every run: line must therefore be introduced by its own name. */
+{
+  const lines = yml.split(/\r?\n/);
+  let orphaned = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^\s*run:/.test(lines[i])) continue;
+    let j = i - 1;
+    while (j >= 0 && /^\s*(#|$)/.test(lines[j])) j--;
+    if (j >= 0 && /^\s*run:/.test(lines[j])) {
+      console.log('  ORPHANED  line ' + (i + 1) + ': ' + lines[i].trim() +
+        ' -- shares a step with the run: above it, so GitHub silently drops one of them.');
+      orphaned++;
+    }
+  }
+  if (orphaned) { console.log(orphaned + ' run: line(s) without a step of their own'); process.exit(1); }
+}
+
 let bad = 0;
 if (steps.length < 100) { console.log('  FAIL  only ' + steps.length + ' steps found -- has the workflow moved?'); bad++; }
 if (!yml.includes('run: node ' + SELF)) { console.log('  FAIL  this check is not itself a step in the workflow'); bad++; }

@@ -267,7 +267,27 @@
       fontFamily: 'inherit',
       textDecoration: 'underline'
     }
-  }, "Forgot password / Reset admin")), showReset && /*#__PURE__*/React.createElement("div", {
+  }, "Forgot password / Reset admin"), /* A sandbox has to be reachable before
+     anyone is signed in -- it starts with an empty store, so there is no
+     account to sign in with until you are already inside it. */
+  /*#__PURE__*/React.createElement("span", {
+    style: { color: MT, margin: '0 7px', fontSize: 11 }
+  }, "\u00b7"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      if (!confirm('Open test mode?\n\nA sandbox for trying the app out. SharePoint is switched off and everything you do stays in this browser, so nothing can reach the site or be seen by anyone else.\n\nIt starts empty -- you will be asked to set up an admin the way a new device is. Your real data is untouched and comes back when you leave.')) return;
+      setTestMode(true);
+      location.reload();
+    },
+    style: {
+      background: 'none',
+      border: 'none',
+      color: MT,
+      cursor: 'pointer',
+      fontSize: 11,
+      fontFamily: 'inherit',
+      textDecoration: 'underline'
+    }
+  }, "Test mode")), showReset && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 10,
       padding: '10px 12px',

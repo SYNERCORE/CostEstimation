@@ -222,7 +222,11 @@ jobs:
         run: node tools/test-load-errors.js
       - name: A request takes its documents
         run: node tools/test-request-docs.js
+      - name: Test mode is a sealed sandbox
+        run: node tools/test-test-mode.js
+      - name: Storage warning clears what it can
         run: node tools/test-storage-warning.js
+      - name: Every workflow step runs here
         run: node tools/check-ci-steps.js
       - name: Tool power usage
         run: node tools/test-tool-power.js
@@ -360,7 +364,11 @@ jobs:
         run: node tools/test-load-errors.js
       - name: A request takes its documents
         run: node tools/test-request-docs.js
+      - name: Test mode is a sealed sandbox
+        run: node tools/test-test-mode.js
+      - name: Storage warning clears what it can
         run: node tools/test-storage-warning.js
+      - name: Every workflow step runs here
         run: node tools/check-ci-steps.js
       - name: Detailed Excel export mirrors the printed CE
         run: node tools/test-xlsx-export.js src/App.js

@@ -3348,9 +3348,20 @@ function App({
     ceSections.filter(x => x.v > 0).forEach(x => {
       sum.push([S(x.letter, 'tdc'), S(x.printLabel, 'td', 4), null, null, null, null, S(N(x.v), 'tdn')]);
       /* Miscellaneous is a set of categories, not one line. The printed CE
-         itemises it under the parent letter; the workbook does the same. */
+         itemises it under the parent letter; the workbook does the same.
+
+         The breakdown used to sit in the TOTAL COST column, lettered and
+         shaded exactly like the items above it -- so selecting that column
+         in Excel added Miscellaneous twice and gave a second, larger total
+         than the one printed underneath. Two people have now had to be told
+         which number is real. The breakdown keeps its own column: whatever
+         is selected in TOTAL COST can only ever add up to TOTAL AMOUNT. */
       if (x.printLabel === 'MISCELLANEOUS') {
-        miscCosted.forEach(cat => sum.push([S(cat.letter, 'tdc'), S('    ' + cat.label, 'td', 4), null, null, null, null, S(N(cat.v), 'tdn')]));
+        miscCosted.forEach(cat => sum.push([
+          S('', 'tdc'),
+          S('        of which  ' + cat.letter + '  ' + cat.label, 'tdsub', 4), null, null, null,
+          S(N(cat.v), 'tdsubn'),
+          S('', 'tdn')]));
       }
     });
     sum.push([S('', 'totlbl'), S('TOTAL AMOUNT:', 'totlbl', 4), null, null, null, null, S(N(grand), 'tot')]);
@@ -8310,13 +8321,13 @@ function App({
         <td class="c b">${r.letter}</td>
         <td class="b">${r.label}</td>
         <td class="r">${fmt(r.v)}</td>
-      </tr>${r.sub?r.sub.map(s=>`<tr><td class="c" style="font-size:7pt">${s.letter}</td><td style="padding-left:16px;font-size:7pt">${esc(s.label)}</td><td class="r" style="font-size:7pt">${fmt(s.v)}</td></tr>`).join(''):''}
+      </tr>${r.sub?r.sub.map(s=>`<tr><td class="c"></td><td style="padding-left:16px;font-size:7pt;font-style:italic;color:#555"><div style="display:flex;justify-content:space-between;gap:12px"><span>of which&nbsp; ${s.letter}&nbsp; ${esc(s.label)}</span><span>${fmt(s.v)}</span></div></td><td class="r"></td></tr>`).join(''):''}
       `).join('')}
       <tr class="tot"><td colspan="2" class="b r" style="font-size:9pt">TOTAL AMOUNT:</td><td class="r b" style="font-size:9pt">${fmt(grand)}</td></tr>
       ${showUnitP ? `<tr class="tot"><td colspan="2" class="b r">${esc(unitLbl)}</td><td class="r b">${fmt(unitP)}</td></tr>` : ''}
       ${showUnitP && perJobT ? `<tr class="tot"><td colspan="2" class="b r">${esc(perJobLbl)}</td><td class="r b">${fmt(perJobT)}</td></tr>` : ''}
       ${margin !== 0 ? `<tr class="tot" style="background:#e8f5e9"><td colspan="2" class="b r">SELLING PRICE (${margin > 0 ? '+' : ''}${margin}% margin):</td><td class="r b">${fmt(grand*(1+margin/100))}</td></tr>` : ''}
-      ${hlRows.length ? hlRows.map(r=>`<tr class="tot"><td colspan="2" class="b r">${esc(hlLabel(r).toUpperCase())}:</td><td class="r b">${fmt(hlAmt(r))}</td></tr>`).join('') : ''}
+      ${hlRows.length ? `<tr><td colspan="3" class="c b" style="background:#ddd;font-size:7.5pt">HIGHLIGHTED COSTS (already included above)</td></tr>` + hlRows.map(r=>`<tr class="tot"><td colspan="2" class="b r">${esc(hlLabel(r).toUpperCase())}:</td><td class="r b">${fmt(hlAmt(r))}</td></tr>`).join('') : ''}
       ${servicesSummary.on && servicesSummary.ok ? `<tr><td colspan="3" class="c b" style="background:#ddd">SERVICES</td></tr>
       ${servicesSummary.lines.map(l=>`<tr><td colspan="2" class="b r">${esc(l.label.toUpperCase())}:</td><td class="r">${fmt(l.v)}</td></tr>`).join('')}
       ${Math.abs(servicesSummary.other) >= 0.005 ? `<tr><td colspan="2" class="b r">OTHER MISC. TO THE PROJECT:</td><td class="r">${fmt(servicesSummary.other)}</td></tr>` : ''}
@@ -8783,6 +8794,10 @@ function App({
       if (showUnitP) a.total('', unitLbl, a.money(unitP));
       if (showUnitP && perJobT) a.total('', perJobLbl, a.money(perJobT));
       if (margin !== 0) a.total('', 'SELLING PRICE (' + (margin > 0 ? '+' : '') + margin + '% margin):', a.money(grand * (1 + margin / 100)));
+      /* The workbook has always headed these; the printed CE and this one
+         did not, so two bold figures appeared under TOTAL AMOUNT, in the
+         same column, with nothing to say they were already inside it. */
+      if (hlRows.length) a.title('HIGHLIGHTED COSTS (already included above)', 3);
       hlRows.forEach(r => a.total('', String(hlLabel(r)).toUpperCase() + ':', a.money(hlAmt(r))));
       if (servicesSummary.on && servicesSummary.ok) {
         a.blank();

@@ -22,7 +22,12 @@
   /* ---- styles ------------------------------------------------------------
      Style names map to cellXfs indices below. Keep the two lists in step. */
   var STYLES = ['base', 'title', 'label', 'val', 'secbar', 'th', 'td', 'tdc',
-                'tdn', 'tot', 'totlbl', 'doc', 'tdnb', 'sec', 'valn', 'note'];
+                'tdn', 'tot', 'totlbl', 'doc', 'tdnb', 'sec', 'valn', 'note',
+                /* A breakdown line that sits UNDER a total, not beside it:
+                   small, italic, grey. It must not be mistaken for another
+                   item to be added -- which is exactly what happened when it
+                   was styled the same as the items above it. */
+                'tdsub', 'tdsubn'];
   var SID = {};
   STYLES.forEach(function (n, i) { SID[n] = i; });
 
@@ -30,13 +35,15 @@
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
     '<numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.00"/></numFmts>' +
-    '<fonts count="6">' +
+    '<fonts count="7">' +
       '<font><sz val="10"/><name val="Calibri"/></font>' +
       '<font><b/><sz val="10"/><name val="Calibri"/></font>' +
       '<font><b/><sz val="16"/><name val="Calibri"/></font>' +
       '<font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>' +
       '<font><sz val="8"/><name val="Calibri"/></font>' +
       '<font><b/><sz val="11"/><name val="Calibri"/></font>' +
+      /* Small, italic, grey: a subordinate line. */
+      '<font><i/><sz val="8"/><color rgb="FF808080"/><name val="Calibri"/></font>' +
     '</fonts>' +
     '<fills count="5">' +
       '<fill><patternFill patternType="none"/></fill>' +
@@ -51,7 +58,7 @@
       '<top style="thin"><color rgb="FF808080"/></top><bottom style="thin"><color rgb="FF808080"/></bottom><diagonal/></border>' +
     '</borders>' +
     '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-    '<cellXfs count="16">' +
+    '<cellXfs count="18">' +
       '<xf xfId="0" numFmtId="0" fontId="0" fillId="0" borderId="0"/>' +
       '<xf xfId="0" numFmtId="0" fontId="2" fillId="0" borderId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' +
       '<xf xfId="0" numFmtId="0" fontId="1" fillId="0" borderId="0" applyFont="1"/>' +
@@ -68,6 +75,11 @@
       '<xf xfId="0" numFmtId="0" fontId="5" fillId="0" borderId="0" applyFont="1"/>' +
       '<xf xfId="0" numFmtId="164" fontId="0" fillId="0" borderId="0" applyNumberFormat="1"/>' +
       '<xf xfId="0" numFmtId="0" fontId="0" fillId="0" borderId="0" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>' +
+          /* tdsub: the breakdown label. tdsubn: its amount -- which the CE
+         SUMMARY puts in its OWN column, never the TOTAL COST column, so
+         selecting that column can only ever give the total. */
+      '<xf xfId="0" numFmtId="0" fontId="6" fillId="0" borderId="1" applyFont="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>' +
+      '<xf xfId="0" numFmtId="164" fontId="6" fillId="0" borderId="1" applyNumberFormat="1" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>' +
     '</cellXfs>' +
     '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
     '</styleSheet>';

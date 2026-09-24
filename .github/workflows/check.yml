@@ -224,6 +224,8 @@ jobs:
         run: node tools/test-request-docs.js
       - name: Test mode is a sealed sandbox
         run: node tools/test-test-mode.js
+      - name: The request form is the RCE checklist
+        run: node tools/test-rce-checklist.js
       - name: Storage warning clears what it can
         run: node tools/test-storage-warning.js
       - name: Every workflow step runs here
@@ -366,6 +368,8 @@ jobs:
         run: node tools/test-request-docs.js
       - name: Test mode is a sealed sandbox
         run: node tools/test-test-mode.js
+      - name: The request form is the RCE checklist
+        run: node tools/test-rce-checklist.js
       - name: Storage warning clears what it can
         run: node tools/test-storage-warning.js
       - name: Every workflow step runs here

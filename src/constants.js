@@ -263,3 +263,40 @@ function wipeTestData(){
                    so the worst case is test data sitting beside live data
                    rather than test data reaching the site. */ }
 })();
+
+/* ── The RCE checklist ─────────────────────────────────────
+   The thirteen things Sales is asked to confirm arrived with an inquiry,
+   taken item for item from the paper form SHIC-F-SMD-002 Rev 01 -- same
+   numbering, same wording, so a request raised here and the sheet it came
+   from can be read side by side. Each is answered Yes, No or N/A with a
+   remark, and item 14 is the recommendation that follows from them. */
+const RCE_ITEMS = [
+  { n: 1,  t: 'PR / ITB / RFQ / Budgetary Inquiry (BI)' },
+  { n: 2,  t: 'In line with SHIC products and services' },
+  { n: 3,  t: 'Site inspection / pre-bid meeting with location' },
+  { n: 4,  t: 'Site conditions & logistics' },
+  { n: 5,  t: 'Terms of Reference (TOR)' },
+  { n: 6,  t: 'Detailed description of scope of works' },
+  { n: 7,  t: 'Detailed description of scope of supply' },
+  { n: 8,  t: 'Asset and equipment details' },
+  { n: 9,  t: 'Material specification' },
+  { n: 10, t: 'Consumables and spare (if any)' },
+  { n: 11, t: 'Acceptance criteria' },
+  { n: 12, t: 'Completion lead time / work duration' },
+  { n: 13, t: 'Implementation schedule' }
+];
+const RCE_ANSWERS = [{ v: 'yes', t: 'Yes' }, { v: 'no', t: 'No' }, { v: 'na', t: 'N/A' }];
+/* Item 14. The middle one is why answering "No" above is not a dead end:
+   the request is logged, and what is missing is on the record. */
+const RCE_RECOMMENDATIONS = [
+  { v: 'proceed', t: '14.1  Proceed with the RCE' },
+  { v: 'secure',  t: '14.2  Secure complete reference data first' },
+  { v: 'decline', t: '14.3  Decline / no quote' }
+];
+const RCE_INQUIRY_TYPES = ['PR', 'ITB', 'RFQ', 'Budgetary Inquiry (BI)'];
+const RCE_STAGES = ['New project', 'Existing project'];
+/* An unanswered item is the whole point of the form, so it has a name. */
+function rceUnanswered(rce) {
+  const items = (rce && rce.items) || {};
+  return RCE_ITEMS.filter(i => !items[i.n] || !items[i.n].v);
+}

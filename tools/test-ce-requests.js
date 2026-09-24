@@ -28,8 +28,14 @@ ck('only a SharePoint save counts -- a request nobody else can see is not assign
   has(/if \(!saved \|\| saved\.sp === false \|\| saved\.id == null\)/));
 ck('the assignment is the Estimator column, with status Pending and who received it',
   has(/status: 'Pending', ceeName: f\.assignee\.trim\(\)/) && has(/receivedBy: currentUser\.name \|\| currentUser\.username/));
-ck('deadline, date received, job title and remarks are written too',
-  has(/deadline: f\.deadline \|\| ''/) && has(/dateRecv: f\.dateRecv \|\| ''/) && has(/jobTitle: String\(f\.description/) && has(/remarks: String\(f\.remarks/));
+ck('deadline, date received and job title are written too',
+  has(/deadline: f\.deadline \|\| ''/) && has(/dateRecv: f\.dateRecv \|\| ''/) && has(/jobTitle: String\(f\.description/));
+/* The remarks column now leads with item 14, because that is the one thing
+   the estimator must read before starting: two of the three recommendations
+   are reasons not to. What Sales typed still follows it. */
+ck('and the remarks carry the recommendation ahead of what Sales typed',
+  has(/RCE_RECOMMENDATIONS\.find\(r => r\.v === f\.recommendation\)/) &&
+  has(/String\(f\.remarks \|\| ''\)\.trim\(\)\]\.filter\(Boolean\)/));
 ck('the attachments panel opens straight after', has(/openAttachPanel\(saved\.id\);/));
 /* The documents chosen on the form go up once there is a row to hang them on,
    and that is the last thing the logging does -- see tools/test-request-docs.js. */

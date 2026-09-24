@@ -30,7 +30,11 @@ ck('the assignment is the Estimator column, with status Pending and who received
   has(/status: 'Pending', ceeName: f\.assignee\.trim\(\)/) && has(/receivedBy: currentUser\.name \|\| currentUser\.username/));
 ck('deadline, date received, job title and remarks are written too',
   has(/deadline: f\.deadline \|\| ''/) && has(/dateRecv: f\.dateRecv \|\| ''/) && has(/jobTitle: String\(f\.description/) && has(/remarks: String\(f\.remarks/));
-ck('the attachments panel opens straight after', has(/openAttachPanel\(saved\.id\);\n    \} catch/));
+ck('the attachments panel opens straight after', has(/openAttachPanel\(saved\.id\);/));
+/* The documents chosen on the form go up once there is a row to hang them on,
+   and that is the last thing the logging does -- see tools/test-request-docs.js. */
+ck('and whatever was chosen on the form is sent, after the panel is showing',
+  has(/openAttachPanel\(saved\.id\);[\s\S]{0,240}if \(_docs\.length\) await handleAttachUpload\(saved\.id, ceNum, _docs\);\n    \} catch/));
 ck('estimators are offered from the user list', has(/list:'req-users'/));
 
 console.log('\nfinding it:');

@@ -220,6 +220,8 @@ jobs:
         run: node tools/test-sign-indicator.js
       - name: A load error names itself
         run: node tools/test-load-errors.js
+      - name: A request takes its documents
+        run: node tools/test-request-docs.js
         run: node tools/test-storage-warning.js
         run: node tools/check-ci-steps.js
       - name: Tool power usage
@@ -356,6 +358,8 @@ jobs:
         run: node tools/test-sign-indicator.js
       - name: A load error names itself
         run: node tools/test-load-errors.js
+      - name: A request takes its documents
+        run: node tools/test-request-docs.js
         run: node tools/test-storage-warning.js
         run: node tools/check-ci-steps.js
       - name: Detailed Excel export mirrors the printed CE

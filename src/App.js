@@ -4906,6 +4906,10 @@ function App({
      -- the one save over an existing number that is allowed without Revise,
      and only for the number the request was raised under. */
   const [reqForm, setReqForm] = React.useState(null);
+  /* The documents are chosen while the request is being written, not after it.
+     They cannot go up yet -- there is no row to hang them on until the request
+     is saved -- so they are held here and sent the moment there is one. */
+  const [reqFiles, setReqFiles] = React.useState([]);
   const [reqBusy, setReqBusy] = React.useState(false);
   const [reqUsers, setReqUsers] = React.useState([]);
   const [monMine, setMonMine] = React.useState(false);
@@ -4931,6 +4935,7 @@ function App({
   };
   const meNames = () => [currentUser?.name, currentUser?.username].map(x => String(x || '').trim().toUpperCase()).filter(Boolean);
   const openRequest = () => {
+    setReqFiles([]);
     const today = new Date().toISOString().slice(0, 10);
     setReqForm({ ceNum: nextCeNum(history, null, ceNums), ceType: 'onsite', client: '', description: '',
       projType: 'Mechanical', dateRecv: today, deadline: '', assignee: '', remarks: '', rceNo: '' });
@@ -4973,8 +4978,15 @@ function App({
       auditLog('log_request', ceNum + ' -> ' + fields.ceeName, currentUser?.username);
       await loadHist();
       setReqForm(null);
-      showToast('Request ' + ceNum + ' logged and assigned to ' + fields.ceeName + '. Attach the documents that came with it.');
+      const _docs = reqFiles.slice();
+      setReqFiles([]);
+      showToast('Request ' + ceNum + ' logged and assigned to ' + fields.ceeName +
+        (_docs.length ? '. Sending ' + _docs.length + ' document(s)...' : '. Attach the documents that came with it.'));
       openAttachPanel(saved.id);
+      /* The request is logged either way. An upload that fails says so and
+         names the file, rather than leaving the panel looking as though it
+         went up. */
+      if (_docs.length) await handleAttachUpload(saved.id, ceNum, _docs);
     } catch (e) { showToast('Could not log the request: ' + e.message, true); }
     setReqBusy(false);
   };
@@ -5021,13 +5033,24 @@ function App({
         spId = _monSpIdCache[ceId];
       }
       if (!spId) throw new Error('Could not create monitoring record');
+      /* One file at a time, and one failure does not end the rest: the loop
+         used to stop at the first refusal -- a file too large, a name the site
+         will not take -- and say "Upload failed" without saying which, while
+         the files already up went unmentioned. Say what went and what did not,
+         by name. */
+      const gone = [], kept = [];
       for (const file of Array.from(files)) {
-        const buf = await file.arrayBuffer();
-        await spAddAttachment(spList('Monitoring'), spId, file.name, buf);
+        try {
+          const buf = await file.arrayBuffer();
+          await spAddAttachment(spList('Monitoring'), spId, file.name, buf);
+          gone.push(file.name);
+        } catch (err) { kept.push(file.name + ' (' + String((err && err.message) || 'failed').slice(0, 60) + ')'); }
       }
       const updated = await spGetAttachments(spList('Monitoring'), spId);
       setAttachList(updated);
-      showToast(`${files.length} file(s) uploaded.`);
+      if (!kept.length) showToast(gone.length + ' file(s) uploaded.');
+      else showToast((gone.length ? gone.length + ' file(s) uploaded. ' : '') +
+        kept.length + ' did NOT: ' + kept.join('; ') + '. Try again, or add them from the 📎 button.', true);
     } catch(e) { showToast('Upload failed: ' + e.message, true); }
     setAttachBusy(false);
   };
@@ -10440,7 +10463,7 @@ reqForm && (() => {
   },
     /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:14,marginBottom:4}}, "+ New Request"),
     /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:11,marginBottom:12}},
-      "Logs the request in CE Monitoring and assigns it. Attachments open next. The estimator Loads it, builds the estimate, and Saves under the same number."),
+      "Logs the request in CE Monitoring, assigns it, and sends whatever came with it. The estimator Loads it, builds the estimate, and Saves under the same number."),
     /*#__PURE__*/React.createElement("div", {style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:10}},
       L("CE Number *", inp('ceNum', {style:{...INP,...MONO}})),
       L("Assigned to *", /*#__PURE__*/React.createElement(React.Fragment, null,
@@ -10457,9 +10480,30 @@ reqForm && (() => {
     ),
     /*#__PURE__*/React.createElement("div", {style:{marginTop:10}}, L("Job title", /*#__PURE__*/React.createElement("textarea", {style:{...INP,height:52,resize:'vertical'}, value:reqForm.description, placeholder:'What the client is asking for', onChange:e=>set('description', e.target.value)}))),
     /*#__PURE__*/React.createElement("div", {style:{marginTop:10}}, L("Remarks", /*#__PURE__*/React.createElement("textarea", {style:{...INP,height:52,resize:'vertical'}, value:reqForm.remarks, placeholder:'Site visit needed, contact person, anything not to forget...', onChange:e=>set('remarks', e.target.value)}))),
+    /* Chosen here, sent the moment the request has a row to hang them on. */
+    /*#__PURE__*/React.createElement("div", {style:{marginTop:10}},
+      L("Documents that came with it",
+        /*#__PURE__*/React.createElement("div", {style:{border:'1px dashed '+BDR,borderRadius:6,padding:9}},
+          /*#__PURE__*/React.createElement("input", {
+            type:'file', multiple:true, disabled:reqBusy, style:{fontSize:11,color:MT,width:'100%'},
+            onChange:e=>{ const picked=Array.from(e.target.files||[]); if(picked.length) setReqFiles(p=>p.concat(picked.filter(f=>!p.some(x=>x.name===f.name&&x.size===f.size)))); e.target.value=''; }
+          }),
+          reqFiles.length > 0 && /*#__PURE__*/React.createElement("div", {style:{marginTop:8,display:'flex',flexDirection:'column',gap:4}},
+            reqFiles.map((f, i) => /*#__PURE__*/React.createElement("div", {key:f.name+i, style:{display:'flex',alignItems:'center',gap:8,fontSize:11}},
+              /*#__PURE__*/React.createElement("span", {style:{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, '📎 ' + f.name),
+              /*#__PURE__*/React.createElement("span", {style:{color:MT,fontSize:10,whiteSpace:'nowrap'}}, Math.max(1, Math.round(f.size/1024)).toLocaleString('en-US') + ' KB'),
+              /*#__PURE__*/React.createElement("button", {
+                style:{...btn('def',true),fontSize:10,padding:'1px 7px'}, disabled:reqBusy,
+                title:'Take this one off the request', onClick:()=>setReqFiles(p=>p.filter((_x,k)=>k!==i))
+              }, '✕')))),
+          /*#__PURE__*/React.createElement("div", {style:{marginTop:6,fontSize:10,color:MT}},
+            reqFiles.length
+              ? reqFiles.length + ' file(s) go up as soon as the request is logged. More can be added afterwards from the 📎 button.'
+              : 'Drawings, TOR, the RFQ, a PO -- anything the estimator needs. They can also be added afterwards from the 📎 button.')))),
     /*#__PURE__*/React.createElement("div", {style:{display:'flex',gap:8,justifyContent:'flex-end',marginTop:14}},
-      /*#__PURE__*/React.createElement("button", {style:btn('def'), disabled:reqBusy, onClick:()=>setReqForm(null)}, "Cancel"),
-      /*#__PURE__*/React.createElement("button", {style:btn('acc'), disabled:reqBusy, onClick:submitRequest}, reqBusy ? "Logging…" : "Log request & attach files")
+      /*#__PURE__*/React.createElement("button", {style:btn('def'), disabled:reqBusy, onClick:()=>{setReqFiles([]);setReqForm(null);}}, "Cancel"),
+      /*#__PURE__*/React.createElement("button", {style:btn('acc'), disabled:reqBusy, onClick:submitRequest},
+        reqBusy ? "Logging..." : (reqFiles.length ? "Log request & send " + reqFiles.length + " file(s)" : "Log request"))
     )
   ));
 })(),

@@ -1349,6 +1349,12 @@ const roleName=r=>ROLE_NAMES[_role(r)]||_role(r)||'user';
 /* Every role an admin may hand out. The owner is reached by transfer alone, so
    it is not among them: this cannot mint a second owner. */
 const ASSIGNABLE_ROLES=[ROLE_USER,ROLE_REQUESTOR,ROLE_ADMIN];
+/* The role one press of the role button produces. The button used to work
+   this out for itself while its LABEL was written separately -- so when
+   Requestor was added to the cycle the label was left saying '->Admin', and
+   an admin looking at the Users tab could see no way to make a Requestor at
+   all, though the button made one. One answer, used by both. */
+const nextRole=r=>{const at=ASSIGNABLE_ROLES.indexOf(_role(r));return ASSIGNABLE_ROLES[(at<0?0:at+1)%ASSIGNABLE_ROLES.length];};
 const findOwner=users=>(users||[]).find(u=>u&&isOwnerRole(u.role))||null;
 const sameUser=(a,b)=>{const x=String((a&&a.username)||a||'').toLowerCase(),y=String((b&&b.username)||b||'').toLowerCase();return !!x&&x===y;};
 

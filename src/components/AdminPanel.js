@@ -170,9 +170,7 @@
     /* Estimator -> Requestor -> Admin, and round again. The owner role is
        reachable by transfer alone, so this cannot mint a second owner or
        strand the app without one. */
-    const cur = String(u.role || 'user').toLowerCase();
-    const at = ASSIGNABLE_ROLES.indexOf(cur);
-    const r = ASSIGNABLE_ROLES[(at < 0 ? 0 : at + 1) % ASSIGNABLE_ROLES.length];
+    const r = nextRole(u.role);
     const says = {
       user: 'an Estimator: builds and costs CEs.',
       requestor: 'a Requestor: raises requests for estimation and reads what comes back. No costing, and no CE of anyone else is theirs to change.',
@@ -454,7 +452,7 @@ They become ` + says)) return;
   }, "Enable"), canManageUser(currentUser, u, 'role').ok && /*#__PURE__*/React.createElement("button", {
     style: btn('def', true),
     onClick: () => toggleRole(u)
-  }, u.role === 'admin' ? '->User' : '->Admin'),
+  }, '→ ' + roleName(nextRole(u.role))),
     /* Ownership moves only from the owner, only to an approved account. */
     iAmOwner && !isOwnerRole(u.role) && u.status === 'approved' && /*#__PURE__*/React.createElement("button", {
       style: btn('acc', true), disabled: ownerBusy, title: 'Hand ownership of this app to ' + u.username,

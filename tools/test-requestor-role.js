@@ -86,9 +86,36 @@ ck('whose request it is, is taken from what was saved, not from what is on scree
 
 /* ---- handing the role out ---- */
 const panel = fs.readFileSync('src/components/AdminPanel.js', 'utf8');
-ck('the roles an admin can hand out are the three, in turn',
-  panel.includes('const at = ASSIGNABLE_ROLES.indexOf(cur);') &&
-  panel.includes('ASSIGNABLE_ROLES[(at < 0 ? 0 : at + 1) % ASSIGNABLE_ROLES.length]'));
+/* The cycle and the button's LABEL were written separately, and when
+   Requestor joined the cycle only the cycle was changed -- the button went on
+   reading '->Admin', so an admin could see no way to make a Requestor at all
+   though the button made one. These assertions used to check the cycle and
+   never the label, which is how that shipped. Now: one answer, and the label
+   has to be that answer. */
+const dbsrc = fs.readFileSync('src/db.js', 'utf8');
+const nrLine = dbsrc.split(/\r?\n/).find(l => l.indexOf('const nextRole=') === 0);
+ck('there is one answer to what the next role is', !!nrLine);
+if (nrLine) {
+  /* _role comes out of db.js too. Stubbing it here once made this test
+     assert a blank role became Requestor, while the shipped pair made it
+     Estimator -- a test that agreed with itself and not with the app. */
+  const roleLine = dbsrc.split(/\r?\n/).find(l => l.indexOf('const _role=') === 0);
+  ck('_role is still where nextRole expects it', !!roleLine);
+  const nextRole = new Function('ASSIGNABLE_ROLES',
+    roleLine + ';' + nrLine + '; return nextRole;')(['user', 'requestor', 'admin']);
+  ck('an Estimator becomes a Requestor', nextRole('user') === 'requestor');
+  ck('a Requestor becomes an Admin', nextRole('requestor') === 'admin');
+  ck('an Admin goes back to Estimator', nextRole('admin') === 'user');
+  /* A blank role is not any of the three, so one press settles it on the
+     first -- Estimator -- rather than skipping a rung. */
+  ck('an account with no role at all settles on Estimator', nextRole('') === 'user');
+  ck('the owner is never handed out', ['owner'].every(r => nextRole(r) !== 'owner'));
+}
+ck('the button does what that answer says', panel.includes('const r = nextRole(u.role);'));
+ck('AND THE BUTTON NAMES THE ROLE IT WILL MAKE',
+  panel.includes("roleName(nextRole(u.role))"));
+ck('the label is not a two-way guess that can drift from the cycle again',
+  !panel.includes("u.role === 'admin' ? '->User' : '->Admin'"));
 ck('and the confirm says what the person becomes, not just the word',
   panel.includes('raises requests for estimation and reads what comes back'));
 ck('the role column reads as a role', panel.includes("isOwnerRole(u.role) ? '★ owner' : roleName(u.role)"));

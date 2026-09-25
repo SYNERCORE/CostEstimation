@@ -45,23 +45,40 @@ ck('it is escaped, like every other field on the sheet',
    blank MATERIAL as "none stated", and a row that vanishes as an oversight. */
 ck('the label stays on the paper even with nothing in it',
   info.indexOf('${info.material ?') < 0);
-ck('and neither label wraps onto two lines beside it',
-  /white-space:nowrap">MATERIAL:/.test(info) &&
-  /white-space:nowrap">CLIENT LOCATION:/.test(info));
+/* The tick rows are wide. Without this the first column is squeezed and
+   every label in the block breaks over two lines. */
+ck('no label in the header wraps onto two lines',
+  ['PROJECT TYPE:', 'PROJECT DESCRIPTION:', 'CLIENT NAME:', 'ATTENTION:', 'END USER:',
+   'MATERIAL:', 'CLIENT LOCATION:', 'CE TYPE:'].every(l =>
+    new RegExp('class="b nw"[^>]*>' + l.replace('.', '\.')).test(info)));
+ck('and the class it uses is really in the stylesheet',
+  /\.nw\{white-space:nowrap\}/.test(app));
 
 /* ---- PROJECT TYPE is ticked ---- */
-const boxes = app.slice(app.indexOf('const typeBoxes = CE_DISCIPLINES.map'), app.indexOf('const infoTable = `<table'));
+const boxes = app.slice(app.indexOf('const tickRow = (opts, chosen)'), app.indexOf('const infoTable = `<table'));
 ck('the printed CE has a PROJECT TYPE row', /PROJECT TYPE:<\/td>/.test(info));
 ck('with a box per discipline, taken from CE_DISCIPLINES itself',
-  /CE_DISCIPLINES\.map/.test(boxes));
+  /CE_DISCIPLINES\.map\(d => \(\{ k: d, t: d \}\)\)/.test(boxes));
 ck('so a discipline added to the app gets a box and cannot go missing',
   require('fs').readFileSync(require('path').join(__dirname, '..', 'src', 'config.js'), 'utf8')
     .indexOf("const CE_DISCIPLINES = ['Electrical', 'Mechanical', 'Civil', 'General'];") > 0);
-ck("the CE's own discipline is the one ticked",
-  /String\(info\.projType \|\| ''\)\.toLowerCase\(\) === d\.toLowerCase\(\)/.test(boxes));
+ck("the CE's own discipline is the one ticked", /, info\.projType\)/.test(boxes));
 ck('ticked and empty are different glyphs', /&#9745;/.test(boxes) && /&#9744;/.test(boxes));
+
+/* Where the work is done decides mobilization, the site incentive and whose
+   power the tools draw. It was printed once, in a line of running text in the
+   band above the table; it is ticked beside PROJECT TYPE now. */
+ck('CE TYPE is ticked beside it', /CE TYPE:<\/td>/.test(info));
+ck('with a box per CE type, taken from CE_CFG itself',
+  /Object\.keys\(CE_CFG\)\.map\(k => \(\{ k, t: ceTypeLabel\(k\) \}\)\)/.test(boxes));
+ck('labelled as the app labels them, not respelled here',
+  /ceTypeLabel\(k\)/.test(boxes));
+ck("and this CE's own type is the one ticked", /, ceType\)/.test(boxes));
+ck('one function draws both rows, so they cannot tick differently',
+  (boxes.match(/const tickRow = /g) || []).length === 1 &&
+  (boxes.match(/tickRow\(/g) || []).length === 2);
 ck('and the match ignores case, so a stored "MECHANICAL" still ticks',
-  /toLowerCase\(\) === d\.toLowerCase\(\)/.test(boxes));
+  /String\(chosen \|\| ''\)\.toLowerCase\(\) === String\(o\.k\)\.toLowerCase\(\)/.test(boxes));
 
 const txt = app.slice(app.indexOf("a.row('PROJECT DESCRIPTION:'"), app.indexOf("a.row('DISCIPLINE:'"));
 ck('the text summary prints it', /a\.row\('MATERIAL:', info\.material\)/.test(txt));

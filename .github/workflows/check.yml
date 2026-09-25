@@ -232,6 +232,8 @@ jobs:
         run: node tools/test-summary-layouts.js
       - name: CE material
         run: node tools/test-ce-material.js
+      - name: What an approver can see
+        run: node tools/test-approver-context.js
       - name: Storage warning clears what it can
         run: node tools/test-storage-warning.js
       - name: Every workflow step runs here
@@ -382,6 +384,8 @@ jobs:
         run: node tools/test-summary-layouts.js
       - name: CE material
         run: node tools/test-ce-material.js
+      - name: What an approver can see
+        run: node tools/test-approver-context.js
       - name: Storage warning clears what it can
         run: node tools/test-storage-warning.js
       - name: Every workflow step runs here

@@ -551,6 +551,11 @@ function App({
   const [diffModal, setDiffModal] = useState(null);
   /* CE Monitoring -> View: the printable CE of a saved CE, shown in place. */
   const [viewCE, setViewCE] = useState(null);
+  /* The CE whose request checklist an approver has opened from the viewer.
+     Approvers kept asking what the client actually sent, and the answer --
+     the RCE checklist Sales filled in -- was only ever visible to the
+     estimator with the CE loaded. Holds a ceId. */
+  const [viewRce, setViewRce] = useState(null);
   /* CE Monitoring -> Remarks trail: {id, ceNum} of the CE whose remarks are open. */
   const [remarksPanel, setRemarksPanel] = useState(null);
   const [remarkDraft, setRemarkDraft] = useState('');
@@ -8285,6 +8290,9 @@ function App({
       .sec{background:${_br.bar};color:${_br.text};font-weight:bold;text-align:center;padding:3px;font-size:8pt}
       .sub{background:#eee;font-weight:bold;font-size:7.5pt;padding:2px 4px}
       .r{text-align:right} .c{text-align:center} .b{font-weight:bold}
+      /* Header labels never wrap: the tick rows are wide, and a label
+         broken over two lines makes the whole block a row taller. */
+      .nw{white-space:nowrap}
       .tot{background:#f5f5f5;font-weight:bold}
       .sig td{border:none;text-align:center;padding:0 6px;vertical-align:bottom}
       /* The document is laid out into real A4 sheets before printing, each
@@ -8336,17 +8344,23 @@ function App({
        read: an approver looks for which box is marked. The boxes are
        CE_DISCIPLINES itself, so a discipline added there gets a box here and
        cannot go missing from the paper. */
-    const typeBoxes = CE_DISCIPLINES.map(d =>
-      `<span style="white-space:nowrap;margin-right:18px">${
-        String(info.projType || '').toLowerCase() === d.toLowerCase() ? '&#9745;' : '&#9744;'
-      }&nbsp;<b>${esc(d.toUpperCase())}</b></span>`).join('');
+    const tickRow = (opts, chosen) => opts.map(o =>
+      `<span style="white-space:nowrap;margin-right:14px">${
+        String(chosen || '').toLowerCase() === String(o.k).toLowerCase() ? '&#9745;' : '&#9744;'
+      }&nbsp;<b>${esc(String(o.t).toUpperCase())}</b></span>`).join('');
+    const typeBoxes = tickRow(CE_DISCIPLINES.map(d => ({ k: d, t: d })), info.projType);
+    /* Whether the work is done in our shop or away on the client's site is
+       the other thing an approver checks first: it decides mobilization, the
+       site incentive and whose power the tools draw. It was printed once, in
+       the band above, in a line of running text. */
+    const kindBoxes = tickRow(Object.keys(CE_CFG).map(k => ({ k, t: ceTypeLabel(k) })), ceType);
 
     const infoTable = `<table class="bdr" style="margin-bottom:5px;font-size:7.5pt">
-      <tr><td class="b" style="width:110px">PROJECT TYPE:</td><td colspan="3">${typeBoxes}</td></tr>
-      <tr><td class="b">PROJECT DESCRIPTION:</td><td class="b c">${esc(info.description||'')}</td><td class="b" style="white-space:nowrap">MATERIAL:</td><td>${esc(info.material||'')}</td></tr>
-      <tr><td class="b">CLIENT NAME:</td><td>${esc(info.client||'')}</td><td class="b" style="white-space:nowrap">CLIENT LOCATION:</td><td>${esc(info.location||'')}</td></tr>
-      <tr><td class="b">ATTENTION:</td><td>${esc(info.attention||'SALES DEPARTMENT')}</td><td class="b">QUANTITY:</td><td>${esc(info.qty||1)} ${esc(qtyUom)}</td></tr>
-      <tr><td class="b">END USER:</td><td>${esc(info.endUser||'C/O SALES')}</td><td class="b">NO. OF DAYS:</td><td>${esc(info.days||'')} DAYS</td></tr>
+      <tr><td class="b nw" style="width:110px">PROJECT TYPE:</td><td>${typeBoxes}</td><td class="b nw">CE TYPE:</td><td>${kindBoxes}</td></tr>
+      <tr><td class="b nw">PROJECT DESCRIPTION:</td><td class="b c">${esc(info.description||'')}</td><td class="b nw">MATERIAL:</td><td>${esc(info.material||'')}</td></tr>
+      <tr><td class="b nw">CLIENT NAME:</td><td>${esc(info.client||'')}</td><td class="b nw">CLIENT LOCATION:</td><td>${esc(info.location||'')}</td></tr>
+      <tr><td class="b nw">ATTENTION:</td><td>${esc(info.attention||'SALES DEPARTMENT')}</td><td class="b">QUANTITY:</td><td>${esc(info.qty||1)} ${esc(qtyUom)}</td></tr>
+      <tr><td class="b nw">END USER:</td><td>${esc(info.endUser||'C/O SALES')}</td><td class="b">NO. OF DAYS:</td><td>${esc(info.days||'')} DAYS</td></tr>
     </table>`;
 
     /* Cost summary -- only the sections this CE actually uses.
@@ -10700,7 +10714,9 @@ reqForm && (() => {
 
 /* ── Attachment Panel Modal ── */
 attachPanel && /*#__PURE__*/React.createElement("div", {
-  style:{position:'fixed',inset:0,background:'#000b',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center'},
+  /* Above the CE viewer (3000), because an approver opens it from there and a
+     panel that paints behind the thing that opened it cannot be read. */
+  style:{position:'fixed',inset:0,background:'#000b',zIndex:3100,display:'flex',alignItems:'center',justifyContent:'center'},
   onClick:()=>setAttachPanel(null)
 }, /*#__PURE__*/React.createElement("div", {
   style:{background:CARD,border:`1px solid ${BDR}`,borderRadius:10,padding:24,minWidth:420,maxWidth:560,maxHeight:'80vh',overflowY:'auto'},
@@ -10802,6 +10818,26 @@ remarksPanel && (() => {
         : /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,textAlign:'center',padding:12}}, "No remarks yet."))));
 })(),
 
+/* ── CE Monitoring -> View -> the request behind it ── */
+viewRce && (() => {
+  const _e = sortedHistory.find(x => x.id === viewRce);
+  const _rce = _e && _e.info && _e.info.rce;
+  if (!_rce) return null;
+  return /*#__PURE__*/React.createElement("div", {
+    /* Above the viewer, like the attachment panel, and closed the same way. */
+    style:{position:'fixed',inset:0,background:'#000b',zIndex:3100,display:'flex',alignItems:'center',justifyContent:'center'},
+    onClick:()=>setViewRce(null)
+  }, /*#__PURE__*/React.createElement("div", {
+    style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:16,width:'min(820px,94vw)',maxHeight:'88vh',overflowY:'auto'},
+    onClick:e=>e.stopPropagation()
+  },
+    /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',gap:8,marginBottom:12}},
+      /*#__PURE__*/React.createElement("b", {style:{fontSize:14}}, "📋 Request behind " + ((_e.info && _e.info.ceNum) || 'this CE')),
+      /*#__PURE__*/React.createElement("span", {style:{fontSize:11,color:MT}}, "As Sales logged it. Read-only."),
+      /*#__PURE__*/React.createElement("button", {style:{...btn('def',true),marginLeft:'auto'},onClick:()=>setViewRce(null)}, "✕ Close")),
+    /*#__PURE__*/React.createElement(RceChecklistCard, {rce: _rce})));
+})(),
+
 /* ── CE Monitoring -> View ── */
 viewCE && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset:0,background:'#000a',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center'},onClick:()=>setViewCE(null)},
   /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:12,width:'min(960px,96vw)',height:'92vh',display:'flex',flexDirection:'column',gap:8},onClick:e=>e.stopPropagation()},
@@ -10809,6 +10845,26 @@ viewCE && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset
       /*#__PURE__*/React.createElement("b", null, "👁 " + (viewCE.ceNum || 'CE')),
       /*#__PURE__*/React.createElement("span", {style:{fontSize:11,color:MT}}, viewCE.draft ? "Read-only view of an unsaved DRAFT — figures may still change." : "Read-only view. Takes a few seconds to draw."),
       /*#__PURE__*/React.createElement("span", {style:{marginLeft:'auto'}}),
+      /* What the client actually sent, and the papers it came with. An
+         approver asked to sign off a figure has to be able to see the request
+         behind it without leaving the CE, and without being able to change
+         either one. */
+      !viewCE.draftKey && (() => {
+        const _e = sortedHistory.find(x => x.id === viewCE.id);
+        const _rce = _e && _e.info && _e.info.rce;
+        return /*#__PURE__*/React.createElement("button", {
+          style:{...btn(viewRce === viewCE.id ? 'acc' : 'def', true), opacity: _rce ? 1 : .4, cursor: _rce ? 'pointer' : 'not-allowed'},
+          disabled: !_rce,
+          title: _rce ? "What the client sent with the inquiry — the RCE checklist Sales filled in"
+                      : "This CE did not come from a logged request, so there is no checklist to show",
+          onClick: () => setViewRce(viewRce === viewCE.id ? null : viewCE.id)
+        }, "📋 Request");
+      })(),
+      !viewCE.draftKey && /*#__PURE__*/React.createElement("button", {
+        style: btn(attachPanel === viewCE.id ? 'acc' : 'def', true),
+        title: "Drawings, TOR and the rest of the papers attached to this CE",
+        onClick: () => { if (attachPanel === viewCE.id) setAttachPanel(null); else openAttachPanel(viewCE.id); }
+      }, "📎 Files"),
       !viewCE.draftKey && (apvMonWaitsOn(monData[viewCE.id], currentUser.username) || viewApvTurn) && /*#__PURE__*/React.createElement("button", {style:{...btn('ok',true),opacity:apvBusy?.6:1},disabled:!!apvBusy,title:apvBusy?"Saving your signature — a moment":"Sign the CE shown here",onClick:()=>{if(!apvBusy)apvStartSign(viewCE.id);}}, apvBusy ? "✍ Signing…" : "✍ Approve & Sign"),
       !viewCE.draftKey && ((monData[viewCE.id]||{}).apv||{}).state==='pending' && ((((monData[viewCE.id]||{}).apv||{}).waiting||[]).includes(currentUser.username) || isAdmin) && /*#__PURE__*/React.createElement("button", {style:btn('def',true),title:"Send it back to the estimator with a comment",onClick:()=>apvStartReturn(viewCE.id)}, "↩ Return"),
       /*#__PURE__*/React.createElement("button", {style:btn('def',true),title:"Print or save this CE as PDF",onClick:()=>{try{

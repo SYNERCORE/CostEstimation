@@ -3331,11 +3331,14 @@ function App({
     const sum = head('COST ESTIMATE SUMMARY');
     [['PROJECT TYPE:', (info.projType ? info.projType + ' ' : '') + cl],
      ['PROJECT DESCRIPTION:', info.description],
+     /* Beside the description, because it describes the same thing: what the
+        job is being quoted on. It used to be printed below END USER, three
+        rows away from the work it qualifies. */
+     ['MATERIAL:', info.material],
      ['CLIENT NAME:', info.client],
      ['CLIENT LOCATION:', info.location],
      ['ATTENTION:', info.attention],
      ['END USER:', info.endUser],
-     ['MATERIAL:', info.material],
      ['RCE No.:', rceNo],
      ['QUANTITY:', (info.qty || 1) + ' ' + qtyUom],
      ['NO. OF DAYS:', info.days],
@@ -8329,10 +8332,19 @@ function App({
       <tr><td colspan="3" style="border:none;font-size:7.5pt;padding:1px 4px"><div style="display:flex;justify-content:space-between;gap:8px"><span><b>CE TYPE:</b>&nbsp;${esc(ceTypeLabel(ceType).toUpperCase())}</span><span>${rceNo ? '<b>RCE No.:</b>&nbsp;' + esc(rceNo) + '&nbsp;&nbsp;' : ''}<b>CE No.:</b>&nbsp;${esc(info.ceNum || '')}&nbsp;&nbsp;<b>DATE:</b>&nbsp;${esc(info.date||'')}</span></div></td></tr>
     </table>`;
 
+    /* PROJECT TYPE is ticked, not spelled out, because that is how the form is
+       read: an approver looks for which box is marked. The boxes are
+       CE_DISCIPLINES itself, so a discipline added there gets a box here and
+       cannot go missing from the paper. */
+    const typeBoxes = CE_DISCIPLINES.map(d =>
+      `<span style="white-space:nowrap;margin-right:18px">${
+        String(info.projType || '').toLowerCase() === d.toLowerCase() ? '&#9745;' : '&#9744;'
+      }&nbsp;<b>${esc(d.toUpperCase())}</b></span>`).join('');
+
     const infoTable = `<table class="bdr" style="margin-bottom:5px;font-size:7.5pt">
-      <tr><td class="b" style="width:110px">PROJECT DESCRIPTION:</td><td colspan="3" class="b c">${esc(info.description||'')}</td></tr>
-      <tr><td class="b">CLIENT NAME:</td><td>${esc(info.client||'')}</td><td class="b" style="width:90px">CLIENT LOCATION:</td><td>${esc(info.location||'')}</td></tr>
-      ${info.material ? `<tr><td class="b">MATERIAL:</td><td colspan="3">${esc(info.material)}</td></tr>` : ''}
+      <tr><td class="b" style="width:110px">PROJECT TYPE:</td><td colspan="3">${typeBoxes}</td></tr>
+      <tr><td class="b">PROJECT DESCRIPTION:</td><td class="b c">${esc(info.description||'')}</td><td class="b" style="white-space:nowrap">MATERIAL:</td><td>${esc(info.material||'')}</td></tr>
+      <tr><td class="b">CLIENT NAME:</td><td>${esc(info.client||'')}</td><td class="b" style="white-space:nowrap">CLIENT LOCATION:</td><td>${esc(info.location||'')}</td></tr>
       <tr><td class="b">ATTENTION:</td><td>${esc(info.attention||'SALES DEPARTMENT')}</td><td class="b">QUANTITY:</td><td>${esc(info.qty||1)} ${esc(qtyUom)}</td></tr>
       <tr><td class="b">END USER:</td><td>${esc(info.endUser||'C/O SALES')}</td><td class="b">NO. OF DAYS:</td><td>${esc(info.days||'')} DAYS</td></tr>
     </table>`;
@@ -8820,12 +8832,11 @@ function App({
     sheet('CE Summary', a => {
       docHead(a, 'COST ESTIMATE SUMMARY', 7);
       a.row('PROJECT DESCRIPTION:', info.description || '');
-      a.row('CLIENT NAME:', info.client || '', '', 'CLIENT LOCATION:', info.location || '');
       /* A material spec runs to a line of its own -- "A217 Gr. C12A with
-         Co-Cr-Mo-Ni & ASTM A335 P91" does not sit in half a row. It is what
-         the job is being quoted on, so a CE read in a message has to carry it
-         as the workbook and the printed CE do. */
+         Co-Cr-Mo-Ni & ASTM A335 P91" does not sit in half a row -- and it
+         belongs next to the description it qualifies. */
       if (info.material) a.row('MATERIAL:', info.material);
+      a.row('CLIENT NAME:', info.client || '', '', 'CLIENT LOCATION:', info.location || '');
       a.row('ATTENTION:', info.attention || 'SALES DEPARTMENT', '', 'QUANTITY:', (info.qty || 1) + ' ' + qtyUom);
       a.row('END USER:', info.endUser || 'C/O SALES', '', 'NO. OF DAYS:', (info.days || '') + ' DAYS');
       a.row('DISCIPLINE:', info.projType || '', '', 'STATUS:', docStatus);

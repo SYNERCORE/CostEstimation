@@ -26,30 +26,49 @@ ck('which rides info, saved whole as one JSON column',
     .indexOf('shicInfo:JSON.stringify(e.info||{})') > 0);
 
 /* ---- all three documents ---- */
-const wb = app.slice(app.indexOf("['CLIENT NAME:', info.client]"), app.indexOf("['STATUS:', docStatus]") + 40);
+const wb = app.slice(app.indexOf("['PROJECT TYPE:'"), app.indexOf("['STATUS:', docStatus]") + 40);
 ck('the workbook prints it', wb.indexOf("['MATERIAL:', info.material]") > 0);
+ck('beside the description it qualifies, not three rows below it',
+  wb.indexOf("'PROJECT DESCRIPTION:'") < wb.indexOf("'MATERIAL:'") &&
+  wb.indexOf("'MATERIAL:'") < wb.indexOf("'CLIENT NAME:'"));
 ck('and skips the row when there is none',
   /if \(v === '' \|\| v === null \|\| v === undefined\) return;/.test(app));
 
 const info = app.slice(app.indexOf('const infoTable = `<table'), app.indexOf('</table>`;', app.indexOf('const infoTable =')));
 ck('the printed CE prints it', /MATERIAL:<\/td>/.test(info));
-ck('on a full-width line, because a material spec is long',
-  /MATERIAL:<\/td><td colspan="3">/.test(info));
-ck('and prints no row at all when the CE has no material',
-  /\$\{info\.material \? `<tr>/.test(info));
+ck('in the right-hand cell of the description row, where the form has it',
+  /PROJECT DESCRIPTION:[\s\S]{0,140}MATERIAL:/.test(info) &&
+  info.indexOf('MATERIAL:') < info.indexOf('CLIENT NAME:'));
 ck('it is escaped, like every other field on the sheet',
-  /MATERIAL:<\/td><td colspan="3">\$\{esc\(info\.material\)\}/.test(info));
-/* Placed where the form places it: under the client, above the quantity. */
-ck('it sits between CLIENT LOCATION and ATTENTION, as the form has it',
-  info.indexOf('CLIENT LOCATION') < info.indexOf('MATERIAL:') &&
-  info.indexOf('MATERIAL:') < info.indexOf('ATTENTION:'));
+  /MATERIAL:<\/td><td>\$\{esc\(info\.material\|\|''\)\}/.test(info));
+/* A form's cell stays on the paper when it is empty -- an approver reads a
+   blank MATERIAL as "none stated", and a row that vanishes as an oversight. */
+ck('the label stays on the paper even with nothing in it',
+  info.indexOf('${info.material ?') < 0);
+ck('and neither label wraps onto two lines beside it',
+  /white-space:nowrap">MATERIAL:/.test(info) &&
+  /white-space:nowrap">CLIENT LOCATION:/.test(info));
+
+/* ---- PROJECT TYPE is ticked ---- */
+const boxes = app.slice(app.indexOf('const typeBoxes = CE_DISCIPLINES.map'), app.indexOf('const infoTable = `<table'));
+ck('the printed CE has a PROJECT TYPE row', /PROJECT TYPE:<\/td>/.test(info));
+ck('with a box per discipline, taken from CE_DISCIPLINES itself',
+  /CE_DISCIPLINES\.map/.test(boxes));
+ck('so a discipline added to the app gets a box and cannot go missing',
+  require('fs').readFileSync(require('path').join(__dirname, '..', 'src', 'config.js'), 'utf8')
+    .indexOf("const CE_DISCIPLINES = ['Electrical', 'Mechanical', 'Civil', 'General'];") > 0);
+ck("the CE's own discipline is the one ticked",
+  /String\(info\.projType \|\| ''\)\.toLowerCase\(\) === d\.toLowerCase\(\)/.test(boxes));
+ck('ticked and empty are different glyphs', /&#9745;/.test(boxes) && /&#9744;/.test(boxes));
+ck('and the match ignores case, so a stored "MECHANICAL" still ticks',
+  /toLowerCase\(\) === d\.toLowerCase\(\)/.test(boxes));
 
 const txt = app.slice(app.indexOf("a.row('PROJECT DESCRIPTION:'"), app.indexOf("a.row('DISCIPLINE:'"));
 ck('the text summary prints it', /a\.row\('MATERIAL:', info\.material\)/.test(txt));
 ck('and only when there is one', /if \(info\.material\) a\.row\('MATERIAL:'/.test(txt));
-ck('in the same place there too',
-  txt.indexOf('CLIENT LOCATION') < txt.indexOf("'MATERIAL:'") &&
-  txt.indexOf("'MATERIAL:'") < txt.indexOf('ATTENTION:'));
+ck('in the same place there too -- straight under the description',
+  txt.indexOf('PROJECT DESCRIPTION:') < txt.indexOf("'MATERIAL:'") &&
+  txt.indexOf("'MATERIAL:'") < txt.indexOf('CLIENT NAME:'));
 
 /* ---- and it survives a round trip through an exported workbook ---- */
 ck('an imported CE reads the material back out of the header',

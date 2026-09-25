@@ -68,15 +68,17 @@ ck('ticked and empty are different glyphs', /&#9745;/.test(boxes) && /&#9744;/.t
 /* Where the work is done decides mobilization, the site incentive and whose
    power the tools draw. It was printed once, in a line of running text in the
    band above the table; it is ticked beside PROJECT TYPE now. */
-ck('CE TYPE is ticked beside it', /CE TYPE:<\/td>/.test(info));
-ck('with a box per CE type, taken from CE_CFG itself',
-  /Object\.keys\(CE_CFG\)\.map\(k => \(\{ k, t: ceTypeLabel\(k\) \}\)\)/.test(boxes));
-ck('labelled as the app labels them, not respelled here',
-  /ceTypeLabel\(k\)/.test(boxes));
-ck("and this CE's own type is the one ticked", /, ceType\)/.test(boxes));
-ck('one function draws both rows, so they cannot tick differently',
+ck('CE TYPE is stated beside it', /CE TYPE:<\/td>/.test(info));
+/* Four boxes and a label did not fit the right-hand column -- the row ran off
+   the sheet and the last type was cut in half. And unlike the discipline there
+   is only ever one CE type on a CE, so there is nothing to choose between. */
+ck('as the one type it is, not as boxes to choose from',
+  /const kindBoxes = `<b>\$\{esc\(ceTypeLabel\(ceType\)\.toUpperCase\(\)\)\}<\/b>`/.test(boxes));
+ck('labelled as the app labels it, not respelled here', /ceTypeLabel\(ceType\)/.test(boxes));
+ck('and nothing is ticked for it', boxes.indexOf('tickRow(Object.keys(CE_CFG)') < 0);
+ck('the tick helper is declared once and used once',
   (boxes.match(/const tickRow = /g) || []).length === 1 &&
-  (boxes.match(/tickRow\(/g) || []).length === 2);
+  (boxes.match(/tickRow\(/g) || []).length === 1);
 ck('and the match ignores case, so a stored "MECHANICAL" still ticks',
   /String\(chosen \|\| ''\)\.toLowerCase\(\) === String\(o\.k\)\.toLowerCase\(\)/.test(boxes));
 

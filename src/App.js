@@ -8351,9 +8351,12 @@ function App({
     const typeBoxes = tickRow(CE_DISCIPLINES.map(d => ({ k: d, t: d })), info.projType);
     /* Whether the work is done in our shop or away on the client's site is
        the other thing an approver checks first: it decides mobilization, the
-       site incentive and whose power the tools draw. It was printed once, in
-       the band above, in a line of running text. */
-    const kindBoxes = tickRow(Object.keys(CE_CFG).map(k => ({ k, t: ceTypeLabel(k) })), ceType);
+       site incentive and whose power the tools draw. Ticked like the
+       discipline at first, but four boxes and a label would not fit the
+       right-hand column and ran off the sheet -- and unlike the discipline
+       there is only ever one CE type, so there is nothing to choose between:
+       the one it is, stated. */
+    const kindBoxes = `<b>${esc(ceTypeLabel(ceType).toUpperCase())}</b>`;
 
     const infoTable = `<table class="bdr" style="margin-bottom:5px;font-size:7.5pt">
       <tr><td class="b nw" style="width:110px">PROJECT TYPE:</td><td>${typeBoxes}</td><td class="b nw">CE TYPE:</td><td>${kindBoxes}</td></tr>

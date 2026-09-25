@@ -228,6 +228,8 @@ jobs:
         run: node tools/test-rce-checklist.js
       - name: The total column adds up to the total
         run: node tools/test-summary-columns.js
+      - name: CE summary layouts
+        run: node tools/test-summary-layouts.js
       - name: Storage warning clears what it can
         run: node tools/test-storage-warning.js
       - name: Every workflow step runs here
@@ -374,6 +376,8 @@ jobs:
         run: node tools/test-rce-checklist.js
       - name: The total column adds up to the total
         run: node tools/test-summary-columns.js
+      - name: CE summary layouts
+        run: node tools/test-summary-layouts.js
       - name: Storage warning clears what it can
         run: node tools/test-storage-warning.js
       - name: Every workflow step runs here

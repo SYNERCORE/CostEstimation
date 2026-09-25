@@ -50,8 +50,11 @@ const miscCosted = [
 const GRAND = 175178.34;
 
 const sum = [];
-new Function('ceSections', 'sum', 'miscCosted', 'S', 'N', loop)(
-  sections, sum, miscCosted,
+/* The itemisation reaches every renderer through ceBreakdown now, and which
+   way round it is set depends on the layout. This file is about the Mechanical
+   one; tools/test-summary-layouts.js covers both. */
+new Function('ceSections', 'sum', 'ceBreakdown', 'ceLayout', 'S', 'N', loop)(
+  sections, sum, { MISCELLANEOUS: miscCosted }, { parentCarries: true, breaks: ['misc'] },
   (v, s, span) => ({ v: v, s: s, span: span }),
   v => (typeof v === 'number' && isFinite(v) ? v : 0));
 

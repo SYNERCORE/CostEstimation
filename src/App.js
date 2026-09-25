@@ -3346,23 +3346,21 @@ function App({
     sum.push([]);
     sum.push([S('ITEM', 'th'), S('DESCRIPTION', 'th', 4), null, null, null, null, S('TOTAL COST', 'th')]);
     ceSections.filter(x => x.v > 0).forEach(x => {
-      sum.push([S(x.letter, 'tdc'), S(x.printLabel, 'td', 4), null, null, null, null, S(N(x.v), 'tdn')]);
-      /* Miscellaneous is a set of categories, not one line. The printed CE
-         itemises it under the parent letter; the workbook does the same.
-
-         The breakdown used to sit in the TOTAL COST column, lettered and
-         shaded exactly like the items above it -- so selecting that column
-         in Excel added Miscellaneous twice and gave a second, larger total
-         than the one printed underneath. Two people have now had to be told
-         which number is real. The breakdown keeps its own column: whatever
-         is selected in TOTAL COST can only ever add up to TOTAL AMOUNT. */
-      if (x.printLabel === 'MISCELLANEOUS') {
-        miscCosted.forEach(cat => sum.push([
-          S('', 'tdc'),
-          S('        of which  ' + cat.letter + '  ' + cat.label, 'tdsub', 4), null, null, null,
-          S(N(cat.v), 'tdsubn'),
-          S('', 'tdn')]));
-      }
+      const _blank = !ceLayout.parentCarries && !!ceBreakdown[x.printLabel];
+      sum.push([S(x.letter, 'tdc'), S(x.printLabel, 'td', 4), null, null, null, null, S(_blank ? '' : N(x.v), 'tdn')]);
+      /* A section with parts is itemised under it. Which way round depends
+         on the layout, and both arrangements exist for the same reason: read
+         down TOTAL COST and every cost must appear exactly once.
+           Mechanical keeps the section's figure in the column and sets its
+         parts beside it, in a column of their own, marked "of which".
+           Electrical leaves the section's own cell empty and lets the parts
+         carry the figures, which is how SY3-F-ACF-009 has always read.
+         Before either, the parts sat in the total column looking exactly
+         like the sections, and the column added up to more than the CE. */
+      const kids = ceBreakdown[x.printLabel];
+      if (kids) kids.forEach(k => sum.push(ceLayout.parentCarries
+        ? [S('', 'tdc'), S('        of which  ' + k.letter + '  ' + k.label, 'tdsub', 4), null, null, null, S(N(k.v), 'tdsubn'), S('', 'tdn')]
+        : [S('', 'tdc'), S('      ' + k.letter + '.  ' + k.label, 'td', 4), null, null, null, null, S(N(k.v), 'tdn')]));
     });
     sum.push([S('', 'totlbl'), S('TOTAL AMOUNT:', 'totlbl', 4), null, null, null, null, S(N(grand), 'tot')]);
     if (showUnitP) sum.push([S('', 'totlbl'), S(unitLbl, 'totlbl', 4), null, null, null, null, S(N(unitP), 'tot')]);
@@ -8189,6 +8187,12 @@ function App({
       letter: N(v) > 0 ? String.fromCharCode(65 + i++) + '.' : ''
     }));
   }, [mpTot, toolsT, matsT, ppeT, miscT, mobSubT, demobSubT, cfg.mobDemob]);
+  /* Which of the two summary sheets this CE prints. The discipline decides
+     unless the CE says otherwise, so every CE saved before this existed
+     reprints exactly as it did. */
+  const ceLayoutKey = summaryLayoutKey(info);
+  const ceLayout = SUMMARY_LAYOUTS[ceLayoutKey];
+
   /* The Miscellaneous categories that actually carry a cost, lettered under
      the section's own letter. Shared by the printed CE and the workbook so the
      two cannot drift apart on the itemisation again. */
@@ -8202,6 +8206,38 @@ function App({
       v: (Array.isArray(misc[k]) ? misc[k] : []).reduce((t, r) => t + miscRowCost(r), 0)
     })).filter(x => x.v > 0).map((x, j) => ({...x, letter: parent.replace('.', '') + '.' + (j + 1)}));
   }, [ceSections, ceType, misc]);
+  /* Every section's parts, in one place, so the four things that render a CE
+     -- the Summary tab, the printed CE, the workbook and the share text --
+     cannot itemise it differently. Keyed by the printed section name.
+
+     Manpower splits into the six shifts and what is paid on top of them.
+     Neither figure is computed here: mpWage and ben are the same values the
+     Manpower tab and the total are built from, so a breakdown that did not
+     add up to its section would mean the section itself was wrong. */
+  const ceBreakdown = useMemo(() => {
+    const out = {};
+    const put = (printLabel, items) => {
+      const L = (ceSections.find(x => x.printLabel === printLabel && x.v > 0) || {}).letter || '';
+      if (!L) return;
+      /* A part that costs nothing is not part of the estimate, exactly as a
+         section that costs nothing gets no letter. */
+      const kept = items.filter(x => N(x.v) > 0);
+      if (kept.length) out[printLabel] = kept.map((x, j) => ({ ...x, letter: L.replace('.', '') + '.' + (j + 1) }));
+    };
+    if (ceLayout.breaks.indexOf('mp') >= 0) {
+      const byShift = {};
+      mp.forEach(r => { if (!r || !r.role) return; const k = r.shift || 'regular_day'; byShift[k] = (byShift[k] || 0) + mpWage(r); });
+      put('MANPOWER COST', [
+        ...Object.keys(SHIFTS).map(k => ({ label: mpShiftLabel(k), v: byShift[k] || 0 })),
+        { label: MP_BENEFITS_LABEL, v: ben }]);
+    }
+    /* The Electrical sheet sets its parts in capitals like everything else
+       on it; the Mechanical one reads them as a sentence under the line they
+       belong to. */
+    if (ceLayout.breaks.indexOf('misc') >= 0) put('MISCELLANEOUS',
+      miscCosted.map(x => ({ label: ceLayout.parentCarries ? x.label : String(x.label).toUpperCase(), v: x.v })));
+    return out;
+  }, [ceSections, ceLayout, mp, rr, ben, miscCosted]);
   /* One colour per cost group, matched to the tab each is costed on, so the
      matrix row and the tab it came from read as the same thing. Keyed on the
      label rather than position: the mob/demob rows only exist for onsite, and
@@ -8306,13 +8342,13 @@ function App({
        LIST OF ROWS per category, so every one of those came out NaN, every
        category tested as empty, and the whole Miscellaneous section vanished
        from the printed CE -- while its cost stayed inside the total, which is
-       the worst of both: a document whose parts do not add up to its sum. */
-    const miscItems = miscCosted;
+       the worst of both: a document whose parts do not add up to its sum.
+       The parts now come from ceBreakdown, which every renderer reads. */
     const costRows = ceSections.filter(x => x.v > 0).map(x => ({
       letter: x.letter,
       label: x.printLabel,
       v: x.v,
-      sub: x.printLabel === 'MISCELLANEOUS' ? miscItems : null
+      sub: ceBreakdown[x.printLabel] || null
     }));
 
     const costTable = `<table style="margin-bottom:5px">
@@ -8320,8 +8356,10 @@ function App({
       ${costRows.map(r=>`<tr>
         <td class="c b">${r.letter}</td>
         <td class="b">${r.label}</td>
-        <td class="r">${fmt(r.v)}</td>
-      </tr>${r.sub?r.sub.map(s=>`<tr><td class="c"></td><td style="padding-left:16px;font-size:7pt;font-style:italic;color:#555"><div style="display:flex;justify-content:space-between;gap:12px"><span>of which&nbsp; ${s.letter}&nbsp; ${esc(s.label)}</span><span>${fmt(s.v)}</span></div></td><td class="r"></td></tr>`).join(''):''}
+        <td class="r">${r.sub && !ceLayout.parentCarries ? '' : fmt(r.v)}</td>
+      </tr>${r.sub?r.sub.map(s=>ceLayout.parentCarries
+        ? `<tr><td class="c"></td><td style="padding-left:16px;font-size:7pt;font-style:italic;color:#555"><div style="display:flex;justify-content:space-between;gap:12px"><span>of which&nbsp; ${s.letter}&nbsp; ${esc(s.label)}</span><span>${fmt(s.v)}</span></div></td><td class="r"></td></tr>`
+        : `<tr><td class="c"></td><td class="b" style="padding-left:22px">${s.letter}.&nbsp; ${esc(s.label)}</td><td class="r">${fmt(s.v)}</td></tr>`).join(''):''}
       `).join('')}
       <tr class="tot"><td colspan="2" class="b r" style="font-size:9pt">TOTAL AMOUNT:</td><td class="r b" style="font-size:9pt">${fmt(grand)}</td></tr>
       ${showUnitP ? `<tr class="tot"><td colspan="2" class="b r">${esc(unitLbl)}</td><td class="r b">${fmt(unitP)}</td></tr>` : ''}
@@ -8417,6 +8455,9 @@ function App({
        page; Miscellaneous never did. Its cost reached the summary and the
        total, but a delivery charge or a third-party fee had no line anywhere
        in the document saying what the client was being charged for. */
+    /* The Miscellaneous page itemises the rows under each category, which
+       it does whichever summary layout the CE prints. */
+    const miscItems = miscCosted;
     const miscPage=miscItems.length?`<div class="blk">
       <div class="sec">MISCELLANEOUS</div>
       ${miscItems.map(cat=>`<div class="sub">${cat.letter}&nbsp;&nbsp;${esc(cat.label)}</div>
@@ -8784,10 +8825,12 @@ function App({
       a.row('DISCIPLINE:', info.projType || '', '', 'STATUS:', docStatus);
       a.blank();
       a.head('ITEM', 'DESCRIPTION', 'TOTAL COST');
-      summaryRows.forEach(([l, v]) => {
-        const parts = String(l).trim().split(/\s+/);
-        const isItem = /^[A-Z]\.$/.test(parts[0]);
-        a.row(isItem ? parts[0] : '', isItem ? parts.slice(1).join(' ') : l, a.money(v));
+      /* Itemised the same way the printed CE and the workbook itemise it, so
+         a CE read in a message and the same CE read on paper agree. */
+      ceSections.filter(x => x.v > 0).forEach(x => {
+        const kids = ceBreakdown[x.printLabel];
+        a.row(x.letter, x.label, kids && !ceLayout.parentCarries ? '' : a.money(x.v));
+        if (kids) kids.forEach(k => a.row('', (ceLayout.parentCarries ? '   of which ' : '   ') + k.letter + '. ' + k.label, a.money(k.v)));
       });
       a.blank();
       a.total('', 'TOTAL AMOUNT:', a.money(grand));
@@ -13863,7 +13906,24 @@ tab === 'dashboard' && (() => {
       );
       window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
     }
-  }, "📧 Notify")))), /*#__PURE__*/React.createElement("table", {
+  }, "📧 Notify")))), /*#__PURE__*/React.createElement("div", {
+    style: {display:'flex',alignItems:'center',gap:8,margin:'0 0 10px 0',flexWrap:'wrap'}
+  },
+    /*#__PURE__*/React.createElement("span", {style:{fontSize:11,color:MT}}, "Summary sheet:"),
+    Object.keys(SUMMARY_LAYOUTS).map(k => /*#__PURE__*/React.createElement("button", {
+      key: k,
+      onClick: () => setInfo(p => ({...p, sumFmt: k})),
+      title: k === 'elec'
+        ? 'Manpower by shift, benefits on their own line, each section’s parts carrying the figures. As SY3-F-ACF-009 reads.'
+        : 'One line per section, with Miscellaneous itemised beside it.',
+      style: {fontSize:11,fontWeight:700,padding:'4px 12px',borderRadius:6,cursor:'pointer',
+        border: '1px solid ' + (ceLayoutKey === k ? 'transparent' : BDR),
+        background: ceLayoutKey === k ? ACC : 'transparent',
+        color: ceLayoutKey === k ? ON_ACC : MT}
+    }, SUMMARY_LAYOUTS[k].label)),
+    /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT}},
+      info.sumFmt ? "Chosen for this CE." : "Following the discipline — pick one to fix it for this CE.")),
+  /*#__PURE__*/React.createElement("table", {
     style: {
       width: '100%',
       borderCollapse: 'collapse',

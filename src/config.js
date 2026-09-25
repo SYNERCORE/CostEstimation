@@ -79,6 +79,53 @@ const MISC_DEF = {
   shopsite: [["accommodation", "G.1 Accommodation"], ["transportation", "G.2 Transportation"], ["requirements", "G.3 Requirements"], ["adminCost", "G.4 Admin Cost"], ["thirdParty", "G.5 Third Party"], ["insurance", "G.6 Insurances"]],
   supply: [["allowance", "D.1 Allowance"], ["transportation", "D.2 Transportation"], ["requirements", "E.3 Requirements"], ["adminCost", "E.4 Admin Cost"], ["thirdParty", "E.5 Third Party"], ["insurance", "E.6 Insurances"]]
 };
+/* ── CE Summary layouts ───────────────────────────────────
+   Two ways the same CE is summarised, because the two disciplines have
+   always issued different sheets. Mechanical lists one line per section.
+   Electrical breaks Manpower out by shift and Tools by group, as
+   SY3-F-ACF-009 does.
+   They differ in one more way, and it matters: where a section has a
+   breakdown, Electrical leaves the SECTION's own TOTAL COST blank and lets
+   the parts carry the figures, while Mechanical keeps the section's figure
+   and sets its parts aside in a column of their own. Both are arranged so
+   that reading down TOTAL COST adds each cost exactly once -- which is the
+   property that matters, and the one the old layout broke.
+   The discipline chooses the default; a CE may be switched either way and
+   remembers which, so nothing printed before this existed changes. */
+const SUMMARY_LAYOUTS = {
+  mech: { label: 'Mechanical', parentCarries: true,  breaks: ['misc'] },
+  elec: { label: 'Electrical', parentCarries: false, breaks: ['mp', 'misc'] }
+};
+const SUMMARY_LAYOUT_BY_DISCIPLINE = { electrical: 'elec' };
+/* An old CE has no stored choice, so it falls to its discipline, and a
+   Mechanical CE printed before any of this reprints identically. */
+function summaryLayoutKey(info) {
+  const set = String((info && info.sumFmt) || '').toLowerCase();
+  if (SUMMARY_LAYOUTS[set]) return set;
+  return SUMMARY_LAYOUT_BY_DISCIPLINE[String((info && info.projType) || '').toLowerCase()] || 'mech';
+}
+function summaryLayout(info) { return SUMMARY_LAYOUTS[summaryLayoutKey(info)]; }
+/* C.1..C.6 are the six shifts, in the order the sheet prints them, which is
+   the order SHIFTS is declared in. C.7 is what is paid on top of the shift. */
+const MP_BENEFITS_LABEL = 'BENEFITS & OTHERS';
+function mpShiftLabel(key) {
+  return ({
+    regular_day:   'REGULAR MANPOWER COST (DAY SHIFT)',
+    regular_night: 'REGULAR MANPOWER COST (NIGHT SHIFT)',
+    sunday_day:    'SUNDAY & NON-WORKING MANPOWER COST (DAY SHIFT)',
+    sunday_night:  'SUNDAY & NON-WORKING MANPOWER COST (NIGHT SHIFT)',
+    holiday_day:   'LEGAL HOLIDAYS MANPOWER COST (DAY SHIFT)',
+    holiday_night: 'LEGAL HOLIDAYS MANPOWER COST (NIGHT SHIFT)'
+  })[key] || ((SHIFTS[key] && SHIFTS[key].label) || key).toUpperCase();
+}
+/* The three buckets the Electrical sheet groups Tools into. */
+const TOOL_GROUPS = [
+  { k: 'common',    t: 'COMMON TOOLS' },
+  { k: 'equipment', t: 'ELECTRICAL EQUIPMENTS' },
+  { k: 'facility',  t: 'FACILITIES' }
+];
+const TOOL_GROUP_DEFAULT = 'common';
+
 const CE_TABS=[{id:"mywork",label:"🏠 My Work"},{id:"info",label:"Project Info"},{id:"sow",label:"Scope of Work"},{id:"sowbreak",label:"SOW Breakdown"},{id:"manpower",label:"Manpower"},{id:"tools",label:"Tools & Equipment"},{id:"materials",label:"Materials"},{id:"ppe",label:"PPE"},{id:"misc",label:"Miscellaneous"},{id:"summary",label:"Summary"},{id:"scopelib",label:"Scope Library"},{id:"masterlist",label:"Masterlist"},{id:"history",label:"CE Monitoring"},{id:"dashboard",label:"📊 Dashboard"}];
 const DEFAULT_ML={
   manpower:[

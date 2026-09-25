@@ -411,8 +411,8 @@ function toolRowTotal(row, kwhRate, src, powerFrac) {
 function ceResDays(r) {
   return (r.days === undefined || r.days === null || r.days === '') ? 1 : (parseFloat(r.days) || 0);
 }
-function ceMpRowCost(r, rates, ceType) {
-  if (!r || !r.role) return 0;
+function ceMpRowParts(r, rates, ceType) {
+  if (!r || !r.role) return { wage: 0, benefits: 0 };
   /* Omitted, this resolves to the statutory defaults, so every caller that
      has not been given the CE's own rates still prices as it always did. */
   const mult = ceShiftMult(rates, r.shift);
@@ -433,7 +433,16 @@ function ceMpRowCost(r, rates, ceType) {
      work -- the only days that earn the Incentive. */
   const siteF = rates && typeof rates._site === 'function' ? rates._site(r) : 1;
   const perdiem = ceIncentiveOn(ceType) ? N(r.perDiem || 0) * days * pax * siteF : 0;
-  return reg + ot + thirteenth + sss + hdmf + sil + perdiem;
+  /* The two halves the Electrical summary lists separately: what the man is
+     paid for the shift, and what is paid on top of it. They are returned from
+     the one expression that has always priced the row, and ceMpRowCost is now
+     their sum -- so the breakdown cannot drift from the figure the CE is
+     quoted at, whatever is changed here later. */
+  return { wage: reg + ot, benefits: thirteenth + sss + hdmf + sil + perdiem };
+}
+function ceMpRowCost(r, rates, ceType) {
+  const p = ceMpRowParts(r, rates, ceType);
+  return p.wage + p.benefits;
 }
 /* A mobilization / demobilization line. Two kinds share one list (so they
    ride the existing shicMob / shicDemob JSON columns with no migration):

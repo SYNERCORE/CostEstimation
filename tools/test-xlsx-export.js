@@ -73,8 +73,15 @@ ck('tools are costed by the one tier function, not by hand',
   /a\.money\(withDays \? toolRowTotal\(r, kwhRate, undefined, pwrFrac\(r\)\) : N\(r\.qty\) \* N\(r\.cost\)\)/.test(exp));
 ck('and only tools get a BASIS column', /withDays \? \['BASIS'\] : \[\]/.test(exp),
   'a consumable is not billed by the day, the hour or the project');
-ck('the summary reuses the same rows the app shows', /summaryRows\.forEach/.test(exp),
+/* It used to read summaryRows, the Summary tab's own array. It reads
+   ceSections and ceBreakdown now -- the same two the printed CE and the
+   workbook read -- because the tab keeps section rows only and the itemisation
+   would otherwise exist twice. */
+ck('the summary reuses the same sections the app shows',
+  /ceSections\.filter\(x => x\.v > 0\)\.forEach/.test(exp),
   'a second copy of the section list would drift from the screen');
+ck('and the one breakdown, not its own', /ceBreakdown\[x\.printLabel\]/.test(exp),
+  'two itemisations of one CE is how the totals came apart in the first place');
 ck('selling price only when there is a margin', /margin !== 0\) a\.total/.test(exp));
 ck('highlighted costs are carried over', /hlRows\.forEach/.test(exp));
 ck('the unit price divides by the CE quantity', /a\.total\('', unitLbl, a\.money\(unitP\)\)/.test(exp) &&

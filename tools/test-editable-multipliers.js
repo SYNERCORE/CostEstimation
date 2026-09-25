@@ -31,7 +31,7 @@ const SHIFTS = {
 const src =
   (help.match(/const OT_MULT_DEFAULT[\s\S]*?\nfunction ceOtMult\(rates\) \{[\s\S]*?\n\}/) || [''])[0] + '\n' +
   (help.match(/function ceIncentiveOn\(ceType\) \{[\s\S]*?\n\}/) || [''])[0] + '\n' +
-  (help.match(/function ceMpRowCost\(r, rates, ceType\) \{[\s\S]*?\n\}/) || [''])[0];
+  (help.match(/function ceMpRowParts\(r, rates, ceType\) \{[\s\S]*?\nfunction ceMpRowCost\(r, rates, ceType\) \{[\s\S]*?\n\}/) || [''])[0];
 if (!/function ceRates/.test(src) || !/ceMpRowCost/.test(src)) { console.error('resolvers not found'); process.exit(1); }
 const ctx = {SHIFTS, N: v => parseFloat(v) || 0, Object, parseFloat, isFinite};
 vm.createContext(ctx);

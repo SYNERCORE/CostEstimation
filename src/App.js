@@ -8332,6 +8332,7 @@ function App({
     const infoTable = `<table class="bdr" style="margin-bottom:5px;font-size:7.5pt">
       <tr><td class="b" style="width:110px">PROJECT DESCRIPTION:</td><td colspan="3" class="b c">${esc(info.description||'')}</td></tr>
       <tr><td class="b">CLIENT NAME:</td><td>${esc(info.client||'')}</td><td class="b" style="width:90px">CLIENT LOCATION:</td><td>${esc(info.location||'')}</td></tr>
+      ${info.material ? `<tr><td class="b">MATERIAL:</td><td colspan="3">${esc(info.material)}</td></tr>` : ''}
       <tr><td class="b">ATTENTION:</td><td>${esc(info.attention||'SALES DEPARTMENT')}</td><td class="b">QUANTITY:</td><td>${esc(info.qty||1)} ${esc(qtyUom)}</td></tr>
       <tr><td class="b">END USER:</td><td>${esc(info.endUser||'C/O SALES')}</td><td class="b">NO. OF DAYS:</td><td>${esc(info.days||'')} DAYS</td></tr>
     </table>`;
@@ -8820,6 +8821,11 @@ function App({
       docHead(a, 'COST ESTIMATE SUMMARY', 7);
       a.row('PROJECT DESCRIPTION:', info.description || '');
       a.row('CLIENT NAME:', info.client || '', '', 'CLIENT LOCATION:', info.location || '');
+      /* A material spec runs to a line of its own -- "A217 Gr. C12A with
+         Co-Cr-Mo-Ni & ASTM A335 P91" does not sit in half a row. It is what
+         the job is being quoted on, so a CE read in a message has to carry it
+         as the workbook and the printed CE do. */
+      if (info.material) a.row('MATERIAL:', info.material);
       a.row('ATTENTION:', info.attention || 'SALES DEPARTMENT', '', 'QUANTITY:', (info.qty || 1) + ' ' + qtyUom);
       a.row('END USER:', info.endUser || 'C/O SALES', '', 'NO. OF DAYS:', (info.days || '') + ' DAYS');
       a.row('DISCIPLINE:', info.projType || '', '', 'STATUS:', docStatus);

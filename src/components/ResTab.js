@@ -10,6 +10,11 @@ const ResTab = ({
   showToast,
   setPicker,
   showDays, /* Tools only: equipment can be charged per day (qty x days x cost) */
+  /* Tools only: the CE's NO. OF DAYS, offered as the duration to charge every
+     row for. A CE carries hundreds of tool rows; setting DAYS one row at a
+     time is not something anyone will actually do, so the whole column can be
+     set at once. */
+  ceDays,
   defaultTier, /* Tools only: what a new row starts on */
   setDefaultTier,
   /* Shopworks tools only -- onsite and supply work run on the client's
@@ -76,6 +81,17 @@ const ResTab = ({
      checked before they go on the CE. null when nothing is being imported. */
   const [imp, setImp] = useState(null);
   const impRef = useRef(null);
+  /* What "Set all" will write. Starts at whatever the rows already agree on,
+     so a CE whose tools are all on 30 days opens showing 30 and the button is
+     a no-op until the number is changed -- it never proposes a figure the CE
+     is not already using. Falls back to the CE's own duration, then to 1. */
+  const [bulkDays, setBulkDays] = useState(() => {
+    const seen = {};
+    (Array.isArray(rows) ? rows : []).forEach(r => { const d = rowDays(r || {}); seen[d] = (seen[d] || 0) + 1; });
+    const keys = Object.keys(seen);
+    if (keys.length) return keys.sort((a, b) => seen[b] - seen[a])[0];
+    return String(N(ceDays) || 1);
+  });
   const mlFind = d => (masterlist[mlType] || []).find(m => String(m.desc || '').trim().toUpperCase() === String(d || '').trim().toUpperCase());
   const importFile = async file => {
     if (!file) return;
@@ -198,7 +214,34 @@ showPower && /*#__PURE__*/React.createElement("label", {
     if (n) set(p => p.map(r => { const m = find(r); return m && m.uom && m.uom !== r.uom ? {...r, uom: m.uom} : r; }));
     showToast(n ? n + ' unit(s) updated from the Masterlist.' : 'Units already match the Masterlist.');
   }
-}, "↺ Sync UOM"), _newRows.length > 0 && /*#__PURE__*/React.createElement("button", {
+}, "↺ Sync UOM"), showDays && /*#__PURE__*/React.createElement("span", {
+  style: {display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, color: MT}
+}, "Days:", /*#__PURE__*/React.createElement("input", {
+  type: 'number', min: 0, step: 1,
+  style: {...INP, width: 54, fontSize: 10, padding: '2px 4px'},
+  value: bulkDays,
+  title: "The number of days to charge every tool for",
+  onChange: e => setBulkDays(e.target.value)
+}), /*#__PURE__*/React.createElement("button", {
+  style: {...btn('ok', true), fontSize: 10, padding: '2px 8px'},
+  disabled: !rows.length || bulkDays === '' || !isFinite(parseFloat(bulkDays)),
+  title: rows.length
+    ? 'Set DAYS on all ' + rows.length + ' row(s) to ' + bulkDays + '. Quantities, tiers and costs are not touched.'
+    : 'No rows to set',
+  onClick: () => {
+    const d = parseFloat(bulkDays);
+    if (!isFinite(d) || d < 0) { showToast('Type a number of days first.', true); return; }
+    /* Only the rows that would actually change are counted, so the toast says
+       what happened rather than repeating the row count back. */
+    const n = rows.filter(r => rowDays(r) !== d).length;
+    set(p => p.map(r => ({...r, days: d})));
+    showToast(n ? n + ' row(s) set to ' + d + ' day(s).' : 'Every row was already on ' + d + ' day(s).');
+  }
+}, "Set all"), ceDays > 0 && /*#__PURE__*/React.createElement("button", {
+  style: {...btn('def', true), fontSize: 10, padding: '2px 8px'},
+  title: "Use the CE's own duration — NO. OF DAYS on Project Info is " + ceDays,
+  onClick: () => setBulkDays(String(ceDays))
+}, "= CE (" + ceDays + ")")), _newRows.length > 0 && /*#__PURE__*/React.createElement("button", {
   style: btn('acc', true),
   title: 'Add every row not yet on the Masterlist, with its unit and unit cost: ' + _newRows.map(r => r.desc).join(', '),
   onClick: () => addToML(_newRows)

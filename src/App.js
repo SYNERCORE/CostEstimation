@@ -13004,6 +13004,11 @@ tab === 'dashboard' && (() => {
       if (!isFinite(f) || f < 0 || f === KWH_RATE_DEFAULT) delete n.kwhRate; else n.kwhRate = f;
       return n;
     }),
+    /* The CE's own duration, offered as the days to charge the equipment for.
+       With 900 rows on a CE, typing it into each one is not a thing anyone
+       will do -- so it is one click, and it is the number already on the
+       Project Info tab rather than a second one to keep in step. */
+    ceDays: N(info.days) || 0,
     masterlist, showToast, setPicker
   }), tab === 'materials' && /*#__PURE__*/React.createElement(ResTab, {
     rows: mats,

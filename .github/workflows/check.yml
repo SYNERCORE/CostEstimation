@@ -234,6 +234,8 @@ jobs:
         run: node tools/test-ce-material.js
       - name: What an approver can see
         run: node tools/test-approver-context.js
+      - name: Bulk DAYS on tools
+        run: node tools/test-bulk-days.js
       - name: Storage warning clears what it can
         run: node tools/test-storage-warning.js
       - name: Every workflow step runs here
@@ -386,6 +388,8 @@ jobs:
         run: node tools/test-ce-material.js
       - name: What an approver can see
         run: node tools/test-approver-context.js
+      - name: Bulk DAYS on tools
+        run: node tools/test-bulk-days.js
       - name: Storage warning clears what it can
         run: node tools/test-storage-warning.js
       - name: Every workflow step runs here

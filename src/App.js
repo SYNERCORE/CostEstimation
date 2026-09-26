@@ -13017,6 +13017,11 @@ tab === 'dashboard' && (() => {
     label: "Materials & Consumables (BOCM)",
     mlType: "materials",
     addToML: list => addRowsToML('materials', list),
+    /* The same reader the Tools tab has. A BOM or a PPE issue list
+       arrives as the same kind of list -- description, quantity,
+       unit -- and was being typed in by hand only because the tab
+       was never handed the reader. */
+    readFile: readDoc,
     masterlist, showToast, setPicker
   }), tab === 'ppe' && /*#__PURE__*/React.createElement(ResTab, {
     rows: ppe,
@@ -13025,6 +13030,11 @@ tab === 'dashboard' && (() => {
     label: "Personal Protective Equipment (PPE)",
     mlType: "ppe",
     addToML: list => addRowsToML('ppe', list),
+    /* The same reader the Tools tab has. A BOM or a PPE issue list
+       arrives as the same kind of list -- description, quantity,
+       unit -- and was being typed in by hand only because the tab
+       was never handed the reader. */
+    readFile: readDoc,
     masterlist, showToast, setPicker
   }), tab === 'misc' && /*#__PURE__*/React.createElement("div", null, (MISC_DEF[ceType] || MISC_DEF.onsite).map(([miscKey, label]) => {
     const rows = Array.isArray(misc[miscKey]) ? misc[miscKey] : [];

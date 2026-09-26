@@ -738,8 +738,12 @@ function parseToolList(text) {
     if (!desc || desc.length < 2 || !(q > 0)) return;
     items.push({ desc, qty: q, uom: uom ? uom.charAt(0).toUpperCase() + uom.slice(1).toLowerCase() : 'Pc', code: code || '' });
   };
-  /* A table with a header row. */
-  const isHdr = cells => cells.some(c => /^(item )?desc(ription)?\b|^item( name)?$|^(tool|equipment|particulars?)( name)?$/i.test(c)) &&
+  /* A table with a header row. The description column is named after what the
+     list is of -- MATERIAL, CONSUMABLES, PPE, TOOL -- and the code column
+     after a number, so "MATERIAL NO" is a code and a bare "MATERIAL" is the
+     description. Reading them the other way round was why a BOM headed
+     MATERIAL / QTY produced no rows at all. */
+  const isHdr = cells => cells.some(c => /^(item |material |product )?desc(ription)?\b|^item( name)?$|^(tool|equipment|particulars?|materials?|consumables?|ppe)( name)?$/i.test(c)) &&
     cells.some(c => /^(qty|quantity|q'?ty)\b/i.test(c));
   let hdr = null;
   lines.forEach(l => {
@@ -748,8 +752,8 @@ function parseToolList(text) {
     const cells = parseCsvLine(l);
     if (isHdr(cells)) {
       const f = re => cells.findIndex(c => re.test(c));
-      hdr = { d: f(/^(item )?desc(ription)?\b|^item( name)?$|^(tool|equipment|particulars?)( name)?$/i), q: f(/^(qty|quantity|q'?ty)\b/i),
-        u: f(/^(uom|unit|u\/m|units?)\b/i), c: f(/^(sku|code|part( no\.?| number)?|item (no|code)|material( no)?)\b/i) };
+      hdr = { d: f(/^(item |material |product )?desc(ription)?\b|^item( name)?$|^(tool|equipment|particulars?|materials?|consumables?|ppe)( name)?$/i), q: f(/^(qty|quantity|q'?ty)\b/i),
+        u: f(/^(uom|unit|u\/m|units?)\b/i), c: f(/^(sku|code|part( no\.?| number)?|item (no|code)|material (no\.?|number|code))\b/i) };
       return;
     }
     if (hdr) push(cells[hdr.d], cells[hdr.q], hdr.u >= 0 ? cells[hdr.u] : '', hdr.c >= 0 ? cells[hdr.c] : '');

@@ -38,6 +38,11 @@ const ResTab = ({
     return !d || (masterlist[mlType] || []).some(m => String(m.desc || '').trim().toUpperCase() === d);
   };
   const _newRows = addToML ? rows.filter(r => !_mlHas(r)) : [];
+  /* Import reads any Description + Qty list and prices it off the Masterlist
+     for THIS tab -- nothing in it was ever specific to tools, only its
+     wording was. Materials and PPE arrive as the same kind of list, so they
+     get the same reader, saying what they are. */
+  const _noun = { tools: 'tool', materials: 'material', ppe: 'PPE' }[mlType] || 'item';
   /* Days is optional per row and defaults to 1, so a row that never sets it
      costs exactly qty x cost -- existing CEs are unaffected. */
   const rowDays = r => (r.days === undefined || r.days === '' || r.days === null) ? 1 : (N(r.days) || 0);
@@ -98,7 +103,7 @@ const ResTab = ({
     try {
       const text = await readFile(file);
       const list = parseToolList(text);
-      if (!list.length) { showToast('No tool rows found in ' + file.name + '. The list needs a Description and a Qty column, or numbered lines ending in a quantity and unit.', true); return; }
+      if (!list.length) { showToast('No ' + _noun + ' rows found in ' + file.name + '. The list needs a Description and a Qty column, or numbered lines ending in a quantity and unit.', true); return; }
       setImp({ name: file.name, rows: list.map(it => ({ ...it, id: uid(), on: true })) });
     } catch (e) {
       showToast('Could not read ' + file.name + ': ' + e.message, true);
@@ -113,7 +118,7 @@ const ResTab = ({
         cost: m ? (m.cost !== undefined ? m.cost : (m.rate || 0)) : 0, ...(showDays ? { tier } : {}), ..._srcFields(m) };
     })]);
     const priced = pick.filter(r => mlFind(r.desc)).length;
-    showToast(pick.length + ' tool row(s) added from ' + imp.name + '. ' + priced + ' priced from the Masterlist' +
+    showToast(pick.length + ' ' + _noun + ' row(s) added from ' + imp.name + '. ' + priced + ' priced from the Masterlist' +
       (pick.length > priced ? ', ' + (pick.length - priced) + ' at P0 -- type their rate, or add them to the Masterlist.' : '.'), pick.length > priced);
     setImp(null);
   };
@@ -179,7 +184,7 @@ showPower && /*#__PURE__*/React.createElement("label", {
 }, "From Masterlist"), readFile && /*#__PURE__*/React.createElement("button", {
   className: 'import-tool-list',
   style: btn('info', true),
-  title: "Read a tool or kit list (PDF, Excel, CSV) into rows. You check them before they are added.",
+  title: "Read a " + _noun + " list (PDF, Excel, CSV) into rows. You check them before they are added.",
   onClick: () => impRef.current && impRef.current.click()
 }, "⇪ Import list"), readFile && /*#__PURE__*/React.createElement("input", {
   ref: impRef, type: 'file', accept: '.pdf,.xlsx,.xls,.csv,.txt,.docx', style: { display: 'none' },
@@ -603,7 +608,7 @@ showPower && /*#__PURE__*/React.createElement("label", {
 }, /*#__PURE__*/React.createElement("div", {
   style: { ...CS, background: 'var(--bg-surface)', width: 'min(860px, 100%)', maxHeight: '86vh', display: 'flex', flexDirection: 'column', gap: 10, margin: 0 }
 }, /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' } },
-  /*#__PURE__*/React.createElement("b", null, "Import tool list"),
+  /*#__PURE__*/React.createElement("b", null, "Import " + _noun + " list"),
   /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: 'var(--text-secondary)' } },
     imp.name + ' -- ' + imp.rows.length + ' item(s) read, ' + imp.rows.filter(r => mlFind(r.desc)).length + ' on the Masterlist. Same items are added up. Untick what the job does not need.'),
   /*#__PURE__*/React.createElement("span", { style: { marginLeft: 'auto', display: 'flex', gap: 6 } },

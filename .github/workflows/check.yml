@@ -238,6 +238,8 @@ jobs:
         run: node tools/test-bulk-days.js
       - name: Import list on Materials and PPE
         run: node tools/test-import-materials.js
+      - name: Tools - Tier 4, charging a tool out whole
+        run: node tools/test-tier-full-price.js
       - name: Storage warning clears what it can
         run: node tools/test-storage-warning.js
       - name: Every workflow step runs here
@@ -394,6 +396,8 @@ jobs:
         run: node tools/test-bulk-days.js
       - name: Import list on Materials and PPE
         run: node tools/test-import-materials.js
+      - name: Tools - Tier 4, charging a tool out whole
+        run: node tools/test-tier-full-price.js
       - name: Storage warning clears what it can
         run: node tools/test-storage-warning.js
       - name: Every workflow step runs here

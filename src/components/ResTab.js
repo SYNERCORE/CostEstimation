@@ -76,6 +76,10 @@ const ResTab = ({
      so on the row rather than quietly reading as a very cheap tool. */
   const tierUnderived = r => {
     const t = tierOf(r);
+    /* Tier 4 needs only the unit price, and needs it on the row -- an entry
+       with a price but no service life derives no annual cost at all, so it
+       must not be asked through toolTierRates. */
+    if (t === 4) return showDays && N(r.unitPrice) <= 0;
     if (!showDays || (t !== 1 && t !== 3)) return false;
     const rates = toolTierRates(r);
     if (!rates) return true;
@@ -257,7 +261,7 @@ showPower && /*#__PURE__*/React.createElement("label", {
   value: N(defaultTier) || 2,
   title: "How a tool added from here is charged. Rows already on the CE keep the tier they have.",
   onChange: e => setDefaultTier && setDefaultTier(N(e.target.value))
-}, [[1, 'Tier 1 - per project'], [2, 'Tier 2 - per day'], [3, 'Tier 3 - per hour used']]
+}, [[1, 'Tier 1 - per project'], [2, 'Tier 2 - per day'], [3, 'Tier 3 - per hour used'], [4, 'Tier 4 - full price']]
   .map(([v, l]) => /*#__PURE__*/React.createElement("option", {key: v, value: v}, l)))),
 /*#__PURE__*/React.createElement("button", {
   style: btn('info', true),
@@ -405,17 +409,19 @@ showPower && /*#__PURE__*/React.createElement("label", {
       width: 64
     },
     value: tierOf(r),
-    title: "1: flat per project, whatever the duration.  2: per day (the default).  3: per hour actually used.",
+    title: "1: flat per project, whatever the duration.  2: per day (the default).  3: per hour actually used.  4: the whole unit price, for a tool this job consumes.",
     onChange: e => set(p => p.map(x => x.id === r.id ? {
       ...x,
       tier: N(e.target.value)
     } : x))
-  }, [[1, 'T1'], [2, 'T2'], [3, 'T3']].map(([v, l]) => /*#__PURE__*/React.createElement("option", {
+  }, [[1, 'T1'], [2, 'T2'], [3, 'T3'], [4, 'T4']].map(([v, l]) => /*#__PURE__*/React.createElement("option", {
     key: v,
     value: v
   }, l))), tierUnderived(r) && /*#__PURE__*/React.createElement("span", {
     style: {color: ACC, fontSize: 11, marginLeft: 4, cursor: 'help'},
-    title: "This row has no unit price, service life or maintenance figure, so there is no annual cost to share out -- " +
+    title: tierOf(r) === 4
+      ? "This row has no unit price, so there is no price to charge the project. It is being charged at the daily rate instead. Fill the unit price in on the Masterlist (Tier Pricing Calculator) and press Sync Rates."
+      : "This row has no unit price, service life or maintenance figure, so there is no annual cost to share out -- " +
       (tierOf(r) === 1 ? "Tier 1 has nothing to divide between projects" : "Tier 3 has nothing to divide between hours") +
       ". It is being charged at the daily rate instead. Fill those figures in on the Masterlist (Tier Pricing Calculator) and press Sync Rates."
   }, "⚠")), showDays && /*#__PURE__*/React.createElement("td", {

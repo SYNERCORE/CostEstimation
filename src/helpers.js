@@ -579,6 +579,23 @@ async function verifyPassword(pw, stored) {
      Tier 2  daily x days       annualCost / 365               <- the default
      Tier 3  hourly x hours     annualCost / 8760
 
+   And one that is not derived from the annual cost at all:
+
+     Tier 4  the whole price    UnitPrice                      duration ignored
+
+   Tier 4 is for a tool the project consumes. Tiers 1 to 3 all assume the tool
+   comes back and is used again -- they charge a SHARE of what owning it costs
+   for the year. A grinder taken onto a heavy scaling job does not come back
+   fit for the next one, and charging that job a share of a year it will never
+   see means the replacement is paid for out of somebody else's margin. Tier 4
+   charges the project the price of the tool, because the project is what ends
+   its life.
+
+   It is the unit price alone -- not price plus a year's maintenance. The
+   project is buying the tool, not owning it for a year, and a figure an
+   approver can check against a quotation is worth more than a more elaborate
+   one he cannot.
+
    Tier 2 is what the app has always done: a tool row costs qty x days x cost,
    so the masterlist `cost` column has always held the Tier 2 daily rate. That
    is why nothing needs migrating -- every masterlist entry and every saved CE
@@ -614,7 +631,11 @@ function toolTierRates(src) {
        is no per-project share to take, so it is absent rather than guessed. */
     tier1: perYear > 0 ? annual / perYear : null,
     tier2: annual / 365,
-    tier3: annual / TIER_HOURS_PER_YEAR
+    tier3: annual / TIER_HOURS_PER_YEAR,
+    /* Not a share of the annual cost -- the price itself. Absent rather than
+       zero when the entry has no unit price, so it reads as "cannot be
+       derived" and not as a free tool. */
+    tier4: N(src.unitPrice) > 0 ? N(src.unitPrice) : null
   };
 }
 /* What one CE row costs. `cost` is the Tier 2 daily rate, the same field the
@@ -630,6 +651,16 @@ function toolRowCost(row, src) {
     if (r && r.tier1 !== null) return qty * r.tier1;
     return qty * daily * ceResDays(row);
   }
+  /* The whole price, once, however long the job runs. Read off the row rather
+     than through toolTierRates, because an entry carrying a unit price but no
+     service life has no annual cost to derive -- and its price is still its
+     price. Without one there is nothing to charge, so it falls back to the
+     daily rate like the other tiers do. */
+  if (tier === 4) {
+    const price = N(row.unitPrice) || N((src || {}).unitPrice);
+    if (price > 0) return qty * price;
+    return qty * daily * ceResDays(row);
+  }
   if (tier === 3) {
     /* Hours, not days. A four-hour job is the reason this tier exists, so an
        hours field left empty must not silently become a full day. */
@@ -638,6 +669,26 @@ function toolRowCost(row, src) {
     return qty * (daily / 24) * hours;
   }
   return qty * daily * ceResDays(row);
+}
+/* The rate a printed tool row should show against its basis.
+
+   Every document printed the stored daily rate in the UNIT COST column, whatever
+   the tier, next to a TOTAL worked out on a different figure entirely. On Tier 2
+   they are the same number and it never showed. On a Tier 4 row it would read as
+   a contradiction on the face of the sheet -- a P4,000 total beside a P0.60 rate
+   -- and on Tier 1 and Tier 3 it already did.
+
+   So: the rate for the basis the row is charged on. Tier 2 returns the stored
+   daily rate, exactly as before, which is what all but a handful of rows are. */
+function toolUnitRate(row, src) {
+  if (!row) return 0;
+  const daily = N(row.cost);
+  const tier = N(row.tier) || 2;
+  if (tier === 2) return daily;
+  if (tier === 4) return (N(row.unitPrice) || N((src || {}).unitPrice)) || daily;
+  const r = toolTierRates(src || row);
+  if (tier === 1) return (r && r.tier1 !== null) ? r.tier1 : daily;
+  return r ? r.tier3 : daily / 24;
 }
 
 

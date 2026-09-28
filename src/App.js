@@ -1775,7 +1775,7 @@ function App({
        so neither can be weighted by days without splitting a shared row in the
        wrong proportion. */
     ? Math.max(0, N(r.pax !== undefined ? r.pax : r.qty)) * Math.max(0, N(r.tier) === 3 ? N(r.hours)
-        : N(r.tier) === 1 ? 1
+        : (N(r.tier) === 1 || N(r.tier) === 4) ? 1
         : (r.days === undefined || r.days === '' ? 1 : r.days))
     : Math.max(0, N(r.qty));
   const rowShares = r => Array.isArray(r && r.shares) && r.shares.length ? r.shares : null;
@@ -1804,6 +1804,10 @@ function App({
   const toolBasis = r => {
     const t = N(r.tier) || 2;
     if (t === 1) return 'per project';
+    /* Not a duration at all: the job is being charged for the tool itself. An
+       approver reading "1 day" against the full price of a grinder would take
+       it for a typing error. */
+    if (t === 4) return 'full price';
     if (t === 3) return (N(r.hours) || 0) + ' hrs';
     return resDays(r) + (resDays(r) === 1 ? ' day' : ' days');
   };
@@ -3485,7 +3489,9 @@ function App({
       s.push(['ITEM', 'DESCRIPTION', 'QTY', 'UOM', 'BASIS', 'UNIT PRICE', 'TOTAL'].map(h => S(h, 'th')));
       toolsActive.forEach((r, i) => s.push([
         S(i + 1, 'tdc'), S(r.desc || '', 'td'), S(N(r.qty) || 1, 'tdc'), S(r.uom || 'Lot', 'tdc'), S(toolBasis(r), 'tdc'),
-        S(N(r.cost), 'tdn'), S(toolRowTotal(r, kwhRate, undefined, pwrFrac(r)), 'tdnb')]));
+        /* The rate for the basis in the column beside it, not the stored daily
+           rate -- on any tier but 2 those are different numbers. */
+        S(toolUnitRate(r), 'tdn'), S(toolRowTotal(r, kwhRate, undefined, pwrFrac(r)), 'tdnb')]));
       s.push([S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('', 'totlbl'), S('TOTAL:', 'totlbl'), S(N(toolsT), 'tot')]);
       sheets.push({name: 'BOTE', cols: COLS, rows: s});
     }
@@ -4125,14 +4131,23 @@ function App({
           field('maintPerYear', 'Maintenance per Year', 'often 20% of unit price'),
           field('projectsPerYear', 'Projects per Year', 'Tier 1 only')),
 
-        rates ? React.createElement('div', null,
+        /* Tier 4 is the unit price itself, so it can be shown from a price
+           alone -- a tool with no service life stated derives no annual cost,
+           and hiding the one figure the user has just typed reads as the
+           calculator refusing to work. */
+        (rates || N(mlCalc.unitPrice) > 0) ? React.createElement('div', null,
           React.createElement('div', {style: {color: MT, fontSize: 11, marginBottom: 8}},
-            'Annual cost to own: ', React.createElement('b', null, money(rates.annual)),
-            '  =  unit price / service life + maintenance per year'),
+            rates ? ['Annual cost to own: ', React.createElement('b', {key: 'a'}, money(rates.annual)),
+              '  =  unit price / service life + maintenance per year']
+              : 'No service life or yearly maintenance stated, so there is no annual cost to share out — only the price itself.'),
           React.createElement('div', {style: {display: 'flex', gap: 8, flexWrap: 'wrap'}},
-            tier('Tier 1 - per project', rates.tier1, 'flat, whatever the duration'),
-            tier('Tier 2 - per day', rates.tier2, 'x days on the CE - the default'),
-            tier('Tier 3 - per hour', rates.tier3, 'x hours on the CE')),
+            rates && tier('Tier 1 - per project', rates.tier1, 'flat, whatever the duration'),
+            rates && tier('Tier 2 - per day', rates.tier2, 'x days on the CE - the default'),
+            rates && tier('Tier 3 - per hour', rates.tier3, 'x hours on the CE'),
+            /* The one figure here that is not a share of the year: what the
+               project pays when it is the job that finishes the tool off. */
+            tier('Tier 4 - full price', N(mlCalc.unitPrice) > 0 ? N(mlCalc.unitPrice) : null,
+              'the tool is charged out whole')),
           React.createElement('div', {style: {color: MT, fontSize: 10, marginTop: 8, lineHeight: 1.6}},
             'Per day and per hour are CALENDAR time: a tool held on site is unavailable to another project overnight, ',
             'so it is charged for the hours it is held, not the hours it runs.')
@@ -4142,17 +4157,24 @@ function App({
         React.createElement('div', {style: {display: 'flex', gap: 8, marginTop: 14, alignItems: 'center'}},
           React.createElement('button', {
             style: btn('acc'),
-            disabled: !rates,
+            /* A price on its own is worth saving: it is all Tier 4 needs, and
+               without it the price would have to be typed on every CE row. */
+            disabled: !rates && !(N(mlCalc.unitPrice) > 0),
             onClick: () => {
               const next = {...masterlist, tools: (masterlist.tools || []).map(r => r.id === mlCalc.id ? {
                 ...r,
                 unitPrice: N(mlCalc.unitPrice), serviceLife: N(mlCalc.serviceLife),
                 projectsPerYear: N(mlCalc.projectsPerYear), maintPerYear: N(mlCalc.maintPerYear),
-                cost: Math.round(rates.tier2 * 100) / 100
+                /* No annual cost to derive from leaves the daily rate alone --
+                   it may have been typed in by hand, and overwriting it with
+                   zero would quietly make the tool free on every other tier. */
+                ...(rates ? {cost: Math.round(rates.tier2 * 100) / 100} : {})
               } : r)};
               saveML(next);
               setMlCalc(null);
-              showToast('Cost set to ' + money(rates.tier2) + ' per day. The figures behind it are saved with the item.');
+              showToast(rates
+                ? 'Cost set to ' + money(rates.tier2) + ' per day. The figures behind it are saved with the item.'
+                : 'Unit price ' + money(N(mlCalc.unitPrice)) + ' saved with the item, for Tier 4. The daily rate is left as it is.');
             }
           }, 'Apply to this item'),
           React.createElement('button', {style: btn('def'), onClick: () => setMlCalc(null)}, 'Cancel'),
@@ -8460,7 +8482,7 @@ function App({
     const toolsPage=toolsActive.length?`<div class="blk">
       <div class="sec">BILL OF TOOLS AND EQUIPMENT</div>
       <table><tr style="background:#eee"><th class="c" style="width:30px">ITEM</th><th>DESCRIPTION</th><th class="c" style="width:28px">QTY</th><th class="c" style="width:35px">UOM</th><th class="c" style="width:52px">BASIS</th>${powerOn?'<th class="r" style="width:64px">POWER</th>':''}<th class="r" style="width:80px">UNIT PRICE</th><th class="r" style="width:80px">TOTAL</th></tr>
-      ${toolsActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.uom||'Lot')}</td><td class="c">${esc(toolBasis(r))}</td>${powerOn?`<td class="r">${(toolPowerCost(r, kwhRate) * pwrFrac(r))>0?fmt((toolPowerCost(r, kwhRate) * pwrFrac(r))):'&#8212;'}</td>`:''}<td class="r">${fmt(r.cost||0)}</td><td class="r b">${fmt(toolRowTotal(r, kwhRate, undefined, pwrFrac(r)))}</td></tr>`).join('')}
+      ${toolsActive.map((r,i)=>`<tr><td class="c">${i+1}</td><td>${esc(r.desc||'')}</td><td class="c">${esc(r.qty||1)}</td><td class="c">${esc(r.uom||'Lot')}</td><td class="c">${esc(toolBasis(r))}</td>${powerOn?`<td class="r">${(toolPowerCost(r, kwhRate) * pwrFrac(r))>0?fmt((toolPowerCost(r, kwhRate) * pwrFrac(r))):'&#8212;'}</td>`:''}<td class="r">${fmt(toolUnitRate(r))}</td><td class="r b">${fmt(toolRowTotal(r, kwhRate, undefined, pwrFrac(r)))}</td></tr>`).join('')}
       <tr class="tot"><td colspan="${powerOn?7:6}" class="r b">TOTAL:</td><td class="r b">${fmt(toolsT)}</td></tr></table></div>` : '';
 
     /* Materials &#8212; skip zero rows */
@@ -8974,7 +8996,8 @@ function App({
         rows.forEach((r, i) => {
           a.row(i + 1, r.desc || '', N(r.qty), r.uom || 'Lot', ...(withDays ? [toolBasis(r)] : []),
             ...(pwrCol ? [a.money((toolPowerCost(r, kwhRate) * pwrFrac(r)))] : []),
-            a.money(r.cost), a.money(withDays ? toolRowTotal(r, kwhRate, undefined, pwrFrac(r)) : N(r.qty) * N(r.cost)));
+            a.money(withDays ? toolUnitRate(r) : N(r.cost)),
+            a.money(withDays ? toolRowTotal(r, kwhRate, undefined, pwrFrac(r)) : N(r.qty) * N(r.cost)));
         });
         a.blank();
         a.total('', 'TOTAL:', '', '', ...(withDays ? [''] : []), '', a.money(total));

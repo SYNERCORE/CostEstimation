@@ -569,6 +569,25 @@ async function verifyPassword(pw, stored) {
   return await sha256(pw) === stored;
 }
 
+/* -- CE notes -----------------------------------------------------------
+   A note is {id, seq, text, imp}. `imp` marks it as one the sales team must
+   not read past -- it prints bold red on the CE and the workbook, and carries
+   an [IMPORTANT] marker in the plain-text summary, which has no font at all.
+
+   A preset note (Users -> CE Defaults) is stored as a bare string, and every
+   preset already saved is an array of them. So a flagged preset note is
+   {t, imp} and a plain one stays a string: nothing already saved has to be
+   migrated, and a preset written by an older build still reads. These two
+   readers are the only place that knows the difference. */
+function ceNoteText(n) {
+  if (n === null || n === undefined) return '';
+  if (typeof n === 'string') return n;
+  return String(n.text !== undefined ? n.text : (n.t !== undefined ? n.t : ''));
+}
+function ceNoteImp(n) {
+  return !!(n && typeof n === 'object' && n.imp);
+}
+
 /* -- Tool & equipment tier pricing ------------------------------------------
    Three ways to charge a tool, all derived from one annual figure, so they can
    never disagree with each other:

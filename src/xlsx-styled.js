@@ -27,7 +27,10 @@
                    small, italic, grey. It must not be mistaken for another
                    item to be added -- which is exactly what happened when it
                    was styled the same as the items above it. */
-                'tdsub', 'tdsubn'];
+                'tdsub', 'tdsubn',
+                /* A note the sales team must not read past: bold, dark red.
+                   Same weight and colour the printed CE gives it. */
+                'noteimp'];
   var SID = {};
   STYLES.forEach(function (n, i) { SID[n] = i; });
 
@@ -35,7 +38,7 @@
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
     '<numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.00"/></numFmts>' +
-    '<fonts count="7">' +
+    '<fonts count="8">' +
       '<font><sz val="10"/><name val="Calibri"/></font>' +
       '<font><b/><sz val="10"/><name val="Calibri"/></font>' +
       '<font><b/><sz val="16"/><name val="Calibri"/></font>' +
@@ -44,6 +47,9 @@
       '<font><b/><sz val="11"/><name val="Calibri"/></font>' +
       /* Small, italic, grey: a subordinate line. */
       '<font><i/><sz val="8"/><color rgb="FF808080"/><name val="Calibri"/></font>' +
+      /* Bold dark red: an important note. C00000 is Excel's own "Dark Red",
+         so it survives a copy into another workbook as a named colour. */
+      '<font><b/><sz val="10"/><color rgb="FFC00000"/><name val="Calibri"/></font>' +
     '</fonts>' +
     '<fills count="5">' +
       '<fill><patternFill patternType="none"/></fill>' +
@@ -58,7 +64,7 @@
       '<top style="thin"><color rgb="FF808080"/></top><bottom style="thin"><color rgb="FF808080"/></bottom><diagonal/></border>' +
     '</borders>' +
     '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-    '<cellXfs count="18">' +
+    '<cellXfs count="19">' +
       '<xf xfId="0" numFmtId="0" fontId="0" fillId="0" borderId="0"/>' +
       '<xf xfId="0" numFmtId="0" fontId="2" fillId="0" borderId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' +
       '<xf xfId="0" numFmtId="0" fontId="1" fillId="0" borderId="0" applyFont="1"/>' +
@@ -80,6 +86,8 @@
          selecting that column can only ever give the total. */
       '<xf xfId="0" numFmtId="0" fontId="6" fillId="0" borderId="1" applyFont="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>' +
       '<xf xfId="0" numFmtId="164" fontId="6" fillId="0" borderId="1" applyNumberFormat="1" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>' +
+      /* noteimp: wraps and tops like `note`, but bold red. */
+      '<xf xfId="0" numFmtId="0" fontId="7" fillId="0" borderId="0" applyFont="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>' +
     '</cellXfs>' +
     '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
     '</styleSheet>';

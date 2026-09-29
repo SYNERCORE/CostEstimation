@@ -104,9 +104,17 @@ ck('mirrored locally first, so a SharePoint failure does not lose them',
   /localStorage\.setItem\('shic:ce_defaults'[\s\S]{0,200}if\(USE_SP\|\|getSiteURL\(\)\)/.test(db));
 ck('and the panel says when it only reached this browser',
   /SharePoint did not accept it/.test(panel));
+/* A note is a bare string, or {t, imp} once it is flagged important, so the
+   blank check has to look inside both shapes -- `filter(Boolean)` would keep
+   an empty flagged note, because the object itself is truthy. */
 ck('blank notes and nameless signatories are dropped on save',
-  /\.filter\(Boolean\)/.test(panel) && /a\.role \|\| ''\)\.trim\(\) \|\| \(a\.name/.test(panel),
+  /\.filter\(n => \(typeof n === 'string' \? n : n\.t\)\)/.test(panel) &&
+  /a\.role \|\| ''\)\.trim\(\) \|\| \(a\.name/.test(panel),
   'a preset of blanks fills every new CE with blanks');
+/* Only a flagged note becomes an object. Every preset already saved is an
+   array of strings and must be written back as one. */
+ck('an unflagged note is still saved as the bare string it always was',
+  /return ceNoteImp\(t\) \? \{t: txt, imp: true\} : txt;/.test(panel));
 
 console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nCE defaults OK');
 process.exit(fails ? 1 : 0);

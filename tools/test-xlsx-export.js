@@ -161,7 +161,12 @@ ck('signatories come from the approvers list', /approvers \|\| \[\]\)\.filter/.t
 ck('the role, name and title all come from the row', /a\.role \|\| ''\) \+ ':'[\s\S]{0,120}a\.name \|\| ''[\s\S]{0,80}a\.title \|\| a\.role/.test(exp1));
 ck('no boilerplate notes', !/Additional scope not in original SOW is excluded|Lead time assumes no interruptions/.test(src),
   'sentences nobody wrote, on a document people sign');
-ck('notes come from the CE', /notes\.map\(n => String\(n\.text \|\| ''\)\)/.test(exp1));
+/* The note's text and whether it is flagged important travel together: the CE
+   notes and the scope-breakdown notes are merged and THEN numbered, so a flat
+   list of strings would lose which one was flagged. */
+ck('notes come from the CE', /notes\.map\(n => \(\{t: String\(n\.text \|\| ''\), imp: !!n\.imp\}\)\)/.test(exp1));
+ck('and a flagged one is written in its own style, not the ordinary one',
+  /n\.imp \? 'noteimp' : 'note'/.test(exp1));
 ck('breakdown notes ride along, labelled by scope', /'Scope ' \+ \(sowLabels\[x\.id\] \|\| ''\)/.test(exp1),
   'the same line Export Detailed and the print produce');
 ck('an empty NOTE heading is not printed', /if \(noteLines\.length\) \{/.test(exp1),

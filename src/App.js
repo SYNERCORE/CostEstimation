@@ -436,7 +436,7 @@ function App({
     if (mk.length) setMisc(q => { const n = {...q}; mk.forEach(k => { n[k] = _uomFix(q[k]) || q[k]; }); return n; });
   }, [tools, mats, ppe, misc, mobVehicles, demobVehicles]);
   const [scope, setScope] = useState('');
-  const [notes, setNotes] = useState([]); /* [{id,seq,text}] */
+  const [notes, setNotes] = useState([]); /* [{id,seq,text,imp}] */
   /* Presets configured in the Users tab: notes and signatories per CE type and
      discipline. Shared through SharePoint, so setting one sets it for
      everybody. */
@@ -449,7 +449,11 @@ function App({
   const mkNote = () => ({
     id: uid(),
     seq: notes.length + 1,
-    text: ''
+    text: '',
+    /* Ordinary until someone says otherwise. A note that shouted by default
+       would teach the sales team to read past the red, which is the one thing
+       it must never do. */
+    imp: false
   });
   const [sowItems, setSowItems] = useState([]); /* [{id,type:'main'|'sub',text}] */
   /* SOW Breakdown view state */
@@ -3243,7 +3247,12 @@ function App({
      alone rather than blanking it. */
   const applyCeDefaults = (type, discipline, force) => {
     const p = ceDefaultFor(ceDefaults, type, discipline);
-    const nextNotes = p ? (p.notes || []).map((t, i) => ({id: uid(), seq: i + 1, text: String(t)})) : [];
+    /* A preset note is a bare string, or {t, imp} when it is flagged. The
+       standing warnings the sales team must see are the same on every CE, so
+       they belong in the preset -- read here, a flag set there survives onto
+       every estimate rather than being re-ticked by hand each time. */
+    const nextNotes = p ? (p.notes || []).map((t, i) =>
+      ({id: uid(), seq: i + 1, text: ceNoteText(t), imp: ceNoteImp(t)})) : [];
     const nextAps = p && (p.approvers || []).length
       ? JSON.parse(JSON.stringify(p.approvers))
       : JSON.parse(JSON.stringify(CE_FALLBACK_APPROVERS));
@@ -3257,12 +3266,12 @@ function App({
     if (!p && !force) return false;
     setNotes(nextNotes);
     setApprovers(nextAps);
-    _defaultsSig.current = JSON.stringify({n: nextNotes.map(n => n.text), a: nextAps});
+    _defaultsSig.current = JSON.stringify({n: nextNotes.map(n => [n.text, !!n.imp]), a: nextAps});
     return !!p;
   };
   /* Safe to re-apply only while nothing has been edited since the last one. */
   const _defaultsUntouched = () =>
-    _defaultsSig.current === JSON.stringify({n: notes.map(n => String(n.text || '')), a: approvers});
+    _defaultsSig.current === JSON.stringify({n: notes.map(n => [String(n.text || ''), !!n.imp]), a: approvers});
 
   /* Re-apply when the CE type or the discipline changes, and once the presets
      arrive from SharePoint.
@@ -3394,12 +3403,15 @@ function App({
       sum.push([S('', 'totlbl'), S('SERVICES TOTAL AMOUNT:', 'totlbl', 4), null, null, null, null, S(N(servicesSummary.total), 'tot')]);
     }
     const sowNotes = (sowItems || []).filter(x => String(x.note || '').trim());
-    const noteLines = [...notes.map(n => String(n.text || '')),
-                       ...sowNotes.map(x => 'Scope ' + (sowLabels[x.id] || '') + ' — ' + String(x.note).trim())].filter(t => t.trim());
+    /* The flag rides with the line: these two lists are merged and then
+       numbered, so a bare array of strings would lose which one was flagged. */
+    const noteLines = [...notes.map(n => ({t: String(n.text || ''), imp: !!n.imp})),
+                       ...sowNotes.map(x => ({t: 'Scope ' + (sowLabels[x.id] || '') + ' — ' + String(x.note).trim(), imp: false}))]
+                      .filter(n => n.t.trim());
     if (noteLines.length) {
       sum.push([]);
       sum.push([S('NOTE:', 'sec')]);
-      noteLines.forEach((t, i) => sum.push([null, S((i + 1) + '. ' + t, 'note', 5)]));
+      noteLines.forEach((n, i) => sum.push([null, S((i + 1) + '. ' + n.t, n.imp ? 'noteimp' : 'note', 5)]));
     }
     const aps = (approvers || []).filter(a => a.role || a.name || a.title);
     if (aps.length) {
@@ -8314,7 +8326,7 @@ function App({
       .r{text-align:right} .c{text-align:center} .b{font-weight:bold}
       /* Header labels never wrap: the tick rows are wide, and a label
          broken over two lines makes the whole block a row taller. */
-      .nw{white-space:nowrap}
+      .nw{white-space:nowrap}.impn{color:#C00000;font-weight:700}
       .tot{background:#f5f5f5;font-weight:bold}
       .sig td{border:none;text-align:center;padding:0 6px;vertical-align:bottom}
       /* The document is laid out into real A4 sheets before printing, each
@@ -8427,7 +8439,7 @@ function App({
     /* Breakdown notes written on the SOW Breakdown tab print with the CE notes,
        after the manually written ones, each labelled with its scope number. */
     const sowNotes = (sowItems || []).filter(s => String(s.note || '').trim());
-    const notesList = (notes.length || sowNotes.length) ? `<div style="margin-top:4px"><b>NOTE:</b><ol style="margin:1px 0 0 14px;padding:0;font-size:7.5pt">${notes.map(n=>`<li>${esc(n.text)}</li>`).join('')}${sowNotes.map(s=>`<li><b>Scope ${esc(sowLabels[s.id]||'')}</b> &#8212; ${esc(String(s.note).trim())}</li>`).join('')}</ol></div>` : '';
+    const notesList = (notes.length || sowNotes.length) ? `<div style="margin-top:4px"><b>NOTE:</b><ol style="margin:1px 0 0 14px;padding:0;font-size:7.5pt">${notes.map(n=>`<li${n.imp?' class="impn"':''}>${esc(n.text)}</li>`).join('')}${sowNotes.map(s=>`<li><b>Scope ${esc(sowLabels[s.id]||'')}</b> &#8212; ${esc(String(s.note).trim())}</li>`).join('')}</ol></div>` : '';
     /* Four signatories to a row. Seven in a single row left each about 2cm
        wide and shrank every signature image to match; the sheet is the same
        width whatever the routing is, so the row has to wrap instead. */
@@ -8910,7 +8922,9 @@ function App({
       if (notes.length || sowNotes.length) {
         a.blank();
         a.title('NOTE', 3);
-        notes.forEach((n, i) => a.row(i + 1, n.text || ''));
+        /* A text file has no font, so the flag has to be a word. Written in
+           front of the note, where it is read before the note is. */
+        notes.forEach((n, i) => a.row(i + 1, (n.imp ? '[IMPORTANT] ' : '') + (n.text || '')));
         sowNotes.forEach((x, i) => a.row(notes.length + i + 1, 'Scope ' + (sowLabels[x.id] || '') + ' — ' + String(x.note).trim()));
       }
       if (approvers && approvers.length) {
@@ -14235,8 +14249,8 @@ tab === 'dashboard' && (() => {
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       ...MONO,
-      background: alpha(ACC, '22'),
-      color: ACC,
+      background: note.imp ? alpha(ERR, '22') : alpha(ACC, '22'),
+      color: note.imp ? ERR : ACC,
       fontWeight: 700,
       fontSize: 11,
       minWidth: 26,
@@ -14254,7 +14268,10 @@ tab === 'dashboard' && (() => {
       flex: 1,
       height: 60,
       resize: 'vertical',
-      fontSize: 12
+      fontSize: 12,
+      /* The editor shows what the paper will show. Judging whether a note is
+         shouting loudly enough is not something to do by printing it first. */
+      ...(note.imp ? {color: ERR, fontWeight: 700, borderColor: alpha(ERR, '77')} : {})
     },
     value: note.text,
     onChange: e => setNotes(p => p.map(n => n.id === note.id ? {
@@ -14270,6 +14287,14 @@ tab === 'dashboard' && (() => {
       flexShrink: 0
     }
   }, /*#__PURE__*/React.createElement("button", {
+    style: note.imp
+      ? {...btn('danger', true), fontWeight: 700}
+      : {...btn('def', true), opacity: .75},
+    title: note.imp
+      ? "Marked important: prints bold red on the CE and the workbook, and as [IMPORTANT] in the text summary. Click to make it an ordinary note."
+      : "Mark important, so the sales team cannot read past it: bold red on the CE and the workbook.",
+    onClick: () => setNotes(p => p.map(n => n.id === note.id ? {...n, imp: !n.imp} : n))
+  }, "❗"), /*#__PURE__*/React.createElement("button", {
     style: btn('def', true),
     title: "Move up",
     disabled: idx === 0,

@@ -49,7 +49,13 @@ function CeDefaultsPanel() {
        preset full of them silently fills every new estimate with blanks. */
     const clean = presets.map(p => ({
       ...p,
-      notes: (p.notes || []).map(t => String(t).trim()).filter(Boolean),
+      /* A plain note saves as the bare string it has always been; only a
+         flagged one becomes an object. So a preset nobody flags is written
+         byte for byte as it was, and an older build still reads it. */
+      notes: (p.notes || []).map(t => {
+        const txt = ceNoteText(t).trim();
+        return ceNoteImp(t) ? {t: txt, imp: true} : txt;
+      }).filter(n => (typeof n === 'string' ? n : n.t)),
       approvers: (p.approvers || []).filter(a => (a.role || '').trim() || (a.name || '').trim() || (a.title || '').trim())
     }));
     try {
@@ -101,11 +107,25 @@ function CeDefaultsPanel() {
     (p.notes || []).map((t, ni) => React.createElement('div', {key: ni, style: {display: 'flex', gap: 6, marginBottom: 4}},
       React.createElement('span', {style: {color: MT, fontSize: 11, width: 16, paddingTop: 6}}, (ni + 1) + '.'),
       React.createElement('input', {
-        style: {...INP, fontSize: 11, padding: '4px 8px'},
-        value: t,
+        style: {...INP, fontSize: 11, padding: '4px 8px',
+          ...(ceNoteImp(t) ? {color: ERR, fontWeight: 700, borderColor: alpha(ERR, '77')} : {})},
+        value: ceNoteText(t),
         placeholder: 'e.g. Any additional scope not stated is not included in this CE.',
-        onChange: e => edit(i, {notes: p.notes.map((x, j) => j === ni ? e.target.value : x)})
+        onChange: e => edit(i, {notes: p.notes.map((x, j) => j === ni
+          ? (ceNoteImp(x) ? {t: e.target.value, imp: true} : e.target.value) : x)})
       }),
+      /* The warnings sales must not read past are the same on every CE, so
+         they are flagged here once rather than re-ticked on each estimate. */
+      React.createElement('button', {
+        style: ceNoteImp(t)
+          ? {...btn('danger', true), fontSize: 10, padding: '2px 8px', fontWeight: 700}
+          : {...btn('def', true), fontSize: 10, padding: '2px 8px', opacity: .75},
+        title: ceNoteImp(t)
+          ? 'Important on every CE this preset fills: bold red. Click to make it ordinary.'
+          : 'Mark important on every CE this preset fills: bold red on the CE and the workbook.',
+        onClick: () => edit(i, {notes: p.notes.map((x, j) => j === ni
+          ? (ceNoteImp(x) ? ceNoteText(x) : {t: ceNoteText(x), imp: true}) : x)})
+      }, '❗'),
       React.createElement('button', {
         style: {...btn('def', true), fontSize: 10, padding: '2px 8px'},
         onClick: () => edit(i, {notes: p.notes.filter((_, j) => j !== ni)})

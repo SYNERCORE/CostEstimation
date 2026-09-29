@@ -118,12 +118,21 @@ const ResTab = ({
     const tier = N(defaultTier) || 2;
     set(p => [...p, ...pick.map(r => {
       const m = mlFind(r.desc);
+      /* The Masterlist is the rate we stand behind, so it wins wherever the
+         item is on it. Where it is not, the file's own unit price is better
+         than P0 -- a 216-line consumables list none of which is on the
+         Masterlist used to import entirely unpriced, and every rate had to be
+         typed back in by hand from the same file it came from. */
       return { ...mkRes(), id: uid(), desc: r.desc.trim(), qty: N(r.qty) || 1, uom: (m && m.uom) || r.uom || 'Pc',
-        cost: m ? (m.cost !== undefined ? m.cost : (m.rate || 0)) : 0, ...(showDays ? { tier } : {}), ..._srcFields(m) };
+        cost: m ? (m.cost !== undefined ? m.cost : (m.rate || 0)) : (N(r.price) > 0 ? N(r.price) : 0),
+        ...(showDays ? { tier } : {}), ..._srcFields(m) };
     })]);
     const priced = pick.filter(r => mlFind(r.desc)).length;
+    const fromFile = pick.filter(r => !mlFind(r.desc) && N(r.price) > 0).length;
+    const none = pick.length - priced - fromFile;
     showToast(pick.length + ' ' + _noun + ' row(s) added from ' + imp.name + '. ' + priced + ' priced from the Masterlist' +
-      (pick.length > priced ? ', ' + (pick.length - priced) + ' at P0 -- type their rate, or add them to the Masterlist.' : '.'), pick.length > priced);
+      (fromFile ? ', ' + fromFile + ' from the file' : '') +
+      (none ? ', ' + none + ' at P0 -- type their rate, or add them to the Masterlist.' : '.'), none > 0);
     setImp(null);
   };
   const _rtDescRef = useRef(null);
@@ -616,14 +625,16 @@ showPower && /*#__PURE__*/React.createElement("label", {
 }, /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' } },
   /*#__PURE__*/React.createElement("b", null, "Import " + _noun + " list"),
   /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: 'var(--text-secondary)' } },
-    imp.name + ' -- ' + imp.rows.length + ' item(s) read, ' + imp.rows.filter(r => mlFind(r.desc)).length + ' on the Masterlist. Same items are added up. Untick what the job does not need.'),
+    imp.name + ' -- ' + imp.rows.length + ' item(s) read, ' + imp.rows.filter(r => mlFind(r.desc)).length + ' on the Masterlist' +
+    (imp.rows.filter(r => !mlFind(r.desc) && N(r.price) > 0).length ? ', ' + imp.rows.filter(r => !mlFind(r.desc) && N(r.price) > 0).length + ' priced by the file' : '') +
+    '. Same items are added up. Untick what the job does not need.'),
   /*#__PURE__*/React.createElement("span", { style: { marginLeft: 'auto', display: 'flex', gap: 6 } },
     /*#__PURE__*/React.createElement("button", { style: btn('ok', true), onClick: () => setImp(p => ({ ...p, rows: p.rows.map(r => ({ ...r, on: true })) })) }, "All"),
     /*#__PURE__*/React.createElement("button", { style: btn('ok', true), onClick: () => setImp(p => ({ ...p, rows: p.rows.map(r => ({ ...r, on: false })) })) }, "None"))),
 /*#__PURE__*/React.createElement("div", { style: { overflow: 'auto', flex: 1, minHeight: 0 } },
 /*#__PURE__*/React.createElement("table", { style: { width: '100%', borderCollapse: 'collapse' } },
 /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null,
-  ['', 'Description', 'Qty', 'UOM', 'Code', 'Masterlist rate'].map((h, i) => /*#__PURE__*/React.createElement("th", { key: i, style: { ...THS, position: 'sticky', top: 0, textAlign: i >= 2 ? 'center' : 'left' } }, h)))),
+  ['', 'Description', 'Qty', 'UOM', 'Code', 'Unit rate'].map((h, i) => /*#__PURE__*/React.createElement("th", { key: i, style: { ...THS, position: 'sticky', top: 0, textAlign: i >= 2 ? 'center' : 'left' } }, h)))),
 /*#__PURE__*/React.createElement("tbody", null, imp.rows.map(r => {
   const m = mlFind(r.desc);
   const upd = patch => setImp(p => ({ ...p, rows: p.rows.map(x => x.id === r.id ? { ...x, ...patch } : x) }));
@@ -633,8 +644,15 @@ showPower && /*#__PURE__*/React.createElement("label", {
     /*#__PURE__*/React.createElement("td", { style: TDS }, /*#__PURE__*/React.createElement("input", { style: { ...INP, width: 56, textAlign: 'center' }, type: 'number', min: 0, value: r.qty, onChange: e => upd({ qty: e.target.value }) })),
     /*#__PURE__*/React.createElement("td", { style: { ...TDS, textAlign: 'center', fontSize: 11 } }, (m && m.uom) || r.uom),
     /*#__PURE__*/React.createElement("td", { style: { ...TDS, textAlign: 'center', fontSize: 10, color: 'var(--text-secondary)' } }, r.code || ''),
-    /*#__PURE__*/React.createElement("td", { style: { ...TDS, textAlign: 'right', fontSize: 11, fontFamily: "'JetBrains Mono',monospace", color: m ? 'var(--status-success)' : 'var(--text-secondary)' } },
-      m ? 'P' + N(m.cost !== undefined ? m.cost : m.rate).toLocaleString('en-PH', { minimumFractionDigits: 2 }) : 'not on list'));
+    /* Where the rate comes from is said on the row, because the two are not
+       equally trusted: the Masterlist is a rate we have agreed, the file's is
+       whatever the supplier wrote on it. */
+    /*#__PURE__*/React.createElement("td", { style: { ...TDS, textAlign: 'right', fontSize: 11, fontFamily: "'JetBrains Mono',monospace", color: m ? 'var(--status-success)' : (N(r.price) > 0 ? 'var(--brand-accent)' : 'var(--text-secondary)') } },
+      m ? 'P' + N(m.cost !== undefined ? m.cost : m.rate).toLocaleString('en-PH', { minimumFractionDigits: 2 })
+        : (N(r.price) > 0
+          ? [/*#__PURE__*/React.createElement("span", { key: 'v' }, 'P' + N(r.price).toLocaleString('en-PH', { minimumFractionDigits: 2 })),
+             /*#__PURE__*/React.createElement("span", { key: 'l', style: { fontFamily: 'inherit', fontSize: 9, color: 'var(--text-secondary)', marginLeft: 4 } }, 'file')]
+          : 'no rate')));
 })))),
 /*#__PURE__*/React.createElement("div", { style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
   /*#__PURE__*/React.createElement("button", { style: btn('def', true), onClick: () => setImp(null) }, "Cancel"),

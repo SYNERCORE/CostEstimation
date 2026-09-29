@@ -44,7 +44,10 @@ ck('a plain numbered list with a unit', parse('1. Chain block 2 pcs\n2. Welding 
 console.log('\nthe screen:');
 ck('Tools & Equipment has an Import list button', res.includes('"⇪ Import list"') && app.includes('readFile: readDoc,'));
 ck('rows are shown to check before they are added', res.includes("className: 'import-preview'") && res.includes('onClick: importAdd'));
-ck('a Masterlist item comes in with its rate', res.includes('cost: m ? (m.cost !== undefined ? m.cost : (m.rate || 0)) : 0'));
+/* The Masterlist still wins where the item is on it; where it is not, the
+   file's own unit price is taken -- see tools/test-import-unit-price.js. */
+ck('a Masterlist item comes in with its rate',
+  res.includes('cost: m ? (m.cost !== undefined ? m.cost : (m.rate || 0)) :'));
 ck('new rows start on the tier chosen for new rows', res.includes('...(showDays ? { tier } : {})'));
 ck('and the toast says how many still need a rate', res.includes("' at P0 -- type their rate, or add them to the Masterlist.'"));
 

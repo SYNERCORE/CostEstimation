@@ -802,17 +802,31 @@ function parseCsvLine(line) {
 function parseToolList(text) {
   const lines = String(text || '').split(/\r?\n/).map(l => l.replace(/\s+/g, ' ').trim());
   const items = [];
-  const push = (desc, qty, uom, code) => {
+  const push = (desc, qty, uom, code, price) => {
     desc = String(desc || '').replace(/\s+/g, ' ').replace(/^[-–•*.\s]+|[,;\s]+$/g, '').trim();
     const q = parseFloat(qty);
     if (!desc || desc.length < 2 || !(q > 0)) return;
-    items.push({ desc, qty: q, uom: uom ? uom.charAt(0).toUpperCase() + uom.slice(1).toLowerCase() : 'Pc', code: code || '' });
+    /* A price is written the way money is written -- P1,250.00 -- so the
+       currency mark and the separators come off before it is a number. A
+       blank cell is no price at all, not a price of zero: 0 would read on
+       the CE as "this item is free" rather than "nobody said". */
+    const pr = parseFloat(String(price === undefined || price === null ? '' : price).replace(/[^0-9.]/g, ''));
+    items.push({ desc, qty: q, uom: uom ? uom.charAt(0).toUpperCase() + uom.slice(1).toLowerCase() : 'Pc', code: code || '',
+      ...(pr > 0 ? { price: pr } : {}) });
   };
   /* A table with a header row. The description column is named after what the
      list is of -- MATERIAL, CONSUMABLES, PPE, TOOL -- and the code column
      after a number, so "MATERIAL NO" is a code and a bare "MATERIAL" is the
      description. Reading them the other way round was why a BOM headed
      MATERIAL / QTY produced no rows at all. */
+  /* "Unit" alone is the UOM column; "Unit Price" is not. The UOM matcher
+     used to take either, so a sheet headed DESCRIPTION / QTY / UNIT PRICE
+     read the price as the unit of measure -- and two lines of one item,
+     one priced and one not, became two rows that never merged.
+     The price column is the UNIT price, never the line total: a header
+     reading "amount" or "total" is the qty times the rate, and adopting it
+     would multiply every imported row by its own quantity. "Unit" alone is
+     the UOM column, so the unit-price test wants a price word after it. */
   const isHdr = cells => cells.some(c => /^(item |material |product )?desc(ription)?\b|^item( name)?$|^(tool|equipment|particulars?|materials?|consumables?|ppe)( name)?$/i.test(c)) &&
     cells.some(c => /^(qty|quantity|q'?ty)\b/i.test(c));
   let hdr = null;
@@ -823,10 +837,11 @@ function parseToolList(text) {
     if (isHdr(cells)) {
       const f = re => cells.findIndex(c => re.test(c));
       hdr = { d: f(/^(item |material |product )?desc(ription)?\b|^item( name)?$|^(tool|equipment|particulars?|materials?|consumables?|ppe)( name)?$/i), q: f(/^(qty|quantity|q'?ty)\b/i),
-        u: f(/^(uom|unit|u\/m|units?)\b/i), c: f(/^(sku|code|part( no\.?| number)?|item (no|code)|material (no\.?|number|code))\b/i) };
+        u: f(/^(uom|u\/m)\b|^units?$/i), c: f(/^(sku|code|part( no\.?| number)?|item (no|code)|material (no\.?|number|code))\b/i),
+        p: f(/^(unit (price|cost|rate)|price|rate|cost|srp|u\/?p)\b/i) };
       return;
     }
-    if (hdr) push(cells[hdr.d], cells[hdr.q], hdr.u >= 0 ? cells[hdr.u] : '', hdr.c >= 0 ? cells[hdr.c] : '');
+    if (hdr) push(cells[hdr.d], cells[hdr.q], hdr.u >= 0 ? cells[hdr.u] : '', hdr.c >= 0 ? cells[hdr.c] : '', hdr.p >= 0 ? cells[hdr.p] : '');
   });
   if (items.length) return mergeToolList(items);
   /* Numbered lines. A record runs from item N to item N+1, so a description
@@ -860,7 +875,11 @@ function mergeToolList(items) {
   const by = new Map();
   items.forEach(it => {
     const k = it.desc.toUpperCase() + '|' + it.uom.toUpperCase();
-    if (by.has(k)) by.get(k).qty += it.qty; else by.set(k, { ...it });
+    /* Quantities add up; a UNIT price does not. Two lines of one item are one
+       line at that price, and if only the later line carried a price, that
+       is the price we know. */
+    if (by.has(k)) { const g = by.get(k); g.qty += it.qty; if (!(g.price > 0) && it.price > 0) g.price = it.price; }
+    else by.set(k, { ...it });
   });
   return [...by.values()];
 }

@@ -149,6 +149,33 @@ const ResTab = ({
       (none ? ', ' + none + ' at P0 -- type their rate, or add them to the Masterlist.' : '.'), none > 0);
     setImp(null);
   };
+  /* Out to Excel and back again.
+     =============================
+     A 672-row list is quicker to edit in Excel than in a browser table, and
+     sales already live there. The columns written are exactly the ones
+     Import XLS reads, so the file that comes out is the file that goes back
+     in -- including Tier and Days, without which a round trip would silently
+     reset every tool to the default tier and one day.
+
+     Rates survive because Import XLS takes the file's Unit Cost and does not
+     consult the Masterlist. That is the opposite of Import list, which is
+     reading someone else's list and should be priced from ours. */
+  const _rtCols = () => ['Description', 'Qty', 'UOM', 'Unit Cost', ...(showDays ? ['Tier', 'Days'] : []), 'Code'];
+  const exportXls = () => {
+    if (!rows.length) { showToast('There is nothing on this tab to export.', true); return; }
+    const head = _rtCols().map(h => ({ v: h, s: 'th' }));
+    const body = rows.map(r => [
+      String(r.desc || ''), N(r.qty) || 0, String(r.uom || ''), N(r.cost) || 0,
+      ...(showDays ? [N(r.tier) || 2, rowDays(r)] : []),
+      String((r.src && r.src.code) || r.code || '')
+    ]);
+    const name = (mlType === 'tools' ? 'BOTE' : mlType === 'materials' ? 'BOCM' : 'PPE');
+    try {
+      SHICXlsx.download(name + '_for_editing.xlsx',
+        [{ name: name, cols: [46, 8, 10, 12, ...(showDays ? [7, 8] : []), 16], rows: [head, ...body] }]);
+      showToast(rows.length + ' row(s) exported. Edit in Excel, then bring it back with Import XLS.');
+    } catch (ex) { showToast('Export failed: ' + ex.message, true); }
+  };
   const _rtDescRef = useRef(null);
   useEffect(() => {
     if (_rtNewId && _rtDescRef.current) { _rtDescRef.current.focus(); _rtSetNewId(null); }
@@ -339,9 +366,13 @@ showPower && /*#__PURE__*/React.createElement("label", {
 }, "⇊ Combine"), /*#__PURE__*/React.createElement("button", {
   style: btn('def', true),
   onClick: () => { const nid = uid(); _rtSetNewId(nid); set(p => [...p, {...mkRes(), id: nid, ...(showDays ? {tier: N(defaultTier) || 2} : {})}]); }
-}, "+ Add"), /*#__PURE__*/React.createElement("label", {
+}, "+ Add"), /*#__PURE__*/React.createElement("button", {
+  style: btn('def', true),
+  onClick: exportXls,
+  title: "Write this tab to an Excel file with the same columns Import XLS reads, so it can be edited there and brought back"
+}, "📤 Export XLS"), /*#__PURE__*/React.createElement("label", {
   style: {...btn('def', true), cursor: 'pointer'},
-  title: "Import from Excel — columns: Description, Qty, UOM, Unit Cost"
+  title: "Import from Excel — columns: Description, Qty, UOM, Unit Cost" + (showDays ? ", Tier, Days" : "")
 }, "📥 Import XLS", /*#__PURE__*/React.createElement("input", {
   type: "file", accept: ".xlsx,.xls", style: {display: 'none'},
   onChange: e => {
@@ -351,17 +382,39 @@ showPower && /*#__PURE__*/React.createElement("label", {
       try {
         const wb = XLSX.read(new Uint8Array(ev.target.result), {type: 'array'});
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(ws, {defval: ''});
-        const imported = rows.map(r => ({
-          id: uid(),
-          desc: String(r['Description'] || r['DESCRIPTION'] || r['desc'] || '').trim(),
-          qty: Math.max(1, parseInt(r['Qty'] || r['QTY'] || r['qty'] || 1) || 1),
-          uom: String(r['UOM'] || r['uom'] || 'Lot').trim(),
-          cost: parseFloat(r['Unit Cost'] || r['UNIT COST'] || r['cost'] || 0) || 0
-        })).filter(r => r.desc);
+        /* Not `rows`: that is the tab's own rows, and shadowing it here made
+           the confirm below report the file's row count as the tab's. */
+        const sheetRows = XLSX.utils.sheet_to_json(ws, {defval: ''});
+        const _pick = (r, ...names) => { for (const n of names) if (r[n] !== undefined && r[n] !== '') return r[n]; return undefined; };
+        const imported = sheetRows.map(r => {
+          /* Tier and Days come back only if the file carries them. A supplier's
+             sheet has neither, and a row given tier 0 or 0 days would cost
+             nothing at all -- so an absent column leaves the row on the tab's
+             own defaults rather than on zero. */
+          const t = _pick(r, 'Tier', 'TIER', 'tier');
+          const d = _pick(r, 'Days', 'DAYS', 'days');
+          return {
+            ...mkRes(), id: uid(),
+            desc: String(_pick(r, 'Description', 'DESCRIPTION', 'desc') || '').trim(),
+            qty: Math.max(1, parseInt(_pick(r, 'Qty', 'QTY', 'qty') || 1) || 1),
+            uom: String(_pick(r, 'UOM', 'uom') || 'Lot').trim(),
+            cost: parseFloat(_pick(r, 'Unit Cost', 'UNIT COST', 'cost') || 0) || 0,
+            ...(showDays ? {
+              tier: N(t) > 0 ? N(t) : (N(defaultTier) || 2),
+              ...(N(d) > 0 ? { days: N(d) } : {})
+            } : {})
+          };
+        }).filter(r => r.desc);
         if (!imported.length) { showToast('No valid rows found. Check columns: Description, Qty, UOM, Unit Cost', true); return; }
-        set(p => [...p, ...imported]);
-        showToast('Imported ' + imported.length + ' rows from Excel.');
+        /* Re-importing an edited export is the common case, and appending it
+           would silently double the list. Asked rather than assumed: the
+           wrong answer either way is a long list to put right by hand. */
+        const replace = rows.length > 0 && window.confirm(
+          'Replace the ' + rows.length + ' row(s) on this tab with the ' + imported.length + ' from ' + file.name + '?' +
+          String.fromCharCode(10,10) + 'OK = replace (use this after editing an export)' +
+          String.fromCharCode(10) + 'Cancel = add them to what is already here');
+        set(p => replace ? imported : [...p, ...imported]);
+        showToast(imported.length + ' row(s) ' + (replace ? 'replaced this tab' : 'added') + ' from ' + file.name + '.');
       } catch(ex) { showToast('Excel parse failed: ' + ex.message, true); }
     };
     reader.readAsArrayBuffer(file);

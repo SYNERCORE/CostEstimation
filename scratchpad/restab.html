@@ -1,0 +1,44 @@
+<!DOCTYPE html><html data-theme="dark"><head><meta charset="utf-8">
+<style>body{margin:0;background:var(--bg-canvas);font-family:system-ui,sans-serif}
+#stage{padding:14px}</style></head><body>
+<div id="stage"></div>
+<script src="../vendor/react.production.min.js"></script>
+<script src="../vendor/react-dom.production.min.js"></script>
+<script src="../src/constants.js"></script>
+<script src="../src/helpers.js"></script>
+<script src="../src/config.js"></script>
+<script>window.RateHistory=()=>null;</script>
+<script src="../src/components/ResTab.js"></script>
+<script>
+/* Renders the SHIPPED ResTab with the shipped stylesheet so the new bulk-days
+   control can be clicked without signing in. Only the data is a stand-in. */
+const MASTER={tools:[{desc:'CABINET, TOOL, 9 DRAWER',cost:289.33,uom:'Unit'}],
+  materials:[{desc:'BOLT, HEX, M12 X 60, A325',cost:42.5,uom:'Pcs'}],ppe:[]};
+/* Import reads a file; the harness hands it text straight, so the reader is
+   the identity function on a fake File. */
+const FAKE='MATERIAL,QTY,UOM'+String.fromCharCode(10)+'"BOLT, HEX, M12 X 60, A325",4,Pcs'+String.fromCharCode(10)+'"GASKET, SPIRAL WOUND",2,Pcs';
+function Harness(){
+  const [rows,setRows]=React.useState(()=>location.search.indexOf('materials')>=0?[]:[
+    {id:'a',desc:'Cabinet, Tool, 9 Drawer for Modular Boxes',qty:1,cost:289.33,uom:'Unit',tier:2,days:30,
+     unitPrice:16000,serviceLife:2,maintPerYear:3200,projectsPerYear:6},
+    {id:'g',desc:'Grinder, Angle, 7in, Heavy Duty',qty:2,cost:7.67,uom:'Unit',tier:2,days:30,
+     unitPrice:4000,serviceLife:2,maintPerYear:800,projectsPerYear:6},
+    {id:'b',desc:'Charger, Battery, Rapid, Milwaukee M18',qty:2,cost:23.44,uom:'Unit',tier:2,days:30},
+    {id:'c',desc:'Regulator Adapter, Acetylene, FxF, No 61',qty:6,cost:1.58,uom:'Pcs',tier:2,days:30},
+    {id:'d',desc:'Shipping Container, Type "A", Metal',qty:1,cost:608.25,uom:'Set',tier:2,days:5}]);
+  const total=rows.reduce((t,r)=>t+toolRowCost(r),0);
+  window._rows=()=>rows;
+  const which=location.search.indexOf('materials')>=0?'materials':'tools';
+  return React.createElement(ResTab,{rows,set:setRows,total,
+    label:which==='materials'?'Materials & Consumables (BOCM)':'Tools & Equipment (BOTE)',
+    mlType:which,masterlist:MASTER,showToast:(m,bad)=>{window._toast=m;console.log('TOAST:',m);},
+    setPicker:()=>{},showDays:which==='tools',ceDays:19,defaultTier:2,setDefaultTier:()=>{},
+    showPower:false,kwhRate:0,pwrFrac:()=>1,addToML:null,
+    readFile:async()=>FAKE});
+}
+fetch('../index.html').then(r=>r.text()).then(h=>{
+  const m=h.match(/<style[^>]*>[\s\S]*?<\/style>/g)||[];
+  document.head.insertAdjacentHTML('beforeend',m.join(''));
+  ReactDOM.createRoot(document.getElementById('stage')).render(React.createElement(Harness));
+});
+</script></body></html>

@@ -1,0 +1,102 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+:root{--bg-canvas:#060e20;--bg-surface:#0b1326;--bg-el:#131b2e;--card:#172036;--bd:#1e293b;--bds:#334155;
+--tp:#ffffff;--ts:#94a3b8;--tm:#64748b;--brand:#4f46e5;--amber:#f59e0b;--cyan:#38bdf8;--violet:#a78bfa;--ok:#10b981}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg-canvas);font:13px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;color:var(--tp);padding:22px}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-size:15px;margin:0 0 3px;letter-spacing:.2px}
+.sub{color:var(--tm);font-size:11.5px;margin-bottom:18px}
+.panel{background:var(--bg-surface);border:1px solid var(--bd);border-radius:9px;overflow:hidden;margin-bottom:16px}
+.phead{display:flex;align-items:center;gap:9px;padding:8px 13px;background:var(--bg-el);border-bottom:1px solid var(--bd);font-size:11px;color:var(--ts);font-weight:700;letter-spacing:.4px}
+.dot{width:7px;height:7px;border-radius:50%}
+.topbar{display:flex;align-items:center;gap:9px;padding:9px 13px;border-bottom:1px solid var(--bd);background:var(--bg-surface)}
+.brand{font-weight:800;font-size:12.5px;letter-spacing:.3px}
+.build{color:var(--tm);font-size:10px;font-family:ui-monospace,Consolas,monospace}
+.spacer{flex:1}
+.pill{font-size:10px;font-weight:800;padding:3px 9px;border-radius:11px;letter-spacing:.3px}
+.tabs{display:flex;flex-wrap:wrap;gap:5px;padding:9px 13px}
+.tab{font-size:11.5px;padding:5px 11px;border-radius:6px;border:1px solid transparent;color:var(--ts);white-space:nowrap}
+.tab.on{background:var(--brand);color:#fff;font-weight:700}
+.tab.gone{color:#374151;border:1px dashed #253048;text-decoration:line-through;opacity:.75}
+.body{padding:15px 13px;border-top:1px solid var(--bd)}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:11px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:11px 13px}
+.lbl{font-size:9.5px;color:var(--tm);letter-spacing:.6px;font-weight:700;margin-bottom:5px}
+.inp{background:var(--bg-canvas);border:1px solid var(--bds);border-radius:5px;padding:6px 9px;font-size:12px;color:var(--tp);margin-top:3px}
+.btn{font-size:11px;font-weight:700;padding:5px 11px;border-radius:6px;border:1px solid var(--bds);background:var(--bg-el);color:var(--ts)}
+.btn.ok{background:var(--ok);color:#052e20;border-color:transparent}
+.btn.gh{background:transparent}
+.note{display:flex;gap:8px;align-items:flex-start;background:#1c1116;border:1px solid #7f1d1d;border-radius:7px;padding:10px 12px;font-size:11.5px;color:#fecaca;margin-top:12px}
+.legend{display:flex;gap:16px;font-size:10.5px;color:var(--tm);margin:0 13px 11px;flex-wrap:wrap}
+.key{display:flex;gap:5px;align-items:center}
+.sw{width:19px;height:10px;border-radius:3px}
+table{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:4px}
+th{text-align:left;color:var(--tm);font-size:9.5px;letter-spacing:.5px;padding:5px 7px;border-bottom:1px solid var(--bd)}
+td{padding:6px 7px;border-bottom:1px solid #131c30}
+.badge{font-size:8.5px;font-weight:800;padding:1px 6px;border-radius:8px;letter-spacing:.4px}
+</style></head><body><div class="wrap">
+
+<h1>The Requestor, as build 271 draws it</h1>
+<div class="sub">Tab labels, order and wording taken from src/config.js and src/App.js &mdash; not an impression of them.</div>
+
+<div class="panel">
+  <div class="phead"><span class="dot" style="background:var(--violet)"></span>WHAT AN ESTIMATOR SEES TODAY &mdash; UNCHANGED</div>
+  <div class="tabs">
+    <span class="tab on">&#127968; My Work</span><span class="tab">Project Info</span><span class="tab">Scope of Work</span>
+    <span class="tab">SOW Breakdown</span><span class="tab">Manpower</span><span class="tab">Tools &amp; Equipment</span>
+    <span class="tab">Materials</span><span class="tab">PPE</span><span class="tab">Miscellaneous</span>
+    <span class="tab">Summary</span><span class="tab">Scope Library</span><span class="tab">Masterlist</span>
+    <span class="tab">CE Monitoring</span><span class="tab">&#128202; Dashboard</span>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="phead"><span class="dot" style="background:var(--cyan)"></span>WHAT A REQUESTOR SEES</div>
+  <div class="topbar">
+    <span class="brand">SYNERCORE CE</span><span class="build">v271 Enterprise</span>
+    <span class="spacer"></span>
+    <span style="font-size:11px;color:var(--ts)">Ana Reyes</span>
+    <span class="pill" style="background:#38bdf822;color:var(--cyan);border:1px solid #38bdf844">REQUESTOR</span>
+  </div>
+  <div class="tabs">
+    <span class="tab on">&#127968; My Work</span><span class="tab">Project Info</span><span class="tab">Scope of Work</span>
+    <span class="tab">CE Monitoring</span><span class="tab">&#128202; Dashboard</span>
+    <span class="tab gone">SOW Breakdown</span><span class="tab gone">Manpower</span><span class="tab gone">Tools &amp; Equipment</span>
+    <span class="tab gone">Materials</span><span class="tab gone">PPE</span><span class="tab gone">Miscellaneous</span>
+    <span class="tab gone">Summary</span><span class="tab gone">Scope Library</span><span class="tab gone">Masterlist</span>
+  </div>
+  <div class="legend">
+    <span class="key"><span class="sw" style="background:var(--brand)"></span>open to them</span>
+    <span class="key"><span class="sw" style="border:1px dashed #253048"></span>struck through = not drawn at all; shown here only to mark what is gone</span>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="phead"><span class="dot" style="background:var(--ok)"></span>CE MONITORING &mdash; WHERE A REQUESTOR RAISES THE WORK</div>
+  <div class="body">
+    <div style="display:flex;gap:6px;margin-bottom:9px"><span class="btn gh">&#9881; Status</span><span class="btn ok">+ New Request</span><span class="btn gh">&#10227; Refresh</span></div>
+    <table>
+      <tr><th>CE NO.</th><th>CUSTOMER</th><th>JOB</th><th>ASSIGNED TO</th><th>STATUS</th><th></th></tr>
+      <tr><td>SY3-CE-2026-1102</td><td>(APRI) AP RENEWABLES</td><td>MGP Unit 8 governor overhauling</td><td>Aljon Estillore</td><td style="color:var(--amber)">Pending</td><td><span class="badge" style="background:#10b98122;color:var(--ok);border:1px solid #10b98144">REQUEST</span></td></tr>
+      <tr><td>SY3-CE-2026-1061-R1</td><td>(APRI) AP RENEWABLES</td><td>Replacement of trunnion</td><td>Aljon Estillore</td><td style="color:var(--cyan)">For Approval</td><td><span class="btn gh" style="font-size:10px;padding:2px 8px">&#128065; View</span></td></tr>
+      <tr><td>SY3-CE-2026-0994</td><td>SEM-CALACA POWER</td><td>Boiler tube retubing</td><td>Kenneth Mendoza</td><td style="color:var(--ok)">Approved</td><td><span class="btn gh" style="font-size:10px;padding:2px 8px">&#128065; View</span></td></tr>
+    </table>
+    <div style="font-size:10.5px;color:var(--tm);margin-top:9px">A CE they raised stays on their list after the estimator costs it &mdash; the Monitoring row carries their name in <b>Received by</b>, and that is what keeps it theirs to watch. <b>View</b> opens the finished CE in full: every rate, every subtotal, the signatures.</div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="phead"><span class="dot" style="background:var(--amber)"></span>PROJECT INFO &mdash; THEIRS TO FILL IN WHILE IT IS STILL A REQUEST</div>
+  <div class="body">
+    <div class="grid">
+      <div class="card"><div class="lbl">CE NUMBER</div><div class="inp">SY3-CE-2026-1102</div></div>
+      <div class="card"><div class="lbl">CLIENT NAME</div><div class="inp">(APRI) AP RENEWABLES INC.</div></div>
+      <div class="card"><div class="lbl">PROJECT DESCRIPTION</div><div class="inp">MGP Unit 8 governor overhauling</div></div>
+      <div class="card"><div class="lbl">DISCIPLINE</div><div class="inp">Mechanical</div></div>
+    </div>
+    <div class="note"><span style="font-size:14px;line-height:1">&#9940;</span><div><b>Once the estimator has costed it, the same screen refuses the save, in these words:</b><br><span style="color:#fff">&ldquo;Costing is the estimator&rsquo;s. You can raise a request from CE Monitoring, and read this CE in full, but not change it.&rdquo;</span></div></div>
+    <div class="note" style="background:#16131c;border-color:#4c1d95;color:#ddd6fe"><span style="font-size:14px;line-height:1">&#128100;</span><div><b>Somebody else&rsquo;s request, opened by mistake:</b><br><span style="color:#fff">&ldquo;This request was raised by Ana Reyes. Only they or an admin can change it.&rdquo;</span></div></div>
+  </div>
+</div>
+
+</div></body></html>

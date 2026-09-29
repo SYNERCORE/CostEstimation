@@ -1,0 +1,65 @@
+<!DOCTYPE html><html data-theme="dark"><head><meta charset="utf-8">
+
+<style>body{margin:0;background:var(--bg-canvas);font-family:system-ui,sans-serif}
+#stage{padding:0}
+#cardstage{padding:18px;max-width:900px;margin:0 auto}
+h2{color:var(--text-secondary);font:700 11px system-ui;letter-spacing:.5px;margin:18px 0 8px}</style>
+</head><body>
+<div id="cardstage"></div>
+<div id="stage"></div>
+<script src="../vendor/react.production.min.js"></script>
+<script src="../vendor/react-dom.production.min.js"></script>
+<script src="../src/constants.js"></script>
+<script src="../src/components/RceChecklistCard.js"></script>
+<script>
+/* Renders the SHIPPED request modal and the SHIPPED card -- the modal block is
+   lifted verbatim out of src/App.js at load time, so what is on screen is the
+   real code with the app's real stylesheet, not a drawing of it. */
+const CE_CFG={onsite:1,shopwork:1};
+const ceTypeLabel=k=>k==='onsite'?'On-site':'Shopwork';
+const currentUser={name:'Mavie Caruncon',username:'mcaruncon'};
+const reqUsers=[{username:'aestillore',name:'Aljon Estillore'},{username:'kmendoza',name:'Kenneth Mendoza'}];
+const submitRequest=()=>{};
+let reqBusy=false;
+
+function Harness(){
+  const [reqForm,setReqForm]=React.useState(()=>({
+    ceNum:'SY3-CE-2026-1102', ceType:'onsite', client:'HEDCOR BUKIDNON',
+    description:'1-SERVICES, BALANCING OF 1 UNIT PELTON 7.8MW RUNNER',
+    projType:'Mechanical', dateRecv:'2026-08-10', deadline:'2026-08-12', assignee:'Aljon Estillore',
+    remarks:'', rceNo:'', inquiryNo:'HSAB - RFQ 130000516', inquiryDate:'2026-08-10',
+    completionDate:'', workLocation:'NAMATEC SABANGAN, MOUNTAIN PROVINCE 2622',
+    address:'NAMATEC SABANGAN, MOUNTAIN PROVINCE 2622', assignedSales:'Mavie Caruncon',
+    inquiryType:'RFQ', stage:'Existing project',
+    items:{1:{v:'yes'},2:{v:'yes'},3:{v:'na',r:'previous data on file'},4:{v:'yes'},
+      5:{v:'no',r:'TOR not issued yet'},6:{v:'yes'},7:{v:'yes'},8:{v:'yes'},9:{v:'no',r:'awaiting runner material cert'}},
+    recommendation:'', otherRemarks:'NOTE: PLEASE SEE THE PREVIOUS DATA REGARDING 7.8MW RUNNER.', declineReason:''}));
+  const [reqFiles,setReqFiles]=React.useState([{name:'MGP-U8-Governor-GA-drawing.pdf',size:2476000},{name:'APRI-RFQ-2026-0417.pdf',size:349000}]);
+  window._h={setReqForm,setReqFiles};
+  return window._MODAL(reqForm,setReqForm,reqFiles,setReqFiles);
+}
+
+fetch('../index.html').then(r=>r.text()).then(h=>{const m=h.match(/<style[^>]*>[\s\S]*?<\/style>/g)||[];document.head.insertAdjacentHTML('beforeend',m.join(''));});
+fetch('../src/App.js').then(r=>r.text()).then(src=>{
+  const a=src.indexOf('\nreqForm && (() => {')+1;
+  const b=src.indexOf('\n\n/* ── Attachment Panel Modal ── */',a)+1;
+  const block=src.slice(a,b).trim().replace(/,$/,'');
+  window._MODAL=new Function('reqForm','setReqForm','reqFiles','setReqFiles',
+    'const {React:_r}=window; return (' + block + ');')
+    .bind(null);
+  const card=document.getElementById('cardstage');
+  ReactDOM.createRoot(card).render(React.createElement('div',null,
+    React.createElement('h2',null,'WHAT THE ESTIMATOR SEES ON THE CE — src/components/RceChecklistCard.js'),
+    React.createElement(RceChecklistCard,{rce:{
+      inquiryNo:'HSAB - RFQ 130000516', inquiryType:'RFQ', inquiryDate:'2026-08-10', deadline:'2026-08-12',
+      completionDate:'', workLocation:'NAMATEC SABANGAN, MOUNTAIN PROVINCE 2622',
+      address:'NAMATEC SABANGAN, MOUNTAIN PROVINCE 2622', assignedSales:'Mavie Caruncon',
+      stage:'Existing project', recommendation:'secure', preparedBy:'Mavie Caruncon',
+      form:'SHIC-F-SMD-002 Rev 01',
+      otherRemarks:'NOTE: PLEASE SEE THE PREVIOUS DATA REGARDING 7.8MW RUNNER.',
+      items:{1:{v:'yes'},2:{v:'yes'},3:{v:'na',r:'previous data on file'},4:{v:'yes'},
+        5:{v:'no',r:'TOR not issued yet'},6:{v:'yes'},7:{v:'yes'},8:{v:'yes'},
+        9:{v:'no',r:'awaiting runner material cert'},10:{v:'na'},11:{v:'yes'},12:{v:'yes'},13:{v:'no',r:'client to confirm outage window'}}}})));
+  if (location.search.indexOf('card')<0) ReactDOM.createRoot(document.getElementById('stage')).render(React.createElement(Harness));
+}).catch(e=>{document.body.innerHTML='<pre style="color:#f88;padding:20px">'+e.message+'</pre>';});
+</script></body></html>

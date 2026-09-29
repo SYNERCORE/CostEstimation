@@ -172,6 +172,8 @@ jobs:
         run: node tools/test-import-tool-list.js
       - name: Import unit price
         run: node tools/test-import-unit-price.js
+      - name: Resource search
+        run: node tools/test-resource-search.js
       - name: Breakdown by shift
         run: node tools/test-sb-shifts.js
       - name: Awarded status and RCE No.
@@ -340,6 +342,8 @@ jobs:
         run: node tools/test-import-tool-list.js
       - name: Import unit price
         run: node tools/test-import-unit-price.js
+      - name: Resource search
+        run: node tools/test-resource-search.js
       - name: Breakdown by shift
         run: node tools/test-sb-shifts.js
       - name: Awarded status and RCE No.

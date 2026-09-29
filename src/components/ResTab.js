@@ -89,6 +89,20 @@ const ResTab = ({
   /* Import list: the rows read from a supplier's kit list, waiting to be
      checked before they go on the CE. null when nothing is being imported. */
   const [imp, setImp] = useState(null);
+  /* Find a row in a list too long to read. 671 tools on one CE cannot be
+     checked by scrolling, and the browser's own Ctrl+F finds only what is
+     painted -- a row's description lives in an <input>, whose value the page
+     search does not see at all. */
+  const [q, setQ] = useState('');
+  /* Every word has to be somewhere in the row, in any order and any case, so
+     "cord 12/3" finds "Cord, Extension, M-F Plug, 12/3". Matching the whole
+     phrase would find nothing, because nobody types a description the way a
+     supplier wrote it. The code and the unit are searched too: a part number
+     is often the only thing anyone is sure of. */
+  const _terms = String(q).trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const _hit = r => !_terms.length ||
+    _terms.every(t => (String(r.desc || '') + ' ' + String(r.uom || '') + ' ' + String(r.code || '') + ' ' +
+      String((r.src && r.src.code) || '')).toLowerCase().indexOf(t) >= 0);
   const impRef = useRef(null);
   /* What "Set all" will write. Starts at whatever the rows already agree on,
      so a CE whose tools are all on 30 days opens showing 30 and the button is
@@ -346,7 +360,29 @@ showPower && /*#__PURE__*/React.createElement("label", {
     reader.readAsArrayBuffer(file);
     e.target.value = '';
   }
-})))), /*#__PURE__*/React.createElement("div", {
+})))),
+/* The count is the point of the box as much as the filtering is: "1 of 671"
+   is the answer to "is it on here", and 0 is an answer too. */
+rows.length > 0 && /*#__PURE__*/React.createElement("div", {
+  style: { display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0 8px' }
+}, /*#__PURE__*/React.createElement("input", {
+  value: q,
+  onChange: e => setQ(e.target.value),
+  placeholder: 'Find in ' + rows.length + ' row(s) -- description, code or unit',
+  style: { ...INP, width: 300, maxWidth: '100%' }
+}), q && /*#__PURE__*/React.createElement("button", {
+  onClick: () => setQ(''),
+  style: { background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 15, padding: '1px 5px' }
+}, "x"), q && /*#__PURE__*/React.createElement("span", {
+  style: { fontSize: 11, color: rows.filter(_hit).length ? 'var(--text-secondary)' : 'var(--status-danger)' }
+}, rows.filter(_hit).length + ' of ' + rows.length + (rows.filter(_hit).length ? '' : ' -- not on this list')),
+/* The buttons above act on the whole list, not on what is shown. Saying so is
+   cheaper than someone pressing Set all on a filtered view and finding it
+   changed 671 rows. */
+q && /*#__PURE__*/React.createElement("span", {
+  style: { fontSize: 10, color: 'var(--text-secondary)', marginLeft: 'auto' }
+}, 'Filtered view. The buttons above still act on all ' + rows.length + '.')),
+/*#__PURE__*/React.createElement("div", {
   style: {
     overflowX: 'auto'
   }
@@ -359,7 +395,7 @@ showPower && /*#__PURE__*/React.createElement("label", {
 }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['#', 'Description', 'Qty', ...(showDays ? ['Tier', 'Days', 'Hrs'] : []), ...(showPower ? ['kW', 'Run hrs', 'Power (P)'] : []), 'UOM', 'Unit Cost (P)', 'Row Total', ''].map(h => /*#__PURE__*/React.createElement("th", {
   key: h,
   style: THS
-}, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map((r, _ix) => {
+}, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map((r, _ix) => ({ r, _ix })).filter(x => _hit(x.r)).map(({ r, _ix }) => {
   const tot = rowTot(r);
   return /*#__PURE__*/React.createElement("tr", {
     key: r.id

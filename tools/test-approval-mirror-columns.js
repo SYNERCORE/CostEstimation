@@ -83,14 +83,21 @@ ck('the key is there for the flow to compare against', got.shicApvKey === key(su
 ck('and the CE number, so a message can be written without a second lookup',
   got.shicCENum === 'SY3-CE-2026-0148');
 /* A CE with no approval routing has nothing to notify anyone about. Writing
-   'none' into the columns would have the flow reasoning about rows that will
+   'none' into the state would have the flow reasoning about rows that will
    never move. */
-ck('a CE that was never submitted writes no approval columns at all',
-  Object.keys(cols({}, 'X')).length === 0);
+const none = cols({}, 'SY3-CE-2026-0148');
+ck('a CE that was never submitted writes no approval state',
+  none.shicApvState === undefined && none.shicApvKey === undefined &&
+  none.shicApvWaiting === undefined);
+/* But the CE number goes on every row regardless: it is what an orphaned
+   Monitoring row is reunited with its twin by, and the rows likeliest to
+   split are exactly the ones written before a CE is ever submitted. */
+ck('though it is still stamped with the CE number',
+  none.shicCENum === 'SY3-CE-2026-0148', none.shicCENum);
 /* SharePoint single-line-of-text caps at 255. A CE with a long roster would
    otherwise fail the whole write. */
 ck('every column is cut to what a text column holds',
-  ['shicApvWaiting', 'shicApvKey', 'shicCENum'].every(k => db.indexOf(k + ':') > 0) &&
+  ['shicApvWaiting', 'shicApvKey', 'shicCENum'].every(k => db.indexOf(k + '=') > 0 || db.indexOf(k + ':') > 0) &&
   (db.match(/\.slice\(0,255\)/g) || []).length >= 3);
 
 /* ---- the record survives a site that has not been repaired ---- */

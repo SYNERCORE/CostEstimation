@@ -486,7 +486,11 @@ async function autoSetupSP(progressCb){
     [spList('CE_MP')]:['shicCEId'],
     [spList('CE_Resources')]:['shicCEId'],
     [spList('CE_Documents')]:['shicCEId'],
-    [spList('Monitoring')]:['shicCEId'],
+    /* shicCENum is filtered on as well as shicCEId: a CE saved offline owns a
+       Monitoring row keyed by a timestamp, and the CE number is the only thing
+       that finds it again. Both halves need the index, or the lookup that
+       reunites them is the one that breaks first. */
+    [spList('Monitoring')]:['shicCEId','shicCENum'],
     [spList('Drafts')]:['Title'],
     [spList('ML_Imports')]:['Title']
   };

@@ -17,6 +17,42 @@ function _srcParse(v){
   if(!v)return {};
   try{const o=JSON.parse(v);return (o&&typeof o==='object')?o:{};}catch(_){return {};}
 }
+/* Every Monitoring row for one CE, however it came to be written.
+
+   A CE saved while SharePoint was unreachable is kept locally under an id of
+   Date.now() (dbSaveHistory, at the end), and its Monitoring row carries that
+   TIMESTAMP as shicCEId. When the CE later reaches SharePoint it is given a
+   real list id -- a small integer -- and a lookup by that id finds nothing, so
+   a SECOND Monitoring row is created. Neither row can see the other, so they
+   drift: one left saying the CE was returned while the other has moved on to
+   pending. Both then feed the approval-notification flow, which cannot tell
+   which one is current.
+
+   The CE number is the thing that is actually the same on both, so it is
+   asked for too. Two narrow queries rather than one `or`: SharePoint cannot
+   use an index across an `or`, and this list gets one row per CE forever.
+   They go together, so it costs a request and not a round trip.
+
+   Rows written before shicCENum existed have it blank, which is why the id
+   half stays. Every copy found is written on, so the split rows converge on
+   the next save instead of drifting further. */
+async function _monRowsFor(numId,ceNum){
+  const byId=spGet(spList('Monitoring'),`shicCEId eq ${numId}`,'Id,shicMonData');
+  const n=String(ceNum||'').trim();
+  /* dbSaveMonitoring falls back to String(ceId) when it has no CE number, and
+     that is an id, not a number anyone would recognise -- matching on it would
+     be matching on nothing. */
+  if(!n||n===String(numId))return await byId;
+  const byNum=spGet(spList('Monitoring'),`shicCENum eq '${n.replace(/'/g,"''")}'`,'Id,shicMonData')
+    /* A site that has not been repaired has no shicCENum, and asking for it is
+       a 400. The id half still works, exactly as it did before. */
+    .catch(()=>[]);
+  const [a,b]=await Promise.all([byId,byNum]);
+  const seen={},out=[];
+  [...a,...b].forEach(r=>{if(r&&!seen[r.Id]){seen[r.Id]=1;out.push(r);}});
+  return out;
+}
+
 /* ── The approval mirror, as columns ─────────────────────────────────────
    Notifications are sent by a Power Automate flow off the Monitoring list,
    not by this app: a static page served from SharePoint cannot hold an API
@@ -29,14 +65,20 @@ function _srcParse(v){
    which the flow writes and nothing here ever touches) sends one message per
    real change, rather than one per save. */
 function _apvCols(mon,ceNum){
+  const out={};
+  /* The CE number goes on EVERY row, approval or not: it is what _monRowsFor
+     matches an orphaned row on, so a row that lacks it can never be reunited
+     with its twin. Stamping it only when there was an approval left exactly
+     the rows most likely to split -- the ones written before a CE is
+     submitted -- with nothing to find them by. */
+  const n=String(ceNum||'').trim();
+  if(n)out.shicCENum=n.slice(0,255);
   const a=(mon&&mon.apv)||null;
-  if(!a)return {};
-  return {
-    shicApvState:String(a.state||'none'),
-    shicApvWaiting:((a.waiting||[]).join(', ')).slice(0,255),
-    shicApvKey:apvMirrorKey(a).slice(0,255),
-    shicCENum:String(ceNum||'').slice(0,255)
-  };
+  if(!a)return out;
+  out.shicApvState=String(a.state||'none');
+  out.shicApvWaiting=((a.waiting||[]).join(', ')).slice(0,255);
+  out.shicApvKey=apvMirrorKey(a).slice(0,255);
+  return out;
 }
 /* A site that has not had "Repair lists & columns" run does not have these
    columns, and SharePoint rejects the WHOLE write for one it does not know.
@@ -150,7 +192,7 @@ async function dbSaveMonEntry(ceId, ceNum, monFields, changed){
        table reads, the newest, when the CE has more than one. */
     if(!spId||(changed&&changed!=='ensure'&&changed.length)){
       try{
-        const r=await spGet(spList('Monitoring'),`shicCEId eq ${numId}`,'Id,shicMonData');
+        const r=await _monRowsFor(numId,ceNum);
         if(r.length){
           const sorted=r.slice().sort((a,b)=>b.Id-a.Id);
           spId=sorted[0].Id;_monSpIdCache[ceId]=spId;

@@ -244,6 +244,8 @@ jobs:
         run: node tools/test-important-notes.js
       - name: Approval - the mirror columns a notification flow reads
         run: node tools/test-approval-mirror-columns.js
+      - name: Monitoring - one CE, two rows, reunited
+        run: node tools/test-monitoring-duplicate-rows.js
       - name: Storage warning clears what it can
         run: node tools/test-storage-warning.js
       - name: Every workflow step runs here
@@ -406,6 +408,8 @@ jobs:
         run: node tools/test-important-notes.js
       - name: Approval - the mirror columns a notification flow reads
         run: node tools/test-approval-mirror-columns.js
+      - name: Monitoring - one CE, two rows, reunited
+        run: node tools/test-monitoring-duplicate-rows.js
       - name: Storage warning clears what it can
         run: node tools/test-storage-warning.js
       - name: Every workflow step runs here

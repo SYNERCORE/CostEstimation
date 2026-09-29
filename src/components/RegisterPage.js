@@ -463,7 +463,12 @@ async function autoSetupSP(progressCb){
     [spList('CE_MP')]:    [[9,'shicCEId'],[2,'shicRole'],[9,'shicRate'],[2,'shicShift'],[9,'shicDays'],[9,'shicQty'],[9,'shicPax'],[9,'shicOTHours'],[9,'shicPerDiem'],[2,'shicTaskId'],[3,'shicShares']],
     [spList('CE_Resources')]:[[9,'shicCEId'],[2,'shicTab'],[2,'shicDesc'],[9,'shicQty'],[2,'shicUOM'],[9,'shicCost'],[9,'shicDays'],[2,'shicTaskId'],[3,'shicShares'],[9,'shicTier'],[9,'shicHours'],[9,'shicKW'],[9,'shicRunHrs'],[3,'shicSrc']],
     [spList('CE_Documents')]:[[9,'shicCEId'],[2,'shicFileName'],[2,'shicFileType'],[3,'shicFileData']],
-    [spList('Monitoring')]:  [[9,'shicCEId'],[3,'shicMonData']],
+    /* The four after shicMonData mirror the approval summary out of that JSON
+       onto plain columns, so a Power Automate flow can notify approvers
+       without parsing it. shicApvNotified is NOT here: the flow creates it and
+       the flow owns it -- this app must never write what the flow uses to
+       remember which changes it has already acted on. */
+    [spList('Monitoring')]:  [[9,'shicCEId'],[3,'shicMonData'],[2,'shicApvState'],[2,'shicApvWaiting'],[2,'shicApvKey'],[2,'shicCENum']],
     [spList('Masterlist')]:  [[3,'shicData']],
     [spList('SowLib')]:      [[3,'shicData']],
     [spList('Companies')]:   [[3,'shicData']],

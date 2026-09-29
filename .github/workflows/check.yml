@@ -242,6 +242,8 @@ jobs:
         run: node tools/test-tier-full-price.js
       - name: Notes - marking one important
         run: node tools/test-important-notes.js
+      - name: Approval - the mirror columns a notification flow reads
+        run: node tools/test-approval-mirror-columns.js
       - name: Storage warning clears what it can
         run: node tools/test-storage-warning.js
       - name: Every workflow step runs here
@@ -402,6 +404,8 @@ jobs:
         run: node tools/test-tier-full-price.js
       - name: Notes - marking one important
         run: node tools/test-important-notes.js
+      - name: Approval - the mirror columns a notification flow reads
+        run: node tools/test-approval-mirror-columns.js
       - name: Storage warning clears what it can
         run: node tools/test-storage-warning.js
       - name: Every workflow step runs here

@@ -29,22 +29,38 @@ const grab = (re, what) => { const m = db.match(re); if (!m) { console.error('no
 const src =
   'const _monSpIdCache={};\n' +
   grab(/function _monMergeLog\(theirs,mine\)\{[\s\S]*?\n\}/, '_monMergeLog') + '\n' +
+  /* The approval summary is mirrored onto plain columns beside the JSON, for
+     the Power Automate flow that notifies approvers. Every Monitoring write
+     goes through _monWrite, so the real one has to be here or this harness is
+     no longer running the real function. */
+  grab(/function _apvCols\(mon,ceNum\)\{[\s\S]*?\n\}/, '_apvCols') + '\n' +
+  grab(/let _apvColsMissing=false;/, '_apvColsMissing') + '\n' +
+  grab(/async function _monWrite\(send,payload\)\{[\s\S]*?\n\}/, '_monWrite') + '\n' +
+  grab(/function _stripApvCols\(p\)\{[\s\S]*?\n\}/, '_stripApvCols') + '\n' +
   grab(/async function dbSaveMonEntry\(ceId, ceNum, monFields, changed\)\{[\s\S]*?\n\}/, 'dbSaveMonEntry');
 
 /* Runs the real dbSaveMonEntry against a fake SharePoint holding `theirs`. */
-function run(mine, theirs, changed) {
-  let written = null, posted = null;
+function run(mine, theirs, changed, opts) {
+  let written = null, posted = null, cols = null;
+  const o = opts || {};
   const save = new Function(
-    'spGet', 'spPost', 'spPatch', 'spWithRetry', 'spList', 'USE_SP', 'getSiteURL', 'console',
+    'spGet', 'spPost', 'spPatch', 'spWithRetry', 'spList', 'USE_SP', 'getSiteURL', 'console', 'apvMirrorKey',
     src + '; return dbSaveMonEntry;'
   )(
     async () => theirs === null ? [] : [{Id: 5, shicMonData: JSON.stringify(theirs)}],
-    async (l, d) => { posted = JSON.parse(d.shicMonData); return {Id: 5}; },
-    async (l, id, d) => { written = JSON.parse(d.shicMonData); },
+    async (l, d) => { posted = JSON.parse(d.shicMonData); cols = d; return {Id: 5}; },
+    /* `rejectCols` stands in for a site that has not had "Repair lists &
+       columns" run: SharePoint refuses the whole write for one column it does
+       not know. */
+    async (l, id, d) => {
+      if (o.rejectCols && d.shicApvKey !== undefined) throw new Error('400 InvalidClientQueryException');
+      written = JSON.parse(d.shicMonData); cols = d;
+    },
     fn => fn(),
-    n => n, true, () => 'https://x', {warn() {}}
+    n => n, true, () => 'https://x', {warn() {}},
+    m => m ? (m.state || 'none') + '|' + (m.signed || 0) + '/' + (m.total || 0) + '|' + (m.waiting || []).slice().sort().join(',') : ''
   );
-  return save(7, 'SHIC-CE-2026-0001', mine, changed).then(res => ({res, written, posted}));
+  return save(7, 'SHIC-CE-2026-0001', mine, changed).then(res => ({res, written, posted, cols}));
 }
 
 const log = (status, at) => ({status, at, by: 'someone'});
@@ -92,6 +108,42 @@ const log = (status, at) => ({status, at, by: 'someone'});
   ck('nothing is written', r.written === null && r.posted === null,
     'the attachment upload only needs an item to attach to');
   ck('and it hands back what the site holds', r.res.fields.status === 'Ongoing');
+
+  /* Approvers are notified by a Power Automate flow reading this list, so the
+     approval summary is mirrored out of the JSON onto plain columns beside it.
+     The JSON stays the source of truth; these are written and never read. */
+  console.log('\nthe approval summary is mirrored onto columns the flow can read:');
+  const apv = {state: 'pending', waiting: ['rvera', 'mcruz'], signedBy: [], signed: 0, total: 3};
+  r = await run({status: 'Submitted', apv}, {status: 'Submitted'}, ['status', 'apv']);
+  ck('the state is a plain word beside the JSON', r.cols.shicApvState === 'pending', r.cols.shicApvState);
+  ck('and who it waits on', r.cols.shicApvWaiting === 'rvera, mcruz', r.cols.shicApvWaiting);
+  ck('the CE number rides along, so a message needs no second lookup',
+    r.cols.shicCENum === 'SHIC-CE-2026-0001');
+  ck('the JSON is still written whole', r.written.apv.total === 3);
+  /* The key is what the flow compares against what it last acted on. If it
+     changed on every save, every save would page the approvers again. */
+  const k1 = r.cols.shicApvKey;
+  /* `theirs` carries the approval, as the saved row does: an edit that names
+     only `status` takes everything else from the site, so a fixture without it
+     would be testing a row that had never been submitted. */
+  r = await run({status: 'Ongoing', apv}, {status: 'Submitted', apv}, ['status']);
+  ck('saving again without the routing moving writes the same key',
+    r.cols.shicApvKey === k1, r.cols.shicApvKey);
+  r = await run({status: 'Ongoing', apv: {...apv, waiting: ['mcruz'], signed: 1}}, {status: 'Submitted', apv}, ['apv']);
+  ck('and a signature changes it', r.cols.shicApvKey !== k1, r.cols.shicApvKey);
+  /* A CE with no routing has nothing to tell anyone about. */
+  r = await run({status: 'Draft'}, {status: 'Draft'}, ['status']);
+  ck('a CE that was never submitted writes no approval columns',
+    r.cols.shicApvState === undefined && r.cols.shicApvKey === undefined);
+
+  /* A site that has not been repaired does not have the columns, and
+     SharePoint rejects the WHOLE write for one it does not know. Losing the
+     approval trail would be far worse than a notification not being sent. */
+  console.log('\na site without the columns still keeps the record:');
+  r = await run({status: 'Submitted', apv}, {status: 'Submitted'}, ['status', 'apv'], {rejectCols: true});
+  ck('the write goes again carrying only the JSON', r.res.ok === true);
+  ck('and the trail is intact', r.written && r.written.apv.total === 3);
+  ck('with the unknown columns gone', r.cols.shicApvKey === undefined && r.cols.shicMonData !== undefined);
 
   console.log('\na refusal is reported, not swallowed:');
   const failing = new Function(

@@ -77,6 +77,27 @@ function apvMirror(approvers, apv) {
   return { state: st, waiting: st === 'pending' ? s.waiting.map(l => l.user) : [], signedBy: signedBy,
     signed: s.signedN, total: s.total, at: new Date().toISOString() };
 }
+/* The mirror, as plain columns a Power Automate flow can read without parsing
+   JSON and without a trigger that fires on every ordinary edit.
+
+   apvMirror already holds everything a notification needs -- it is written to
+   the Monitoring row whenever the routing moves -- but it lives inside the
+   shicMonData JSON blob. A flow reading that would have to parse it on every
+   save and then work out, unaided, whether anything had actually changed.
+
+   apvMirrorKey is what changes only when there is something new to say: the
+   state, and who it now waits on. A flow compares it with the value it last
+   notified about (shicApvNotified, which the flow writes and this app never
+   touches) and sends only on a difference. That is what stops an estimator
+   fixing a typo from paging four approvers again.
+
+   Sorted, so the same two people in a different order is the same key. */
+function apvMirrorKey(m) {
+  if (!m) return '';
+  const w = (m.waiting || []).slice().sort();
+  return String(m.state || 'none') + '|' + (m.signed || 0) + '/' + (m.total || 0) + '|' + w.join(',');
+}
+
 /* Whether the CE on this Monitoring row is waiting on this person's signature.
    One answer for My Work, the Monitoring filter and the row badge alike. */
 function apvMonWaitsOn(m, username) {

@@ -17,6 +17,50 @@ function _srcParse(v){
   if(!v)return {};
   try{const o=JSON.parse(v);return (o&&typeof o==='object')?o:{};}catch(_){return {};}
 }
+/* ── The approval mirror, as columns ─────────────────────────────────────
+   Notifications are sent by a Power Automate flow off the Monitoring list,
+   not by this app: a static page served from SharePoint cannot hold an API
+   token, and anything it did hold would be readable by anyone who opened the
+   console. So the app's whole part in it is to state, in plain columns, where
+   the approval stands. The flow does the rest.
+
+   shicApvKey is the one that matters. It changes only when the routing moves,
+   so a flow that remembers the last key it acted on (in shicApvNotified,
+   which the flow writes and nothing here ever touches) sends one message per
+   real change, rather than one per save. */
+function _apvCols(mon,ceNum){
+  const a=(mon&&mon.apv)||null;
+  if(!a)return {};
+  return {
+    shicApvState:String(a.state||'none'),
+    shicApvWaiting:((a.waiting||[]).join(', ')).slice(0,255),
+    shicApvKey:apvMirrorKey(a).slice(0,255),
+    shicCENum:String(ceNum||'').slice(0,255)
+  };
+}
+/* A site that has not had "Repair lists & columns" run does not have these
+   columns, and SharePoint rejects the WHOLE write for one it does not know.
+   The approval trail is the thing that must not be lost, so on a rejection
+   the write goes again carrying only the JSON -- exactly what it carried
+   before these columns existed. The flow is a convenience; the record is not. */
+let _apvColsMissing=false;
+async function _monWrite(send,payload){
+  if(_apvColsMissing)return await send(_stripApvCols(payload));
+  try{return await send(payload);}
+  catch(e){
+    const m=e&&e.message||'';
+    if(!/400|InvalidClientQuery|does not exist|Column/i.test(m))throw e;
+    _apvColsMissing=true;
+    console.warn('Monitoring approval columns are missing -- run SP Setup → "Repair lists & columns" to let notifications work. Writing without them.');
+    return await send(_stripApvCols(payload));
+  }
+}
+function _stripApvCols(p){
+  const o={...p};
+  ['shicApvState','shicApvWaiting','shicApvKey','shicCENum'].forEach(k=>{delete o[k];});
+  return o;
+}
+
 /* ── SP Draft persistence ── */
 async function dbSaveDraft(d){
   if(USE_SP||getSiteURL()){
@@ -133,25 +177,29 @@ async function dbSaveMonEntry(ceId, ceNum, monFields, changed){
         if(last)toWrite.remarks=last.text||'';
       }
     }
-    const payload={shicMonData:JSON.stringify(toWrite)};
+    /* The approval summary, promoted out of the JSON onto plain columns so a
+       Power Automate flow can read it -- and, through shicApvKey, tell a
+       routing change from an estimator fixing a typo. The JSON stays the
+       source of truth; these are a mirror of it and nothing reads them back. */
+    const payload={shicMonData:JSON.stringify(toWrite),..._apvCols(toWrite,ceNum)};
     if(spId){
       try{
-        await spWithRetry(()=>spPatch(spList('Monitoring'),spId,payload));
+        await _monWrite(p=>spWithRetry(()=>spPatch(spList('Monitoring'),spId,p)),payload);
         /* The older copies of the same CE are written too, so whichever one
            a colleague's table happens to read says the same thing. */
         for(const other of alsoWrite){
-          try{await spPatch(spList('Monitoring'),other,payload);}catch(_e){console.warn('duplicate monitoring row '+other+' not updated:',_e.message);}
+          try{await _monWrite(p=>spPatch(spList('Monitoring'),other,p),payload);}catch(_e){console.warn('duplicate monitoring row '+other+' not updated:',_e.message);}
         }
       }catch(patchErr){
         /* 404 = item was deleted in SP; clear cache and create fresh */
         if(patchErr.message&&patchErr.message.includes('404')){
           delete _monSpIdCache[ceId];
-          const created=await spWithRetry(()=>spPost(spList('Monitoring'),{Title:ceNum||String(ceId),shicCEId:numId,...payload}));
+          const created=await _monWrite(p=>spWithRetry(()=>spPost(spList('Monitoring'),p)),{Title:ceNum||String(ceId),shicCEId:numId,...payload});
           if(created&&created.Id)_monSpIdCache[ceId]=created.Id;
         }else throw patchErr;
       }
     }else{
-      const created=await spWithRetry(()=>spPost(spList('Monitoring'),{Title:ceNum||String(ceId),shicCEId:numId,...payload}));
+      const created=await _monWrite(p=>spWithRetry(()=>spPost(spList('Monitoring'),p)),{Title:ceNum||String(ceId),shicCEId:numId,...payload});
       if(created&&created.Id)_monSpIdCache[ceId]=created.Id;
     }
     /* What was actually written, so the caller can show the row the site now

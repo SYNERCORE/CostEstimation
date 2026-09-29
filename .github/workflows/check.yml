@@ -178,6 +178,8 @@ jobs:
         run: node tools/test-company-header.js
       - name: Resource round trip
         run: node tools/test-resource-roundtrip.js
+      - name: Workbook logo
+        run: node tools/test-xlsx-logo.js
       - name: Breakdown by shift
         run: node tools/test-sb-shifts.js
       - name: Awarded status and RCE No.
@@ -352,6 +354,8 @@ jobs:
         run: node tools/test-company-header.js
       - name: Resource round trip
         run: node tools/test-resource-roundtrip.js
+      - name: Workbook logo
+        run: node tools/test-xlsx-logo.js
       - name: Breakdown by shift
         run: node tools/test-sb-shifts.js
       - name: Awarded status and RCE No.

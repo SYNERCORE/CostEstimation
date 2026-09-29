@@ -8802,6 +8802,7 @@ function App({
       /* Same rule as the printed CE -- see the note there. */
       name: coI.name || (_hasCoI ? '' : 'SYNERCORE'),
       sub: coI.sub || (_hasCoI ? '' : 'HEAVY INDUSTRIES CORP.'),
+      logo: coI.logo || '',
       doc: coI.docNo || coI.doc || 'SHIC-F-TSG025', revNo: coI.revNo || '0', revDate: coI.revDate || ''
     };
     const shiftLabel = k => (SHIFTS[k] && SHIFTS[k].label) || k;
@@ -8880,8 +8881,10 @@ function App({
 
     /* The document header that tops every printed page. */
     const docHead = (a, title, span) => {
-      /* No dangling dash for a company with a name and no subtitle. */
-      a.row({ v: [co.name, co.sub].filter(Boolean).join(' — ') }, '', '', 'Document No.:', co.doc);
+      /* The logo REPLACES the name, exactly as it does on the printed CE --
+         it is drawn over A1, and the name underneath it would show through.
+         No dangling dash for a company with a name and no subtitle. */
+      a.row({ v: co.logo ? '' : [co.name, co.sub].filter(Boolean).join(' — ') }, '', '', 'Document No.:', co.doc);
       a.row({ v: 'COST ESTIMATE SUMMARY' }, '', '', 'Revision No.:', co.revNo);
       a.row('', '', '', 'Revision Date:', co.revDate);
       a.title(title, span);
@@ -9061,7 +9064,8 @@ function App({
       });
     });
 
-    SHICXlsx.download((info.ceNum || 'CE') + '_' + (info.client || 'export').replace(/[^a-z0-9]/gi, '_') + '.xlsx', sheets, { bar: ceBrand(coI).bar, barText: ceBrand(coI).text });
+    SHICXlsx.download((info.ceNum || 'CE') + '_' + (info.client || 'export').replace(/[^a-z0-9]/gi, '_') + '.xlsx', sheets,
+      { bar: ceBrand(coI).bar, barText: ceBrand(coI).text, logo: co.logo });
     showToast('Exported to Excel — one sheet per page of the CE.');
   };
   const [showDraftBanner, setShowDraftBanner] = React.useState(() => hasDraft());

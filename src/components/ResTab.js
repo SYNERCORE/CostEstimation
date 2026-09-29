@@ -190,9 +190,16 @@ showPower && /*#__PURE__*/React.createElement("label", {
   value: kwhRate,
   onChange: e => setKwhRate(e.target.value)
 }), "P/kWh"), /*#__PURE__*/React.createElement("div", {
+  /* The row of controls has grown past what one line holds, and Import XLS
+     was clipped off the right edge on a laptop with no scrollbar to reach
+     it -- the button was not merely off-screen, it was unreachable. It wraps
+     now: a two-line toolbar is better than a control nobody can press. */
   style: {
     display: 'flex',
-    gap: 6
+    gap: 6,
+    flexWrap: 'wrap',
+    rowGap: 6,
+    alignItems: 'center'
   }
 }, /*#__PURE__*/React.createElement("button", {
   style: btn('info', true),

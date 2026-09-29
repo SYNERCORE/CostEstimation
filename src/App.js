@@ -8343,9 +8343,15 @@ function App({
       @media screen{body{background:#e9e9ee}.sheet{margin:0 auto 8px;box-shadow:0 1px 6px rgba(0,0,0,.25)}}
       @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
     `;
+    /* The Synercore names are the fallback for having NO company record at
+       all -- a first run, before the Company DB is filled in. They are not a
+       fallback for a field left blank on some other company: SY3 with no
+       subtitle set printed "SY3 - HEAVY INDUSTRIES CORP.", putting another
+       company's name on its own documents. */
+    const _hasCo = !!(coInfo && (coInfo.name || coInfo.sub || coInfo.logo || coInfo.id));
     const co = {
-      name:    coInfo.name    || 'SYNERCORE',
-      sub:     coInfo.sub     || 'HEAVY INDUSTRIES CORP.',
+      name:    coInfo.name    || (_hasCo ? '' : 'SYNERCORE'),
+      sub:     coInfo.sub     || (_hasCo ? '' : 'HEAVY INDUSTRIES CORP.'),
       doc:     coInfo.docNo   || coInfo.doc || 'SHIC-F-TSG025',
       revNo:   coInfo.revNo   || '0',
       revDate: coInfo.revDate || '',
@@ -8791,8 +8797,11 @@ function App({
     /* Resolved exactly as the printed CE does, so the two headers agree. */
     const _cos = getCompanies();
     const coI = _cos.find(c => String(c.id) === String(info.companyId)) || _cos[0] || {};
+    const _hasCoI = !!(coI && (coI.name || coI.sub || coI.logo || coI.id));
     const co = {
-      name: coI.name || 'SYNERCORE', sub: coI.sub || 'HEAVY INDUSTRIES CORP.',
+      /* Same rule as the printed CE -- see the note there. */
+      name: coI.name || (_hasCoI ? '' : 'SYNERCORE'),
+      sub: coI.sub || (_hasCoI ? '' : 'HEAVY INDUSTRIES CORP.'),
       doc: coI.docNo || coI.doc || 'SHIC-F-TSG025', revNo: coI.revNo || '0', revDate: coI.revDate || ''
     };
     const shiftLabel = k => (SHIFTS[k] && SHIFTS[k].label) || k;
@@ -8871,7 +8880,8 @@ function App({
 
     /* The document header that tops every printed page. */
     const docHead = (a, title, span) => {
-      a.row({ v: co.name + ' — ' + co.sub }, '', '', 'Document No.:', co.doc);
+      /* No dangling dash for a company with a name and no subtitle. */
+      a.row({ v: [co.name, co.sub].filter(Boolean).join(' — ') }, '', '', 'Document No.:', co.doc);
       a.row({ v: 'COST ESTIMATE SUMMARY' }, '', '', 'Revision No.:', co.revNo);
       a.row('', '', '', 'Revision Date:', co.revDate);
       a.title(title, span);

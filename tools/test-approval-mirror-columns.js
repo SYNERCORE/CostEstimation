@@ -105,8 +105,12 @@ ck('every column is cut to what a text column holds',
    without this the approval trail itself would be lost on an unrepaired site
    -- a far worse failure than a notification not being sent. */
 ck('a rejected write goes again carrying only the JSON', /_stripApvCols\(payload\)/.test(db));
+/* Stated as a rule rather than a fixed list, so a column added later fails
+   here for being unstripped rather than for not being one of four. */
+const _strip = db.slice(db.indexOf('function _stripApvCols('), db.indexOf('function _stripApvCols(') + 400);
 ck('and every promoted column is stripped, not just some',
-  /\['shicApvState','shicApvWaiting','shicApvKey','shicCENum'\]\.forEach\(k=>\{delete o\[k\];\}\)/.test(db));
+  (db.match(/out\.(shic\w+)=/g) || []).concat(["out.shicCENum="])
+    .map(x => x.slice(4, -1)).every(c => _strip.indexOf("'" + c + "'") > 0));
 ck('after one rejection it stops trying, rather than failing every write twice',
   /if\(_apvColsMissing\)return await send\(_stripApvCols\(payload\)\)/.test(db));
 ck('and it says which button fixes it',

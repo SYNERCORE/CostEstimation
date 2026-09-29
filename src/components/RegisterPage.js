@@ -468,7 +468,7 @@ async function autoSetupSP(progressCb){
        without parsing it. shicApvNotified is NOT here: the flow creates it and
        the flow owns it -- this app must never write what the flow uses to
        remember which changes it has already acted on. */
-    [spList('Monitoring')]:  [[9,'shicCEId'],[3,'shicMonData'],[2,'shicApvState'],[2,'shicApvWaiting'],[2,'shicApvKey'],[2,'shicCENum']],
+    [spList('Monitoring')]:  [[9,'shicCEId'],[3,'shicMonData'],[2,'shicApvState'],[2,'shicApvWaiting'],[2,'shicApvKey'],[2,'shicApvOwner'],[2,'shicApvNote'],[2,'shicCENum']],
     [spList('Masterlist')]:  [[3,'shicData']],
     [spList('SowLib')]:      [[3,'shicData']],
     [spList('Companies')]:   [[3,'shicData']],

@@ -78,6 +78,11 @@ function _apvCols(mon,ceNum){
   out.shicApvState=String(a.state||'none');
   out.shicApvWaiting=((a.waiting||[]).join(', ')).slice(0,255);
   out.shicApvKey=apvMirrorKey(a).slice(0,255);
+  /* A returned CE waits on nobody, so shicApvWaiting is empty and a flow
+     reading only that has no one to notify. The estimator who submitted it is
+     who has to act; the note is what the approver said when sending it back. */
+  out.shicApvOwner=String(a.by||'').slice(0,255);
+  out.shicApvNote=String(a.note||'').slice(0,255);
   return out;
 }
 /* A site that has not had "Repair lists & columns" run does not have these
@@ -99,7 +104,7 @@ async function _monWrite(send,payload){
 }
 function _stripApvCols(p){
   const o={...p};
-  ['shicApvState','shicApvWaiting','shicApvKey','shicCENum'].forEach(k=>{delete o[k];});
+  ['shicApvState','shicApvWaiting','shicApvKey','shicApvOwner','shicApvNote','shicCENum'].forEach(k=>{delete o[k];});
   return o;
 }
 

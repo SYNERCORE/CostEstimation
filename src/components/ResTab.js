@@ -72,6 +72,49 @@ const ResTab = ({
     if (it.group) out.group = String(it.group);
     return out;
   };
+  /* One row, re-priced from the Masterlist.
+     ======================================
+     Sync Rates does the whole CE at once, which is the wrong tool when a
+     tab carries 671 rows and two of them have just been corrected on the
+     Masterlist. Everything else on the CE was quoted at a price, and
+     re-pricing it wholesale to fix two rows changes figures nobody asked
+     about.
+
+     Matched on the description, upper-cased and trimmed, which is the same
+     key the whole-tab sync and the importer use -- three different ways of
+     finding the same item would eventually disagree about which item it is. */
+  const _mlFind = r => {
+    const d = String(r.desc || '').trim().toUpperCase();
+    if (!d) return null;
+    return (masterlist[mlType] || []).find(m => String(m.desc || '').trim().toUpperCase() === d) || null;
+  };
+  const _money = v => 'P' + N(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const syncRow = r => {
+    const m = _mlFind(r);
+    if (!m) {
+      showToast('"' + (String(r.desc || '').trim() || 'This row') + '" is not on the Masterlist, so there is no rate to take. Add it with the + Masterlist button first.', true);
+      return;
+    }
+    const extra = _srcFields(m);
+    /* The tier figures count as a change too: a Tier 1 row whose rate happens
+       to match still prices from them, so a row can need the sync while its
+       cost column looks right. */
+    const moved = N(m.cost) !== N(r.cost) ||
+      Object.keys(extra).some(k => k !== 'group' && N(extra[k]) !== N(r[k]));
+    if (!moved) { showToast('"' + r.desc + '" already matches the Masterlist.'); return; }
+    /* Confirmed, because this is a price on a CE that may already be quoted,
+       and the button sits beside the one that deletes the row. One line, so
+       refreshing a handful of rows stays quick. */
+    if (!window.confirm('Re-price "' + r.desc + '" from the Masterlist?' + String.fromCharCode(10, 10) +
+      '   ' + _money(r.cost) + '   ->   ' + _money(m.cost) + String.fromCharCode(10, 10) +
+      'Nothing else on this tab is touched. Nothing is saved until you press Save.')) return;
+    set(p => p.map(x => x.id === r.id
+      /* The grouping is the CE's own if it has one: re-pricing is what was
+         asked for, re-grouping was not. */
+      ? { ...x, cost: m.cost, ...extra, ...(x.group ? { group: x.group } : {}) }
+      : x));
+    showToast('"' + r.desc + '" re-priced: ' + _money(r.cost) + ' -> ' + _money(m.cost) + '.');
+  };
   const rowPwr = r => showPower ? toolPowerCost(r, kwhRate) * (pwrFrac ? pwrFrac(r) : 1) : 0;
   const rowTot = r => showDays ? toolRowCost(r) + rowPwr(r) : N(r.qty) * N(r.cost);
   const tierOf = r => N(r.tier) || 2;
@@ -710,6 +753,20 @@ q && /*#__PURE__*/React.createElement("span", {
   })), /*#__PURE__*/React.createElement("td", {
     style: TDS
   }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => syncRow(r),
+    title: _mlFind(r)
+      ? 'Take the current Masterlist rate for "' + r.desc + '" — this row only'
+      : 'Not on the Masterlist, so there is no rate to take',
+    style: {
+      background: 'none',
+      border: 'none',
+      color: _mlFind(r) ? 'var(--accent-info)' : 'var(--text-muted)',
+      cursor: 'pointer',
+      fontSize: 13,
+      padding: '1px 3px',
+      opacity: _mlFind(r) ? 1 : .35
+    }
+  }, "↻"), /*#__PURE__*/React.createElement("button", {
     onClick: () => set(p => p.filter(x => x.id !== r.id)),
     style: {
       background: 'none',

@@ -2268,7 +2268,39 @@ function App({
     _lastDraftId.current = null;
     setSharedDrafts(prev => prev.filter(d => !ids.has(d.draftId)));
   };
-  const saveDraft = async () => {
+  /* One click is one save.
+     =====================
+     Save, Revise and Draft all reach SharePoint and back before anything on
+     screen changes. For that second or two the button looks untouched, so
+     people press it again -- and Revise made that expensive: each press read
+     the same history, worked out the same next revision number, found it
+     unused, and wrote it. One Revise, three revisions, and a revision is not
+     something anyone unpicks afterwards.
+
+     A ref, not state: two clicks in the same tick would both read a state
+     value that has not re-rendered yet and both pass. A ref assignment is
+     there for the next click immediately. The state beside it is only so the
+     button can say what it is doing -- which is the other half of the fault,
+     because a button that gives no sign of life is a button people press
+     again. Guarding at the definition covers Ctrl+S and every other caller,
+     not just the one button. */
+  const _busy = useRef({});
+  const [busyOp, setBusyOp] = useState({});
+  const guard = (key, fn) => async (...args) => {
+    if (_busy.current[key]) return;
+    _busy.current[key] = true;
+    setBusyOp(p => ({ ...p, [key]: true }));
+    try { return await fn(...args); }
+    finally {
+      _busy.current[key] = false;
+      setBusyOp(p => ({ ...p, [key]: false }));
+    }
+  };
+  /* A button mid-flight: visibly out of action, and saying so. */
+  const busyBtn = (key, base) => busyOp[key]
+    ? { ...base, opacity: .55, cursor: 'progress', pointerEvents: 'none' } : base;
+
+  const saveDraft = guard('draft', async () => {
     const draftId = draftIdFor(info.ceNum);
     /* Remembered so the save can retire this exact row even if the CE number
        has changed since. */
@@ -2318,7 +2350,7 @@ function App({
     } catch (e) {
       showToast('Draft saved locally.');
     }
-  };
+  });
 
   /* \u2500\u2500 Load shared drafts list from SharePoint \u2500\u2500 */
   const loadSharedDrafts = async (quiet) => {
@@ -2565,7 +2597,7 @@ function App({
     if (e && e.savedBy && e.savedBy !== currentUser.username) return 'This request was raised by ' + (e.savedByName || e.savedBy) + '. Only they or an admin can change it.';
     return null;
   };
-  const handleSave = async () => {
+  const handleSave = guard('save', async () => {
     let _overwrote = null; /* set when bulk mode lets a save replace an existing CE */
     /* Whose request it is, is what was saved, not what is on screen: a save
        stamps savedBy with whoever is saving, so asking the open CE would let
@@ -2722,8 +2754,8 @@ function App({
     } catch (e) {
       showToast('Save failed: ' + e.message, true);
     }
-  };
-  const handleSaveRevision = async () => {
+  });
+  const handleSaveRevision = guard('revise', async () => {
     const ceNum = (info.ceNum || '').trim();
     if (!ceNum) {
       showToast('Please enter a CE Number before saving a revision.', true);
@@ -2779,7 +2811,7 @@ function App({
     } catch (e) {
       showToast('Save failed: ' + e.message, true);
     }
-  };
+  });
   const hasUnsavedWork = () => {
     const hasInfo = !!(info.ceNum && info.ceNum !== BLANK_INFO.ceNum) || !!(info.client) || !!(info.description);
     /* `r.pax` defaults to 1 on the blank starter row, so testing it made a
@@ -9696,10 +9728,11 @@ function App({
     onClick: handleNew,
     title: "New CE (Ctrl+N)"
   }, "+ New"), /*#__PURE__*/React.createElement("button", {
-    style: btn('def', true),
+    style: busyBtn('save', btn('def', true)),
+    disabled: !!busyOp.save,
     onClick: handleSave,
     title: "Save CE (Ctrl+S)"
-  }, "Save"), /*#__PURE__*/React.createElement("span", {
+  }, busyOp.save ? "Saving\u2026" : "Save"), /*#__PURE__*/React.createElement("span", {
     className: "shic-hide-narrow",
     title: "Keyboard shortcuts: Ctrl+S = Save  •  Ctrl+N = New CE",
     style: {fontSize:9, color:BDR, cursor:'default', userSelect:'none', letterSpacing:.3}
@@ -13962,29 +13995,32 @@ tab === 'dashboard' && (() => {
       fontWeight: 700
     }
   }, sharedDrafts.length)), /*#__PURE__*/React.createElement("button", {
-    style: {
+    style: busyBtn('draft', {
       ...btn('def'),
       background: '#8B5CF622',
       borderColor: '#8B5CF655',
       color: 'var(--accent-violet)'
-    },
+    }),
+    disabled: !!busyOp.draft,
     onClick: saveDraft,
     title: "Park unfinished work as a draft the team can see and pick up. Saving the CE clears it."
-  }, "\u2B07 Draft"), /*#__PURE__*/React.createElement("button", {
+  }, busyOp.draft ? "\u2B07 Saving\u2026" : "\u2B07 Draft"), /*#__PURE__*/React.createElement("button", {
     title: "Save this CE and share it with the team (Ctrl+S). The CE Number must be unique.",
-    style: { ...btn('acc'), fontWeight: 800, padding: '6px 18px' },
+    style: busyBtn('save', { ...btn('acc'), fontWeight: 800, padding: '6px 18px' }),
+    disabled: !!busyOp.save,
     onClick: handleSave
-  }, "Save"), /*#__PURE__*/React.createElement("button", {
+  }, busyOp.save ? "Saving\u2026" : "Save"), /*#__PURE__*/React.createElement("button", {
     title: "Save a copy of this CE as its next revision (-R1, -R2…); the original is kept.",
-    style: {
+    style: busyBtn('revise', {
       ...btn('def'),
       background: alpha(INFO, '22'),
       borderColor: alpha(INFO, '55'),
       color: INFO
-    },
+    }),
+    disabled: !!busyOp.revise,
     onClick: handleSaveRevision,
-    title: 'Save as ' + ((info.ceNum || 'CE') + '-Rn revision')
-  }, "\u21BB Revise")), /*#__PURE__*/React.createElement("div", {
+    title: busyOp.revise ? 'Saving the revision\u2026' : 'Save as ' + ((info.ceNum || 'CE') + '-Rn revision')
+  }, busyOp.revise ? "\u21BB Saving\u2026" : "\u21BB Revise")), /*#__PURE__*/React.createElement("div", {
     title: "Re-pricing from the Masterlist",
     style: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', border: '1px solid ' + BDR, borderRadius: 8, padding: '3px 6px' }
   }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, fontWeight: 700, letterSpacing: .6, color: MT, textTransform: 'uppercase' } }, "Prices"), /*#__PURE__*/React.createElement("button", {

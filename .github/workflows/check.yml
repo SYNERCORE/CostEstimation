@@ -256,6 +256,8 @@ jobs:
         run: node tools/test-approval-mirror-columns.js
       - name: Approval returned and approved branches
         run: node tools/test-approval-returned.js
+      - name: One click is one save
+        run: node tools/test-save-guard.js
       - name: Monitoring - one CE, two rows, reunited
         run: node tools/test-monitoring-duplicate-rows.js
       - name: Storage warning clears what it can
@@ -432,6 +434,8 @@ jobs:
         run: node tools/test-approval-mirror-columns.js
       - name: Approval returned and approved branches
         run: node tools/test-approval-returned.js
+      - name: One click is one save
+        run: node tools/test-save-guard.js
       - name: Monitoring - one CE, two rows, reunited
         run: node tools/test-monitoring-duplicate-rows.js
       - name: Storage warning clears what it can

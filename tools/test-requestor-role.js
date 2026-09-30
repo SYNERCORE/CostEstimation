@@ -50,7 +50,10 @@ ck('Users stays an admin tab', /isAdmin \? \[\{\s*id: 'admin'/.test(app));
 
 /* ---- the refusal, run as the app runs it ---- */
 const start = app.indexOf('  const requestorSaveRefusal = (e) => {');
-const stop = app.indexOf('  const handleSave = async () => {');
+/* Matched on the NAME, not the whole signature: handleSave has since been
+   wrapped in the one-click-is-one-save guard, and a marker that spelled out
+   `async () => {` stopped matching, silently slicing to -1. */
+const stop = app.indexOf('  const handleSave = ');
 ck('the refusal is in the app', start > 0 && stop > start);
 const mk = (isRequestor, me) => new Function('isRequestor', 'currentUser',
   'return (' + app.slice(start, stop).replace('const requestorSaveRefusal = ', '').trim().replace(/;$/, '') + ')')(isRequestor, { username: me });

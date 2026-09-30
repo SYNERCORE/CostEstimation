@@ -1,4 +1,4 @@
-﻿function FbSetupPanel(){
+﻿function FbSetupPanel({currentUser}={}){
   const[cfg,setCfg]=React.useState(()=>getSPConfig()||{});
   const[status,setStatus]=React.useState('idle');
   const[busy,setBusy]=React.useState(false);
@@ -64,6 +64,7 @@
   };
   const[access,setAccess]=React.useState(null);
   const[orphans,setOrphans]=React.useState(null);
+  const[dupRevs,setDupRevs]=React.useState(null);
   const[offline,setOffline]=React.useState(null);
   /* The Monitoring list is cached, the CEs behind it were not: only ones saved
      from this browser were stored, so the CE nobody here had opened yet was
@@ -94,6 +95,32 @@
         : 'Every CE with a total has its line items. Nothing to repair.');
     }catch(e){addLog('Check failed: '+e.message.slice(0,140));}
     setProgress(null);setBusy(false);
+  };
+  /* Read-only. It answers a question; it does not act on the answer. */
+  const handleFindDupRevs=async()=>{
+    setBusy(true);setDupRevs(null);addLog('Looking for revisions that are copies of each other...');
+    try{
+      const g=await dbFindDuplicateRevisions(p=>setProgress({msg:p.msg,progress:p.progress}));
+      setDupRevs(g);
+      const n=g.reduce((a,x)=>a+x.extras.length,0);
+      if(g.length)console.warn('Suspected duplicate revisions:',g.map(x=>x.keep.ceNum+' -> '+x.extras.map(e=>e.ceNum).join(', ')).join(' | '));
+      addLog(n?('⚠ '+n+' revision(s) look like copies of the one before them. Check each before deleting.')
+             :'No revision looks like a copy of the one before it.');
+    }catch(e){addLog('Check failed: '+e.message.slice(0,140));}
+    setProgress(null);setBusy(false);
+  };
+  /* One at a time, each one confirmed by name. A bulk "delete all" over a
+     heuristic is how the wrong CE goes. */
+  const handleDeleteDupRev=async(row)=>{
+    if(!window.confirm('Delete '+row.ceNum+' permanently?'+String.fromCharCode(10,10)+
+      'Its line items go with it. This cannot be undone.'))return;
+    setBusy(true);
+    try{
+      await dbDeleteHistory(row.id,(currentUser||{}).role);
+      addLog('Deleted '+row.ceNum+'.');
+      setDupRevs(p=>(p||[]).map(g=>({...g,extras:g.extras.filter(e=>e.id!==row.id)})).filter(g=>g.extras.length));
+    }catch(e){addLog('Could not delete '+row.ceNum+': '+e.message.slice(0,120));}
+    setBusy(false);
   };
   /* "It works for me" proves nothing: every SharePoint call runs on the
      signed-in user's own token, so permission is per person, per list. Have
@@ -184,6 +211,7 @@
       status==='connected'&&React.createElement('button',{style:btn('info'),disabled:busy,title:'Adds any list or column this version needs and the site does not have. Existing data is never touched.',onClick:handleRepair},busy?'Working...':'Repair lists & columns'),
       React.createElement('button',{style:btn('def'),disabled:busy,title:'Tries a read and a write on every list AS THE SIGNED-IN ACCOUNT. Run it from the machine of whoever cannot sync.',onClick:handleCheckAccess},busy?'Working...':'Check my access'),
       status==='connected'&&React.createElement('button',{style:btn('def'),disabled:busy,title:'Lists every CE that has a stored total but no line items behind it — the state a save leaves when it fails after writing the header. Read-only.',onClick:handleFindOrphans},busy?'Working...':'Find CEs missing line items'),
+      status==='connected'&&React.createElement('button',{style:btn('def'),disabled:busy,title:'Lists revisions that hold the same figures as the revision before them — what repeated presses of Revise left behind. Read-only; nothing is deleted until you say so.',onClick:handleFindDupRevs},busy?'Working...':'Find duplicate revisions'),
       status==='connected'&&React.createElement('button',{style:btn('info'),disabled:busy,title:'Stores every CE in this browser so any of them can be opened, printed and exported with no connection. Reads the three lists once each rather than two requests per CE. Safe to re-run: only CEs that have changed are written.',onClick:handleCacheAll},busy?'Working...':'⬇ Download all CEs for offline')
     ),
     /* ---- Set up a phone or tablet ---- */
@@ -227,6 +255,35 @@
           React.createElement('span',{style:{color:MT,marginLeft:'auto'}},o.savedAt?new Date(o.savedAt).toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'}):'')
         ))),
       orphans.length>200&&React.createElement('div',{style:{fontSize:10,color:MT,marginTop:6}},'+ '+(orphans.length-200)+' more (see the console for the full list).')
+    ),
+    dupRevs&&React.createElement('div',{style:{marginTop:10,padding:'10px 12px',background:SURF,borderRadius:6}},
+      React.createElement('div',{style:{fontWeight:700,fontSize:12,marginBottom:6,color:dupRevs.length?ERR:OK}},
+        dupRevs.length
+          ? dupRevs.reduce((a,g)=>a+g.extras.length,0)+' revision(s) look like copies, in '+dupRevs.length+' CE(s)'
+          : 'No revision looks like a copy of the one before it'),
+      dupRevs.length>0&&React.createElement('div',{style:{fontSize:10,color:MT,marginBottom:8,lineHeight:1.6}},
+        'Each group below is one CE. The first line is the revision to KEEP — the lowest of the run, which is the one that was meant. The indented lines hold the same client, description, total and line count, and were saved within minutes of it. Open any of them first if you are not sure; nothing here is deleted until you press Delete on that row.'),
+      dupRevs.length>0&&React.createElement('div',{style:{maxHeight:260,overflowY:'auto'}},
+        dupRevs.map(g=>React.createElement('div',{key:g.keep.id,style:{padding:'6px 0',borderBottom:'1px solid '+alpha(BDR,'44')}},
+          React.createElement('div',{style:{display:'flex',gap:8,fontSize:10,alignItems:'center'}},
+            React.createElement('span',{style:{fontFamily:"'JetBrains Mono',monospace",minWidth:170,color:OK}},g.keep.ceNum),
+            React.createElement('span',{style:{minWidth:100,textAlign:'right',color:MT}},'P'+g.keep.total.toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2})),
+            React.createElement('span',{style:{color:MT}},g.keep.savedBy||''),
+            React.createElement('span',{style:{color:OK,marginLeft:'auto',fontWeight:700}},'keep')),
+          g.extras.map(e=>React.createElement('div',{key:e.id,style:{display:'flex',gap:8,fontSize:10,alignItems:'center',paddingLeft:16,marginTop:3}},
+            React.createElement('span',{style:{fontFamily:"'JetBrains Mono',monospace",minWidth:154}},e.ceNum),
+            React.createElement('span',{style:{minWidth:100,textAlign:'right',color:MT}},'P'+e.total.toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2})),
+            React.createElement('span',{style:{color:MT}},e.savedAt?new Date(e.savedAt).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):''),
+            e.locked
+              ? React.createElement('span',{style:{marginLeft:'auto',color:MT,fontSize:9},
+                  title:'Somebody has acted on this one — the approval trail names it. Withdraw it first if it really is a stray.'},
+                  'in approval ('+e.apvState+')')
+              : React.createElement('button',{style:{...btn('def'),marginLeft:'auto',fontSize:9,padding:'2px 8px',color:ERR,borderColor:alpha(ERR,'55')},
+                  disabled:busy,onClick:()=>handleDeleteDupRev(e)},'Delete')
+          ))
+        ))),
+      dupRevs.length>0&&React.createElement('div',{style:{fontSize:10,color:MT,marginTop:8,lineHeight:1.6}},
+        'A revision that somebody has submitted or signed is never offered for deletion, however much it looks like a copy.')
     ),
     access&&React.createElement('div',{style:{marginTop:10,padding:'10px 12px',background:SURF,borderRadius:6}},
       React.createElement('div',{style:{fontSize:11,color:TX,fontWeight:700,marginBottom:6}},'What this account can do'),

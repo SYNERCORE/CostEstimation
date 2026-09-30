@@ -935,6 +935,103 @@ async function dbFindHeaderOnlyCEs(progressCb){
     .map(h=>({id:h.Id,ceNum:h.Title||('#'+h.Id),total:Number(h.shicTotal||0),savedBy:h.shicSavedBy||'',savedAt:h.shicSavedAt||''}))
     .sort((a,b)=>b.total-a.total);
 }
+/* Revisions that are copies of one another rather than revisions of one
+   another.
+   ====================================================================
+   Revise reached SharePoint and back before the button changed, so people
+   pressed it again. A click that read the history AFTER the previous save had
+   landed saw the revision just written, worked out the NEXT one, and saved
+   that: one Revise, a chain of R1 R2 R3 holding the same figures.
+
+   (Clicks that overlapped are not this shape. dbSaveHistory looks a CE number
+   up before it writes and PATCHES an existing one, so two saves racing on the
+   same number collapse into one row by themselves. Only the spaced-out clicks
+   left anything behind. Build 296 stopped both.)
+
+   This only ever READS. What it returns is a list of suspicions for a person
+   to look at -- a revision is somebody's work, and no heuristic is worth
+   deleting that unasked. A run has to be all of: the same family, consecutive
+   revisions, the same saved-by, the same client, the same description, the
+   same total to the centavo, the same number of manpower and resource lines,
+   and saved inside the same few minutes. A real revision that changed nothing
+   at all, by the same person, within minutes, would look like this too --
+   which is why the answer is a list and not a delete. */
+const _DUP_REV_WINDOW_MS = 5 * 60 * 1000;
+async function dbFindDuplicateRevisions(progressCb){
+  if(!(USE_SP||getSiteURL()))throw new Error('This needs a SharePoint connection.');
+  progressCb&&progressCb({msg:'Reading CE headers...',progress:.15});
+  const heads=await spGet(spList('CEs'),null,'Id,Title,shicTotal,shicSavedBy,shicSavedAt,shicClient,shicDesc');
+  /* How many lines each CE has. Two revisions holding the same total but a
+     different number of rows are not copies of each other. */
+  progressCb&&progressCb({msg:'Counting line items...',progress:.45});
+  const count=async list=>{
+    const rows=await spGet(spList(list),null,'Id,shicCEId');
+    const m={};rows.forEach(r=>{const k=String(r.shicCEId);m[k]=(m[k]||0)+1;});return m;
+  };
+  const mpN=await count('CE_MP');
+  progressCb&&progressCb({msg:'Counting line items...',progress:.65});
+  const resN=await count('CE_Resources');
+
+  const fams=new Map();
+  heads.forEach(h=>{
+    const f=ceFamily(h.Title||'');
+    if(!f.key)return;
+    if(!fams.has(f.key))fams.set(f.key,[]);
+    fams.get(f.key).push({
+      id:h.Id, ceNum:h.Title||('#'+h.Id), rev:f.rev,
+      total:Math.round(Number(h.shicTotal||0)*100)/100,
+      savedBy:h.shicSavedBy||'', savedAt:h.shicSavedAt||'',
+      client:h.shicClient||'', desc:h.shicDesc||'',
+      lines:(mpN[String(h.Id)]||0)+'/'+(resN[String(h.Id)]||0)
+    });
+  });
+
+  const twin=(a,b)=>{
+    const t=Math.abs(new Date(b.savedAt).getTime()-new Date(a.savedAt).getTime());
+    return b.rev===a.rev+1 && isFinite(t) && t<=_DUP_REV_WINDOW_MS &&
+      b.total===a.total && b.savedBy===a.savedBy &&
+      b.client===a.client && b.desc===a.desc && b.lines===a.lines;
+  };
+  const groups=[];
+  fams.forEach(rows=>{
+    if(rows.length<2)return;
+    rows.sort((a,b)=>a.rev-b.rev||a.id-b.id);
+    let run=[rows[0]];
+    const flush=()=>{if(run.length>1)groups.push(run.slice());};
+    for(let i=1;i<rows.length;i++){
+      if(twin(run[run.length-1],rows[i]))run.push(rows[i]);
+      else{flush();run=[rows[i]];}
+    }
+    flush();
+  });
+  if(!groups.length)return[];
+
+  /* A revision that has been submitted, is being signed, or has been approved
+     is not a stray copy any more -- somebody has acted on it, and the approval
+     trail names it. Those are marked and never offered for deletion. */
+  progressCb&&progressCb({msg:'Checking which ones are in an approval...',progress:.85});
+  const ids=[];groups.forEach(g=>g.forEach(r=>ids.push(r.id)));
+  const info={};
+  for(let i=0;i<ids.length;i+=40){
+    const q=ids.slice(i,i+40).map(id=>'Id eq '+id).join(' or ');
+    try{
+      const rows=await spGet(spList('CEs'),q,'Id,shicInfo');
+      rows.forEach(r=>{
+        let st='none';
+        try{st=((JSON.parse(r.shicInfo||'{}')||{}).approval||{}).state||'none';}catch(_){}
+        info[String(r.Id)]=st;
+      });
+    }catch(_){}
+  }
+  groups.forEach(g=>g.forEach(r=>{
+    r.apvState=info[String(r.id)]||'none';
+    r.locked=r.apvState!=='none'&&r.apvState!=='withdrawn';
+  }));
+  /* The lowest revision of a run is the one the estimator meant to make; the
+     rest are the echoes. Suggested, not applied. */
+  return groups.map(g=>({keep:g[0],extras:g.slice(1)}))
+    .filter(x=>x.extras.length>0);
+}
 async function dbSaveHistory(e){_spFailReason='';if(USE_SP||getSiteURL()){try{const existing=await spGet(spList('CEs'),`Title eq '${(e.info.ceNum||'').replace(/'/g,"''")}'`,'Id');const hdr={Title:e.info.ceNum,shicType:e.ceType,shicClient:e.info.client||'',shicDesc:e.info.description||'',shicTotal:Math.round((e.grand||0)*100)/100,shicSavedBy:e.savedBy||'',shicSavedAt:new Date().toISOString(),shicScope:e.scope||'',shicNotes:JSON.stringify(e.notes||[]),shicApprovers:JSON.stringify(e.approvers||[]),shicMob:JSON.stringify(e.mobVehicles||[]),shicDemob:JSON.stringify(e.demobVehicles||[]),shicMisc:JSON.stringify({...(e.misc||{}), _addlCosts:(e.addlCosts||[]), _margin:(e.margin||0), _verifyNotes:(e.verifyNotes||{}), _rates:(e.rates||{}), _docRef:(e.docRef||null), _rowKeys:_rowKeysOf(e), _signatures:(e.signatures||{})}),shicSOW:JSON.stringify(e.sowItems||[]),/* The whole info object. Only client and description had columns, so date, location, discipline, department, status, material, QUANTITY, DAYS, attention, end user and the issuing company never reached SharePoint at all -- they lived in the saving browser's cache and nowhere else. Anyone else opening the CE got BLANK_INFO defaults: today's date, qty 1, status DRAFT, discipline Electrical. Saving from there wrote those defaults back as if they were real. One JSON column carries the lot, and new fields ride along without another migration. */shicInfo:JSON.stringify(e.info||{})};let ceId;if(existing.length){ceId=existing[0].Id;await spWithRetry(()=>spPatch(spList('CEs'),ceId,hdr));}else{const r=await spWithRetry(()=>spPost(spList('CEs'),hdr));ceId=r.Id;/* Race-condition guard: if two users POSTed simultaneously, keep the lowest Id and delete the duplicate */const dupes=await spGet(spList('CEs'),`Title eq '${(e.info.ceNum||'').replace(/'/g,"''")}'`,'Id,shicSavedBy');if(dupes.length>1){dupes.sort((a,b)=>a.Id-b.Id);const winner=dupes[0];if(winner.Id!==ceId){/* We lost the race — our row is the duplicate. Delete it, preserve our data locally, and surface a clear error to the user so they can save under a different CE number. The winner row is left completely untouched. */await spDelete(spList('CEs'),ceId).catch(()=>{});const _savedAt=new Date().toISOString();try{const h=LS.get('history')||[];LS.set('history',[{...e,id:Date.now(),savedAt:_savedAt,_raceConflict:true},...h.filter(x=>(x.info?.ceNum||x.ceNum)!==e.info.ceNum)]);LS.set('ce_cache:'+e.info.ceNum,{...e,id:Date.now(),savedAt:_savedAt});}catch(_){}/* 'local': we LOST the race and deleted our own SharePoint row, so this browser holds the only copy of the user's work. Nothing may ever delete a 'local' record. */try{await cePut({...e,ceNum:e.info.ceNum,savedAt:_savedAt,savedBy:e.savedBy||'',_syncState:'local',_raceConflict:true});}catch(_){}throw new Error(`CE number "${e.info.ceNum}" was saved by "${winner.shicSavedBy||'another user'}" at the same time. Your data has been kept in this browser — load the local draft and save again with a different CE number.`);}else{for(const dup of dupes.slice(1))await spDelete(spList('CEs'),dup.Id).catch(()=>{});}}}/* Fresh, not the big-list snapshot: rows another browser added since it was
    taken would be missed here, never deleted, and counted on every load. */_spInvalidateBigList();const[om,or]=await Promise.all([_spGetByCE(spList('CE_MP'),ceId,'Id'),_spGetByCE(spList('CE_Resources'),ceId,'Id')]);/* Insert new rows FIRST — if any insert fails the old rows are still intact */const mpPayloads=(e.mp||[]).filter(r=>r.role).map(r=>({shicCEId:ceId,shicRole:r.role,shicRate:r.rate||0,shicShift:r.shift||'regular_day',shicDays:r.days||1,shicPax:r.pax||1,shicOTHours:r.otHours||0,shicPerDiem:r.perDiem||0,shicTaskId:r.taskId||'',shicShares:_shDump(r.shares)}));const resPayloads=[...(e.tools||[]).filter(r=>r.desc).map(r=>({shicCEId:ceId,shicTab:'tools',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicDays:r.days||1,shicTaskId:r.taskId||'',shicShares:_shDump(r.shares),/* Tier 2 is the default and what every existing row already is, so it is written as 0 rather than 2: an unrepaired site rejects the column, and a row that never names a tier must still cost what it always did. */shicTier:r.tier||0,shicHours:r.hours||0,shicKW:r.kw||0,shicRunHrs:r.runHrs||0,shicSrc:_srcDump(r)})),...(e.mats||[]).filter(r=>r.desc).map(r=>({shicCEId:ceId,shicTab:'mats',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicTaskId:r.taskId||'',shicShares:_shDump(r.shares)})),...(e.ppe||[]).filter(r=>r.desc).map(r=>({shicCEId:ceId,shicTab:'ppe',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicTaskId:r.taskId||'',shicShares:_shDump(r.shares)}))];const insFns=[...mpPayloads.map(p=>()=>spWithRetry(()=>spPost(spList('CE_MP'),p))),...resPayloads.map(p=>()=>spWithRetry(()=>spPost(spList('CE_Resources'),p)))];let spErr=null;for(let i=0;i<insFns.length;i+=5){try{await Promise.all(insFns.slice(i,i+5).map(fn=>fn()));}catch(batchErr){spErr=batchErr;console.error('dbSaveHistory batch insert failed:',batchErr.message);break;}}if(spErr)throw spErr;/* Only delete OLD rows after new ones safely written */const dels=[...om.map(x=>()=>spDelete(spList('CE_MP'),x.Id)),...or.map(x=>()=>spDelete(spList('CE_Resources'),x.Id))];let _delFail=0;for(let i=0;i<dels.length;i+=5)await Promise.all(dels.slice(i,i+5).map(fn=>fn().catch(()=>{_delFail++;})));if(_delFail)setTimeout(()=>(window._shicToast||console.warn)(_delFail+' old line(s) of '+e.info.ceNum+' could not be removed from SharePoint. They are ignored when the CE opens; save it again to clear them.',true),1200);_spInvalidateBigList();try{LS.set('ce_cache:'+e.info.ceNum,{...e,id:ceId,savedAt:hdr.shicSavedAt});}catch(_){}/* Write through to IndexedDB alongside the localStorage cache. 'synced' -- SharePoint accepted it, so the migration may safely treat the two copies as agreeing. */try{await cePut({...e,ceNum:e.info.ceNum,id:ceId,savedAt:hdr.shicSavedAt,savedBy:e.savedBy||'',_syncState:'synced'});}catch(_){}return{sp:true,id:ceId};}catch(e2){const msg=e2.message||String(e2);_spFailReason=msg;console.warn('dbSaveHistory SP error:',msg);/* A 400 InvalidClientQueryException on an insert almost always means the
    site is missing a column this version writes -- exactly what happened when

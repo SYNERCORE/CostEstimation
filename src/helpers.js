@@ -541,7 +541,33 @@ function computeCEParts(ce) {
   const veh = rows => arr(rows).reduce((s, r) => s + mobRowCost(r, _rates), 0);
   const mob = cfg.mobDemob ? veh(ce.mobVehicles) : 0;
   const demob = cfg.mobDemob ? veh(ce.demobVehicles) : 0;
-  return { mob, demob, mpT, toolsT, matsT, ppeT, miscT, total: mob + demob + mpT + toolsT + matsT + ppeT + miscT };
+  /* The quantity, applied the way this CE says to apply it.
+     ====================================================
+     A CE whose tabs hold ONE unit is charged that times the count, less
+     whatever is exempt. This recompute is what Monitoring, the drift check
+     and the orphan finder compare a stored total against, so a mode it did
+     not know about would make every per-unit CE look as though its figures
+     had been tampered with.
+
+     qtyMode absent means divide, which is every CE saved before this existed
+     and every one costed for the whole job: the multiplier is 1 and the total
+     below is the plain sum it has always been. */
+  const info = ce.info || {};
+  const tabs = mob + demob + mpT + toolsT + matsT + ppeT + miscT;
+  if (info.qtyMode !== 'multiply') return { mob, demob, mpT, toolsT, matsT, ppeT, miscT, total: tabs };
+  const qty = N(info.qty) || 1;
+  const pj = Array.isArray(info.perJob) ? info.perJob : [];
+  /* What does not move with the quantity: mob/demob if exempt, plus each
+     exempt misc category. Read from the CE's own lists so a recompute matches
+     what the editor showed when it was saved. */
+  let once = pj.indexOf('mobdemob') >= 0 ? mob + demob : 0;
+  const mdef = (typeof MISC_DEF !== 'undefined' && (MISC_DEF[ce.ceType] || MISC_DEF.onsite)) || [];
+  mdef.forEach(d => {
+    const k = d[0];
+    if (pj.indexOf(k) < 0) return;
+    once += arr((ce.misc || {})[k]).reduce((t, r) => t + miscRowCost(r), 0);
+  });
+  return { mob, demob, mpT, toolsT, matsT, ppeT, miscT, total: once + (tabs - once) * qty };
 }
 function computeCEGrand(ce) {
   return computeCEParts(ce).total;

@@ -1579,15 +1579,20 @@ function App({
   }, [mp, mealCatMap, mobVehicles, demobVehicles]);
   const mobSubT = mobVehiclesT;
   const demobSubT = demobVehiclesT;
-  const mobT = cfg.mobDemob ? mobSubT + demobSubT : 0;
-  const grand = mobT + mpTot + toolsT + matsT + ppeT + miscT;
+  const _mobTabs = cfg.mobDemob ? mobSubT + demobSubT : 0;
+  /* What is actually typed on the tabs, before the quantity is applied. */
+  const tabsT = _mobTabs + mpTot + toolsT + matsT + ppeT + miscT;
   /* Costs charged once for the job, whatever the quantity -- transport to
-     site costs the same for one valve as for two. They are kept out of the
-     unit price and shown beside it. Chosen per CE on the Summary tab and kept
-     in info.perJob: misc category keys, and 'mobdemob'. */
+     site costs the same for one valve as for two. Chosen per CE on the
+     Summary tab and kept in info.perJob: misc category keys, and 'mobdemob'.
+
+     The same list serves both quantity modes, because it answers the same
+     question in both: which costs do NOT move with the quantity. Dividing, it
+     is what stays out of the unit price; multiplying, it is what stays
+     charged once. */
   const perJob = Array.isArray(info.perJob) ? info.perJob : [];
   const perJobLines = [
-    ...(perJob.includes('mobdemob') && mobT > 0 ? [{ k: 'mobdemob', label: 'Mobilization / Demobilization', v: mobT }] : []),
+    ...(perJob.includes('mobdemob') && _mobTabs > 0 ? [{ k: 'mobdemob', label: 'Mobilization / Demobilization', v: _mobTabs }] : []),
     ...(MISC_DEF[ceType] || MISC_DEF.onsite).filter(([k]) => perJob.includes(k)).map(([k, l]) => ({
       k, label: String(l).replace(/^[A-Z]\.\d+\s*/, ''),
       v: (Array.isArray(misc[k]) ? misc[k] : []).reduce((t, r) => t + miscRowCost(r), 0)
@@ -1595,7 +1600,41 @@ function App({
   ];
   const perJobT = perJobLines.reduce((t, x) => t + x.v, 0);
   const perJobNames = perJobLines.map(x => x.label).join(', ');
-  const unitP = (grand - perJobT) / (N(info.qty) || 1);
+
+  /* Two ways a quantity can mean something.
+     =====================================
+     DIVIDE (what this has always done, and the default): the tabs hold the
+     cost of the whole job, so the unit price is the job divided by the count.
+
+     MULTIPLY: the tabs hold ONE of them -- one valve, one panel -- and the
+     job is that times the count. It is the natural way to cost a CE for a
+     repeated item, and doing it the other way round meant typing figures
+     nobody had worked out yet.
+
+     Exemptions work the same in both, so a CE can be switched from one to the
+     other without revisiting them. Every existing CE stays on divide: qtyMode
+     is absent on all of them, and absent means divide. */
+  const qtyN = N(info.qty) || 1;
+  const qtyMulOn = info.qtyMode === 'multiply';
+  /* How many times a bucket is charged. Manpower, tools, materials and PPE
+     are always charged per unit when multiplying; mob/demob and the misc
+     categories are too, unless they are on the exempt list. */
+  const qF = qtyMulOn ? qtyN : 1;
+  const qFx = k => (qtyMulOn && !perJob.includes(k)) ? qtyN : 1;
+  const _pjMisc = perJobLines.filter(x => x.k !== 'mobdemob').reduce((t, x) => t + x.v, 0);
+  const mobSubTX = mobSubT * qFx('mobdemob');
+  const demobSubTX = demobSubT * qFx('mobdemob');
+  const mobT = cfg.mobDemob ? mobSubTX + demobSubTX : 0;
+  const mpTotX = mpTot * qF, toolsTX = toolsT * qF, matsTX = matsT * qF, ppeTX = ppeT * qF;
+  /* The exempt categories keep their own figure; the rest move with the
+     quantity. */
+  const miscTX = (miscT - _pjMisc) * qF + _pjMisc;
+  /* The amount charged for the job. In divide mode every multiplier is 1 and
+     this is the old expression exactly, to the centavo. */
+  const grand = mobT + mpTotX + toolsTX + matsTX + ppeTX + miscTX;
+  /* One formula, both modes. Multiplying, (grand - perJobT) is the per-unit
+     cost times the count, so dividing by the count gives the unit back. */
+  const unitP = (grand - perJobT) / qtyN;
   /* The unit the quantity is counted in reads better than the count itself:
      "UNIT PRICE PER PCS" says what one of them costs; "(qty 3)" made the
      reader work it out. Used by the summary, the printed CE and the exports. */
@@ -1859,7 +1898,14 @@ function App({
     });
     const named = lines.reduce((t, l) => t + l.v, 0);
     const other = grand - named;
-    return { lines, other, total: grand, ok: other > -0.005, on: !!info.showServices && lines.length > 0 };
+    /* taskCostRollup adds up the rows behind a task, and those rows hold ONE
+       unit when the quantity multiplies. Scaling the named services by the
+       quantity would be right only if no exempt cost were ever linked to a
+       task -- and where one is, the block would overstate it silently. Money
+       that might be wrong is worse than a block that does not print, so this
+       stands down in multiply mode until it can be done properly. */
+    return { lines, other, total: grand, ok: other > -0.005,
+      on: !!info.showServices && lines.length > 0 && !qtyMulOn, offByQtyMode: !!info.showServices && lines.length > 0 && qtyMulOn };
   })();
   const sowUnassignedCount = (() => {
     const valid = new Set((sowItems || []).map(s => s.id));
@@ -8248,19 +8294,22 @@ function App({
     /* Mobilization and demobilization lead, each on its own row, as the
        client's CE lists them: A. MOBILIZATION, B. DEMOBILIZATION. */
     const defs = [
-      ...(cfg.mobDemob ? [['Mobilization Expenses', 'MOBILIZATION', mobSubT], ['Demobilization Expenses', 'DEMOBILIZATION', demobSubT]] : []),
-      ['Manpower Cost', 'MANPOWER COST', mpTot],
-      ['Tools & Equipment', 'TOOLS AND EQUIPMENTS', toolsT],
-      ['Materials & Consumables', 'MATERIALS AND CONSUMABLES', matsT],
-      ['PPE', 'PERSONAL PROTECTIVE EQUIPMENT', ppeT],
-      ['Miscellaneous', 'MISCELLANEOUS', miscT]
+      /* The figures the quantity has already been applied to, so reading down
+         TOTAL COST still adds to TOTAL AMOUNT in either quantity mode. In
+         divide mode every multiplier is 1 and these are the tab totals. */
+      ...(cfg.mobDemob ? [['Mobilization Expenses', 'MOBILIZATION', mobSubTX], ['Demobilization Expenses', 'DEMOBILIZATION', demobSubTX]] : []),
+      ['Manpower Cost', 'MANPOWER COST', mpTotX],
+      ['Tools & Equipment', 'TOOLS AND EQUIPMENTS', toolsTX],
+      ['Materials & Consumables', 'MATERIALS AND CONSUMABLES', matsTX],
+      ['PPE', 'PERSONAL PROTECTIVE EQUIPMENT', ppeTX],
+      ['Miscellaneous', 'MISCELLANEOUS', miscTX]
     ];
     let i = 0;
     return defs.map(([label, printLabel, v]) => ({
       label, printLabel, v,
       letter: N(v) > 0 ? String.fromCharCode(65 + i++) + '.' : ''
     }));
-  }, [mpTot, toolsT, matsT, ppeT, miscT, mobSubT, demobSubT, cfg.mobDemob]);
+  }, [mpTotX, toolsTX, matsTX, ppeTX, miscTX, mobSubTX, demobSubTX, cfg.mobDemob]);
   /* Which of the two summary sheets this CE prints. The discipline decides
      unless the CE says otherwise, so every CE saved before this existed
      reprints exactly as it did. */
@@ -8277,9 +8326,12 @@ function App({
          no longer match anything; the section's real letter is prefixed below. */
       label: String(l).replace(/^[A-Z]\.\d+\s*/, ''),
       rows: (Array.isArray(misc[k]) ? misc[k] : []).filter(r => r && (r.desc || N(r.cost) > 0)),
-      v: (Array.isArray(misc[k]) ? misc[k] : []).reduce((t, r) => t + miscRowCost(r), 0)
+      /* Charged per unit or charged once, category by category -- the parts
+         have to add up to the section above them, and that section has had
+         the quantity applied to it. */
+      v: (Array.isArray(misc[k]) ? misc[k] : []).reduce((t, r) => t + miscRowCost(r), 0) * qFx(k)
     })).filter(x => x.v > 0).map((x, j) => ({...x, letter: parent.replace('.', '') + '.' + (j + 1)}));
-  }, [ceSections, ceType, misc]);
+  }, [ceSections, ceType, misc, qtyMulOn, qtyN, perJob]);
   /* Every section's parts, in one place, so the four things that render a CE
      -- the Summary tab, the printed CE, the workbook and the share text --
      cannot itemise it differently. Keyed by the printed section name.
@@ -8301,9 +8353,11 @@ function App({
     if (ceLayout.breaks.indexOf('mp') >= 0) {
       const byShift = {};
       mp.forEach(r => { if (!r || !r.role) return; const k = r.shift || 'regular_day'; byShift[k] = (byShift[k] || 0) + mpWage(r); });
+      /* Manpower is never exempt, so every part of it moves with the quantity
+         exactly as the section does. */
       put('MANPOWER COST', [
-        ...Object.keys(SHIFTS).map(k => ({ label: mpShiftLabel(k), v: byShift[k] || 0 })),
-        { label: MP_BENEFITS_LABEL, v: ben }]);
+        ...Object.keys(SHIFTS).map(k => ({ label: mpShiftLabel(k), v: (byShift[k] || 0) * qF })),
+        { label: MP_BENEFITS_LABEL, v: ben * qF }]);
     }
     /* The Electrical sheet sets its parts in capitals like everything else
        on it; the Mechanical one reads them as a sentence under the line they
@@ -8311,7 +8365,7 @@ function App({
     if (ceLayout.breaks.indexOf('misc') >= 0) put('MISCELLANEOUS',
       miscCosted.map(x => ({ label: ceLayout.parentCarries ? x.label : String(x.label).toUpperCase(), v: x.v })));
     return out;
-  }, [ceSections, ceLayout, mp, rr, ben, miscCosted]);
+  }, [ceSections, ceLayout, mp, rr, ben, miscCosted, qF]);
   /* One colour per cost group, matched to the tab each is costed on, so the
      matrix row and the tab it came from read as the same thing. Keyed on the
      label rather than position: the mob/demob rows only exist for onsite, and
@@ -12140,7 +12194,7 @@ tab === 'dashboard' && (() => {
       }
     }, "Demobilization Total: ", /*#__PURE__*/React.createElement("span", {
       style: MONO
-    }, "P", ph(demobVehiclesT))))), mobT > 0 && /*#__PURE__*/React.createElement("div", {
+    }, "P", ph(demobVehiclesT))))), _mobTabs > 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         ...CS,
         borderColor: alpha(OK, '44'),
@@ -12171,7 +12225,7 @@ tab === 'dashboard' && (() => {
         fontSize: 16,
         color: OK
       }
-    }, "P", ph(mobT)))));
+    }, "P", ph(_mobTabs)))));
   })(), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
@@ -13350,6 +13404,10 @@ tab === 'dashboard' && (() => {
     else if (sowUnassignedCount > 0) add('warn', sowUnassignedCount + ' resource row' + (sowUnassignedCount === 1 ? '' : 's') + ' not assigned to a scope task.', 'sowbreak');
     if (N(margin) === 0) add('warn', 'Margin is 0% — the selling price equals cost.', 'summary');
     if (!N(info.qty)) add('warn', 'Quantity is blank, so the unit price falls back to 1.', 'info');
+    /* Multiplying by one is what the CE already costs. Worth saying, because
+       somebody who chose the mode expects the figures to have moved. */
+    if (qtyMulOn && qtyN === 1) add('warn', 'Quantity is 1, so multiplying changes nothing. Set the quantity, or switch back.', 'info');
+    if (servicesSummary.offByQtyMode) add('warn', 'The services breakdown does not print while the quantity multiplies — the task costs are per unit and the total is per job.', 'summary');
     /* One deleted line inside a summed callout is the dangerous case: the
        number still looks plausible, it is just short by that line. */
     const dangling = (addlCosts || []).filter(r => hlMissing(r).length);
@@ -14208,11 +14266,25 @@ tab === 'dashboard' && (() => {
       ...TDS,
       color: MT
     }
-  }, "Unit Price (qty ", info.qty || 1, perJobT ? ", excl. per-job costs" : "", ")",
-    /* Which costs are charged once for the job rather than per unit. */
+  }, qtyMulOn ? "Cost of one" : "Unit Price", " (qty ", info.qty || 1, perJobT ? (qtyMulOn ? ", excl. once-only costs" : ", excl. per-job costs") : "", ")",
+    /* What the quantity DOES, before what it leaves alone. The two settings
+       read together because the second only makes sense once the first is
+       understood. */
+    /*#__PURE__*/React.createElement("div", { style: { marginTop: 6, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontSize: 11 } },
+      [['divide', 'Job total ÷ quantity', 'The tabs hold the cost of the whole job. The unit price is that total divided by the quantity. This is how every CE has worked.'],
+       ['multiply', 'One unit × quantity', 'The tabs hold the cost of ONE of them. The job total is that times the quantity. Ticked costs below stay charged once.']].map(([v, l, t]) =>
+        /*#__PURE__*/React.createElement("label", { key: v, title: t,
+          style: { display: 'inline-flex', gap: 4, alignItems: 'center', cursor: 'pointer', border: '1px solid ' + ((info.qtyMode === 'multiply') === (v === 'multiply') ? ACC : BDR), borderRadius: 10, padding: '1px 8px', color: (info.qtyMode === 'multiply') === (v === 'multiply') ? ACC : MT } },
+          /*#__PURE__*/React.createElement("input", { type: 'radio', name: 'shic-qtymode',
+            checked: (info.qtyMode === 'multiply') === (v === 'multiply'),
+            onChange: () => setInfo(p => ({ ...p, qtyMode: v === 'multiply' ? 'multiply' : undefined })) }), l))),
+    /* Which costs do not move with the quantity, whichever way it moves. */
     /*#__PURE__*/React.createElement("div", { style: { marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', fontSize: 11 } },
-      /*#__PURE__*/React.createElement("span", { title: 'Ticked costs are the same whatever the quantity, so they are left out of the unit price and shown on their own line.' }, "Charged once per job:"),
-      [...(mobT > 0 ? [['mobdemob', 'Mob/Demob']] : []), ...(MISC_DEF[ceType] || MISC_DEF.onsite)
+      /*#__PURE__*/React.createElement("span", { title: qtyMulOn
+        ? 'Ticked costs are the same whatever the quantity, so they are charged once rather than multiplied.'
+        : 'Ticked costs are the same whatever the quantity, so they are left out of the unit price and shown on their own line.' },
+        qtyMulOn ? "Not multiplied, charged once:" : "Charged once per job:"),
+      [...(_mobTabs > 0 ? [['mobdemob', 'Mob/Demob']] : []), ...(MISC_DEF[ceType] || MISC_DEF.onsite)
         .filter(([k]) => (Array.isArray(misc[k]) ? misc[k] : []).some(r => miscRowCost(r) > 0))
         .map(([k, l]) => [k, String(l).replace(/^[A-Z]\.\d+\s*/, '')])].map(([k, l]) =>
         /*#__PURE__*/React.createElement("label", { key: k, style: { display: 'inline-flex', gap: 4, alignItems: 'center', cursor: 'pointer', border: '1px solid ' + BDR, borderRadius: 10, padding: '1px 8px', color: perJob.includes(k) ? ACC : MT } },

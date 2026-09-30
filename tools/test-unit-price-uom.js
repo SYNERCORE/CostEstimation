@@ -25,6 +25,6 @@ ck('and per-job costs are flagged', fn({ qtyUom: 'SET' }, 5000) === 'UNIT PRICE 
 /* The figure itself is unchanged: still the total, less per-job costs,
    divided by the quantity. */
 ck('the unit price is still worked out the same way',
-  app.includes('const unitP = (grand - perJobT) / (N(info.qty) || 1);'));
+  app.includes('const unitP = (grand - perJobT) / qtyN;'));
 
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nunit price label OK'); process.exit(bad ? 1 : 0);

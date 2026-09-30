@@ -27,12 +27,16 @@ function run(ctx) {
   const fn = new Function(
     'N', 'grand', 'collectZeroCost', 'info', 'sowItems', 'sowUnassignedCount',
     'margin', 'addlCosts', 'hlSources', 'approvers',
+    /* The quantity mode the checks now speak about. Absent means divide,
+       which is what every case below is. */
+    'qtyMulOn', 'qtyN', 'servicesSummary',
     resolvers + '\n' + rules + '\n return { issues, errs, warns, clean };'
   );
   return fn(
     N, ctx.grand, () => ctx.zero || [], ctx.info || {}, ctx.sowItems || [],
     ctx.sowUnassignedCount || 0, ctx.margin || 0, ctx.addlCosts || [],
-    ctx.hlSources || [], ctx.approvers || []
+    ctx.hlSources || [], ctx.approvers || [],
+    !!ctx.qtyMulOn, ctx.qtyN || 1, ctx.servicesSummary || {}
   );
 }
 

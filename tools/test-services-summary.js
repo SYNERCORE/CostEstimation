@@ -20,11 +20,15 @@ const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'App.js'), 'utf8')
 let bad = 0;
 const ck = (n, c, x) => { if (c) console.log('  PASS  ' + n); else { console.log('  FAIL  ' + n + (x ? '  -> ' + x : '')); bad++; } };
 const near = (a, b) => Math.abs(a - b) < 0.005;
+const SEP = String.fromCharCode(10);
 
 const m = app.match(/const servicesSummary = \(\(\) => \{[\s\S]*?\n  \}\)\(\);/);
 if (!m) { console.error('servicesSummary not found in src/App.js'); process.exit(1); }
-const run = (sowItems, costs, grand, show) => new Function('sowItems', 'taskCostRollup', 'grand', 'info',
-  m[0] + '\nreturn servicesSummary;')(sowItems, it => costs[it.id] || 0, grand, {showServices: show});
+/* qtyMulOn: the block stands down when the quantity multiplies, because the
+   task costs behind it are per unit while the total is per job. Every case
+   below is the divide mode, which is what the block is for. */
+const run = (sowItems, costs, grand, show, qtyMulOn) => new Function('sowItems', 'taskCostRollup', 'grand', 'info', 'qtyMulOn',
+  m[0] + '\nreturn servicesSummary;')(sowItems, it => costs[it.id] || 0, grand, {showServices: show}, !!qtyMulOn);
 
 const main = (id, group) => ({id, type: 'main', text: id, group});
 const sub = id => ({id, type: 'sub', text: id});
@@ -58,6 +62,16 @@ ck('each prints the services total', (app.match(/SERVICES TOTAL AMOUNT:/g) || []
 ck('the group is typed on the main scope item', /it\.type === 'main' && \/\*#__PURE__\*\/React\.createElement\("input", \{\s*list: 'svc-groups'/.test(app));
 ck('the toggle is stored on the CE info', /setInfo\(p=>\(\{\.\.\.p, showServices:v\}\)\)/.test(app));
 ck('and a double count is explained on screen', /counted under two services/.test(app));
+
+/* A per-unit CE: the rollup adds up ONE unit's rows while the grand total is
+   the whole job, so the remainder would be inflated by every extra unit. It
+   does not print at all rather than print that. */
+console.log(SEP + 'and it stands down when the quantity multiplies:');
+let q = run([main('a', 'Welding Works')], {a: 100}, 300, true, true);
+ck('the block does not print', q.on === false);
+ck('but it says so rather than vanishing quietly', q.offByQtyMode === true);
+ck('and it still prints when the quantity divides',
+  run([main('a', 'Welding Works')], {a: 100}, 300, true, false).on === true);
 
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nservices summary OK');
 process.exit(bad ? 1 : 0);

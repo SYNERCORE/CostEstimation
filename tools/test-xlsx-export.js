@@ -85,7 +85,7 @@ ck('and the one breakdown, not its own', /ceBreakdown\[x\.printLabel\]/.test(exp
 ck('selling price only when there is a margin', /margin !== 0\) a\.total/.test(exp));
 ck('highlighted costs are carried over', /hlRows\.forEach/.test(exp));
 ck('the unit price divides by the CE quantity', /a\.total\('', unitLbl, a\.money\(unitP\)\)/.test(exp) &&
-  /const unitP = \(grand - perJobT\) \/ \(N\(info\.qty\) \|\| 1\);/.test(fs.readFileSync('src/App.js', 'utf8')));
+  fs.readFileSync('src/App.js', 'utf8').indexOf('const unitP = (grand - perJobT) / qtyN;') > 0);
 ck('and per-job costs are charged once, on their own line', /if \(showUnitP && perJobT\) a\.total\('', perJobLbl, a\.money\(perJobT\)\)/.test(exp));
 
 console.log('\nNumbers are numbers, so the recipient can total a column:');

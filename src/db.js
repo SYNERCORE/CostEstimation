@@ -6,7 +6,10 @@
    reload. One column holding the four, rather than four columns. */
 function _srcDump(r){
   const o={};
-  ['unitPrice','serviceLife','projectsPerYear','maintPerYear'].forEach(k=>{
+  /* `group` rides here too -- which of the three buckets the Electrical
+     summary sheet prints the row under. One blob rather than another column
+     means no site has to be repaired before the grouping works. */
+  ['unitPrice','serviceLife','projectsPerYear','maintPerYear','group'].forEach(k=>{
     if(r[k]!==undefined&&r[k]!==''&&r[k]!==null)o[k]=r[k];
   });
   /* Empty string, not '{}': a row with no figures must read back with no keys,

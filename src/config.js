@@ -94,7 +94,7 @@ const MISC_DEF = {
    remembers which, so nothing printed before this existed changes. */
 const SUMMARY_LAYOUTS = {
   mech: { label: 'Mechanical', parentCarries: true,  breaks: ['misc'] },
-  elec: { label: 'Electrical', parentCarries: false, breaks: ['mp', 'misc'] }
+  elec: { label: 'Electrical', parentCarries: false, breaks: ['mp', 'tools', 'misc'] }
 };
 const SUMMARY_LAYOUT_BY_DISCIPLINE = { electrical: 'elec' };
 /* An old CE has no stored choice, so it falls to its discipline, and a
@@ -125,6 +125,19 @@ const TOOL_GROUPS = [
   { k: 'facility',  t: 'FACILITIES' }
 ];
 const TOOL_GROUP_DEFAULT = 'common';
+/* Which bucket a row prints under. A row that names none is a common tool:
+   that is what the electrical team calls anything they have not singled
+   out, and it is what every row saved before this existed is. A row naming
+   a bucket that no longer exists falls there too, rather than printing
+   under a heading the sheet does not have. */
+function toolGroupOf(r) {
+  const k = String((r && r.group) || '').trim().toLowerCase();
+  return TOOL_GROUPS.some(g => g.k === k) ? k : TOOL_GROUP_DEFAULT;
+}
+function toolGroupLabel(k) {
+  const g = TOOL_GROUPS.find(x => x.k === toolGroupOf({ group: k }));
+  return g ? g.t : '';
+}
 
 const CE_TABS=[{id:"mywork",label:"🏠 My Work"},{id:"info",label:"Project Info"},{id:"sow",label:"Scope of Work"},{id:"sowbreak",label:"SOW Breakdown"},{id:"manpower",label:"Manpower"},{id:"tools",label:"Tools & Equipment"},{id:"materials",label:"Materials"},{id:"ppe",label:"PPE"},{id:"misc",label:"Miscellaneous"},{id:"summary",label:"Summary"},{id:"scopelib",label:"Scope Library"},{id:"masterlist",label:"Masterlist"},{id:"history",label:"CE Monitoring"},{id:"dashboard",label:"📊 Dashboard"}];
 const DEFAULT_ML={

@@ -42,16 +42,24 @@ const asSheet = cells => {
   const head = cells[0].map(c => (c && c.v !== undefined) ? c.v : c);
   return cells.slice(1).map(r => { const o = {}; head.forEach((h, i) => { o[h] = r[i]; }); return o; });
 };
+/* TOOL_GROUPS is the config constant the importer reads to recognise a
+   Group cell. The real one, so renaming a bucket breaks the test rather
+   than the sheet. */
+const TOOL_GROUPS = (() => {
+  const c = fs.readFileSync('src/config.js', 'utf8');
+  return new Function(c.slice(c.indexOf('const TOOL_GROUPS = ['), c.indexOf('const TOOL_GROUP_DEFAULT')) +
+    String.fromCharCode(10) + 'return TOOL_GROUPS;')();
+})();
 const mkImport = (sheetRows, showDays, defaultTier) => {
   let n = 0;
-  return new Function('sheetRows', 'showDays', 'defaultTier', 'N', 'mkRes', 'uid',
+  return new Function('sheetRows', 'showDays', 'defaultTier', 'N', 'mkRes', 'uid', 'TOOL_GROUPS',
     grab(/const _pick = \(r, \.\.\.names\)[\s\S]*?\}\)\.filter\(r => r\.desc\);/, 'the importer') +
     '\nreturn imported;'
-  )(sheetRows, showDays, defaultTier, N, () => ({ qty: 1, cost: 0 }), () => 'id' + (++n));
+  )(sheetRows, showDays, defaultTier, N, () => ({ qty: 1, cost: 0 }), () => 'id' + (++n), TOOL_GROUPS);
 };
 
 const tools = [
-  { desc: 'Cord, Extension, M-F Plug, 12/3', qty: 6, uom: 'Pcs', cost: 3.56, tier: 2, days: 30, src: { code: 'SIE-11' } },
+  { desc: 'Cord, Extension, M-F Plug, 12/3', qty: 6, uom: 'Pcs', cost: 3.56, tier: 2, days: 30, group: 'equipment', src: { code: 'SIE-11' } },
   { desc: 'Crane, Mobile, 25T', qty: 1, uom: 'Unit', cost: 18000, tier: 1, days: 3 },
   { desc: 'Torque Wrench, Hydraulic', qty: 2, uom: 'Set', cost: 42.75, tier: 3, days: 7 }
 ];
@@ -60,11 +68,14 @@ console.log('what goes out:');
 let cells = mkExport(tools, true);
 let head = cells[0].map(c => c.v);
 ck('the header names the columns the importer reads',
-  head.join() === 'Description,Qty,UOM,Unit Cost,Tier,Days,Code', head.join());
+  head.join() === 'Description,Qty,UOM,Unit Cost,Tier,Days,Group,Code', head.join());
 ck('one row per row', cells.length === 4, cells.length);
 ck('the rate goes out as a number, not as text',
   typeof cells[1][3] === 'number' && cells[1][3] === 3.56, typeof cells[1][3]);
-ck('and the code it was imported under goes with it', cells[1][6] === 'SIE-11', cells[1][6]);
+ck('and the code it was imported under goes with it', cells[1][7] === 'SIE-11', cells[1][7]);
+/* Without this, exporting and reimporting would quietly flatten every row
+   back to a common tool and the Electrical sheet would lose D.1/D.2/D.3. */
+ck('the summary bucket goes out with the row', cells[1][6] === 'equipment', cells[1][6]);
 /* Materials and PPE have no tier and no days; writing the columns would
    invite someone to fill them in on a tab that cannot use them. */
 head = mkExport([{ desc: 'Bolt', qty: 4, uom: 'Pcs', cost: 12 }], false)[0].map(c => c.v);
@@ -83,6 +94,11 @@ ck('the rate is the file rate, not a Masterlist one', back[0].cost === 3.56, bac
    touching a rate: every tool back on tier 2 for one day. */
 ck('the tier survives', back.map(r => r.tier).join() === '2,1,3', back.map(r => r.tier).join());
 ck('and so do the days', back.map(r => rowDays(r)).join() === '30,3,7', back.map(r => rowDays(r)).join());
+ck('and so does the summary bucket', back[0].group === 'equipment', back[0].group);
+/* A row that named no bucket must come back naming none, not naming the
+   default -- the two print the same today and differ the moment the
+   default moves. */
+ck('a row with no bucket comes back with none', back[1].group === undefined, back[1].group);
 
 console.log('\nan edit made in Excel is what comes back:');
 cells = mkExport(tools, true);

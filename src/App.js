@@ -2580,6 +2580,10 @@ function App({
       ['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear', 'kw'].forEach(k => {
         if (f[k] !== undefined) n[k] = f[k];
       });
+      /* The summary bucket, but only onto a row that does not already name
+         one. Re-pricing is asked for; quietly undoing a grouping somebody set
+         on this CE is not, and the two would be indistinguishable afterwards. */
+      if (f.group && !r.group) n.group = f.group;
       return n;
     }));
     setMats(prev => reprice(prev, mlRes.mats));
@@ -4286,7 +4290,12 @@ function App({
          workbook the rates are maintained in has them; without them here, they
          could be typed into the calculator one item at a time and no other
          way. Cost stays where it is so an older template still imports. */
-      tools: ['Item Code', 'Category', 'Description', 'Cost (P)', 'UOM',
+      /* Group is which of the three buckets the Electrical summary sheet
+         prints the item under. It sits beside UOM rather than out past the
+         tier figures, because it is a property of the item and not part of
+         the tier arithmetic. The importer matches on the header name, so an
+         older workbook without the column is unaffected by where it sits. */
+      tools: ['Item Code', 'Category', 'Description', 'Cost (P)', 'UOM', 'Group',
         'Unit Price', 'Service Life (Years)', 'Projects per Year', 'Maintenance per Year', 'Power (kW)'],
       materials: ['Item Code', 'Category', 'Description', 'Cost (P)', 'UOM'],
       ppe: ['Item Code', 'Category', 'Description', 'Cost (P)', 'UOM'],
@@ -4295,7 +4304,7 @@ function App({
     const downloadMLTemplate = tab => {
       const colMap = {
         manpower: ['code', 'category', 'role', 'rate', 'perDiem', 'uom', 'mealCat'],
-        tools: ['code', 'category', 'desc', 'cost', 'uom',
+        tools: ['code', 'category', 'desc', 'cost', 'uom', 'group',
           'unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear', 'kw'],
         materials: ['code', 'category', 'desc', 'cost', 'uom'],
         ppe: ['code', 'category', 'desc', 'cost', 'uom'],
@@ -4384,7 +4393,10 @@ function App({
           maintenanceperyear: 'maintPerYear', maintperyear: 'maintPerYear',
           /* Power rating, under every heading the shop's sheets use for it. */
           powerkw: 'kw', kw: 'kw', power: 'kw', rating: 'kw', ratingkw: 'kw',
-          powerrating: 'kw', powerratingkw: 'kw', kilowatt: 'kw', kilowatts: 'kw'
+          powerrating: 'kw', powerratingkw: 'kw', kilowatt: 'kw', kilowatts: 'kw',
+          /* Which summary bucket the item belongs to. Named as the template
+             heads it and as the team's own sheets do. */
+          group: 'group', toolgroup: 'group', summarygroup: 'group', type: 'group'
         };
         const rekey = r => {
           const o = {};
@@ -4438,6 +4450,17 @@ function App({
             if (!N(item.cost)) {
               const _r = toolTierRates(item);
               if (_r) item.cost = Math.round(_r.tier2 * 100) / 100;
+            }
+            /* The bucket, written however the sheet writes it: the key, the
+               printed heading, or the word on its own. A cell nobody filled in
+               leaves the field off, so the item stays a common tool rather
+               than being stamped as one -- the two read the same on the sheet
+               but only the second survives a later change of default. */
+            if (rk.group !== undefined && String(rk.group).trim() !== '') {
+              const w = String(rk.group).trim().toLowerCase();
+              const hit = TOOL_GROUPS.find(g => g.k === w || g.t.toLowerCase() === w) ||
+                (/equip/.test(w) ? TOOL_GROUPS[1] : /facilit/.test(w) ? TOOL_GROUPS[2] : /common|tool/.test(w) ? TOOL_GROUPS[0] : null);
+              if (hit) item.group = hit.k;
             }
           }
           return item;
@@ -4900,6 +4923,17 @@ function App({
          appeared nowhere -- which reads as the calculator having failed.
          Editable here as well, because typing one number is quicker than
          opening a dialog to change it. */
+      ...(mlTab === 'tools'
+        ? [/*#__PURE__*/React.createElement("td", { key: 'group', style: TDS },
+            /*#__PURE__*/React.createElement("select", {
+              style: { ...INP, width: 130, fontSize: 10, ...(r.group ? {} : { color: MT }) },
+              value: r.group || '',
+              title: r.group ? 'Prints under this heading on the Electrical summary sheet'
+                : 'Not set — prints under COMMON TOOLS',
+              onChange: e => updML(r.id, 'group', e.target.value)
+            }, /*#__PURE__*/React.createElement("option", { value: '' }, "Auto (Common)"),
+              TOOL_GROUPS.map(g => /*#__PURE__*/React.createElement("option", { key: g.k, value: g.k }, g.t))))]
+        : []),
       ...(mlTab === 'tools'
         ? ['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear', 'kw'].map(k =>
             /*#__PURE__*/React.createElement("td", {
@@ -8359,13 +8393,28 @@ function App({
         ...Object.keys(SHIFTS).map(k => ({ label: mpShiftLabel(k), v: (byShift[k] || 0) * qF })),
         { label: MP_BENEFITS_LABEL, v: ben * qF }]);
     }
+    /* Tools split into the three buckets the electrical team already works
+       in: common tools, electrical equipments, facilities. rowCost is the
+       same per-row figure toolsT is built from, so the three parts add up to
+       the section exactly rather than to something near it.
+
+       Every bucket is listed even when empty, because the sheet these are
+       modelled on lists them: an estimator reading D.3 FACILITIES with a dash
+       beside it knows nothing was charged there, where a missing line only
+       says somebody left it out. `put` drops the parts that cost nothing, so
+       a CE with tools in one bucket only prints the one. */
+    if (ceLayout.breaks.indexOf('tools') >= 0) {
+      const byGroup = {};
+      tools.forEach(r => { const k = toolGroupOf(r); byGroup[k] = (byGroup[k] || 0) + rowCost('tools', r); });
+      put('TOOLS AND EQUIPMENTS', TOOL_GROUPS.map(g => ({ label: g.t, v: (byGroup[g.k] || 0) * qF })));
+    }
     /* The Electrical sheet sets its parts in capitals like everything else
        on it; the Mechanical one reads them as a sentence under the line they
        belong to. */
     if (ceLayout.breaks.indexOf('misc') >= 0) put('MISCELLANEOUS',
       miscCosted.map(x => ({ label: ceLayout.parentCarries ? x.label : String(x.label).toUpperCase(), v: x.v })));
     return out;
-  }, [ceSections, ceLayout, mp, rr, ben, miscCosted, qF]);
+  }, [ceSections, ceLayout, mp, rr, ben, miscCosted, qF, tools, kwhRate, _workMap]);
   /* One colour per cost group, matched to the tab each is costed on, so the
      matrix row and the tab it came from read as the same thing. Keyed on the
      label rather than position: the mob/demob rows only exist for onsite, and

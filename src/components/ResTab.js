@@ -65,6 +65,11 @@ const ResTab = ({
     ['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear', 'kw'].forEach(k => {
       if (it[k] !== undefined && it[k] !== '' && N(it[k]) > 0) out[k] = N(it[k]);
     });
+    /* Which heading the row prints under on the Electrical summary sheet. A
+       word, not a figure, so it cannot go through the same filter. An item
+       with no group set leaves the field off: the row is a common tool by
+       default either way, and not writing it keeps the default meaningful. */
+    if (it.group) out.group = String(it.group);
     return out;
   };
   const rowPwr = r => showPower ? toolPowerCost(r, kwhRate) * (pwrFrac ? pwrFrac(r) : 1) : 0;
@@ -160,19 +165,19 @@ const ResTab = ({
      Rates survive because Import XLS takes the file's Unit Cost and does not
      consult the Masterlist. That is the opposite of Import list, which is
      reading someone else's list and should be priced from ours. */
-  const _rtCols = () => ['Description', 'Qty', 'UOM', 'Unit Cost', ...(showDays ? ['Tier', 'Days'] : []), 'Code'];
+  const _rtCols = () => ['Description', 'Qty', 'UOM', 'Unit Cost', ...(showDays ? ['Tier', 'Days', 'Group'] : []), 'Code'];
   const exportXls = () => {
     if (!rows.length) { showToast('There is nothing on this tab to export.', true); return; }
     const head = _rtCols().map(h => ({ v: h, s: 'th' }));
     const body = rows.map(r => [
       String(r.desc || ''), N(r.qty) || 0, String(r.uom || ''), N(r.cost) || 0,
-      ...(showDays ? [N(r.tier) || 2, rowDays(r)] : []),
+      ...(showDays ? [N(r.tier) || 2, rowDays(r), String(r.group || '')] : []),
       String((r.src && r.src.code) || r.code || '')
     ]);
     const name = (mlType === 'tools' ? 'BOTE' : mlType === 'materials' ? 'BOCM' : 'PPE');
     try {
       SHICXlsx.download(name + '_for_editing.xlsx',
-        [{ name: name, cols: [46, 8, 10, 12, ...(showDays ? [7, 8] : []), 16], rows: [head, ...body] }]);
+        [{ name: name, cols: [46, 8, 10, 12, ...(showDays ? [7, 8, 12] : []), 16], rows: [head, ...body] }]);
       showToast(rows.length + ' row(s) exported. Edit in Excel, then bring it back with Import XLS.');
     } catch (ex) { showToast('Export failed: ' + ex.message, true); }
   };
@@ -401,7 +406,15 @@ showPower && /*#__PURE__*/React.createElement("label", {
             cost: parseFloat(_pick(r, 'Unit Cost', 'UNIT COST', 'cost') || 0) || 0,
             ...(showDays ? {
               tier: N(t) > 0 ? N(t) : (N(defaultTier) || 2),
-              ...(N(d) > 0 ? { days: N(d) } : {})
+              ...(N(d) > 0 ? { days: N(d) } : {}),
+              /* The summary bucket, by key or by the heading it prints. An
+                 absent or unrecognised cell leaves the field off, which reads
+                 as the default rather than overwriting a group with a guess. */
+              ...(() => {
+                const w = String(_pick(r, 'Group', 'GROUP', 'group') || '').trim().toLowerCase();
+                const hit = TOOL_GROUPS.find(g => g.k === w || g.t.toLowerCase() === w);
+                return hit ? { group: hit.k } : {};
+              })()
             } : {})
           };
         }).filter(r => r.desc);
@@ -452,7 +465,7 @@ q && /*#__PURE__*/React.createElement("span", {
     borderCollapse: 'collapse',
     fontSize: 12
   }
-}, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['#', 'Description', 'Qty', ...(showDays ? ['Tier', 'Days', 'Hrs'] : []), ...(showPower ? ['kW', 'Run hrs', 'Power (P)'] : []), 'UOM', 'Unit Cost (P)', 'Row Total', ''].map(h => /*#__PURE__*/React.createElement("th", {
+}, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['#', 'Description', 'Qty', ...(showDays ? ['Tier', 'Grp', 'Days', 'Hrs'] : []), ...(showPower ? ['kW', 'Run hrs', 'Power (P)'] : []), 'UOM', 'Unit Cost (P)', 'Row Total', ''].map(h => /*#__PURE__*/React.createElement("th", {
   key: h,
   style: THS
 }, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map((r, _ix) => ({ r, _ix })).filter(x => _hit(x.r)).map(({ r, _ix }) => {
@@ -529,7 +542,22 @@ q && /*#__PURE__*/React.createElement("span", {
       : "This row has no unit price, service life or maintenance figure, so there is no annual cost to share out -- " +
       (tierOf(r) === 1 ? "Tier 1 has nothing to divide between projects" : "Tier 3 has nothing to divide between hours") +
       ". It is being charged at the daily rate instead. Fill those figures in on the Masterlist (Tier Pricing Calculator) and press Sync Rates."
-  }, "⚠")), showDays && /*#__PURE__*/React.createElement("td", {
+  }, "⚠")), /* Which heading the row prints under on the Electrical summary sheet.
+     It arrives from the Masterlist, but a row typed straight onto the CE
+     has no masterlist item behind it -- and a row can belong somewhere
+     else on this job than it usually does. Abbreviated, because the row is
+     already wide: the full heading is in the title and in the option. */
+  showDays && /*#__PURE__*/React.createElement("td", { style: TDS },
+    /*#__PURE__*/React.createElement("select", {
+      style: { ...INP, width: 52, fontSize: 10, padding: "2px 2px", ...(r.group ? {} : { color: MT }) },
+      value: r.group || "",
+      title: "Which heading this prints under on the Electrical summary sheet: "
+        + TOOL_GROUPS.map(g => g.t).join(", ") + ". Unset prints under " + TOOL_GROUPS[0].t + ".",
+      onChange: e => set(p => p.map(x => x.id === r.id ? { ...x, group: e.target.value || undefined } : x))
+    }, /*#__PURE__*/React.createElement("option", { value: "" }, "—"),
+      TOOL_GROUPS.map(g => /*#__PURE__*/React.createElement("option", { key: g.k, value: g.k },
+        g.t.split(" ")[0].slice(0, 4))))),
+  showDays && /*#__PURE__*/React.createElement("td", {
     style: TDS
   }, /*#__PURE__*/React.createElement("input", {
     style: {

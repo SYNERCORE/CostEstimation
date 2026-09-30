@@ -128,9 +128,10 @@ ck('and only on the tools tab', /mlTab === \'tools\'\n?[\s]*\\? \[\'unitPrice\'/
    first extra one sits under the wrong heading -- which is what put the delete
    button under "Unit Price". */
 const toolsHdr = app.match(/tools: \[\'Item Code\'[^\]]*\]/)[0];
-/* Nine, plus Power (kW) once tools started carrying a power rating. */
-ck('the tools heading row declares ten columns',
-  (toolsHdr.match(/\'/g) || []).length / 2 === 10,
+/* Nine, plus Power (kW) once tools started carrying a power rating, plus
+   Group once they began printing under one on the Electrical sheet. */
+ck('the tools heading row declares eleven columns',
+  (toolsHdr.match(/\'/g) || []).length / 2 === 11,
   toolsHdr);
 
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\ntools template OK');

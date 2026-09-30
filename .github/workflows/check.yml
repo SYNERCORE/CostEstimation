@@ -262,6 +262,8 @@ jobs:
         run: node tools/test-duplicate-revisions.js
       - name: Quantity modes
         run: node tools/test-qty-mode.js
+      - name: Tool groups on the Electrical sheet
+        run: node tools/test-tool-groups.js
       - name: Monitoring - one CE, two rows, reunited
         run: node tools/test-monitoring-duplicate-rows.js
       - name: Storage warning clears what it can
@@ -444,6 +446,8 @@ jobs:
         run: node tools/test-duplicate-revisions.js
       - name: Quantity modes
         run: node tools/test-qty-mode.js
+      - name: Tool groups on the Electrical sheet
+        run: node tools/test-tool-groups.js
       - name: Monitoring - one CE, two rows, reunited
         run: node tools/test-monitoring-duplicate-rows.js
       - name: Storage warning clears what it can

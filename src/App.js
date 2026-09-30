@@ -7399,7 +7399,7 @@ function App({
           ...THS,
           fontSize: 9
         }
-      }, h)))), /*#__PURE__*/React.createElement("tbody", null, safeRows.map(r => /*#__PURE__*/React.createElement("tr", {
+      }, h)))), /*#__PURE__*/React.createElement("tbody", null, safeRows.map((r, _ix) => /*#__PURE__*/React.createElement("tr", {
         key: r.id
       }, /*#__PURE__*/React.createElement("td", {
         style: TDS
@@ -7441,12 +7441,17 @@ function App({
           minWidth: 170
         },
         ref: r.id === newRowId ? newRowNameRef : undefined,
-        list: 'slr' + r.id,
+        list: 'slr_' + type,
         value: r.name || '',
         onChange: e => autoFill(r.id, e.target.value),
         placeholder: type === 'mp' ? 'Role / position...' : 'Item description...'
-      }), /*#__PURE__*/React.createElement("datalist", {
-        id: 'slr' + r.id
+      }),
+      /* One suggestion list per table, not one per row: the options are the
+         same list in every line, so a long tab was building the whole
+         Masterlist into the page once for each of them -- which is what made
+         moving onto a long tab stall. */
+      _ix === 0 && /*#__PURE__*/React.createElement("datalist", {
+        id: 'slr_' + type
       }, mlItems.map(m => /*#__PURE__*/React.createElement("option", {
         key: m.id,
         value: m.role || m.desc
@@ -11965,9 +11970,9 @@ tab === 'dashboard' && (() => {
             return E("tr", { key: r.id }, /*#__PURE__*/React.createElement("td", { style: { ...TDS, ...MONO, color: MT, textAlign: 'center', width: 28 } }, _ix + 1), 
               r.auto ? E("td", { style: TDS }, E("span", { style: { fontSize: 12 } }, r.desc), E("span", { title: 'Linked to the SOW Breakdown crew', style: { marginLeft: 6, fontSize: 9, fontWeight: 700, color: OK, border: '1px solid ' + alpha(OK, '66'), borderRadius: 4, padding: '0 4px' } }, "SOW")) :
               E("td", { style: TDS },
-                E("input", { style: { ...INP, minWidth: 200 }, list: idPfx + r.id, value: r.desc, placeholder: "e.g. Supervisor, Welder...",
+                E("input", { style: { ...INP, minWidth: 200 }, list: idPfx, value: r.desc, placeholder: "e.g. Supervisor, Welder...",
                   onChange: e => { const dv = e.target.value; const f = (masterlist.manpower || []).find(m => m.role === dv); upd(r.id, { desc: dv, ...(f ? { rate: f.rate } : {}) }); } }),
-                E("datalist", { id: idPfx + r.id }, (masterlist.manpower || []).map(m => E("option", { key: m.id || m.role, value: m.role })))),
+                _ix === 0 && E("datalist", { id: idPfx }, (masterlist.manpower || []).map(m => E("option", { key: m.id || m.role, value: m.role })))),
               r.auto ? E("td", { style: TDS }, E(NumBox, { style: { ...INP, ...MONO, width: 52, ...(r.paxSet ? { borderColor: ACC } : {}) }, min: 0, value: r.qty,
                 title: r.paxSet ? 'Set by hand -- the crew count is no longer applied. Clear it to follow the SOW Breakdown again.' : 'From the SOW Breakdown crew. Type to override.',
                 onCommit: v => upd(r.id, { qty: v, paxSet: true }) }),
@@ -12063,7 +12068,7 @@ tab === 'dashboard' && (() => {
           ...INP,
           minWidth: 200
         },
-        list: idPfx + r.id,
+        list: idPfx,
         value: r.desc,
         onChange: e => {
           const dv = e.target.value;
@@ -12078,8 +12083,8 @@ tab === 'dashboard' && (() => {
           } : xr));
         },
         placeholder: "e.g. Driver, Meals, Plane Ticket, Diesel..."
-      }), /*#__PURE__*/React.createElement("datalist", {
-        id: idPfx + r.id
+      }), _ix === 0 && /*#__PURE__*/React.createElement("datalist", {
+        id: idPfx
       }, (masterlist.vehicles || []).map(mlItem => /*#__PURE__*/React.createElement("option", {
         key: mlItem.id,
         value: mlItem.desc
@@ -12715,7 +12720,7 @@ tab === 'dashboard' && (() => {
           ...INP,
           width: 180
         },
-        list: 'rl' + r.id,
+        list: 'rl',
         value: r.role,
         onChange: e => {
           const ro = e.target.value;
@@ -12742,8 +12747,8 @@ tab === 'dashboard' && (() => {
           } : x));
         },
         placeholder: "Role name..."
-      }), /*#__PURE__*/React.createElement("datalist", {
-        id: 'rl' + r.id
+      }), _ix === 0 && /*#__PURE__*/React.createElement("datalist", {
+        id: 'rl'
       }, masterlist.manpower.map(m => /*#__PURE__*/React.createElement("option", {
         key: m.id,
         value: m.role
@@ -13355,7 +13360,7 @@ tab === 'dashboard' && (() => {
           ...INP,
           minWidth: 195
         },
-        list: 'mc' + miscKey + r.id,
+        list: 'mc_' + miscKey,
         value: r.desc || '',
         onChange: e => {
           const dv = e.target.value;
@@ -13371,8 +13376,9 @@ tab === 'dashboard' && (() => {
         style: { marginTop: 4, fontSize: 10, color: MT, lineHeight: 1.5 }
       }, r.parts.map((p, j) => /*#__PURE__*/React.createElement("div", { key: j, style: { display: 'flex', gap: 8 } },
         /*#__PURE__*/React.createElement("span", { style: { flex: 1, paddingLeft: 10 } }, "\u2013 " + p.label),
-        /*#__PURE__*/React.createElement("span", { style: MONO }, N(p.qty) + " pax \u00d7 " + N(p.days) + (N(p.days) === 1 ? " day" : " days"))))), /*#__PURE__*/React.createElement("datalist", {
-        id: 'mc' + miscKey + r.id
+        /*#__PURE__*/React.createElement("span", { style: MONO }, N(p.qty) + " pax \u00d7 " + N(p.days) + (N(p.days) === 1 ? " day" : " days"))))),
+      _ix === 0 && /*#__PURE__*/React.createElement("datalist", {
+        id: 'mc_' + miscKey
       }, (masterlist.vehicles || []).map(mlItem => /*#__PURE__*/React.createElement("option", {
         key: mlItem.id,
         value: mlItem.desc

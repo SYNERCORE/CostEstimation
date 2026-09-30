@@ -127,7 +127,7 @@ console.log('\nthe incentive comes from the Masterlist, onto the row:');
    the incentive with the rate; typing the role into the box copied the rate
    and nothing else -- which is why a row read P0 against a Masterlist that
    says P200, and why the CE charged the P0. */
-const roleEdit = app.match(/list: 'rl' \+ r\.id,[\s\S]*?placeholder: "Role name\.\.\."/);
+const roleEdit = app.match(/list: 'rl',[\s\S]*?placeholder: "Role name\.\.\."/);
 ck('typing a role finds its Masterlist entry', !!roleEdit && /masterlist\.manpower\.find/.test(roleEdit[0]));
 ck('and takes the incentive with the rate',
   !!roleEdit && /rate: f\.rate, perDiem: f\.perDiem !== undefined \? f\.perDiem : x\.perDiem/.test(roleEdit[0]),

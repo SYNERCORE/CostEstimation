@@ -4162,6 +4162,14 @@ function App({
      With no hooks left inside it, MlEditor is called as a plain function
      below, so its output is part of App's own tree and nothing remounts. */
   const [mlTab, setMlTab] = useState('manpower');
+  /* The tools list carries five figures a tier price is derived from, and they
+     are reference data: read when the tier pricing is being maintained, and in
+     the way the rest of the time. Twelve columns squeezed Description and Cost
+     -- the two anybody actually reads -- into nothing. Hidden by default, and
+     the choice is remembered, because somebody maintaining tiers wants them up
+     for the whole session and everybody else never wants them. */
+  const [mlTierCols, setMlTierCols] = useState(() => { try { return !!LS.get('ml_tier_cols'); } catch (_e) { return false; } });
+  const toggleTierCols = () => setMlTierCols(v => { const n = !v; try { LS.set('ml_tier_cols', n); } catch (_e) {} return n; });
   /* The tier calculator. Held here rather than inside MlEditor: state declared
      in a component that is itself declared in another component is thrown away
      on every render, which is what ate keystrokes in this very editor before. */
@@ -4284,6 +4292,11 @@ function App({
       ppe: ['category', 'desc', 'cost', 'uom'],
       vehicles: ['category', 'desc', 'rate', 'uom']
     };
+  /* The five reference figures, named once. colL is what the TEMPLATE is
+     written from and must always carry them; the table's own heading row is
+     what hides them. Getting that the wrong way round would hand out a
+     template missing five columns whenever somebody had the table collapsed. */
+  const TIER_HEADS = ['Unit Price', 'Service Life (Years)', 'Projects per Year', 'Maintenance per Year', 'Power (kW)'];
     const colL = {
       manpower: ['Item Code', 'Category', 'Role / Position', 'Day Rate (P)', 'Incentive (P/Day)', 'UOM', 'Food Allowance'],
       /* The four figures a tier price is derived from ride with the rate. The
@@ -4296,7 +4309,7 @@ function App({
          the tier arithmetic. The importer matches on the header name, so an
          older workbook without the column is unaffected by where it sits. */
       tools: ['Item Code', 'Category', 'Description', 'Cost (P)', 'UOM', 'Group',
-        'Unit Price', 'Service Life (Years)', 'Projects per Year', 'Maintenance per Year', 'Power (kW)'],
+        ...TIER_HEADS],
       materials: ['Item Code', 'Category', 'Description', 'Cost (P)', 'UOM'],
       ppe: ['Item Code', 'Category', 'Description', 'Cost (P)', 'UOM'],
       vehicles: ['Item Code', 'Category', 'Description', 'Rate (P)', 'UOM']
@@ -4657,7 +4670,11 @@ function App({
       setEscPct('');
     };
     const ks = colK[mlTab],
-      ls = colL[mlTab];
+      /* Headings and cells come from one flag, or every column after the first
+         hidden one sits under the wrong heading. */
+      ls = (mlTab === 'tools' && !mlTierCols)
+        ? colL.tools.filter(h => TIER_HEADS.indexOf(h) < 0)
+        : colL[mlTab];
     return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
       style: {
         ...CS,
@@ -4805,7 +4822,13 @@ function App({
       style: btn('def', true),
       onClick: applyEscalation,
       title: "Apply % adjustment to all rates in current tab"
-    }, "Apply %")))), /*#__PURE__*/React.createElement("div", {
+    }, "Apply %"), mlTab === 'tools' && /*#__PURE__*/React.createElement("button", {
+      style: mlTierCols ? btn('info', true) : btn('def', true),
+      onClick: toggleTierCols,
+      title: mlTierCols
+        ? "Hide unit price, service life, projects per year, maintenance per year and power. They stay on the items; the Tier Pricing Calculator still shows and edits them."
+        : "Show the five figures a tier price is worked out from, to type them in without opening the calculator."
+    }, (mlTierCols ? "▾" : "▸") + " Tier figures")))), /*#__PURE__*/React.createElement("div", {
       style: {
         overflowX: 'auto'
       }
@@ -4934,7 +4957,7 @@ function App({
             }, /*#__PURE__*/React.createElement("option", { value: '' }, "Auto (Common)"),
               TOOL_GROUPS.map(g => /*#__PURE__*/React.createElement("option", { key: g.k, value: g.k }, g.t))))]
         : []),
-      ...(mlTab === 'tools'
+      ...(mlTab === 'tools' && mlTierCols
         ? ['unitPrice', 'serviceLife', 'projectsPerYear', 'maintPerYear', 'kw'].map(k =>
             /*#__PURE__*/React.createElement("td", {
               key: k,

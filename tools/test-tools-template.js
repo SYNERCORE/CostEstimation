@@ -125,14 +125,26 @@ ck('and only on the tools tab', /mlTab === \'tools\'\n?[\s]*\\? \[\'unitPrice\'/
   || app.indexOf("(mlTab === 'tools'") > 0);
 
 /* Headings and cells must stay the same length, or every column after the
-   first extra one sits under the wrong heading -- which is what put the delete
-   button under "Unit Price". */
-const toolsHdr = app.match(/tools: \[\'Item Code\'[^\]]*\]/)[0];
+   first extra one sits under the wrong heading -- which is what put the
+   delete button under "Unit Price". The list is evaluated rather than
+   counted in the source, because the five tier figures are now named once in
+   TIER_HEADS and spread in, and counting quotes would have called that six
+   columns. */
+const heads = (() => {
+  const th = app.slice(app.indexOf('const TIER_HEADS = ['), app.indexOf(']', app.indexOf('const TIER_HEADS = [')) + 1);
+  const row = app.match(/tools: \['Item Code'[\s\S]*?\],/)[0].replace(/,$/, '');
+  return new Function(th + ';return ({ ' + row + ' }).tools;')();
+})();
 /* Nine, plus Power (kW) once tools started carrying a power rating, plus
    Group once they began printing under one on the Electrical sheet. */
-ck('the tools heading row declares eleven columns',
-  (toolsHdr.match(/\'/g) || []).length / 2 === 11,
-  toolsHdr);
+ck('the tools heading row declares eleven columns', heads.length === 11, heads.join(' | '));
+/* The TEMPLATE carries every column whatever the table is showing: a template
+   missing five columns would be handed out to whoever had them collapsed. */
+ck('and the template keeps them all when the table hides them',
+  heads.indexOf('Unit Price') > 0 && heads.indexOf('Power (kW)') > 0, heads.join(' | '));
+ck('the table is what hides them, and its cells follow the same flag',
+  app.indexOf("(mlTab === 'tools' && !mlTierCols)") > 0 &&
+  app.indexOf("mlTab === 'tools' && mlTierCols") > 0);
 
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\ntools template OK');
 process.exit(bad ? 1 : 0);

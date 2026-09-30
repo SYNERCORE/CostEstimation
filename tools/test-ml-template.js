@@ -21,6 +21,11 @@ const fs=require('fs');
 const src=fs.readFileSync('src/App.js','utf8');
 const norm=eval('('+src.match(/const norm = h => String\(h\)[^;]*;/)[0].replace(/^const norm = /,'').replace(/;$/,'')+')');
 const HEADER_KEY=eval('('+src.match(/const HEADER_KEY = \{[\s\S]*?\n        \};/)[0].replace(/^const HEADER_KEY = /,'').replace(/;$/,'')+')');
+/* TIER_HEADS names the five reference figures once and colL spreads them
+ * in, so the declaration has to come along or the eval has nothing to
+ * spread. Lifted from the source, not retyped: a renamed heading must
+ * show up here as a failure, not be papered over by a local copy. */
+const TIER_HEADS=eval(src.slice(src.indexOf('const TIER_HEADS = ['),src.indexOf(']',src.indexOf('const TIER_HEADS = ['))+1).replace(/^const TIER_HEADS = /,''));
 const colL=eval('('+src.match(/const colL = \{[\s\S]*?\n    \};/)[0].replace(/^const colL = /,'').replace(/;$/,'')+')');
 const colMap=eval('('+src.match(/const colMap = \{[\s\S]*?\n      \};/)[0].replace(/^const colMap = /,'').replace(/;$/,'')+')');
 

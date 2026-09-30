@@ -268,6 +268,8 @@ jobs:
         run: node tools/test-row-sync.js
       - name: Suggestion lists are per table
         run: node tools/test-row-suggestions.js
+      - name: History cache is scoped to the account
+        run: node tools/test-history-cache-scope.js
       - name: Monitoring - one CE, two rows, reunited
         run: node tools/test-monitoring-duplicate-rows.js
       - name: Storage warning clears what it can
@@ -456,6 +458,8 @@ jobs:
         run: node tools/test-row-sync.js
       - name: Suggestion lists are per table
         run: node tools/test-row-suggestions.js
+      - name: History cache is scoped to the account
+        run: node tools/test-history-cache-scope.js
       - name: Monitoring - one CE, two rows, reunited
         run: node tools/test-monitoring-duplicate-rows.js
       - name: Storage warning clears what it can

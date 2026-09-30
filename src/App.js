@@ -1207,7 +1207,16 @@ function App({
         try { LS.set('history', h); } catch (e) { console.warn('history not cached locally:', e && e.message); }
       } else if (spAvail && h && h.length === 0) {
         /* Keep showing the cached list rather than blanking the UI. */
-        try { effective = LS.get('history') || []; } catch (_e) { effective = []; }
+        /* The cache is one key for the whole browser, not one per account: an
+           admin who used this machine earlier left EVERYONE's CEs in it. Only
+           an admin may be shown it as it stands -- anyone else gets the same
+           filter the first paint and the offline path apply. Without it, an
+           account with no CEs of its own (a new requestor, say) matched zero
+           rows, fell into this branch, and was handed the lot. */
+        try {
+          const _c = LS.get('history') || [];
+          effective = isAdmin ? _c : _c.filter(x => x.savedBy === currentUser.username || mineToSee(x.id));
+        } catch (_e) { effective = []; }
         setSyncStatus({ sp: 'connected' });
       }
       setHistory(effective);

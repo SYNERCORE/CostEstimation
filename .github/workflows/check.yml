@@ -254,7 +254,7 @@ jobs:
         run: node tools/test-important-notes.js
       - name: Approval - the mirror columns a notification flow reads
         run: node tools/test-approval-mirror-columns.js
-      - name: Approval returned branch
+      - name: Approval returned and approved branches
         run: node tools/test-approval-returned.js
       - name: Monitoring - one CE, two rows, reunited
         run: node tools/test-monitoring-duplicate-rows.js
@@ -430,7 +430,7 @@ jobs:
         run: node tools/test-important-notes.js
       - name: Approval - the mirror columns a notification flow reads
         run: node tools/test-approval-mirror-columns.js
-      - name: Approval returned branch
+      - name: Approval returned and approved branches
         run: node tools/test-approval-returned.js
       - name: Monitoring - one CE, two rows, reunited
         run: node tools/test-monitoring-duplicate-rows.js

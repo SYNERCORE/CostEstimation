@@ -74,17 +74,23 @@ function apvMirror(approvers, apv) {
   const _signed = (apv && apv.lines) || {};
   const _owes = new Set(s.lines.filter(l => !_signed[l.id] && !((apv && apv.skipped) || {})[l.id]).map(l => l.user));
   const signedBy = Object.values(_signed).map(l => (l && l.by) || '').filter(u => u && !_owes.has(u));
-  /* Who the CE belongs to, and -- when it has come back -- why. A returned CE
-     waits on nobody, so `waiting` is empty and a notifier reading only that
-     has no one to tell. The estimator who submitted it is the one who has to
-     act, and the comment the approver wrote is the whole substance of the
-     message: "your CE came back" without a reason is a wasted notification.
+  /* Who the CE belongs to, and -- once it has stopped moving -- what happened
+     to it. A returned or a fully approved CE waits on nobody, so `waiting` is
+     empty and a notifier reading only that has no one to tell. The estimator
+     who submitted it is the one who has to act, or who wants to know.
+
+     The note is the substance of the message. On a return it is the reason:
+     "your CE came back" without one is a wasted notification. On an approval
+     it is who put the last signature on it, which is what the estimator would
+     otherwise have to open the CE to find out.
+
      Neither belongs in apvMirrorKey -- the key must change when the routing
      moves and at no other time, and an edited comment is not the routing. */
-  const _ret = st === 'returned' ? ((apv && apv.log) || []).filter(l => l && l.action === 'returned').slice(-1)[0] : null;
+  const _act = (st === 'returned' || st === 'approved')
+    ? ((apv && apv.log) || []).filter(l => l && l.action === st).slice(-1)[0] : null;
   return { state: st, waiting: st === 'pending' ? s.waiting.map(l => l.user) : [], signedBy: signedBy,
     by: (apv && apv.submittedBy) || '',
-    note: _ret ? ((_ret.byName || _ret.by || '') + (_ret.comment ? ': ' + _ret.comment : '')) : '',
+    note: _act ? ((_act.byName || _act.by || '') + (_act.comment ? ': ' + _act.comment : '')) : '',
     signed: s.signedN, total: s.total, at: new Date().toISOString() };
 }
 /* The mirror, as plain columns a Power Automate flow can read without parsing

@@ -11,6 +11,11 @@
    held since submission, and what the approver said when sending it back.
    "Your CE came back" without a reason is a wasted message.
 
+   A fully approved CE has the same shape of problem: it waits on nobody
+   either, and the estimator who has been waiting on it is exactly who wants
+   to hear. The note carries who put the last signature on it, so the message
+   says more than that something happened.
+
    Neither may enter apvMirrorKey. The key exists to change when the routing
    moves and at no other time; a key that moved with an edited comment would
    page people over a typo. */
@@ -108,6 +113,69 @@ ck('and a CE never submitted writes none of them',
 ck('both are cut to what a text column holds',
   /shicApvOwner=String\(a\.by\|\|''\)\.slice\(0,255\)/.test(db) &&
   /shicApvNote=String\(a\.note\|\|''\)\.slice\(0,255\)/.test(db));
+
+/* ---- approved, which is the same problem wearing a happier face ---- */
+console.log('\nan approved CE reaches the estimator too:');
+const approved = {
+  state: 'approved', submittedBy: 'mfsantos', submittedByName: 'M F Santos',
+  lines: { a1: { by: 'rvera' }, a2: { by: 'mcruz' }, a3: { by: 'jubana' } },
+  log: [
+    { by: 'mfsantos', byName: 'M F Santos', action: 'submitted' },
+    { by: 'rvera', byName: 'R Vera', action: 'approved', role: 'Reviewed By' },
+    { by: 'mcruz', byName: 'M Cruz', action: 'approved', role: 'Reviewed By' },
+    { by: 'jubana', byName: 'J Ubana', action: 'approved', role: 'Approved By' }
+  ]
+};
+m = A.apvMirror(approvers, approved);
+ck('it waits on nobody', m.waiting.length === 0);
+ck('and still names the estimator who has been waiting for it',
+  m.by === 'mfsantos', m.by);
+/* The LAST signature, not the first: the first reviewer signed days ago and
+   naming them would read as though the CE were still going round. */
+ck('the note names who put the last signature on it',
+  m.note === 'J Ubana', m.note);
+/* A per-line approval carries no comment, so the note must not trail a
+   dangling separator. */
+ck('with no dangling separator behind it', m.note.indexOf(':') < 0, m.note);
+got = cols({ apv: m }, 'SY3-CE-2026-0148');
+ck('the flow can read the state as approved', got.shicApvState === 'approved');
+ck('the owner column is the estimator', got.shicApvOwner === 'mfsantos');
+ck('and the note column names the signer', got.shicApvNote === 'J Ubana');
+
+/* A return is not an approval and an approval is not a return: each must read
+   its OWN last log entry. A CE returned once, fixed, and then approved holds
+   both kinds, and reading the wrong one would tell the estimator their
+   approved CE had come back. */
+const bothWays = { ...approved, log: [
+  { by: 'rvera', byName: 'R Vera', action: 'returned', comment: 'Manpower rate is stale' },
+  { by: 'jubana', byName: 'J Ubana', action: 'approved', role: 'Approved By' }
+] };
+ck('a CE that was returned and then approved reports the approval',
+  A.apvMirror(approvers, bothWays).note === 'J Ubana',
+  A.apvMirror(approvers, bothWays).note);
+const backAgain = { ...returned, log: [
+  { by: 'jubana', byName: 'J Ubana', action: 'approved', role: 'Approved By' },
+  { by: 'rvera', byName: 'R Vera', action: 'returned', comment: 'Margin too low' }
+] };
+ck('and one approved in part and then returned reports the return',
+  A.apvMirror(approvers, backAgain).note === 'R Vera: Margin too low',
+  A.apvMirror(approvers, backAgain).note);
+
+/* Nothing else grows a note. A withdrawn CE is the estimator's own doing and
+   needs no telling. */
+['withdrawn', 'none', 'pending'].forEach(st => {
+  ck('a ' + st + ' CE carries no note',
+    A.apvMirror(approvers, { ...approved, state: st }).note === '',
+    A.apvMirror(approvers, { ...approved, state: st }).note);
+});
+
+/* An approval is an event worth exactly one message. The key has to move when
+   the CE becomes approved -- or the flow, comparing with what it last
+   notified, would stay silent -- and not move again afterwards. */
+ck('becoming approved moves the key', k(approved) !== k(pending));
+ck('but who signed it does not move the key again',
+  k(approved) === k({ ...approved, log: approved.log.concat([
+    { by: 'zzz', byName: 'Z Z', action: 'approved' }]) }));
 
 console.log('\nprovisioning and safety:');
 const strip = db.slice(db.indexOf('function _stripApvCols('), db.indexOf('function _stripApvCols(') + 400);

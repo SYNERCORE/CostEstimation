@@ -33,10 +33,25 @@ const ResTab = ({
      first time on a CE is there for the next one. */
   addToML
 }) => {
-  const _mlHas = r => {
-    const d = String(r.desc || '').trim().toUpperCase();
-    return !d || (masterlist[mlType] || []).some(m => String(m.desc || '').trim().toUpperCase() === d);
-  };
+  /* The Masterlist is looked up once per row for the + Masterlist mark and
+     again for the re-price arrow. Scanning the whole list for each of those,
+     on every render, is rows x items of work per keystroke -- which is what
+     made a long tab stutter as you typed. Index it once instead, keeping the
+     FIRST entry for a description so the answer is the one .find gave. */
+  const _mlIndex = React.useMemo(() => {
+    const ix = new Map();
+    (masterlist[mlType] || []).forEach(it => {
+      const d = String(it.desc || '').trim().toUpperCase();
+      if (d && !ix.has(d)) ix.set(d, it);
+    });
+    return ix;
+  }, [masterlist, mlType]);
+  const _mlKey = r => String((r && r.desc) || '').trim().toUpperCase();
+  /* One datalist serves every row: the suggestions are the same list in each
+     of them, so building it per row put the whole Masterlist into the page
+     once for every line on the tab. */
+  const _dlId = 'dl_' + mlType;
+  const _mlHas = r => { const d = _mlKey(r); return !d || _mlIndex.has(d); };
   const _newRows = addToML ? rows.filter(r => !_mlHas(r)) : [];
   /* Import reads any Description + Qty list and prices it off the Masterlist
      for THIS tab -- nothing in it was ever specific to tools, only its
@@ -83,11 +98,7 @@ const ResTab = ({
      Matched on the description, upper-cased and trimmed, which is the same
      key the whole-tab sync and the importer use -- three different ways of
      finding the same item would eventually disagree about which item it is. */
-  const _mlFind = r => {
-    const d = String(r.desc || '').trim().toUpperCase();
-    if (!d) return null;
-    return (masterlist[mlType] || []).find(m => String(m.desc || '').trim().toUpperCase() === d) || null;
-  };
+  const _mlFind = r => { const d = _mlKey(r); return d ? (_mlIndex.get(d) || null) : null; };
   const _money = v => 'P' + N(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const syncRow = r => {
     const m = _mlFind(r);
@@ -502,7 +513,9 @@ q && /*#__PURE__*/React.createElement("span", {
   style: {
     overflowX: 'auto'
   }
-}, /*#__PURE__*/React.createElement("table", {
+}, /*#__PURE__*/React.createElement("datalist", { id: _dlId },
+  (masterlist[mlType] || []).map(x => /*#__PURE__*/React.createElement("option", { key: x.id, value: x.desc }))
+), /*#__PURE__*/React.createElement("table", {
   style: {
     width: '100%',
     borderCollapse: 'collapse',
@@ -523,7 +536,7 @@ q && /*#__PURE__*/React.createElement("span", {
       minWidth: 190
     },
     ref: r.id === _rtNewId ? _rtDescRef : undefined,
-    list: 'dl_' + mlType + '_' + r.id,
+    list: _dlId,
     value: r.desc,
     onChange: e => {
       const d = e.target.value;
@@ -541,9 +554,7 @@ q && /*#__PURE__*/React.createElement("span", {
       } : x));
     },
     placeholder: "Item description..."
-  }), /*#__PURE__*/React.createElement("datalist", {id: 'dl_' + mlType + '_' + r.id},
-    (masterlist[mlType] || []).map(x => /*#__PURE__*/React.createElement("option", {key: x.id, value: x.desc}))
-  ), addToML && !_mlHas(r) && /*#__PURE__*/React.createElement("button", {
+  }), addToML && !_mlHas(r) && /*#__PURE__*/React.createElement("button", {
     style: { background: 'none', border: 'none', padding: '2px 0 0', cursor: 'pointer', fontSize: 10, color: 'var(--brand-accent)', display: 'block' },
     title: 'Not on the Masterlist yet. Adds it with this unit and unit cost.',
     onClick: () => addToML([r])

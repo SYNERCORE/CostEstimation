@@ -27,20 +27,28 @@ const grab = (re, what) => { const m = tab.match(re); if (!m) { console.error('n
 const N = v => (v === '' || v === null || v === undefined || isNaN(parseFloat(v))) ? 0 : parseFloat(v);
 
 /* The shipped _mlFind, _money and syncRow, run against a fake tab. */
-const src = grab(/const _mlFind = r => \{[\s\S]*?\n  \};\n  const rowPwr/, 'syncRow')
-  .replace(/\n  const rowPwr$/, '');
+const cut = (from, to, what) => {
+  const a = tab.indexOf(from), b = tab.indexOf(to, a);
+  if (a < 0 || b < 0) { console.error('not found in ResTab.js: ' + what); process.exit(1); }
+  return tab.slice(a, b);
+};
+const indexSrc = cut('const _mlIndex = React.useMemo', "const _dlId = 'dl_' + mlType;", 'the Masterlist index');
+const src = cut('const _mlFind = r =>', 'const rowPwr', 'syncRow');
 const srcFields = grab(/const _srcFields = it => \{[\s\S]*?\n  \};/, '_srcFields');
 
 const build = (rows, ml) => {
   const state = { rows: rows.map(r => ({ ...r })), toasts: [], confirms: [] };
   let answer = true;
-  const fn = new Function('masterlist', 'mlType', 'showToast', 'set', 'N', 'window', 'state',
-    srcFields + NL + src + NL + 'return syncRow;');
+  /* useMemo outside React is just "call it": what matters here is the lookup
+     the component ends up using, not when it is rebuilt. */
+  const React = { useMemo: f => f() };
+  const fn = new Function('React', 'masterlist', 'mlType', 'showToast', 'set', 'N', 'window', 'state',
+    srcFields + NL + indexSrc + NL + src + NL + 'return syncRow;');
   const api = {
     call: (r, ans) => {
       answer = ans === undefined ? true : ans;
       fn(
-        { tools: ml }, 'tools',
+        React, { tools: ml }, 'tools',
         (m, err) => state.toasts.push({ m: m, err: !!err }),
         upd => { state.rows = upd(state.rows); },
         N,
@@ -133,6 +141,32 @@ ck('and it is dimmed when there is nothing behind it',
   tab.indexOf('opacity: _mlFind(r) ? 1 : .35') > 0);
 ck('the whole-tab Sync Rates is still there for when that is what is wanted',
   fs.readFileSync(path.join(__dirname, '..', 'src', 'App.js'), 'utf8').indexOf('const syncRatesFromML = () => {') > 0);
+
+console.log(NL + 'and none of it costs a scan per row:');
+/* A long tab re-renders on every keystroke, and each row asked the whole
+   Masterlist twice -- once for the + Masterlist mark, once for the arrow.
+   Rows x items of that, per keystroke, is what made typing stutter. */
+ck('the Masterlist is indexed once, not searched per row',
+  tab.indexOf('const _mlIndex = React.useMemo') > 0);
+ck('and the index is what both the mark and the arrow read',
+  tab.indexOf('const _mlHas = r => { const d = _mlKey(r); return !d || _mlIndex.has(d); };') > 0 &&
+  tab.indexOf('const _mlFind = r => { const d = _mlKey(r); return d ? (_mlIndex.get(d) || null) : null; };') > 0);
+ck('it is rebuilt only when the Masterlist or the tab changes',
+  tab.indexOf('}, [masterlist, mlType]);') > 0);
+/* The index keeps the first entry for a description, as .find returned -- a
+   duplicated Masterlist row must not change which rate a row is given. */
+a = build(ROWS(), [{ desc: 'Cable Pulling Machine', cost: 2750 },
+  { desc: 'Cable Pulling Machine', cost: 9999 }]);
+a.call(a.state.rows[0]);
+ck('a duplicated Masterlist entry still gives the first rate',
+  a.state.rows[0].cost === 2750, a.state.rows[0].cost);
+/* The suggestion list is identical in every row, so one is enough; a copy
+   per row put the whole Masterlist into the page once for every line. */
+ck('the suggestion list is built once for the tab',
+  tab.indexOf("const _dlId = 'dl_' + mlType;") > 0 && tab.indexOf('list: _dlId,') > 0);
+ck('and the table holds one datalist, not one per row',
+  tab.split('React.createElement("datalist"').length - 1 === 1,
+  tab.split('React.createElement("datalist"').length - 1);
 
 console.log(bad ? NL + bad + ' FAILURE(S)' : NL + 'row sync OK');
 process.exit(bad ? 1 : 0);

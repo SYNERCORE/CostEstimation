@@ -503,23 +503,35 @@ const LS = {
     const top = Object.keys(groups).sort((a, b) => groups[b] - groups[a])[0] || 'other settings';
     return { total, groups, top: { name: top, bytes: groups[top] || 0 } };
   },
-  /* ce_cache: holds one full CE per saved estimate and was never pruned, which
-     with 800+ CEs is the bulk of what fills localStorage. Keep the most recent
-     `keep` entries (by savedAt) and drop the rest; they are only a cache and are
-     refetched from SharePoint on demand. Returns how many were removed. */
-  pruneCeCache: (keep = 60) => {
+  /* ce_cache: holds one full CE per saved estimate. Only a cache -- every entry
+     is refetched from SharePoint on demand -- so it is bounded two ways:
+
+       keep      how many, newest first (by savedAt)
+       maxBytes  how much. COUNT alone was not a bound: a CE carrying its
+                 signature images is 150-330 KB, so sixty of them is 3.5 MB and
+                 the warning came back every session however many were cleared.
+
+     A record marked local exists only in this browser and is never evicted,
+     whatever the budget says. Returns how many were removed. */
+  pruneCeCache: (keep = 60, maxBytes = 1.2 * 1024 * 1024) => {
     try {
       const entries = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (!key || key.indexOf('shic:ce_cache:') !== 0) continue;
-        let when = 0;
-        try { when = new Date((JSON.parse(localStorage.getItem(key)) || {}).savedAt || 0).getTime() || 0; } catch (_e) {}
-        entries.push({ key, when });
+        const raw = localStorage.getItem(key) || '';
+        let when = 0, local = false;
+        try { const v = JSON.parse(raw) || {}; when = new Date(v.savedAt || 0).getTime() || 0; local = v._syncState === 'local'; } catch (_e) {}
+        entries.push({ key, when, local, bytes: (raw.length + key.length) * 2 });
       }
-      if (entries.length <= keep) return 0;
       entries.sort((a, b) => b.when - a.when);
-      const doomed = entries.slice(keep);
+      let kept = 0, used = 0;
+      const doomed = [];
+      for (const e of entries) {
+        if (e.local) continue;
+        if (kept < keep && used + e.bytes <= maxBytes) { kept++; used += e.bytes; }
+        else doomed.push(e);
+      }
       doomed.forEach(e => { try { localStorage.removeItem(e.key); } catch (_e) {} });
       return doomed.length;
     } catch (_e) { return 0; }

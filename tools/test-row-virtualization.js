@@ -18,4 +18,11 @@ const m = (top, h, vh, n, over) => ({ a: Math.max(0, Math.floor(-top / h) - over
 const w = m(-4400, 44, 800, 700, 12);
 ck('scrolled 100 rows down draws ~ rows 88..131', w.a === 88 && w.b === 131);
 ck('at the top draws the first screen only', m(100, 44, 800, 700, 12).b < 40);
-process.exit(bad ? 1 : 0);
+if (bad) process.exit(1);
+/* Switching tabs: the Masterlist suggestion list is built on first focus, not on every visit. */
+const t2 = t;
+let b2 = 0;
+const c2 = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) b2++; };
+c2('the suggestion list is built only after an input is focused', t2.indexOf('const _dlEl = React.useMemo(() => _dlOn ?') > 0 && t2.indexOf("onFocusCapture: _dlOn ? undefined") > 0);
+c2('and is kept, not rebuilt per render', t2.indexOf('[_dlOn, masterlist, mlType]);') > 0);
+if (b2) process.exit(1);

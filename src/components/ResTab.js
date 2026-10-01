@@ -169,6 +169,14 @@ const ResTab = ({
   const _list = rows.map((r, _ix) => ({ r, _ix })).filter(x => _hit(x.r));
   const _VMIN = 60, _OVER = 12;
   const _tbRef = useRef(null);
+  /* The suggestion list is the whole Masterlist -- thousands of <option>s.
+     Built on every visit to the tab it was most of what switching tabs cost,
+     and nobody needs it until they click into a description. So it is built
+     on the first focus, and then kept (same element, so React skips it). */
+  const [_dlOn, _setDlOn] = useState(false);
+  const _dlEl = React.useMemo(() => _dlOn ? React.createElement("datalist", { id: _dlId },
+    (masterlist[mlType] || []).map(x => React.createElement("option", { key: x.id, value: x.desc }))) : null,
+    [_dlOn, masterlist, mlType]);
   const _rowH = useRef(44);
   const [_wv, _setWv] = useState({ a: 0, b: _VMIN });
   const _virt = _list.length > _VMIN;
@@ -555,10 +563,9 @@ q && /*#__PURE__*/React.createElement("span", {
 /*#__PURE__*/React.createElement("div", {
   style: {
     overflowX: 'auto'
-  }
-}, /*#__PURE__*/React.createElement("datalist", { id: _dlId },
-  (masterlist[mlType] || []).map(x => /*#__PURE__*/React.createElement("option", { key: x.id, value: x.desc }))
-), /*#__PURE__*/React.createElement("table", {
+  },
+  onFocusCapture: _dlOn ? undefined : (ev => { if (ev.target && ev.target.tagName === 'INPUT') _setDlOn(true); })
+}, _dlEl, /*#__PURE__*/React.createElement("table", {
   style: {
     width: '100%',
     borderCollapse: 'collapse',

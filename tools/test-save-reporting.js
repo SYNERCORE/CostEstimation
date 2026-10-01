@@ -82,7 +82,7 @@ ck('it still refuses to push a summary with no line items',
 
 console.log('\nand a header-only CE refuses to open:');
 ck('a CE with a total but no rows is caught', /if \(!_rowCount && N\(d\.grand\) > 0\)/.test(app));
-ck('every row type counts toward that', /\(d\.mp \|\| \[\]\)\.length \+ \(d\.tools \|\| \[\]\)\.length \+ \(d\.mats \|\| \[\]\)\.length \+ \(d\.ppe \|\| \[\]\)\.length/.test(app));
+ck('every row type counts toward that, mobilization and miscellaneous included', app.indexOf('_arr(d.mp) + _arr(d.tools) + _arr(d.mats) + _arr(d.ppe) +') > 0 && app.indexOf('_arr(d.mobVehicles) + _arr(d.demobVehicles)') > 0 && app.indexOf('_arr(d.misc[k])') > 0);
 ck('it says the total that is missing its rows', /has a stored total of/.test(app),
   'P0.00 and a cheerful "Loaded" reads as "this CE is empty"');
 ck('and nothing is applied to the editor', /Re-import or re-save this CE to restore it[\s\S]{0,40}return;/.test(app),

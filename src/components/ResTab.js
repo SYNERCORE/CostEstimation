@@ -162,6 +162,49 @@ const ResTab = ({
   const _hit = r => !_terms.length ||
     _terms.every(t => (String(r.desc || '') + ' ' + String(r.uom || '') + ' ' + String(r.code || '') + ' ' +
       String((r.src && r.src.code) || '')).toLowerCase().indexOf(t) >= 0);
+  /* Only the rows near the screen are drawn. A tab with hundreds of rows put
+     thousands of inputs in the page and every keystroke re-rendered them all.
+     The rest are two spacer rows of the height they would have taken, so the
+     scrollbar and the page length stay true. Short lists are drawn whole. */
+  const _list = rows.map((r, _ix) => ({ r, _ix })).filter(x => _hit(x.r));
+  const _VMIN = 60, _OVER = 12;
+  const _tbRef = useRef(null);
+  const _rowH = useRef(44);
+  const [_wv, _setWv] = useState({ a: 0, b: _VMIN });
+  const _virt = _list.length > _VMIN;
+  useEffect(() => {
+    if (!_virt) return;
+    let raf = 0;
+    const calc = () => {
+      raf = 0;
+      const tb = _tbRef.current; if (!tb) return;
+      const tr = tb.querySelector('tr[data-vr]');
+      if (tr && tr.offsetHeight > 10) _rowH.current = tr.offsetHeight;
+      const h = _rowH.current, top = tb.getBoundingClientRect().top;
+      const vh = window.innerHeight || 800;
+      /* top is where the first row's slot starts; spacer above counts. */
+      const first = Math.max(0, Math.floor(-top / h) - _OVER);
+      const last = Math.min(_list.length, Math.ceil((vh - top) / h) + _OVER);
+      _setWv(p => (p.a === first && p.b === last) ? p : { a: first, b: Math.max(last, first + 1) });
+    };
+    const kick = () => { if (!raf) raf = requestAnimationFrame(calc); };
+    calc();
+    window.addEventListener('scroll', kick, true);
+    window.addEventListener('resize', kick);
+    return () => { window.removeEventListener('scroll', kick, true); window.removeEventListener('resize', kick); if (raf) cancelAnimationFrame(raf); };
+  }, [_virt, _list.length]);
+  let _from = 0, _to = _list.length;
+  if (_virt) {
+    _from = Math.min(_wv.a, Math.max(0, _list.length - 1)); _to = Math.min(_wv.b, _list.length);
+    /* A row just added stays drawn so it can take focus. */
+    const ni = _list.findIndex(x => x.r.id === _rtNewId);
+    if (ni >= 0) { if (ni < _from) _from = ni; if (ni >= _to) _to = ni + 1; }
+  }
+  const _vis = {
+    items: _list.slice(_from, _to),
+    top: _from > 0 ? React.createElement("tr", { key: '_vt', "aria-hidden": true, style: { height: _from * _rowH.current } }, React.createElement("td", { colSpan: 30, style: { padding: 0, border: 0 } })) : null,
+    bot: _to < _list.length ? React.createElement("tr", { key: '_vb', "aria-hidden": true, style: { height: (_list.length - _to) * _rowH.current } }, React.createElement("td", { colSpan: 30, style: { padding: 0, border: 0 } })) : null
+  };
   const impRef = useRef(null);
   /* What "Set all" will write. Starts at whatever the rows already agree on,
      so a CE whose tools are all on 30 days opens showing 30 and the button is
@@ -501,8 +544,8 @@ rows.length > 0 && /*#__PURE__*/React.createElement("div", {
   onClick: () => setQ(''),
   style: { background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 15, padding: '1px 5px' }
 }, "x"), q && /*#__PURE__*/React.createElement("span", {
-  style: { fontSize: 11, color: rows.filter(_hit).length ? 'var(--text-secondary)' : 'var(--status-danger)' }
-}, rows.filter(_hit).length + ' of ' + rows.length + (rows.filter(_hit).length ? '' : ' -- not on this list')),
+  style: { fontSize: 11, color: _list.length ? 'var(--text-secondary)' : 'var(--status-danger)' }
+}, _list.length + ' of ' + rows.length + (_list.length ? '' : ' -- not on this list')),
 /* The buttons above act on the whole list, not on what is shown. Saying so is
    cheaper than someone pressing Set all on a filtered view and finding it
    changed 671 rows. */
@@ -524,10 +567,10 @@ q && /*#__PURE__*/React.createElement("span", {
 }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['#', 'Description', 'Qty', ...(showDays ? ['Tier', 'Grp', 'Days', 'Hrs'] : []), ...(showPower ? ['kW', 'Run hrs', 'Power (P)'] : []), 'UOM', 'Unit Cost (P)', 'Row Total', ''].map(h => /*#__PURE__*/React.createElement("th", {
   key: h,
   style: THS
-}, h)))), /*#__PURE__*/React.createElement("tbody", null, rows.map((r, _ix) => ({ r, _ix })).filter(x => _hit(x.r)).map(({ r, _ix }) => {
+}, h)))), /*#__PURE__*/React.createElement("tbody", { ref: _tbRef }, _vis.top, _vis.items.map(({ r, _ix }) => {
   const tot = rowTot(r);
   return /*#__PURE__*/React.createElement("tr", {
-    key: r.id
+    key: r.id, "data-vr": 1
   }, /*#__PURE__*/React.createElement("td", { style: { ...TDS, ...MONO, color: MT, textAlign: 'center', width: 28 } }, _ix + 1), /*#__PURE__*/React.createElement("td", {
     style: TDS
   }, /*#__PURE__*/React.createElement("input", {
@@ -788,7 +831,7 @@ q && /*#__PURE__*/React.createElement("span", {
       padding: '1px 5px'
     }
   }, "x")));
-})))), /*#__PURE__*/React.createElement("div", {
+}), _vis.bot))), /*#__PURE__*/React.createElement("div", {
   style: {
     marginTop: 10,
     borderTop: `1px solid ${'var(--border-subtle)'}`,

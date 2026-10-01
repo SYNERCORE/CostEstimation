@@ -25,6 +25,6 @@ ck('the section is on My Work for every requestor, even with none sent',
   app.indexOf("(isRequestor || sent.length > 0) && section('📤 Requests I sent'") > 0);
 ck('and shows who it is with', app.indexOf("' · with ' + x.m.ceeName") > 0);
 const sp = require('fs').readFileSync(require('path').join(__dirname, '..', 'src', 'sp.js'), 'utf8');
-ck('the SharePoint throttle code is recognised, not shown as an outage', sp.indexOf('-2146232832') > 0);
+ck('the generic SPException code is NOT mistaken for the throttle', sp.indexOf('|-2146232832') < 0);
 console.log(bad ? bad + ' FAILURE(S)' : 'requests sent OK');
 process.exit(bad ? 1 : 0);

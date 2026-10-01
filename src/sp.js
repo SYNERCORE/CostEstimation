@@ -292,10 +292,11 @@ function spErr(verb,list,status,body,retryAfter){
      than anything that sounds like a limit -- so it reads as an outage. With
      ~900 CEs the line-item lists hold tens of thousands of rows, which is
      exactly when this starts. The remedy is an index, not a retry. */
-  /* -2146232832 is SPQueryThrottledException. The body is cut to a few
-     characters on its way to a toast, so the words may never arrive but the
-     code does -- and without it this read as an outage. */
-  if(/list view threshold|exceeds the list view|throttl|-2146232832/i.test(String(body||'')))
+  /* Matched on SharePoint's words only. -2146232832 looked like the throttle
+     code and was matched here once; it is the generic SPException code, and a
+     query on a column that does not exist carries it too -- which sent a bad
+     query down the wrong road for three builds. */
+  if(/list view threshold|exceeds the list view|throttl/i.test(String(body||'')))
     return new Error('SP '+verb+' '+list+': this list has passed the SharePoint 5,000-item view threshold and '+
       'a column it is filtered on is not indexed (for Monitoring: shicCEId and shicCENum), so filtered reads fail. An admin should open SP Setup and press '+
       '"Repair lists & columns", which now adds the index. (SharePoint reported '+status+'.)');

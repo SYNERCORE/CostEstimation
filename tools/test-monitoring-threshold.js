@@ -30,6 +30,12 @@ const mk = (refuse) => {
   const bare = new Function('spGet', 'spList', src + '; return _monRowsFor;')(async () => { throw new Error('SP get X: 500 boom'); }, x => x);
   let threw = false; try { await bare(1, 'A'); } catch (e) { threw = true; }
   ck('any other failure still surfaces', threw);
+  /* The real cause of the 500s on this site: a CE id that is not a number was
+     sent as `shicCEId eq NaN`. */
+  m = mk(false);
+  await m.fn(NaN, 'SY3-CE-2026-1179A');
+  ck('a non-numeric CE id is never put in a filter', m.calls.every(c => c.indexOf('NaN') < 0), m.calls.join(' | '));
+  ck('but the CE is still looked up by its number', m.calls.some(c => c.indexOf('SY3-CE-2026-1179A') >= 0));
   ck('the whole-table reads no longer filter on Title', db.indexOf("\"Title ne 'config'\"") < 0);
   console.log(bad ? bad + ' FAILURE(S)' : 'monitoring threshold OK');
   process.exit(bad ? 1 : 0);

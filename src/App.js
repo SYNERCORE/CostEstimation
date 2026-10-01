@@ -1113,10 +1113,10 @@ function App({
           setTimeout(async () => {
             try {
               const full = await dbLoadCE(_pid);
-              if (!full) { showToast('Could not open that CE — it is not in SharePoint or this browser.', true); return; }
+              if (!full) { console.error('open CE ' + _pid + ': dbLoadCE returned nothing'); showToast('Could not open that CE — it is not in SharePoint or this browser.', true); return; }
               await handleLoad(full);
               setAutoPrint({as: _as, ceNum: (full.info || {}).ceNum || ''});
-            } catch (ex) { showToast('Could not open that CE: ' + ex.message, true); }
+            } catch (ex) { console.error('open CE ' + _pid + ' failed:', ex); showToast('Could not open that CE: ' + ex.message, true); }
           }, 600);
         }
       } catch (e) { console.warn('print URL parse failed:', e.message); }

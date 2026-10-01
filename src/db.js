@@ -42,7 +42,7 @@ function _srcParse(v){
 async function _monRowsFor(numId,ceNum){
   try{return await _monRowsForFiltered(numId,ceNum);}
   catch(err){
-    if(!/view threshold|-2146232832/i.test(String((err&&err.message)||'')))throw err;
+    if(!/view threshold/i.test(String((err&&err.message)||'')))throw err;
     /* Both filtered columns are indexed on this site and SharePoint still
        refuses the query -- so stop asking it to filter, walk the list, and
        match here. Slower, but a save that cannot find its row writes a second
@@ -53,7 +53,12 @@ async function _monRowsFor(numId,ceNum){
   }
 }
 async function _monRowsForFiltered(numId,ceNum){
-  const byId=spGet(spList('Monitoring'),`shicCEId eq ${numId}`,'Id,shicMonData');
+  /* A CE id that is not a number (a draft key, an id that never arrived) used
+     to be sent as `shicCEId eq NaN`, which SharePoint answers with a 500
+     "Column 'NaN' does not exist" -- and a save that fails that way reads as
+     "saved in this browser only". Look it up by CE number instead, or not at all. */
+  if(!isFinite(numId)){console.warn('Monitoring lookup: CE id '+JSON.stringify(numId)+' is not a number (CE '+ceNum+') -- asking by number only');}
+  const byId=isFinite(numId)?spGet(spList('Monitoring'),`shicCEId eq ${numId}`,'Id,shicMonData'):Promise.resolve([]);
   const n=String(ceNum||'').trim();
   /* dbSaveMonitoring falls back to String(ceId) when it has no CE number, and
      that is an id, not a number anyone would recognise -- matching on it would

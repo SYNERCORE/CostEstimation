@@ -1303,9 +1303,14 @@ function App({
     showToast(add.length + ' item(s) added to the Masterlist (' + tab + '), category General.');
   };
   const showToast = (msg, err = false) => {
+    /* An error toast is gone in three seconds, which is not long enough to read
+       it, copy it, or notice it at all in the embedded viewer -- where a CE that
+       would not open just left the page sitting on My Work. Errors go to the
+       console as well, and stay up longer inside a frame. */
+    if (err) { try { console.warn('[toast] ' + msg); } catch (_e) {} }
     setToast(msg);
     setToastErr(err);
-    setTimeout(() => setToast(''), 3200);
+    setTimeout(() => setToast(''), (err && window !== window.top) ? 20000 : 3200);
     window._shicToast = showToast;
   };
   window._shicToast = showToast;

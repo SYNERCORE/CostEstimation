@@ -10187,6 +10187,12 @@ function App({
 
 /* ── SOW Breakdown: assign resources per scope task ── */
 tab === 'sowbreak' && (() => {
+  /* Every open task card draws all of its resource rows. On a CE with several
+     hundred that is thousands of inputs, and it is what made this tab -- and
+     every click while it was open -- slow. Past 150 resources the cards start
+     closed; a card the user has opened or closed keeps what they chose. */
+  const _sbBig = ((mp || []).length + (tools || []).length + (mats || []).length + (ppe || []).length) > 150;
+  const _sbOpen = id => sbCollapsed[id] === undefined ? !_sbBig : !sbCollapsed[id];
   const UOMS = UOM_OPTIONS;
   const named = t => t.rows.filter(r => r[t.nameKey]);
   const _miscNamed = miscFlat().filter(r => r.desc);
@@ -10469,12 +10475,12 @@ tab === 'sowbreak' && (() => {
         (sowItems || []).length > 1 && /*#__PURE__*/React.createElement("button", {
           style: { ...btn('def', true), fontSize: 10 },
           onClick: () => {
-            const allOpen = (sowItems || []).every(it => !sbCollapsed[it.id]);
+            const allOpen = (sowItems || []).every(it => _sbOpen(it.id));
             const n = {};
-            if (allOpen) (sowItems || []).forEach(it => { n[it.id] = true; });
+            (sowItems || []).forEach(it => { n[it.id] = allOpen; });
             setSbCollapsed(n);
           }
-        }, (sowItems || []).every(it => !sbCollapsed[it.id]) ? "Collapse all" : "Expand all"),
+        }, (sowItems || []).every(it => _sbOpen(it.id)) ? "Collapse all" : "Expand all"),
         /*#__PURE__*/React.createElement("div", { style: { textAlign: 'right' } },
           /*#__PURE__*/React.createElement("div", { style: { ...MONO, fontSize: 15, fontWeight: 700, color: assignedNamed === totalNamed && totalNamed > 0 ? OK : ACC } }, assignedNamed + " / " + totalNamed),
           /*#__PURE__*/React.createElement("div", { style: { color: MT, fontSize: 10 } }, "resources assigned")
@@ -10500,7 +10506,7 @@ tab === 'sowbreak' && (() => {
       const hasSubs = grp.length > 1;
       const rollN = hasSubs ? taskResCountRollup(it) : n;
       const rollCost = hasSubs ? taskCostRollup(it) : cost;
-      const open = !sbCollapsed[it.id];
+      const open = _sbOpen(it.id);
       const others = (sowItems || []).filter(o => o.id !== it.id && taskResCount(o.id) > 0);
       return /*#__PURE__*/React.createElement("div", {
         key: it.id,

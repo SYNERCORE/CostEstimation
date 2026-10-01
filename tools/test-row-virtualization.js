@@ -26,3 +26,13 @@ const c2 = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) b
 c2('the suggestion list is built only after an input is focused', t2.indexOf('const _dlEl = React.useMemo(() => _dlOn ?') > 0 && t2.indexOf("onFocusCapture: _dlOn ? undefined") > 0);
 c2('and is kept, not rebuilt per render', t2.indexOf('[_dlOn, masterlist, mlType]);') > 0);
 if (b2) process.exit(1);
+/* SOW Breakdown: past 150 resources the task cards start closed. */
+const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'App.js'), 'utf8');
+let b3 = 0;
+const c3 = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) b3++; };
+c3('big CEs open the SOW Breakdown with cards closed', app.indexOf('> 150;') > 0 && app.indexOf('const _sbOpen = id => sbCollapsed[id] === undefined ? !_sbBig : !sbCollapsed[id];') > 0);
+c3('the card and the Collapse/Expand all button agree', app.indexOf('const open = _sbOpen(it.id);') > 0 && app.indexOf('n[it.id] = allOpen;') > 0 && app.indexOf('!sbCollapsed[it.id]') < 0);
+const sbOpen = (big, c, id) => c[id] === undefined ? !big : !c[id];
+c3('a card the user opened stays open on a big CE', sbOpen(true, { a: false }, 'a') === true && sbOpen(true, {}, 'a') === false);
+c3('small CEs are unchanged (open by default)', sbOpen(false, {}, 'a') === true);
+if (b3) process.exit(1);

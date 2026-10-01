@@ -272,6 +272,8 @@ jobs:
         run: node tools/test-history-cache-scope.js
       - name: Requests I sent on My Work
         run: node tools/test-requests-sent.js
+      - name: Monitoring past the list threshold
+        run: node tools/test-monitoring-threshold.js
       - name: Monitoring - one CE, two rows, reunited
         run: node tools/test-monitoring-duplicate-rows.js
       - name: Storage warning clears what it can
@@ -464,6 +466,8 @@ jobs:
         run: node tools/test-history-cache-scope.js
       - name: Requests I sent on My Work
         run: node tools/test-requests-sent.js
+      - name: Monitoring past the list threshold
+        run: node tools/test-monitoring-threshold.js
       - name: Monitoring - one CE, two rows, reunited
         run: node tools/test-monitoring-duplicate-rows.js
       - name: Storage warning clears what it can

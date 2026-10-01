@@ -76,7 +76,7 @@ ck('nothing is kept in localStorage instead',
 
 console.log('\nand the list they hang on is shared, not per-user:');
 ck('the monitoring read has no user filter',
-  /spGet\(spList\('Monitoring'\),"Title ne 'config'"/.test(db),
+  /spGet\(spList\('Monitoring'\),'','Id,Title,shicCEId,shicMonData,Modified'\)/.test(db),
   'filtering by savedBy here would hide every other estimator\'s attachments');
 ck('the SP item id is cached for every CE read back',
   /_monSpIdCache\[cid\]=item\.Id/.test(db));

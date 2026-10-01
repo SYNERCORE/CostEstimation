@@ -40,6 +40,19 @@ function _srcParse(v){
    half stays. Every copy found is written on, so the split rows converge on
    the next save instead of drifting further. */
 async function _monRowsFor(numId,ceNum){
+  try{return await _monRowsForFiltered(numId,ceNum);}
+  catch(err){
+    if(!/view threshold|-2146232832/i.test(String((err&&err.message)||'')))throw err;
+    /* Both filtered columns are indexed on this site and SharePoint still
+       refuses the query -- so stop asking it to filter, walk the list, and
+       match here. Slower, but a save that cannot find its row writes a second
+       one, which is worse than slow. */
+    const n=String(ceNum||'').trim().toUpperCase();
+    const all=await spGet(spList('Monitoring'),'','Id,Title,shicCEId,shicMonData');
+    return all.filter(r=>r&&r.Title!=='config'&&(Number(r.shicCEId)===Number(numId)||(n&&String(r.Title||'').trim().toUpperCase()===n)));
+  }
+}
+async function _monRowsForFiltered(numId,ceNum){
   const byId=spGet(spList('Monitoring'),`shicCEId eq ${numId}`,'Id,shicMonData');
   const n=String(ceNum||'').trim();
   /* dbSaveMonitoring falls back to String(ceId) when it has no CE number, and
@@ -296,7 +309,7 @@ async function dbSaveMonAll(monData, histItems){
    nobody ever saw. These two find them and fold them back into one. */
 async function dbFindMonDuplicates(){
   if(!(USE_SP||getSiteURL()))return [];
-  const r=await spGet(spList('Monitoring'),"Title ne 'config'",'Id,Title,shicCEId,shicMonData');
+  const r=(await spGet(spList('Monitoring'),'','Id,Title,shicCEId,shicMonData')).filter(x=>x.Title!=='config');
   const by={};
   r.forEach(it=>{const cid=String(it.shicCEId);if(!cid||cid==='null'||cid==='0')return;(by[cid]=by[cid]||[]).push(it);});
   return Object.keys(by).filter(cid=>by[cid].length>1).map(cid=>{
@@ -344,7 +357,11 @@ async function dbGetMon(){
   if(!(USE_SP||getSiteURL()))return null;
   try{
     /* Fetch all per-CE items */
-    const r=await spGet(spList('Monitoring'),"Title ne 'config'",'Id,Title,shicCEId,shicMonData,Modified');
+    /* No $filter: Title is not indexed and 'ne' cannot use an index anyway, so
+       on a list past 5,000 rows this read was refused outright and the whole
+       Monitoring table failed to load. An unfiltered paged read is always
+       allowed; the legacy config row is dropped here instead. */
+    const r=(await spGet(spList('Monitoring'),'','Id,Title,shicCEId,shicMonData,Modified')).filter(x=>x.Title!=='config');
     if(r.length){
       const data={};let latest=null;const seen={};let dups=0;
       for(const item of r){

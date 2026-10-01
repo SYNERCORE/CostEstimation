@@ -274,6 +274,8 @@ jobs:
         run: node tools/test-requests-sent.js
       - name: Monitoring past the list threshold
         run: node tools/test-monitoring-threshold.js
+      - name: Load guard counts every kind of cost row
+        run: node tools/test-load-guard-rows.js
       - name: Monitoring - one CE, two rows, reunited
         run: node tools/test-monitoring-duplicate-rows.js
       - name: Storage warning clears what it can
@@ -468,6 +470,8 @@ jobs:
         run: node tools/test-requests-sent.js
       - name: Monitoring past the list threshold
         run: node tools/test-monitoring-threshold.js
+      - name: Load guard counts every kind of cost row
+        run: node tools/test-load-guard-rows.js
       - name: Monitoring - one CE, two rows, reunited
         run: node tools/test-monitoring-duplicate-rows.js
       - name: Storage warning clears what it can

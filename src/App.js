@@ -2920,7 +2920,14 @@ function App({
        fails in between leaves exactly this in SharePoint. It used to open as a
        blank estimate reporting P0.00 with a cheerful "Loaded" toast, which
        reads as "this CE is empty" rather than "this CE did not come back". */
-    const _rowCount = (d.mp || []).length + (d.tools || []).length + (d.mats || []).length + (d.ppe || []).length;
+    /* Every place a CE keeps cost, not just the four line-item tabs. A CE that is
+       only mobilisation, or only a third-party rental under Miscellaneous, has no
+       manpower, tools, materials or PPE rows and a perfectly good total -- and was
+       refused here as though its rows had never reached SharePoint. */
+    const _arr = v => Array.isArray(v) ? v.length : 0;
+    const _rowCount = _arr(d.mp) + _arr(d.tools) + _arr(d.mats) + _arr(d.ppe) +
+      _arr(d.mobVehicles) + _arr(d.demobVehicles) + _arr(d.addlCosts) +
+      Object.keys(d.misc && typeof d.misc === 'object' ? d.misc : {}).reduce((t, k) => t + _arr(d.misc[k]), 0);
     if (!_rowCount && N(d.grand) > 0) {
       showToast('⚠ ' + (d.info?.ceNum || d.ceNum || 'This CE') + ' has a stored total of ' +
         'P' + N(d.grand).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' but no line items in SharePoint — the header was written and the rows were not. ' +

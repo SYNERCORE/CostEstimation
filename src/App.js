@@ -458,6 +458,8 @@ function App({
   const [sowItems, setSowItems] = useState([]); /* [{id,type:'main'|'sub',text}] */
   /* SOW Breakdown view state */
   const [sbCollapsed, setSbCollapsed] = useState({}); /* {taskId:true} */
+  const [sbDlOn, setSbDlOn] = useState(false);   /* Masterlist suggestions built on first focus */
+  const [sbShow, setSbShow] = useState({});      /* {taskId|tabKey: rows drawn} */
   const [sbSel, setSbSel] = useState({});             /* bulk-assign selection, {selKey:descriptor} */
   const [sbSearch, setSbSearch] = useState('');
   const [addMode, setAddMode] = useState(false);
@@ -10242,6 +10244,15 @@ tab === 'sowbreak' && (() => {
     }, c[0]))));
 
   /* One resource group (Manpower / Tools / Consumables / PPE) inside a task card. */
+  const SB_PAGE = 100;
+  /* A task holding hundreds of rows draws the first page and says how many it
+     is holding back; drawing them all is what made the tab unusable. */
+  const _moreRow = (n, lim, k) => n > lim ? /*#__PURE__*/React.createElement("tr", { key: '_more' },
+    /*#__PURE__*/React.createElement("td", { colSpan: 8, style: { ...TDS, paddingLeft: 128, color: MT, fontSize: 10.5 } },
+      'Showing ' + lim + ' of ' + n + '.  ',
+      /*#__PURE__*/React.createElement("button", { style: { ...btn('def', true), fontSize: 10 }, onClick: () => setSbShow(p => ({ ...p, [k]: lim + SB_PAGE })) }, 'Show ' + Math.min(SB_PAGE, n - lim) + ' more'),
+      ' ',
+      /*#__PURE__*/React.createElement("button", { style: { ...btn('def', true), fontSize: 10 }, onClick: () => setSbShow(p => ({ ...p, [k]: n })) }, 'Show all'))) : null;
   const group = (t, taskId) => {
     /* A consolidated row serves several tasks, so it is listed under each of
        them -- carrying the slice of its cost that this task asked for. */
@@ -10249,6 +10260,7 @@ tab === 'sowbreak' && (() => {
     if (!rows.length) return null;
     const isMp = t.key === 'mp';
     const hasDays = isMp || t.key === 'tools'; /* tools are charged qty x days x cost */
+    const _lim = sbShow[taskId + '|' + t.key] || SB_PAGE;
     return /*#__PURE__*/React.createElement("div", { key: t.key, style: { marginBottom: 6 } },
       /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 } },
         /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, fontWeight: 700, color: MT, textTransform: 'uppercase', letterSpacing: '.06em', minWidth: 128 } }, t.label),
@@ -10257,11 +10269,11 @@ tab === 'sowbreak' && (() => {
         /*#__PURE__*/React.createElement("span", { style: { ...MONO, marginLeft: 'auto', fontSize: 10, color: MT }, title: t.label + " subtotal for this task" },
           "₱" + ph(rows.reduce((a, r) => a + rowCostForTask(t.key, r, taskId), 0)))
       ),
-      /*#__PURE__*/React.createElement("datalist", { id: 'sb_ml_' + t.ml },
+      sbDlOn && /*#__PURE__*/React.createElement("datalist", { id: 'sb_ml_' + t.ml },
         ((masterlist && masterlist[t.ml]) || []).map(x => /*#__PURE__*/React.createElement("option", { key: x.id, value: x[t.nameKey] || x.desc || x.role || '' }))),
-      /*#__PURE__*/React.createElement("table", { style: { width: '100%', borderCollapse: 'collapse', fontSize: 11, marginBottom: 2 } },
+      /*#__PURE__*/React.createElement("table", { onFocusCapture: sbDlOn ? undefined : (() => setSbDlOn(true)), style: { width: '100%', borderCollapse: 'collapse', fontSize: 11, marginBottom: 2 } },
         hdr([['Item description'], [isMp ? 'Pax' : 'Qty', 58], ...(hasDays ? [['Days', 56]] : []), ...(isMp ? [] : [['UOM', 66]]), [isMp ? 'Rate' : 'Unit cost', 92], ['Cost', 92], ['', 56]]),
-        /*#__PURE__*/React.createElement("tbody", null, rows.map(r =>
+        /*#__PURE__*/React.createElement("tbody", null, rows.slice(0, _lim).map(r =>
           /*#__PURE__*/React.createElement("tr", { key: r.id },
             /*#__PURE__*/React.createElement("td", { style: { ...TDS, paddingLeft: 128 } },
               /*#__PURE__*/React.createElement("input", {
@@ -10320,7 +10332,7 @@ tab === 'sowbreak' && (() => {
               }, "×")
             )
           )
-        ))
+        ), _moreRow(rows.length, _lim, taskId + '|' + t.key))
       )
     );
   };
@@ -10342,9 +10354,9 @@ tab === 'sowbreak' && (() => {
         /*#__PURE__*/React.createElement("span", { style: { ...MONO, marginLeft: 'auto', fontSize: 10, color: MT }, title: "Miscellaneous subtotal for this task" },
           "₱" + ph(rows.reduce((a, r) => a + rowCost('misc', r), 0)))
       ),
-      /*#__PURE__*/React.createElement("datalist", { id: 'sb_ml_misc' },
+      sbDlOn && /*#__PURE__*/React.createElement("datalist", { id: 'sb_ml_misc' },
         ((masterlist && masterlist.vehicles) || []).map(x => /*#__PURE__*/React.createElement("option", { key: x.id, value: x.desc || '' }))),
-      /*#__PURE__*/React.createElement("table", { style: { width: '100%', borderCollapse: 'collapse', fontSize: 11, marginBottom: 2 } },
+      /*#__PURE__*/React.createElement("table", { onFocusCapture: sbDlOn ? undefined : (() => setSbDlOn(true)), style: { width: '100%', borderCollapse: 'collapse', fontSize: 11, marginBottom: 2 } },
         hdr([['Item description'], ['Qty', 58], ['UOM', 66], ['Unit cost', 92], ['Cost', 92], ['', 56]]),
         /*#__PURE__*/React.createElement("tbody", null, rows.map(r =>
           /*#__PURE__*/React.createElement("tr", { key: r.id },

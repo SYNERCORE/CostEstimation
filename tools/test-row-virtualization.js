@@ -36,3 +36,11 @@ const sbOpen = (big, c, id) => c[id] === undefined ? !big : !c[id];
 c3('a card the user opened stays open on a big CE', sbOpen(true, { a: false }, 'a') === true && sbOpen(true, {}, 'a') === false);
 c3('small CEs are unchanged (open by default)', sbOpen(false, {}, 'a') === true);
 if (b3) process.exit(1);
+/* SOW Breakdown: a task with hundreds of rows draws a page at a time; suggestions built on focus. */
+let b4 = 0;
+const c4 = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) b4++; };
+c4('a task group draws a page of rows, not all of them', app.indexOf('rows.slice(0, _lim).map(r =>') > 0 && app.indexOf('const SB_PAGE = 100;') > 0);
+c4('and says how many it holds back, with Show more / Show all', app.indexOf("'Showing ' + lim + ' of ' + n") > 0 && app.indexOf("'Show all'") > 0 && app.indexOf('_moreRow(rows.length, _lim, taskId') > 0);
+c4('Masterlist suggestions are built on first focus, not per group per render',
+  app.indexOf("sbDlOn && /*#__PURE__*/React.createElement(\"datalist\", { id: 'sb_ml_' + t.ml }") > 0 && app.split('onFocusCapture: sbDlOn ? undefined').length - 1 === 2);
+if (b4) process.exit(1);

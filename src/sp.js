@@ -22,6 +22,7 @@ function spAdoptSetupLink(){
     if(!j || !/^https:\/\/[^\/]+\//.test(String(j.s||''))) return false;
     const cur = getSPConfig();
     saveSPConfig({...cur, siteUrl: String(j.s).replace(/\/$/,''), clientId: String(j.c||cur.clientId||''),
+      ...(j.t ? {tenantId: String(j.t)} : {}),
       ...(j.p ? {listPrefix: String(j.p)} : {})});
     /* The address is tidied so a shared screenshot of it is not a second,
        stale copy of the settings, and a reload does not run this again. */
@@ -31,10 +32,23 @@ function spAdoptSetupLink(){
   }catch(_e){ return false; }
 }
 /* The link an admin hands to a new device. */
+/* Which Microsoft tenant a sign-in goes to. 'common' lets an account choose its
+   OWN tenant -- so someone whose work account lives elsewhere (an SY3 address
+   given access to this Synercore site as a guest) signs in to THEIR tenant,
+   where this app was never registered, and is told "Need admin approval" for a
+   consent that was in fact granted. The site address names the tenant: a
+   SharePoint Online host is <tenant>.sharepoint.com and the tenant's first
+   domain is <tenant>.onmicrosoft.com, so use that unless one was configured. */
+function spAuthorityTenant(cfg, siteUrl){
+  const c = cfg || {};
+  if(c.tenantId) return String(c.tenantId).trim();
+  const m = /^https:\/\/([a-z0-9-]+)\.sharepoint\.com(?:\/|$)/i.exec(String(siteUrl || c.siteUrl || ''));
+  return m ? m[1].toLowerCase() + '.onmicrosoft.com' : 'common';
+}
 function spSetupLink(cfg){
   const c = cfg || getSPConfig();
   if(!c.siteUrl) return '';
-  const j = JSON.stringify({s: c.siteUrl, c: c.clientId || '', ...(c.listPrefix && c.listPrefix !== 'SHICCE' ? {p: c.listPrefix} : {})});
+  const j = JSON.stringify({s: c.siteUrl, c: c.clientId || '', ...(c.tenantId ? {t: c.tenantId} : {}), ...(c.listPrefix && c.listPrefix !== 'SHICCE' ? {p: c.listPrefix} : {})});
   const b64 = btoa(unescape(encodeURIComponent(j))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
   return window.location.origin + window.location.pathname + '?setup=' + b64;
 }
@@ -140,7 +154,7 @@ async function _getSPTokenNow(opts){
       _spMsalApp=new msal.PublicClientApplication({
         auth:{
           clientId:cfg.clientId,
-          authority:'https://login.microsoftonline.com/'+(cfg.tenantId||'common'),
+          authority:'https://login.microsoftonline.com/'+spAuthorityTenant(cfg,su),
           redirectUri:window.location.origin+window.location.pathname.replace(/\/[^\/]*$/,'/')
         },
         cache:{cacheLocation:'sessionStorage',storeAuthStateInCookie:false}

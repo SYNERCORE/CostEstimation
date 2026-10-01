@@ -284,6 +284,8 @@ jobs:
         run: node tools/test-requestor-sees-all.js
       - name: Long lists draw only the rows near the screen
         run: node tools/test-row-virtualization.js
+      - name: Blank disciplines can be filled in bulk
+        run: node tools/test-bulk-discipline.js
       - name: Monitoring - one CE, two rows, reunited
         run: node tools/test-monitoring-duplicate-rows.js
       - name: Storage warning clears what it can
@@ -488,6 +490,8 @@ jobs:
         run: node tools/test-requestor-sees-all.js
       - name: Long lists draw only the rows near the screen
         run: node tools/test-row-virtualization.js
+      - name: Blank disciplines can be filled in bulk
+        run: node tools/test-bulk-discipline.js
       - name: Monitoring - one CE, two rows, reunited
         run: node tools/test-monitoring-duplicate-rows.js
       - name: Storage warning clears what it can

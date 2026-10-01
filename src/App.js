@@ -5541,6 +5541,25 @@ function App({
     return Object.values(seen).sort((a, b) => b.n - a.n || a.label.localeCompare(b.label));
   }, [monRows, monData]);
   const discOptions = useMonFacet(monDisc);
+  /* CEs saved before the Discipline field existed carry none, and the column
+     reads blank. Admins can give every blank CE in the current view one:
+     only blanks are written, so a CE that already has a discipline is never
+     overwritten, and the view's own filters pick which ones. */
+  const fillBlankDisc = () => {
+    if (!isAdmin) return;
+    const blanks = sortedHistory.filter(e => !e._draft && typeof e.id === 'number' && !String(monDisc(e, monOf(e)) || '').trim());
+    if (!blanks.length) { showToast('Every CE in this view already has a discipline.'); return; }
+    const NL = String.fromCharCode(10);
+    const ans = window.prompt(blanks.length + ' CE(s) in this view have no discipline.' + NL + NL +
+      'Type the discipline to give them (' + CE_DISCIPLINES.join(', ') + '):');
+    if (ans === null) return;
+    const pick = CE_DISCIPLINES.find(d => d.toUpperCase() === String(ans).trim().toUpperCase());
+    if (!pick) { showToast('"' + ans + '" is not one of: ' + CE_DISCIPLINES.join(', ') + '.', true); return; }
+    if (!window.confirm('Set ' + pick + ' on ' + blanks.length + ' CE(s)? Ones that already have a discipline are not touched.')) return;
+    blanks.forEach(e => updateMon(e.id, 'designation', pick));
+    auditLog('bulk_discipline', pick + ' x' + blanks.length, currentUser?.username);
+    showToast(pick + ' set on ' + blanks.length + ' CE(s).');
+  };
   const custOptions = useMonFacet(monCust);
 
   const sortedHistory = useMemo(() => {
@@ -6253,6 +6272,11 @@ function App({
     /*#__PURE__*/React.createElement("option", {value:'shopworks'}, "Shopworks"),
     /*#__PURE__*/React.createElement("option", {value:'supply'}, "Supply")
   ),
+  isAdmin && discOptions.some(o => !o.label) && /*#__PURE__*/React.createElement("button", {
+    style: {...btn('def', true), fontSize: 10},
+    onClick: fillBlankDisc,
+    title: "Give a discipline to every CE in this view that has none. Ones that already have one are left alone."
+  }, "Set blank disciplines"),
   /*#__PURE__*/React.createElement("select", {
     style: {...INP, fontSize:11, width:150},
     value: monDiscFilter,

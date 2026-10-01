@@ -809,26 +809,42 @@ async function _spGetByCE(list, ceId, sel){
   /* Once a list is known to be past the threshold, do not keep trying the
      filter that cannot work -- that is a failing round-trip per CE opened. The
      snapshot is dropped on every write, so this never serves stale rows. */
-  if(_spBigListCache[list]) return _spBigListCache[list].get(String(ceId)) || [];
+  if(_spBigListCache[list]) return _spRowsFromIndex(list, ceId, sel);
   try{ return await _spGetTolerant(list, `shicCEId eq ${ceId}`, sel); }
   catch(err){
     if(!/view threshold/i.test(err.message||'')) throw err;
     if(!_spBigListCache[list]){
-      setTimeout(()=>(window._shicToast||console.warn)('Reading all of ' + list + ' once — it is past the SharePoint 5,000-item limit and shicCEId is not indexed, so CEs cannot be fetched one at a time. Run SP Setup > "Repair lists & columns" to make this fast again.', true), 100);
-      /* shicCEId is not in the caller's $select -- the filter used to supply
-         it -- and without it there is nothing to group on. */
-      const all = await _spGetTolerant(list, null, sel.indexOf('shicCEId') < 0 ? sel + ',shicCEId' : sel);
+      setTimeout(()=>(window._shicToast||console.warn)('Reading ' + list + ' by row number — it is past the SharePoint 5,000-item limit and a filter on shicCEId is being refused. Slower, but CEs still open. An admin can check the index in SP Setup.'), 0);
+      /* Walk ONLY Id and shicCEId. The first version of this fallback pulled
+         every column of every row -- tens of thousands of rows of line items --
+         and that read was itself refused with a 500, so the fallback failed
+         exactly where it was needed. Two small columns are cheap to page. */
+      const all = await spGet(list, '', 'Id,shicCEId');
       const byCE = new Map();
       for(const r of all){
         const k = String(r.shicCEId);
         if(!byCE.has(k)) byCE.set(k, []);
         byCE.get(k).push(r);
       }
-      console.info('Read ' + all.length + ' rows from ' + list + ' across ' + byCE.size + ' CEs (threshold fallback).');
+      console.info('Indexed ' + all.length + ' rows of ' + list + ' across ' + byCE.size + ' CEs (threshold fallback).');
       _spBigListCache[list] = byCE;
     }
-    return _spBigListCache[list].get(String(ceId)) || [];
+    return _spRowsFromIndex(list, ceId, sel);
   }
+}
+/* The row ids for one CE are known from the walk; fetch their columns by Id.
+   Id is always indexed, so this filter is allowed at any list size. */
+async function _spRowsFromIndex(list, ceId, sel){
+  const rows = _spBigListCache[list].get(String(ceId)) || [];
+  if(!rows.length) return [];
+  const cols = String(sel).split(',').map(c=>c.trim()).filter(Boolean);
+  if(cols.every(c=>c==='Id'||c==='shicCEId')) return rows;
+  const out = [];
+  for(let n=0;n<rows.length;n+=40){
+    const f = rows.slice(n, n+40).map(r=>'Id eq '+r.Id).join(' or ');
+    out.push(...await _spGetTolerant(list, f, cols.indexOf('shicCEId')<0 ? sel+',shicCEId' : sel));
+  }
+  return out;
 }
 /* One CE, assembled from its header row and its line-item rows.
    Shared by dbLoadCE and the offline prefetch: a second copy of this would

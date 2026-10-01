@@ -335,6 +335,9 @@ async function spGet(l,f='',sel=''){
       /* The body is the only place SharePoint says WHY. Without it a threshold
          error, a missing column and a genuine outage all read as a bare 500. */
       let body='';try{body=await r.text();}catch(_){}
+      /* Said once, in full, where it can be read: the toast keeps a hundred
+         characters and the browser's own line cuts the URL. */
+      if(r.status>=500)console.warn('SP '+r.status+' on '+l+' | filter: '+(f||'(none)')+' | select: '+(sel||'(all)')+' | '+String(body).slice(0,500));
       throw spErr('get',l,r.status,body,r.headers&&r.headers.get('Retry-After'));
     }
     const json=await r.json();

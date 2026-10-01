@@ -689,6 +689,7 @@ function App({
      the browser showed it happily. Pass an object to write several fields as
      one change. */
   const updateMon = (ceId, field, val) => setMonData(prev => {
+    if (isRequestor && !reqOwns(ceId, prev)) { showToast('Requestors can view this CE but only change the requests they raised.', true); return prev; }
     const fields = (field && typeof field === 'object') ? field : { [field]: val };
     const extra = {};
     /* Stamp who moved a CE and when, on EVERY status change.
@@ -986,6 +987,9 @@ function App({
      that comes back is theirs to read in full, which is what View is for. */
   const isRequestor = isRequestorRole(currentUser.role);
   const REQUESTOR_TABS = ['mywork', 'info', 'sow', 'history', 'dashboard'];
+  /* A requestor reads every CE in CE Monitoring and the Dashboard -- the owner's
+     decision -- but changes only the ones they raised (see reqOwns). */
+  const canSeeAll = isAdmin || isRequestor;
   /* Every CE number in use, not just this user's. See dbGetCeNumbers. */
   const [ceNums, setCeNums] = useState([]);
   const isOwner = isOwnerRole(currentUser.role);
@@ -1170,6 +1174,16 @@ function App({
      latest monitoring data. */
   const _monRef = React.useRef({});
   _monRef.current = monData;
+  /* Whether a requestor raised this CE: receivedBy is stamped at request time
+     and never changes; savedBy covers a request whose monitoring row has not
+     arrived yet. */
+  const reqOwns = (id, mon) => {
+    const m = (mon || _monRef.current || {})[id] || {};
+    const me = [currentUser?.name, currentUser?.username].map(x => String(x || '').trim().toUpperCase()).filter(Boolean);
+    if (me.includes(String(m.receivedBy || '').trim().toUpperCase()) && String(m.receivedBy || '').trim()) return true;
+    const h = (history || []).find(x => String(x.id) === String(id));
+    return !!(h && h.savedBy === currentUser?.username && !m.receivedBy);
+  };
   const mineToSee = id => {
     const m = (_monRef.current || {})[id];
     if (!m) return false;
@@ -1187,7 +1201,7 @@ function App({
        on it made opening the app feel like it had hung. */
     try {
       const cached = LS.get('history') || [];
-      if (cached.length) setHistory(isAdmin ? cached : cached.filter(h => h.savedBy === currentUser.username || mineToSee(h.id)));
+      if (cached.length) setHistory(canSeeAll ? cached : cached.filter(h => h.savedBy === currentUser.username || mineToSee(h.id)));
     } catch (_e) {}
     try {
       const spAvail = !!(USE_SP || getSiteURL());
@@ -1195,7 +1209,7 @@ function App({
          says nothing about anyone's estimates, but it is what stops two
          people being handed the same number. */
       dbGetCeNumbers().then(ns => { if (ns && ns.length) setCeNums(ns); }).catch(() => {});
-      const h = await dbGetHistory(currentUser.username, isAdmin, isAdmin ? null : mineToSee);
+      const h = await dbGetHistory(currentUser.username, canSeeAll, canSeeAll ? null : mineToSee);
       /* Keep LS in sync with SP so fallback is never stale. Only ever write a
          NON-empty result. The old code purged the cache whenever SharePoint
          returned zero rows, which was wrong twice over: a failed/trimmed query
@@ -1215,7 +1229,7 @@ function App({
            rows, fell into this branch, and was handed the lot. */
         try {
           const _c = LS.get('history') || [];
-          effective = isAdmin ? _c : _c.filter(x => x.savedBy === currentUser.username || mineToSee(x.id));
+          effective = canSeeAll ? _c : _c.filter(x => x.savedBy === currentUser.username || mineToSee(x.id));
         } catch (_e) { effective = []; }
         setSyncStatus({ sp: 'connected' });
       }
@@ -1232,7 +1246,7 @@ function App({
       try {
         const cached = LS.get('history') || [];
         const u = currentUser.username;
-        setHistory(isAdmin ? cached : cached.filter(h => h.savedBy === u || mineToSee(h.id)));
+        setHistory(canSeeAll ? cached : cached.filter(h => h.savedBy === u || mineToSee(h.id)));
       } catch (_e) {}
     }
     setHistBusy(false);
@@ -5327,11 +5341,11 @@ function App({
      once for each new set of such CEs. */
   const _assignedKey = React.useRef('');
   React.useEffect(() => {
-    if (isAdmin) return;
+    if (canSeeAll) return;
     const have = new Set(history.map(h => String(h.id)));
     const missing = Object.keys(monData || {}).filter(id => !have.has(String(id)) && mineToSee(id)).sort().join(',');
     if (missing && missing !== _assignedKey.current) { _assignedKey.current = missing; loadHist(); }
-  }, [monData, history, isAdmin]);
+  }, [monData, history, canSeeAll]);
   /* A draft is work in progress. Once the CE has been saved the work is in
      history and the draft is finished with -- but it was only ever retired by
      the person who saved it, in the session that saved it, so drafts of CEs
@@ -6862,22 +6876,22 @@ function App({
       /* Status changes constantly and everything else in the row does not, so
          it gets its own action rather than sharing Edit with the reference
          fields. It opens a panel: pick the new status, and read the trail. */
-      disabled: !!e._draft,
+      disabled: !!e._draft || (isRequestor && !reqOwns(e.id)),
       style: {gridRow: 1, gridColumn: 1, ...btn(statusPanel === e.id ? 'acc' : 'def', true), fontSize: 10, padding: '2px 8px', opacity: e._draft ? .4 : 1, cursor: e._draft ? 'not-allowed' : 'pointer'},
       title: e._draft ? 'A draft is always Draft — save the CE to start tracking it' : 'Update status and view its history',
       onClick: () => { if (!e._draft) setStatusPanel(statusPanel === e.id ? null : e.id); }
     }, '⚑ Status'), /*#__PURE__*/React.createElement("button", {
-      disabled: !!e._draft,
+      disabled: !!e._draft || (isRequestor && !reqOwns(e.id)),
       style: {gridRow: 1, gridColumn: 2, ...btn('def', true), fontSize: 10, padding: '2px 8px', opacity: e._draft ? .4 : 1, cursor: e._draft ? 'not-allowed' : 'pointer'},
       title: e._draft ? 'Save the CE to start its remarks' : 'Add a remark and read every earlier one',
       onClick: () => { if (!e._draft) { setRemarkDraft(''); setRemarksPanel({ id: e.id, ceNum: e.info?.ceNum || e.ceNum || '' }); } }
     }, '💬 Remarks' + (((monData[e.id] || {}).remarksLog || []).length > 1 ? ' (' + monData[e.id].remarksLog.length + ')' : '')), /*#__PURE__*/React.createElement("button", {
-      disabled: !!e._draft,
+      disabled: !!e._draft || (isRequestor && !reqOwns(e.id)),
       style: {gridRow: 1, gridColumn: 3, ...btn(assignPanel && assignPanel.id === e.id ? 'acc' : 'def', true), fontSize: 10, padding: '2px 8px', opacity: e._draft ? .4 : 1, cursor: e._draft ? 'not-allowed' : 'pointer'},
       title: e._draft ? 'Save the CE first — a draft has no monitoring record to assign' : 'Reassign this CE to another estimator',
       onClick: () => { if (!e._draft) openAssign(e); }
     }, '👤 Assign'), /*#__PURE__*/React.createElement("button", {
-      disabled: !!e._draft,
+      disabled: !!e._draft || (isRequestor && !reqOwns(e.id)),
       style: {gridRow: 2, gridColumn: 3, ...btn(editingRow === e.id ? 'ok' : 'def', true), fontSize: 10, padding: '2px 8px', opacity: e._draft ? .4 : 1, cursor: e._draft ? 'not-allowed' : 'pointer'},
       title: e._draft ? 'Save the CE first — a draft has no monitoring record to hold a deadline' : 'Edit monitoring fields',
       onClick: () => { if (!e._draft) setEditingRow(editingRow === e.id ? null : e.id); }
@@ -11319,9 +11333,24 @@ tab === 'mywork' && (() => {
         /*#__PURE__*/React.createElement("span", {style:{flex:1,color:MT,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, ((d.info && d.info.client) || '') + ' · saved ' + new Date(d.savedAt).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})),
         /*#__PURE__*/React.createElement("button", {style:btn('acc',true),onClick:()=>resumeDraft(d)}, "Resume")), 'No saved drafts.'),
       section('⏳ My CEs in approval', inApproval, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT,whiteSpace:'nowrap'}}, apv(x).signed + '/' + apv(x).total + ' signed · waiting on ' + (apv(x).waiting || []).join(', ')), viewBtn(x)), 'None of your CEs are in approval.'),
-      (isRequestor || sent.length > 0) && section('📤 Requests I sent', sent, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,whiteSpace:'nowrap',color:MT}},
+      !isRequestor && sent.length > 0 && section('📤 Requests I sent', sent, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,whiteSpace:'nowrap',color:MT}},
         (x.m.status || 'Pending') + (x.m.ceeName ? ' · with ' + x.m.ceeName : '')), viewBtn(x)), 'You have not sent a request yet. Use + New Request in CE Monitoring.'),
-      forReview.length > 0 && section('🔎 For review (status For Approval)', forReview, x => line(x, null, viewBtn(x)), '')));
+      forReview.length > 0 && section('🔎 For review (status For Approval)', forReview, x => line(x, null, viewBtn(x)), '')),
+    isRequestor && /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:'12px 14px',overflowX:'auto'}},
+      /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:13,marginBottom:8}}, '📤 My requests', /*#__PURE__*/React.createElement("span", {style:{marginLeft:6,fontSize:11,color:MT}}, '(' + sent.length + ')')),
+      sent.length ? /*#__PURE__*/React.createElement("table", {style:{width:'100%',borderCollapse:'collapse',fontSize:12}},
+        /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['CE NO.', 'CUSTOMER', 'JOB', 'ASSIGNED TO', 'STATUS', ''].map((h, i) => /*#__PURE__*/React.createElement("th", {key: i, style:{textAlign:'left',padding:'6px 8px',fontSize:10,color:MT,letterSpacing:'.06em',borderBottom:'1px solid '+BDR}}, h)))),
+        /*#__PURE__*/React.createElement("tbody", null, sent.map(x => {
+          const st = x.m.status || 'Pending', col = getStatusColor(st), still = !!(x.e.info && x.e.info.request);
+          const td = {padding:'7px 8px',borderBottom:'1px solid '+alpha(BDR,'44'),verticalAlign:'middle'};
+          return /*#__PURE__*/React.createElement("tr", {key: x.e.id},
+            /*#__PURE__*/React.createElement("td", {style:{...td,...MONO,fontWeight:700,whiteSpace:'nowrap'}}, ceLabel(x.e)),
+            /*#__PURE__*/React.createElement("td", {style:td}, (x.e.info && x.e.info.client) || x.m.customer || '—'),
+            /*#__PURE__*/React.createElement("td", {style:td}, x.m.jobTitle || (x.e.info && x.e.info.description) || '—'),
+            /*#__PURE__*/React.createElement("td", {style:td}, x.m.ceeName || '—'),
+            /*#__PURE__*/React.createElement("td", {style:td}, /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'2px 10px',borderRadius:12,fontSize:11,fontWeight:700,color:col,border:'1px solid '+col,background:alpha(col,'18')}}, st)),
+            /*#__PURE__*/React.createElement("td", {style:{...td,textAlign:'right'}}, still ? /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'3px 12px',borderRadius:6,fontSize:11,fontWeight:800,color:'#fff',background:'#16a34a',letterSpacing:'.06em'}}, 'REQUEST') : viewBtn(x)));
+        }))) : /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,padding:'6px 0'}}, 'You have not sent a request yet. Use + New Request in CE Monitoring.')));
 })(),
 
 tab === 'dashboard' && (() => {

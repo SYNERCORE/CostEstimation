@@ -280,6 +280,8 @@ jobs:
         run: node tools/test-ce-cache-bound.js
       - name: Sign-in tenant comes from the site address
         run: node tools/test-sp-tenant.js
+      - name: Requestors read every CE, change only their own
+        run: node tools/test-requestor-sees-all.js
       - name: Monitoring - one CE, two rows, reunited
         run: node tools/test-monitoring-duplicate-rows.js
       - name: Storage warning clears what it can
@@ -480,6 +482,8 @@ jobs:
         run: node tools/test-ce-cache-bound.js
       - name: Sign-in tenant comes from the site address
         run: node tools/test-sp-tenant.js
+      - name: Requestors read every CE, change only their own
+        run: node tools/test-requestor-sees-all.js
       - name: Monitoring - one CE, two rows, reunited
         run: node tools/test-monitoring-duplicate-rows.js
       - name: Storage warning clears what it can

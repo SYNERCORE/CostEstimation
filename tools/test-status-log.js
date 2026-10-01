@@ -33,9 +33,9 @@ const setSyncStatus=()=>{};
 const _monWroteAt={current:{}};
 let state={};
 const setMonData=fn=>{state=fn(state);};
-const upd=new Function('setMonData','currentUser','dbSaveMonEntry','localStorage','MON_KEY','history','setSyncStatus','_monWroteAt',
+const upd=new Function('setMonData','currentUser','dbSaveMonEntry','localStorage','MON_KEY','history','setSyncStatus','_monWroteAt','isRequestor',
   'return '+body.replace(/^const updateMon = /,'').replace(/;$/,''))
-  (setMonData,currentUser,dbSaveMonEntry,localStorage,MON_KEY,history,setSyncStatus,_monWroteAt);
+  (setMonData,currentUser,dbSaveMonEntry,localStorage,MON_KEY,history,setSyncStatus,_monWroteAt,false);
 
 let bad=0; const ck=(n,c,x)=>{ if(c)console.log('  PASS  '+n); else {console.log('  FAIL  '+n+(x?'  -> '+x:''));bad++;} };
 upd(7,'status','Pending');

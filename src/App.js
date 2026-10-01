@@ -11257,6 +11257,11 @@ tab === 'mywork' && (() => {
   const open = mine.filter(x => ceIsOpen(x.m.status) && apv(x).state !== 'pending')
     .map(x => ({...x, dl: ceDeadline(x.m.deadline, x.m.dateSubmitted, x.m.status)}))
     .sort((a, b) => (a.dl.days == null) - (b.dl.days == null) || (a.dl.days || 0) - (b.dl.days || 0));
+  /* Requests this user raised, wherever they have got to. `mine` stops matching
+     once the estimator's first costed save flips savedBy, so a request that has
+     moved on would vanish from here; receivedBy is stamped at request time and
+     never changes, the same field mineToSee uses to keep it visible. */
+  const sent = rows.filter(x => !x.e._draft && x.m.receivedBy && names.includes(String(x.m.receivedBy).trim().toUpperCase()));
   const drafts = (sharedDrafts || []).filter(d => d.savedBy === me);
   const now = new Date(), inMonth = v => { const d = v ? new Date(v) : null; return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); };
   const subMonth = mine.filter(x => inMonth(x.m.dateSubmitted ? x.m.dateSubmitted + 'T00:00:00' : null) || (x.m.status === 'Submitted' && inMonth(x.m.statusChangedAt)));
@@ -11302,6 +11307,8 @@ tab === 'mywork' && (() => {
         /*#__PURE__*/React.createElement("span", {style:{flex:1,color:MT,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, ((d.info && d.info.client) || '') + ' · saved ' + new Date(d.savedAt).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})),
         /*#__PURE__*/React.createElement("button", {style:btn('acc',true),onClick:()=>resumeDraft(d)}, "Resume")), 'No saved drafts.'),
       section('⏳ My CEs in approval', inApproval, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT,whiteSpace:'nowrap'}}, apv(x).signed + '/' + apv(x).total + ' signed · waiting on ' + (apv(x).waiting || []).join(', ')), viewBtn(x)), 'None of your CEs are in approval.'),
+      (isRequestor || sent.length > 0) && section('📤 Requests I sent', sent, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,whiteSpace:'nowrap',color:MT}},
+        (x.m.status || 'Pending') + (x.m.ceeName ? ' · with ' + x.m.ceeName : '')), viewBtn(x)), 'You have not sent a request yet. Use + New Request in CE Monitoring.'),
       forReview.length > 0 && section('🔎 For review (status For Approval)', forReview, x => line(x, null, viewBtn(x)), '')));
 })(),
 

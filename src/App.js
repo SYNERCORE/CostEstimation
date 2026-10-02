@@ -2746,7 +2746,8 @@ function App({
     const dup = await dbFindCEByNum(ceNum).catch(() => null);
     /* A logged request is built out and saved over under its own number. Only
        that number: renaming the CE to someone else's number is still refused. */
-    const _fromRequest = !!(info.request && String(info.requestNum || '').toUpperCase() === ceNum);
+    const _fromRequest = !!(info.request && (String(info.requestNum || '').toUpperCase() === ceNum ||
+      (info.acceptedCeNum && String(info.acceptedCeNum).toUpperCase() === ceNum)));
     /* One sequence across companies: SY3-CE-2026-1131 may not exist beside
        SHIC-CE-2026-1131. Refused in bulk mode too -- that overwrites the same
        number, never another company's. */
@@ -2928,6 +2929,11 @@ function App({
     return hasInfo || hasRows;
   };
   const handleLoad = async e => {
+    /* A request nobody has accepted has no CE number to build the estimate
+       under -- its RCE No. is only the key it is filed by. */
+    { const _ri = ((e && e.data) || e || {}).info || {};
+      if (_ri.request && !_ri.acceptedCeNum && String(_ri.ceNum || '') === String(_ri.requestNum || '')) {
+        showToast('Accept this request first -- it gets its CE number when the Cost Estimation team accepts it. Use Accept beside its number.', true); return; } }
     if (hasUnsavedWork() && !confirm('Load this CE? Your current unsaved work will be replaced.\n\nTip: save a draft first (Ctrl+S or the Save Draft button) if you need to keep it.')) return;
     let d = e.data || e;
     // SP history items have numeric id but no tools — fetch full CE before applying
@@ -5187,7 +5193,7 @@ function App({
   const openRequest = () => {
     setReqFiles([]);
     const today = new Date().toISOString().slice(0, 10);
-    setReqForm({ ceNum: nextCeNum(history, null, ceNums), ceType: 'onsite', client: '', description: '',
+    setReqForm({ ceType: 'onsite', client: '', description: '',
       projType: 'Mechanical', dateRecv: today, deadline: '', assignee: '', remarks: '', rceNo: '',
       /* The checklist starts blank on purpose. Seeding every item as Yes would
          make a complete-looking request out of one that nobody has read. */
@@ -5196,10 +5202,41 @@ function App({
       items: {}, recommendation: '', otherRemarks: '', declineReason: '' });
     dbGetUsers().then(u => setReqUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(_e=>logSwallowed('App:L5170',_e));
   };
+  /* The Cost Estimation team accepts a request: only now does it get a CE
+     number. The request row keeps its place (same id, same attachments, same
+     Monitoring row) and is renamed from its RCE No. to the CE number. */
+  const acceptRequest = async e => {
+    if (isRequestor) { showToast('Only the Cost Estimation team can accept a request.', true); return; }
+    const i0 = e.info || {};
+    if (!i0.request || i0.acceptedCeNum || typeof e.id !== 'number') return;
+    const rce = String(i0.requestNum || i0.ceNum || '').trim();
+    const NL = String.fromCharCode(10);
+    const ans = window.prompt('Accept request ' + rce + ' and give it its CE number:' + NL + NL +
+      'Change the prefix (SHIC, SY3) if it belongs to the other company.', nextCeNum(history, null, ceNums));
+    if (ans === null) return;
+    const newNum = String(ans).trim().toUpperCase();
+    if (!/^[A-Z0-9\-_\/\.]{2,30}$/.test(newNum)) { showToast('CE Number must be 2–30 characters, letters/numbers/dashes only.', true); return; }
+    const taken = (await dbFindCEByNum(newNum).catch(() => null)) || (await dbFindCESeqClash(newNum, ceNums).catch(() => null));
+    if (taken) { showToast('CE Number "' + newNum + '" is already taken. Next free: ' + nextCeNum(history, (newNum.split('-CE-')[0] || null), [...ceNums, newNum]), true); return; }
+    const newInfo = { ...i0, ceNum: newNum, requestNum: rce, rceNo: i0.rceNo || rce, acceptedCeNum: newNum,
+      acceptedBy: currentUser.name || currentUser.username || '', acceptedAt: new Date().toISOString() };
+    const res = await dbAcceptRequest(e.id, rce, newNum, newInfo);
+    if (!res || !res.ok) { showToast('Not accepted — ' + ((res && res.reason) || 'SharePoint refused it') + '.', true); return; }
+    const re = h => String(h.id) === String(e.id) ? { ...h, ceNum: newNum, info: newInfo } : h;
+    setHistory(p => p.map(re));
+    try { LS.set('history', (LS.get('history') || []).map(re)); } catch (_e) { logSwallowed('App:acceptRequest', _e); }
+    setCeNums(p => p.indexOf(newNum) < 0 ? [...p, newNum] : p);
+    auditLog('accept_request', rce + ' -> ' + newNum, currentUser?.username);
+    showToast('Request ' + rce + ' accepted as ' + newNum + '. Load it to build the estimate.');
+  };
   const submitRequest = async () => {
     const f = reqForm || {};
-    const ceNum = String(f.ceNum || '').trim().toUpperCase();
-    if (!/^[A-Z0-9\-_\/\.]{2,30}$/.test(ceNum)) { showToast('CE Number must be 2–30 characters, letters/numbers/dashes only.', true); return; }
+    /* A request is known by its RCE No. It has no CE number yet: that is given
+       when the Cost Estimation team accepts it (acceptRequest). Until then the
+       RCE No. is the key the request is filed under. */
+    const ceNum = String(f.rceNo || '').trim().toUpperCase();
+    if (!ceNum) { showToast('RCE No. is required: it is how the request is known until the Cost Estimation team accepts it.', true); return; }
+    if (!/^[A-Z0-9\-_\/\.]{2,30}$/.test(ceNum)) { showToast('RCE No. must be 2–30 characters, letters/numbers/dashes only.', true); return; }
     if (!String(f.client || '').trim()) { showToast('Customer is required.', true); return; }
     if (!String(f.assignee || '').trim()) { showToast('Assign the request to an estimator.', true); return; }
     /* The checklist is the form. A request logged with items unanswered says
@@ -5219,16 +5256,17 @@ function App({
     }
     setReqBusy(true);
     try {
-      const dup = (await dbFindCEByNum(ceNum).catch(() => null)) || (await dbFindCESeqClash(ceNum, ceNums).catch(() => null));
+      const dup = (await dbFindCEByNum(ceNum).catch(() => null)) ||
+        Object.values(monData || {}).some(m => String((m && m.rceNo) || '').trim().toUpperCase() === ceNum);
       if (dup) {
-        showToast('CE Number "' + ceNum + '" is already taken. Next free: ' + nextCeNum(history, (ceNum.split('-CE-')[0] || null), [...ceNums, ceNum]), true);
+        showToast('RCE No. "' + ceNum + '" is already on a request or a CE. Each RCE No. is logged once.', true);
         setReqBusy(false); return;
       }
       const entry = {
         ceType: f.ceType || 'onsite',
         info: { ...BLANK_INFO, ceNum, date: f.dateRecv || BLANK_INFO.date, client: f.client.trim(),
           description: String(f.description || '').trim(), projType: f.projType || BLANK_INFO.projType,
-          status: 'DRAFT', request: true, requestNum: ceNum,
+          status: 'DRAFT', request: true, requestNum: ceNum, rceNo: ceNum,
           /* info is stored whole as one JSON column, so the checklist rides
              along with it and needs no new SharePoint column of its own. */
           rce: { inquiryNo: String(f.inquiryNo || '').trim(), inquiryDate: f.inquiryDate || '',
@@ -5258,16 +5296,15 @@ function App({
         remarks: [(RCE_RECOMMENDATIONS.find(r => r.v === f.recommendation) || {}).t,
           f.recommendation === 'decline' ? String(f.declineReason || '').trim() : '',
           String(f.remarks || '').trim()].filter(Boolean).join(' — '),
-        rceNo: String(f.rceNo || '').trim() };
+        rceNo: ceNum };
       const mres = await dbSaveMonEntry(saved.id, ceNum, fields, Object.keys(fields));
       setMonData(p => ({ ...p, [saved.id]: (mres && mres.fields) || fields }));
-      setCeNums(p => p.indexOf(ceNum) < 0 ? [...p, ceNum] : p);
       auditLog('log_request', ceNum + ' -> ' + fields.ceeName, currentUser?.username);
       await loadHist();
       setReqForm(null);
       const _docs = reqFiles.slice();
       setReqFiles([]);
-      showToast('Request ' + ceNum + ' logged and assigned to ' + fields.ceeName +
+      showToast('Request RCE ' + ceNum + ' logged and assigned to ' + fields.ceeName +
         (_docs.length ? '. Sending ' + _docs.length + ' document(s)...' : '. Attach the documents that came with it.'));
       openAttachPanel(saved.id);
       /* The request is logged either way. An upload that fails says so and
@@ -6685,9 +6722,14 @@ function App({
       style: {marginLeft: 5, fontSize: 8, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 8, background: '#8B5CF622', color: 'var(--accent-violet)', border: '1px solid #8B5CF644'}
     }, 'UNSAVED'),
     e.info?.request && !e._draft && /*#__PURE__*/React.createElement("span", {
-      title: 'Logged request, not costed yet — Load it to build the estimate, then Save under the same number',
+      title: e.info.acceptedCeNum ? 'Accepted as ' + e.info.acceptedCeNum + ', not costed yet — Load it to build the estimate' : 'Logged request, not accepted yet — it is known by its RCE No. until the Cost Estimation team accepts it',
       style: {marginLeft: 5, fontSize: 8, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 8, background: alpha(OK, '22'), color: OK, border: '1px solid ' + alpha(OK, '44')}
     }, 'REQUEST'),
+    !isRequestor && e.info?.request && !e.info.acceptedCeNum && !e._draft && typeof e.id === 'number' && /*#__PURE__*/React.createElement("button", {
+      style: {...btn('ok', true), marginLeft: 5, fontSize: 9, padding: '1px 7px'},
+      title: 'Accept this request and give it its CE number',
+      onClick: () => acceptRequest(e)
+    }, 'Accept'),
     /* Superseded revisions are folded into the row that supersedes them. The
        chip says how many, so a CE with history is visible as such without
        having to take three rows to say it. */
@@ -10927,13 +10969,12 @@ reqForm && (() => {
     /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:14,marginBottom:2}}, "Request for Costing (RCE) Checklist"),
     /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:10,marginBottom:10,...MONO}}, "SHIC-F-SMD-002 Rev 01"),
     /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:11,marginBottom:12}},
-      "Logs the request in CE Monitoring, assigns it, and sends whatever came with it. The estimator Loads it, builds the estimate, and Saves under the same number."),
+      "Logs the request in CE Monitoring, assigns it, and sends whatever came with it. A request is known by its RCE No.; it gets a CE number only when the Cost Estimation team accepts it, and the estimator then builds the estimate under that number."),
 
     sect("THE INQUIRY"),
     grid(
-      L("CE Number *", inp('ceNum', {style:{...INP,...MONO}})),
+      L("RCE No. *", inp('rceNo', {placeholder:'From Sales', style:{...INP,...MONO}})),
       L("Inquiry number", inp('inquiryNo', {placeholder:'e.g. HSAB - RFQ 130000516', style:{...INP,...MONO}})),
-      L("RCE No.", inp('rceNo', {placeholder:'From Sales', style:{...INP,...MONO}})),
       L("Inquiry date", inp('inquiryDate', {type:'date'})),
       L("Submission deadline", inp('deadline', {type:'date'})),
       L("Completion date", inp('completionDate', {type:'date'})),
@@ -11418,7 +11459,7 @@ tab === 'mywork' && (() => {
     isRequestor && /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:'12px 14px',overflowX:'auto'}},
       /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:13,marginBottom:8}}, '📤 My requests', /*#__PURE__*/React.createElement("span", {style:{marginLeft:6,fontSize:11,color:MT}}, '(' + sent.length + ')')),
       sent.length ? /*#__PURE__*/React.createElement("table", {style:{width:'100%',borderCollapse:'collapse',fontSize:12}},
-        /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['CE NO.', 'CUSTOMER', 'JOB', 'ASSIGNED TO', 'STATUS', ''].map((h, i) => /*#__PURE__*/React.createElement("th", {key: i, style:{textAlign:'left',padding:'6px 8px',fontSize:10,color:MT,letterSpacing:'.06em',borderBottom:'1px solid '+BDR}}, h)))),
+        /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['RCE / CE NO.', 'CUSTOMER', 'JOB', 'ASSIGNED TO', 'STATUS', ''].map((h, i) => /*#__PURE__*/React.createElement("th", {key: i, style:{textAlign:'left',padding:'6px 8px',fontSize:10,color:MT,letterSpacing:'.06em',borderBottom:'1px solid '+BDR}}, h)))),
         /*#__PURE__*/React.createElement("tbody", null, sent.map(x => {
           const st = x.m.status || 'Pending', col = getStatusColor(st), still = !!(x.e.info && x.e.info.request);
           const td = {padding:'7px 8px',borderBottom:'1px solid '+alpha(BDR,'44'),verticalAlign:'middle'};

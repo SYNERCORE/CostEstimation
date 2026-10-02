@@ -359,5 +359,7 @@ jobs:
       - name: Saved-total recompute agrees with the editor
         run: node tools/test-recompute.js
 
+      - name: A request has an RCE No. and gets its CE number on acceptance
+        run: node tools/test-request-rce-first.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

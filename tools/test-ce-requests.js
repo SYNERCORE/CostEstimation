@@ -19,9 +19,9 @@ const has = re => re.test(app);
 
 console.log('logging a request:');
 ck('Monitoring has a + New Request button', has(/onClick: openRequest\n  \}, "\+ New Request"\)/));
-ck('it suggests the next free CE number', has(/ceNum: nextCeNum\(history, null, ceNums\)/));
+ck('it is filed under the RCE No., not a suggested CE number (that comes on acceptance)', has(/const ceNum = String\(f\.rceNo \|\| ''\)\.trim\(\)\.toUpperCase\(\);/) && !has(/setReqForm\(\{ ceNum:/));
 ck('customer and assignee are required', has(/Customer is required\./) && has(/Assign the request to an estimator\./));
-ck('a number already in use is refused', has(/const dup = \(await dbFindCEByNum\(ceNum\)\.catch\(\(\) => null\)\) \|\| \(await dbFindCESeqClash\(ceNum, ceNums\)\.catch\(\(\) => null\)\);\n      if \(dup\) \{/));
+ck('an RCE No. already in use is refused', has(/is already on a request or a CE/) && has(/String\(\(m && m\.rceNo\) \|\| ''\)\.trim\(\)\.toUpperCase\(\) === ceNum/));
 ck('it is saved as an empty CE flagged as a request, under its own number',
   has(/status: 'DRAFT', request: true, requestNum: ceNum/));
 ck('only a SharePoint save counts -- a request nobody else can see is not assigned',
@@ -65,8 +65,8 @@ ck('and the change is audited', has(/auditLog\('reassign_ce'/));
 ck('an unchanged pick writes nothing', has(/if \(to !== String\(a\.from \|\| ''\)\.trim\(\)\) \{/));
 
 console.log('\nbuilding it out:');
-ck('saving over the request is allowed only under the number it was raised as',
-  has(/const _fromRequest = !!\(info\.request && String\(info\.requestNum \|\| ''\)\.toUpperCase\(\) === ceNum\);/));
+ck('saving over the request is allowed only under the number it was raised or accepted as',
+  has(/const _fromRequest = !!\(info\.request && \(String\(info\.requestNum \|\| ''\)\.toUpperCase\(\) === ceNum \|\|/) && has(/info\.acceptedCeNum && String\(info\.acceptedCeNum\)\.toUpperCase\(\) === ceNum/));
 ck('every other existing number is still refused', has(/if \(dup && !dup\._imported && !_fromRequest\) \{/));
 ck('and the saved CE is no longer a request',
   has(/if \(_fromRequest\) \{ _entry\.info = \{\.\.\._entry\.info, request: false\}; setInfo\(p => \(\{\.\.\.p, request: false\}\)\); \}/));

@@ -291,6 +291,29 @@ async function dbPatchCEInfo(ceId,info){
   }catch(e){console.warn('dbPatchCEInfo:',e.message);return false;}
 }
 
+/* The Cost Estimation team accepts a request: it stops being known by its RCE
+   No. and gets a CE number. The CE row is renamed in place -- same id, so its
+   Monitoring row, attachments and history stay with it -- and its Monitoring
+   row is retitled to match. Returns {ok} or {ok:false, reason}. */
+async function dbAcceptRequest(ceId,oldNum,newNum,info){
+  if(!(USE_SP||getSiteURL()))return{ok:false,reason:'SharePoint is not connected'};
+  try{
+    const numId=Number(ceId);
+    const r=await spGet(spList('CEs'),`Id eq ${numId}`,'Id');
+    if(!r.length)return{ok:false,reason:'the request is not on the site'};
+    await spWithRetry(()=>spPatch(spList('CEs'),r[0].Id,{Title:newNum,shicInfo:JSON.stringify(info||{})}));
+    /* The CE is renamed whether or not the Monitoring title follows: the row is
+       found by CE id, so a title that lags changes nothing but what is shown in
+       the list's own view. */
+    try{
+      const rows=await _monRowsFor(numId,oldNum);
+      for(const m of rows)await spWithRetry(()=>spPatch(spList('Monitoring'),m.Id,{Title:newNum}));
+    }catch(e){logSwallowed('db:dbAcceptRequest',e);}
+    try{const loc=await _ceLoadLocal(numId);if(loc)await cePut({...loc,info:info,ceNum:newNum});}catch(e){logSwallowed('db:dbAcceptRequest',e);}
+    return{ok:true};
+  }catch(e){console.warn('dbAcceptRequest:',e.message);return{ok:false,reason:e.message};}
+}
+
 /* Batch-save all entries (import / migration). histItems needed for ceNum lookup. */
 async function dbSaveMonAll(monData, histItems){
   if(!(USE_SP||getSiteURL()))return;

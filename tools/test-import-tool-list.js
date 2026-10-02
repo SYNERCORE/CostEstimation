@@ -42,7 +42,7 @@ ck('a row with no quantity is skipped', !csv.some(x => x.desc === 'Blank'));
 ck('a plain numbered list with a unit', parse('1. Chain block 2 pcs\n2. Welding machine 1 unit').length === 2);
 
 console.log('\nthe screen:');
-ck('Tools & Equipment has an Import list button', res.includes('"⇪ Import list"') && app.includes('readFile: readDoc,'));
+ck('Tools & Equipment has an Import list button', res.includes('"⇪ Import list"') && app.includes('readFile: resStable.readFile,'));
 ck('rows are shown to check before they are added', res.includes("className: 'import-preview'") && res.includes('onClick: importAdd'));
 /* The Masterlist still wins where the item is on it; where it is not, the
    file's own unit price is taken -- see tools/test-import-unit-price.js. */

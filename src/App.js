@@ -399,6 +399,11 @@ function MlTrendModal({ mlTrend, setMlTrend, masterlist, ML_HIST_KIND }) {
       )));
 }
 
+/* The resource tabs skip a render when nothing they show has changed. Every
+   prop is compared as is; the callbacks come through resStable (see App), which
+   keep their identity but always run the newest closure. */
+const ResTabM = React.memo(ResTab);
+
 function App({
   currentUser,
   onLogout
@@ -1369,6 +1374,28 @@ function App({
   const _workMap = useMemo(() => ceSplitOn(ceType) ? ceWorkMap(sowItems) : null, [ceType, sowItems]);
   const siteFrac = r => _workMap ? ceSiteFrac(r, _workMap) : 1;
   const pwrFrac = r => cfg.power === 'shop' ? 1 - siteFrac(r) : 1;
+  /* Callbacks for the memoised resource tabs. A new arrow on every render would
+     defeat the memo, and wrapping each in useCallback would need its whole
+     chain of dependencies listed (and a missed one is a stale price). Instead
+     the wrappers are made once and read the newest functions from a ref each
+     time they are called. What the tab DRAWS from pwrFrac is covered by the
+     _pfk / _wm props, which change when its inputs do. */
+  const _lat = useRef(null);
+  _lat.current = () => ({ addRowsToML, readDoc, showToast, pwrFrac });
+  const resStable = useMemo(() => ({
+    addTools: l => _lat.current().addRowsToML('tools', l),
+    addMats: l => _lat.current().addRowsToML('materials', l),
+    addPpe: l => _lat.current().addRowsToML('ppe', l),
+    readFile: f => _lat.current().readDoc(f),
+    showToast: (m, e) => _lat.current().showToast(m, e),
+    pwrFrac: r => _lat.current().pwrFrac(r),
+    setDefaultTier: v => setInfo(p => ({...p, toolTier: v})),
+    setKwhRate: v => setRates(p => {
+      const n = {...p}, f = parseFloat(v);
+      if (!isFinite(f) || f < 0 || f === KWH_RATE_DEFAULT) delete n.kwhRate; else n.kwhRate = f;
+      return n;
+    })
+  }), []);
   const calcBen = r => {
     const pax = N(r.pax),
       days = N(r.days),
@@ -13297,62 +13324,60 @@ tab === 'dashboard' && (() => {
     /* The sum of the rows above it, so this footer can never report a figure
        the table it sits under does not add up to. Equal to `ben` -- the one
        the CE is costed on -- and tools/test-manpower-totals.js keeps it so. */
-  }, "P", ph(benefitsT)))))))), tab === 'tools' && /*#__PURE__*/React.createElement(ResTab, {
+  }, "P", ph(benefitsT)))))))), tab === 'tools' && /*#__PURE__*/React.createElement(ResTabM, {
     rows: tools,
     set: setTools,
     total: toolsT,
     label: "Tools & Equipment (BOTE)",
     mlType: "tools",
-    addToML: list => addRowsToML('tools', list),
+    addToML: resStable.addTools,
     showDays: true,
     /* Lives on info, so it rides to SharePoint inside shicInfo with no column
        of its own and comes back with the CE. */
     defaultTier: N(info.toolTier) || 2,
-    setDefaultTier: v => setInfo(p => ({...p, toolTier: v})),
+    setDefaultTier: resStable.setDefaultTier,
     showPower: powerOn,
     kwhRate,
-    pwrFrac,
-    readFile: readDoc,
+    pwrFrac: resStable.pwrFrac,
+    /* What pwrFrac depends on, so the memoised tab redraws when it changes. */
+    _pfk: cfg.power, _wm: _workMap,
+    readFile: resStable.readFile,
     /* A rate equal to the default is removed rather than stored, so a CE that
        was never touched is not frozen against a future change to it -- the
        same rule the shift multipliers follow. */
-    setKwhRate: v => setRates(p => {
-      const n = {...p}, f = parseFloat(v);
-      if (!isFinite(f) || f < 0 || f === KWH_RATE_DEFAULT) delete n.kwhRate; else n.kwhRate = f;
-      return n;
-    }),
+    setKwhRate: resStable.setKwhRate,
     /* The CE's own duration, offered as the days to charge the equipment for.
        With 900 rows on a CE, typing it into each one is not a thing anyone
        will do -- so it is one click, and it is the number already on the
        Project Info tab rather than a second one to keep in step. */
     ceDays: N(info.days) || 0,
-    masterlist, showToast, setPicker
-  }), tab === 'materials' && /*#__PURE__*/React.createElement(ResTab, {
+    masterlist, showToast: resStable.showToast, setPicker
+  }), tab === 'materials' && /*#__PURE__*/React.createElement(ResTabM, {
     rows: mats,
     set: setMats,
     total: matsT,
     label: "Materials & Consumables (BOCM)",
     mlType: "materials",
-    addToML: list => addRowsToML('materials', list),
+    addToML: resStable.addMats,
     /* The same reader the Tools tab has. A BOM or a PPE issue list
        arrives as the same kind of list -- description, quantity,
        unit -- and was being typed in by hand only because the tab
        was never handed the reader. */
-    readFile: readDoc,
-    masterlist, showToast, setPicker
-  }), tab === 'ppe' && /*#__PURE__*/React.createElement(ResTab, {
+    readFile: resStable.readFile,
+    masterlist, showToast: resStable.showToast, setPicker
+  }), tab === 'ppe' && /*#__PURE__*/React.createElement(ResTabM, {
     rows: ppe,
     set: setPpe,
     total: ppeT,
     label: "Personal Protective Equipment (PPE)",
     mlType: "ppe",
-    addToML: list => addRowsToML('ppe', list),
+    addToML: resStable.addPpe,
     /* The same reader the Tools tab has. A BOM or a PPE issue list
        arrives as the same kind of list -- description, quantity,
        unit -- and was being typed in by hand only because the tab
        was never handed the reader. */
-    readFile: readDoc,
-    masterlist, showToast, setPicker
+    readFile: resStable.readFile,
+    masterlist, showToast: resStable.showToast, setPicker
   }), tab === 'misc' && /*#__PURE__*/React.createElement("div", null, (MISC_DEF[ceType] || MISC_DEF.onsite).map(([miscKey, label]) => {
     const rows = Array.isArray(misc[miscKey]) ? misc[miscKey] : [];
     const catTotal = rows.reduce((s, r) => s + miscRowCost(r), 0);

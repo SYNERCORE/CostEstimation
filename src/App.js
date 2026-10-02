@@ -5258,6 +5258,9 @@ function App({
       const re = h => String(h.id) === String(e.id) ? { ...h, info: newInfo } : h;
       setHistory(q => q.map(re));
       try { LS.set('history', (LS.get('history') || []).map(re)); } catch (_e) { logSwallowed('App:saveReview', _e); }
+      /* A declined request is closed, so it must not count as open work; reopening it puts it back to Draft. */
+      if (st === 'declined') updateMon(e.id, 'status', 'No Quote');
+      else if (mode === 'review' && ((monData[e.id] || {}).status === 'No Quote')) updateMon(e.id, 'status', 'Draft');
       auditLog('review_request', label + ' ' + st, currentUser?.username);
       setRceReview(null);
       showToast(mode === 'update' ? 'Sent back to Cost Estimation.' : st === 'declined' ? 'Request ' + label + ' declined.' : 'Request ' + label + ' returned to the requestor.');

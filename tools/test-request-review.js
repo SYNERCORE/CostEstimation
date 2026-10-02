@@ -27,9 +27,9 @@ const run = async (mode, p, o) => {
   o = o || {};
   const c = { toasts: [], patched: null, accepted: null, audit: [], hist: null };
   const e = { id: 7, ceNum: 'RCE-45', info: { request: true, requestNum: 'RCE-45', rce: { inquiryNo: 'Q1', items: {} } } };
-  const fn = new Function('rceReview', 'isRequestor', 'showToast', 'reqOwns', 'monData', 'currentUser', 'setReqBusy', 'acceptRequest', 'dbPatchCEInfo',
+  const fn = new Function('rceReview', 'isRequestor', 'showToast', 'reqOwns', 'monData', 'currentUser', 'updateMon', 'setReqBusy', 'acceptRequest', 'dbPatchCEInfo',
     'setHistory', 'LS', 'logSwallowed', 'auditLog', 'setRceReview', src + NL + 'return saveReview;')(
-    { e, mode }, !!o.requestor, (m, er) => c.toasts.push({ m, er: !!er }), () => o.owns !== false, {}, { name: 'Est One', username: 'est1' }, () => {},
+    { e, mode }, !!o.requestor, (m, er) => c.toasts.push({ m, er: !!er }), () => o.owns !== false, {}, { name: 'Est One', username: 'est1' }, (id, f, v) => { c.mon = [id, f, v]; }, () => {},
     async (ee, extra) => { c.accepted = extra; return o.acceptOk !== false; },
     async (id, info) => { c.patched = info; return o.patchOk !== false; },
     f => { c.hist = f([{ id: 7, info: {} }, { id: 8, info: {} }]); }, { get: () => [], set: () => {} }, () => {}, (x, d) => c.audit.push(d), v => { c.closed = v === null; });
@@ -48,7 +48,10 @@ const run = async (mode, p, o) => {
   ck('it is still a request and has no CE number', c.patched.request === true && !c.patched.acceptedCeNum);
   ck('only that row changes in the list', c.hist[0].info.reviewStatus === 'returned' && c.hist[1].info.reviewStatus === undefined);
   c = await run('review', { items, recommendation: 'decline', declineReason: 'out of scope' });
+  ck('a declined request is set to No Quote', c.mon && c.mon[0] === 7 && c.mon[1] === 'status' && c.mon[2] === 'No Quote');
   ck('Decline records the reason', c.patched.reviewStatus === 'declined' && c.patched.reviewNote === 'out of scope');
+  c = await run('review', { items, recommendation: 'secure', note: 'n' });
+  ck('a return does not touch the Monitoring status', !c.mon);
   c = await run('update', { items, recommendation: '', note: 'TOR attached' });
   ck('the requestor\'s update marks it resubmitted and clears the estimators\' note', c.patched.reviewStatus === 'resubmitted' && c.patched.reviewNote === '' && c.patched.resubmitNote === 'TOR attached');
   c = await run('review', { items, recommendation: 'decline', declineReason: 'x' }, { requestor: true });

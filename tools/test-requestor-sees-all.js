@@ -47,5 +47,7 @@ ck('the card is no longer shown to requestors', app.indexOf("!isRequestor && sen
 ck('the My Work button is New Request for a requestor, the CE editor for everyone else',
   app.indexOf('onClick:openRequest,title:"Log a request for estimation') > 0 && app.indexOf('isRequestor ? "➕ New Request" : "➕ Go to the CE editor"') > 0);
 
+ck('the For review card is not shown to a requestor', app.indexOf("!isRequestor && forReview.length > 0 && section('🔎 For review") > 0);
+
 console.log(bad ? NL + bad + ' FAILURE(S)' : NL + 'requestor visibility OK');
 process.exit(bad ? 1 : 0);

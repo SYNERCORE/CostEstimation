@@ -11380,7 +11380,7 @@ tab === 'mywork' && (() => {
       section('⏳ My CEs in approval', inApproval, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT,whiteSpace:'nowrap'}}, apv(x).signed + '/' + apv(x).total + ' signed · waiting on ' + (apv(x).waiting || []).join(', ')), viewBtn(x)), 'None of your CEs are in approval.'),
       !isRequestor && sent.length > 0 && section('📤 Requests I sent', sent, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,whiteSpace:'nowrap',color:MT}},
         (x.m.status || 'Pending') + (x.m.ceeName ? ' · with ' + x.m.ceeName : '')), viewBtn(x)), 'You have not sent a request yet. Use + New Request in CE Monitoring.'),
-      forReview.length > 0 && section('🔎 For review (status For Approval)', forReview, x => line(x, null, viewBtn(x)), '')),
+      !isRequestor && forReview.length > 0 && section('🔎 For review (status For Approval)', forReview, x => line(x, null, viewBtn(x)), '')),
     isRequestor && /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:'12px 14px',overflowX:'auto'}},
       /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:13,marginBottom:8}}, '📤 My requests', /*#__PURE__*/React.createElement("span", {style:{marginLeft:6,fontSize:11,color:MT}}, '(' + sent.length + ')')),
       sent.length ? /*#__PURE__*/React.createElement("table", {style:{width:'100%',borderCollapse:'collapse',fontSize:12}},

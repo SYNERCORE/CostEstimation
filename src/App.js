@@ -696,7 +696,7 @@ function App({
      the browser showed it happily. Pass an object to write several fields as
      one change. */
   const updateMon = (ceId, field, val) => setMonData(prev => {
-    if (isRequestor && !reqOwns(ceId, prev)) { showToast('Requestors can view this CE but only change the requests they raised.', true); return prev; }
+    if (isRequestor && !reqOwns(ceId, prev)) { console.warn('[blocked] a requestor tried to change CE ' + ceId + ', which they did not raise'); return prev; }
     const fields = (field && typeof field === 'object') ? field : { [field]: val };
     const extra = {};
     /* Stamp who moved a CE and when, on EVERY status change.
@@ -9671,7 +9671,10 @@ function App({
       border: `1px solid ${toastErr ? ERR : BDR}`,
       borderRadius: 8,
       padding: '9px 18px',
-      zIndex: 999,
+      /* Above every modal (they sit at 3000-9999). At 999 a message raised while a
+         form was open -- "Assign the request to an estimator" -- was drawn behind
+         it, and the form seemed to ignore the button. */
+      zIndex: 10000,
       color: TX,
       fontSize: 13,
       boxShadow: '0 4px 24px #0009',
@@ -9681,7 +9684,7 @@ function App({
     style: {
       position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
       background: CARD, border: `1px solid ${BDR}`, borderRadius: 8,
-      padding: '10px 18px', zIndex: 1000, color: TX, fontSize: 13,
+      padding: '10px 18px', zIndex: 10000, color: TX, fontSize: 13,
       boxShadow: '0 4px 24px #0009', display: 'flex', alignItems: 'center', gap: 12
     }
   }, undoToast.msg, /*#__PURE__*/React.createElement("button", {

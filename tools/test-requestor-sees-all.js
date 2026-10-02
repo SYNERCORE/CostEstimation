@@ -49,5 +49,9 @@ ck('the My Work button is New Request for a requestor, the CE editor for everyon
 
 ck('the For review card is not shown to a requestor', app.indexOf("!isRequestor && forReview.length > 0 && section('🔎 For review") > 0);
 
+ck('a message raised while a form is open is drawn above it',
+  app.slice(app.indexOf("padding: '9px 18px',"), app.indexOf("padding: '9px 18px',") + 800).indexOf('zIndex: 10000,') > 0 && app.indexOf('zIndex: 999,') < 0);
+ck('a blocked change is logged, not toasted over every screen', app.indexOf('[blocked] a requestor tried to change CE') > 0);
+
 console.log(bad ? NL + bad + ' FAILURE(S)' : NL + 'requestor visibility OK');
 process.exit(bad ? 1 : 0);

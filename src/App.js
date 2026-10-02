@@ -5167,6 +5167,7 @@ function App({
      is saved -- so they are held here and sent the moment there is one. */
   const [reqFiles, setReqFiles] = React.useState([]);
   const [reqBusy, setReqBusy] = React.useState(false);
+  const [rceReview, setRceReview] = React.useState(null);
   const [reqUsers, setReqUsers] = React.useState([]);
   const [monMine, setMonMine] = React.useState(false);
   const [monApvMine, setMonApvMine] = React.useState(false);
@@ -5205,29 +5206,62 @@ function App({
   /* The Cost Estimation team accepts a request: only now does it get a CE
      number. The request row keeps its place (same id, same attachments, same
      Monitoring row) and is renamed from its RCE No. to the CE number. */
-  const acceptRequest = async e => {
-    if (isRequestor) { showToast('Only the Cost Estimation team can accept a request.', true); return; }
+  const acceptRequest = async (e, extra) => {
+    if (isRequestor) { showToast('Only the Cost Estimation team can accept a request.', true); return false; }
     const i0 = e.info || {};
-    if (!i0.request || i0.acceptedCeNum || typeof e.id !== 'number') return;
+    if (!i0.request || i0.acceptedCeNum || typeof e.id !== 'number') return false;
     const rce = String(i0.requestNum || i0.ceNum || '').trim();
     const NL = String.fromCharCode(10);
     const ans = window.prompt('Accept request ' + rce + ' and give it its CE number:' + NL + NL +
       'Change the prefix (SHIC, SY3) if it belongs to the other company.', nextCeNum(history, null, ceNums));
-    if (ans === null) return;
+    if (ans === null) return false;
     const newNum = String(ans).trim().toUpperCase();
-    if (!/^[A-Z0-9\-_\/\.]{2,30}$/.test(newNum)) { showToast('CE Number must be 2–30 characters, letters/numbers/dashes only.', true); return; }
+    if (!/^[A-Z0-9\-_\/\.]{2,30}$/.test(newNum)) { showToast('CE Number must be 2–30 characters, letters/numbers/dashes only.', true); return false; }
     const taken = (await dbFindCEByNum(newNum).catch(() => null)) || (await dbFindCESeqClash(newNum, ceNums).catch(() => null));
-    if (taken) { showToast('CE Number "' + newNum + '" is already taken. Next free: ' + nextCeNum(history, (newNum.split('-CE-')[0] || null), [...ceNums, newNum]), true); return; }
-    const newInfo = { ...i0, ceNum: newNum, requestNum: rce, rceNo: i0.rceNo || rce, acceptedCeNum: newNum,
+    if (taken) { showToast('CE Number "' + newNum + '" is already taken. Next free: ' + nextCeNum(history, (newNum.split('-CE-')[0] || null), [...ceNums, newNum]), true); return false; }
+    const newInfo = { ...i0, ...(extra || {}), ceNum: newNum, requestNum: rce, rceNo: i0.rceNo || rce, acceptedCeNum: newNum,
       acceptedBy: currentUser.name || currentUser.username || '', acceptedAt: new Date().toISOString() };
     const res = await dbAcceptRequest(e.id, rce, newNum, newInfo);
-    if (!res || !res.ok) { showToast('Not accepted — ' + ((res && res.reason) || 'SharePoint refused it') + '.', true); return; }
+    if (!res || !res.ok) { showToast('Not accepted — ' + ((res && res.reason) || 'SharePoint refused it') + '.', true); return false; }
     const re = h => String(h.id) === String(e.id) ? { ...h, ceNum: newNum, info: newInfo } : h;
     setHistory(p => p.map(re));
     try { LS.set('history', (LS.get('history') || []).map(re)); } catch (_e) { logSwallowed('App:acceptRequest', _e); }
     setCeNums(p => p.indexOf(newNum) < 0 ? [...p, newNum] : p);
     auditLog('accept_request', rce + ' -> ' + newNum, currentUser?.username);
     showToast('Request ' + rce + ' accepted as ' + newNum + '. Load it to build the estimate.');
+    return true;
+  };
+  /* The Cost Estimation team's review of a request (mode 'review'), or the
+     requestor's update of one that came back (mode 'update'). Proceed is the
+     acceptance; Secure returns it; Decline closes it with the reason. */
+  const saveReview = async p => {
+    const e = rceReview && rceReview.e, mode = rceReview && rceReview.mode;
+    if (!e || typeof e.id !== 'number') return;
+    if (mode === 'review' && isRequestor) { showToast('Only the Cost Estimation team can review a request.', true); return; }
+    if (mode === 'update' && !reqOwns(e.id, monData[e.id])) { showToast('You can only update a request you raised.', true); return; }
+    const i0 = e.info || {}, who = currentUser.name || currentUser.username || '', now = new Date().toISOString();
+    const rce = { ...(i0.rce || {}), items: p.items, otherRemarks: p.otherRemarks, recommendation: p.recommendation, declineReason: p.declineReason };
+    const label = String(i0.requestNum || i0.ceNum || '');
+    setReqBusy(true);
+    try {
+      if (mode === 'review' && p.recommendation === 'proceed') {
+        const ok = await acceptRequest(e, { rce, reviewStatus: 'accepted', reviewedBy: who, reviewedAt: now, reviewNote: p.note });
+        if (ok) { auditLog('review_request', label + ' proceed', currentUser?.username); setRceReview(null); }
+        return;
+      }
+      const st = mode === 'update' ? 'resubmitted' : p.recommendation === 'decline' ? 'declined' : 'returned';
+      const newInfo = { ...i0, rce, reviewStatus: st,
+        reviewNote: mode === 'update' ? '' : (p.recommendation === 'decline' ? p.declineReason : p.note),
+        ...(mode === 'update' ? { resubmittedBy: who, resubmittedAt: now, resubmitNote: p.note } : { reviewedBy: who, reviewedAt: now }) };
+      const okp = await dbPatchCEInfo(e.id, newInfo);
+      if (!okp) { showToast('Not saved — SharePoint refused it.', true); return; }
+      const re = h => String(h.id) === String(e.id) ? { ...h, info: newInfo } : h;
+      setHistory(q => q.map(re));
+      try { LS.set('history', (LS.get('history') || []).map(re)); } catch (_e) { logSwallowed('App:saveReview', _e); }
+      auditLog('review_request', label + ' ' + st, currentUser?.username);
+      setRceReview(null);
+      showToast(mode === 'update' ? 'Sent back to Cost Estimation.' : st === 'declined' ? 'Request ' + label + ' declined.' : 'Request ' + label + ' returned to the requestor.');
+    } finally { setReqBusy(false); }
   };
   const submitRequest = async () => {
     const f = reqForm || {};
@@ -6719,11 +6753,20 @@ function App({
       title: e.info.acceptedCeNum ? 'Accepted as ' + e.info.acceptedCeNum + ', not costed yet — Load it to build the estimate' : 'Logged request, not accepted yet — it is known by its RCE No. until the Cost Estimation team accepts it',
       style: {marginLeft: 5, fontSize: 8, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 8, background: alpha(OK, '22'), color: OK, border: '1px solid ' + alpha(OK, '44')}
     }, 'REQUEST'),
+    e.info?.request && e.info.reviewStatus && e.info.reviewStatus !== 'accepted' && !e._draft && /*#__PURE__*/React.createElement("span", {
+      title: e.info.reviewNote || '',
+      style: {marginLeft: 5, fontSize: 8, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 8, color: e.info.reviewStatus === 'declined' ? ERR : e.info.reviewStatus === 'returned' ? ACC : INFO, border: '1px solid currentColor'}
+    }, String(e.info.reviewStatus).toUpperCase()),
     !isRequestor && e.info?.request && !e.info.acceptedCeNum && !e._draft && typeof e.id === 'number' && /*#__PURE__*/React.createElement("button", {
       style: {...btn('ok', true), marginLeft: 5, fontSize: 9, padding: '1px 7px'},
-      title: 'Accept this request and give it its CE number',
-      onClick: () => acceptRequest(e)
-    }, 'Accept'),
+      title: 'Review the checklist and decide: proceed, secure the missing data first, or decline',
+      onClick: () => setRceReview({e, mode: 'review'})
+    }, 'Review'),
+    isRequestor && e.info?.request && !e.info.acceptedCeNum && e.info.reviewStatus !== 'declined' && reqOwns(e.id) && !e._draft && typeof e.id === 'number' && /*#__PURE__*/React.createElement("button", {
+      style: {...btn('info', true), marginLeft: 5, fontSize: 9, padding: '1px 7px'},
+      title: 'Add or correct what the Cost Estimation team asked for',
+      onClick: () => setRceReview({e, mode: 'update'})
+    }, 'Update'),
     /* Superseded revisions are folded into the row that supersedes them. The
        chip says how many, so a CE with history is visible as such without
        having to take three rows to say it. */
@@ -10944,6 +10987,13 @@ statusPanel && (() => {
   ));
 })(),
 
+/* ── Request review / update ── */
+rceReview && /*#__PURE__*/React.createElement(RceReviewModal, {
+  key: rceReview.e.id + rceReview.mode, mode: rceReview.mode, rce: (rceReview.e.info || {}).rce || {}, busy: reqBusy,
+  title: (rceReview.mode === 'review' ? 'Review request ' : 'Update request ') + (rceReview.e.info?.requestNum || rceReview.e.ceNum),
+  onClose: () => setRceReview(null), onDone: saveReview
+}),
+
 /* ── New Request Modal ── */
 reqForm && (() => {
   const set = (k, v) => setReqForm(p => ({...p, [k]: v}));
@@ -11001,8 +11051,7 @@ reqForm && (() => {
         RCE_STAGES.map(k => /*#__PURE__*/React.createElement("option", {key:k, value:k}, k))))
     )),
 
-    /* The checklist and item 14 are the Cost Estimation team's review of what the requestor sent, so a requestor neither sees nor fills them. */
-    ...(isRequestor ? [] : [
+    /* Prefill only: a requestor who already has this information can enter it, and the Cost Estimation team reviews and decides item 14 afterwards. */
     sect("COMPLETE?", "Every item is answered. No is not a refusal -- it is the record of what did not arrive, and item 14.2 is the recommendation that follows from it."),
     /*#__PURE__*/React.createElement("div", {style:{border:'1px solid '+BDR,borderRadius:7,overflow:'hidden'}},
       RCE_ITEMS.map((it, ix) => {
@@ -11047,8 +11096,7 @@ reqForm && (() => {
     reqForm.recommendation === 'decline' && /*#__PURE__*/React.createElement("div", {style:{marginTop:10}},
       L("Reason to decline / no quote *", /*#__PURE__*/React.createElement("textarea", {
         style:{...INP,height:46,resize:'vertical'}, value:reqForm.declineReason || '', disabled:reqBusy,
-        placeholder:'Why SHIC is not quoting this one', onChange:e=>set('declineReason', e.target.value)})))
-    ]),
+        placeholder:'Why SHIC is not quoting this one', onChange:e=>set('declineReason', e.target.value)}))),
     /*#__PURE__*/React.createElement("div", {style:{marginTop:10}}, L("Other remarks", /*#__PURE__*/React.createElement("textarea", {style:{...INP,height:46,resize:'vertical'}, value:reqForm.otherRemarks || '', placeholder:'Anything the estimator should know that no item above covers', onChange:e=>set('otherRemarks', e.target.value)}))),
     /*#__PURE__*/React.createElement("div", {style:{marginTop:10}}, L("Remarks for CE Monitoring", /*#__PURE__*/React.createElement("textarea", {style:{...INP,height:40,resize:'vertical'}, value:reqForm.remarks, placeholder:'Site visit needed, contact person, anything not to forget...', onChange:e=>set('remarks', e.target.value)}))),
 
@@ -11468,8 +11516,10 @@ tab === 'mywork' && (() => {
             /*#__PURE__*/React.createElement("td", {style:td}, (x.e.info && x.e.info.client) || x.m.customer || '—'),
             /*#__PURE__*/React.createElement("td", {style:td}, x.m.jobTitle || (x.e.info && x.e.info.description) || '—'),
             /*#__PURE__*/React.createElement("td", {style:td}, x.m.ceeName || '—'),
-            /*#__PURE__*/React.createElement("td", {style:td}, /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'2px 10px',borderRadius:12,fontSize:11,fontWeight:700,color:col,border:'1px solid '+col,background:alpha(col,'18')}}, st)),
-            /*#__PURE__*/React.createElement("td", {style:{...td,textAlign:'right'}}, still ? /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'3px 12px',borderRadius:6,fontSize:11,fontWeight:800,color:'#fff',background:'#16a34a',letterSpacing:'.06em'}}, 'REQUEST') : viewBtn(x)));
+            /*#__PURE__*/React.createElement("td", {style:td}, /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'2px 10px',borderRadius:12,fontSize:11,fontWeight:700,color:col,border:'1px solid '+col,background:alpha(col,'18')}}, st),
+              still && x.e.info.reviewStatus && /*#__PURE__*/React.createElement("div", {style:{fontSize:10,marginTop:3,color:x.e.info.reviewStatus === 'declined' ? ERR : MT}},
+                String(x.e.info.reviewStatus).toUpperCase() + (x.e.info.reviewNote ? ': ' + x.e.info.reviewNote : ''))),
+            /*#__PURE__*/React.createElement("td", {style:{...td,textAlign:'right'}}, still && !x.e.info.acceptedCeNum && x.e.info.reviewStatus !== 'declined' && typeof x.e.id === 'number' && /*#__PURE__*/React.createElement("button", {style:{...btn('info',true),marginRight:6},onClick:()=>setRceReview({e:x.e,mode:'update'})}, 'Update'), still ? /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'3px 12px',borderRadius:6,fontSize:11,fontWeight:800,color:'#fff',background:'#16a34a',letterSpacing:'.06em'}}, 'REQUEST') : viewBtn(x)));
         }))) : /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,padding:'6px 0'}}, 'You have not sent a request yet. Use + New Request in CE Monitoring.')));
 })(),
 

@@ -46,7 +46,7 @@ ck('a full checklist leaves nothing unanswered',
 
 const submit = app.slice(app.indexOf('const submitRequest = async ()'), app.indexOf('const [statusPanel'));
 ck('logging a request does not require the checklist: that is the estimators review', submit.indexOf('rceUnanswered(f)') < 0);
-ck('a requestor neither sees nor fills the checklist and item 14', app.indexOf('...(isRequestor ? [] : [') > 0 && app.indexOf('sect("COMPLETE?"') > app.indexOf('...(isRequestor ? [] : ['));
+ck('a requestor can prefill the checklist and item 14; the estimators review them afterwards', app.indexOf('...(isRequestor ? [] : [') < 0);
 
 /* The gate must come BEFORE anything is written, or a refused request has
    already been saved and assigned by the time it is refused. */

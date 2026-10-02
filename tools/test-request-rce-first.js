@@ -32,7 +32,7 @@ ck('the request carries its RCE No. both as requestNum and rceNo', sub.indexOf('
 ck('it does not claim a CE number in the sequence', sub.indexOf('setCeNums') < 0);
 
 console.log(NL + 'accepting:');
-const acc = cut(app, 'const acceptRequest = async e => {', 'const submitRequest = async');
+const acc = cut(app, 'const acceptRequest = async (e, extra) => {', 'const submitRequest = async');
 const run = (info, answer, taken, dbRes, role) => {
   const calls = { toasts: [], accepted: null, hist: null, audit: [] };
   const fn = new Function('isRequestor', 'showToast', 'window', 'nextCeNum', 'history', 'ceNums', 'dbFindCEByNum', 'dbFindCESeqClash', 'dbAcceptRequest',

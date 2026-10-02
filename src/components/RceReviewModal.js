@@ -10,13 +10,14 @@
 
    It only collects; the caller writes. onDone receives
    { items, otherRemarks, recommendation, declineReason, note }. */
-function RceReviewModal({ rce, mode, title, busy, onClose, onDone }) {
+function RceReviewModal({ rce, mode, title, busy, users, assignee, onClose, onDone }) {
   const R = rce || {};
   const [items, setItems] = React.useState(R.items || {});
   const [otherRemarks, setOtherRemarks] = React.useState(R.otherRemarks || '');
   const [rec, setRec] = React.useState(mode === 'review' ? (R.recommendation || '') : (R.recommendation || ''));
   const [reason, setReason] = React.useState(R.declineReason || '');
   const [note, setNote] = React.useState('');
+  const [est, setEst] = React.useState(assignee || '');
   const [errs, setErrs] = React.useState([]);
   const review = mode === 'review';
   const setItem = (n, patch) => setItems(p => ({ ...p, [n]: { ...(p[n] || {}), ...patch } }));
@@ -27,11 +28,12 @@ function RceReviewModal({ rce, mode, title, busy, onClose, onDone }) {
   const submit = () => {
     const bad = [];
     if (review && !rec) bad.push('item 14: choose Proceed, Secure complete reference data first, or Decline');
+    if (review && rec === 'proceed' && !String(est).trim()) bad.push('an estimator to assign it to');
     if (review && rec === 'decline' && !String(reason).trim()) bad.push('the reason for declining');
     if (review && rec === 'secure' && !noCount && !String(note).trim()) bad.push('what the requestor must supply (mark the missing items No, or write a note)');
     if (bad.length) { setErrs(bad); return; }
     setErrs([]);
-    onDone({ items, otherRemarks, recommendation: rec, declineReason: String(reason).trim(), note: String(note).trim() });
+    onDone({ items, otherRemarks, recommendation: rec, declineReason: String(reason).trim(), note: String(note).trim(), assignee: String(est).trim() });
   };
 
   const sect = (t, n) => React.createElement('div', { style: { marginTop: 14, marginBottom: 8, borderTop: '1px solid ' + BDR, paddingTop: 10 } },
@@ -95,6 +97,10 @@ function RceReviewModal({ rce, mode, title, busy, onClose, onDone }) {
           style: { ...INP, height: 46, resize: 'vertical' }, value: reason, disabled: busy,
           placeholder: 'Why SHIC is not quoting this one', onChange: e => setReason(e.target.value) }))),
 
+      review && React.createElement('div', { style: { marginTop: 10 } },
+        L('Assign to estimator' + (rec === 'proceed' ? ' *' : ''), React.createElement(React.Fragment, null,
+          React.createElement('input', { style: INP, list: 'rev-users', value: est, disabled: busy, placeholder: 'Estimator', onChange: e => setEst(e.target.value) }),
+          React.createElement('datalist', { id: 'rev-users' }, (users || []).map(u => React.createElement('option', { key: u.username, value: u.name || u.username })))))),
       React.createElement('div', { style: { marginTop: 10 } },
         L('Other remarks', React.createElement('textarea', {
           style: { ...INP, height: 40, resize: 'vertical' }, value: otherRemarks, disabled: busy,

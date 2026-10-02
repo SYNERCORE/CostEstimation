@@ -20,14 +20,14 @@ const has = re => re.test(app);
 console.log('logging a request:');
 ck('Monitoring has a + New Request button', has(/onClick: openRequest\n  \}, "\+ New Request"\)/));
 ck('it is filed under the RCE No., not a suggested CE number (that comes on acceptance)', has(/const ceNum = String\(f\.rceNo \|\| ''\)\.trim\(\)\.toUpperCase\(\);/) && !has(/setReqForm\(\{ ceNum:/));
-ck('customer and assignee are required', app.includes("_todo.push('Customer')") && app.includes("'Assigned to (an estimator)'"));
+ck('customer is required; assigning is optional, a reviewer assigns', app.includes("_todo.push('Customer')") && app.indexOf("_todo.push('Assigned to") < 0);
 ck('an RCE No. already in use is refused', has(/is already on a request or a CE/) && has(/String\(\(m && m\.rceNo\) \|\| ''\)\.trim\(\)\.toUpperCase\(\) === ceNum/));
 ck('it is saved as an empty CE flagged as a request, under its own number',
   has(/status: 'DRAFT', request: true, requestNum: ceNum/));
 ck('only a SharePoint save counts -- a request nobody else can see is not assigned',
   has(/if \(!saved \|\| saved\.sp === false \|\| saved\.id == null\)/));
 ck('the assignment is the Estimator column, with status Pending and who received it',
-  has(/status: 'Pending', ceeName: f\.assignee\.trim\(\)/) && has(/receivedBy: currentUser\.name \|\| currentUser\.username/));
+  has(/status: 'Pending', ceeName: String(f.assignee || '').trim() || 'Unassigned'/) && has(/receivedBy: currentUser.name || currentUser.username/));
 ck('deadline, date received and job title are written too',
   has(/deadline: f\.deadline \|\| ''/) && has(/dateRecv: f\.dateRecv \|\| ''/) && has(/jobTitle: String\(f\.description/));
 /* The remarks column now leads with item 14, because that is the one thing

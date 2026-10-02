@@ -5234,6 +5234,10 @@ function App({
   /* The Cost Estimation team's review of a request (mode 'review'), or the
      requestor's update of one that came back (mode 'update'). Proceed is the
      acceptance; Secure returns it; Decline closes it with the reason. */
+  const openReview = (e, mode) => {
+    setRceReview({ e, mode });
+    if (!reqUsers.length) dbGetUsers().then(u => setReqUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(_e => logSwallowed('App:openReview', _e));
+  };
   const saveReview = async p => {
     const e = rceReview && rceReview.e, mode = rceReview && rceReview.mode;
     if (!e || typeof e.id !== 'number') return;
@@ -5242,8 +5246,10 @@ function App({
     const i0 = e.info || {}, who = currentUser.name || currentUser.username || '', now = new Date().toISOString();
     const rce = { ...(i0.rce || {}), items: p.items, otherRemarks: p.otherRemarks, recommendation: p.recommendation, declineReason: p.declineReason };
     const label = String(i0.requestNum || i0.ceNum || '');
+    const curEst = String((monData[e.id] || {}).ceeName || '').trim(), newEst = String(p.assignee || '').trim();
     setReqBusy(true);
     try {
+      if (mode === 'review' && newEst && newEst !== curEst) { updateMon(e.id, 'ceeName', newEst); auditLog('assign_request', label + ' -> ' + newEst, currentUser?.username); }
       if (mode === 'review' && p.recommendation === 'proceed') {
         const ok = await acceptRequest(e, { rce, reviewStatus: 'accepted', reviewedBy: who, reviewedAt: now, reviewNote: p.note });
         if (ok) { auditLog('review_request', label + ' proceed', currentUser?.username); setRceReview(null); }
@@ -5278,7 +5284,7 @@ function App({
     if (!ceNum) { _errs.rceNo = 1; _todo.push('RCE No.'); }
     else if (!/^[A-Z0-9\-_\/\.]{2,30}$/.test(ceNum)) { _errs.rceNo = 1; _todo.push('RCE No. (2-30 characters, letters/numbers/dashes only)'); }
     if (!String(f.client || '').trim()) { _errs.client = 1; _todo.push('Customer'); }
-    if (!String(f.assignee || '').trim()) { _errs.assignee = 1; _todo.push('Assigned to (an estimator)'); }
+    /* Assigning is optional here: a reviewer of the Cost Estimation team assigns an estimator when they review the request. */
     /* The checklist and item 14 are the estimators' review, done after the request is logged; they are not required to log it. */
     if (_todo.length) {
       setReqForm(p => ({ ...p, _errs }));
@@ -5318,7 +5324,7 @@ function App({
         showToast('Request NOT logged — SharePoint did not accept it' + (saved && saved.reason ? ': ' + String(saved.reason).slice(0, 80) : '') + '.', true);
         setReqBusy(false); return;
       }
-      const fields = { status: 'Pending', ceeName: f.assignee.trim(), customer: f.client.trim(),
+      const fields = { status: 'Pending', ceeName: String(f.assignee || '').trim() || 'Unassigned', customer: f.client.trim(),
         jobTitle: String(f.description || '').trim(), designation: f.projType || '', dateRecv: f.dateRecv || '',
         deadline: f.deadline || '', receivedBy: currentUser.name || currentUser.username || '',
         /* The recommendation belongs where the estimator looks first. Left
@@ -5335,7 +5341,7 @@ function App({
       setReqForm(null);
       const _docs = reqFiles.slice();
       setReqFiles([]);
-      showToast('Request RCE ' + ceNum + ' logged and assigned to ' + fields.ceeName +
+      showToast('Request RCE ' + ceNum + (fields.ceeName === 'Unassigned' ? ' logged. A reviewer will assign an estimator' : ' logged and assigned to ' + fields.ceeName) +
         (_docs.length ? '. Sending ' + _docs.length + ' document(s)...' : '. Attach the documents that came with it.'));
       openAttachPanel(saved.id);
       /* The request is logged either way. An upload that fails says so and
@@ -6763,7 +6769,7 @@ function App({
     !isRequestor && e.info?.request && !e.info.acceptedCeNum && !e._draft && typeof e.id === 'number' && /*#__PURE__*/React.createElement("button", {
       style: {...btn('ok', true), marginLeft: 5, fontSize: 9, padding: '1px 7px'},
       title: 'Review the checklist and decide: proceed, secure the missing data first, or decline',
-      onClick: () => setRceReview({e, mode: 'review'})
+      onClick: () => openReview(e, 'review')
     }, 'Review'),
     isRequestor && e.info?.request && !e.info.acceptedCeNum && e.info.reviewStatus !== 'declined' && reqOwns(e.id) && !e._draft && typeof e.id === 'number' && /*#__PURE__*/React.createElement("button", {
       style: {...btn('info', true), marginLeft: 5, fontSize: 9, padding: '1px 7px'},
@@ -10994,7 +11000,7 @@ statusPanel && (() => {
 rceReview && /*#__PURE__*/React.createElement(RceReviewModal, {
   key: rceReview.e.id + rceReview.mode, mode: rceReview.mode, rce: (rceReview.e.info || {}).rce || {}, busy: reqBusy,
   title: (rceReview.mode === 'review' ? 'Review request ' : 'Update request ') + (rceReview.e.info?.requestNum || rceReview.e.ceNum),
-  onClose: () => setRceReview(null), onDone: saveReview
+  users: reqUsers, assignee: String((monData[rceReview.e.id] || {}).ceeName || '').replace(/^Unassigned$/, ''), onClose: () => setRceReview(null), onDone: saveReview
 }),
 
 /* ── New Request Modal ── */
@@ -11040,8 +11046,8 @@ reqForm && (() => {
     /*#__PURE__*/React.createElement("div", {style:{marginTop:10}}, L("Address", inp('address', {placeholder:'Site or office address as the inquiry gives it'}))),
     /*#__PURE__*/React.createElement("div", {style:{marginTop:10}}, L("Project title", /*#__PURE__*/React.createElement("textarea", {style:{...INP,height:46,resize:'vertical'}, value:reqForm.description, placeholder:'What the client is asking for', onChange:e=>set('description', e.target.value)}))),
     /*#__PURE__*/React.createElement("div", {style:{marginTop:10}}, grid(
-      L("Assigned to *", /*#__PURE__*/React.createElement(React.Fragment, null,
-        inp('assignee', {list:'req-users', placeholder:'Estimator'}),
+      L("Assigned to (optional)", /*#__PURE__*/React.createElement(React.Fragment, null,
+        inp('assignee', {list:'req-users', placeholder:'Leave blank: a reviewer will assign one'}),
         /*#__PURE__*/React.createElement("datalist", {id:'req-users'}, reqUsers.map(u => /*#__PURE__*/React.createElement("option", {key:u.username, value:u.name || u.username}))))),
       L("Inquiry type", /*#__PURE__*/React.createElement("select", {style:INP, value:reqForm.inquiryType || '', onChange:e=>set('inquiryType', e.target.value)},
         /*#__PURE__*/React.createElement("option", {value:''}, '--'),

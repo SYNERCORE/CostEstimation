@@ -61,9 +61,15 @@ const run = async (mode, p, o) => {
   c = await run('review', { items, recommendation: 'secure', note: 'n' }, { patchOk: false });
   ck('a refusal from SharePoint is reported, the list is not changed', c.toasts.some(t => t.er) && c.hist === null);
 
+  c = await run('review', { items, recommendation: 'secure', note: 'n', assignee: 'Bob' });
+  ck('the reviewer assigns the estimator in the Estimator column', c.mon && c.mon[0] === 7 && c.mon[1] === 'ceeName' && c.mon[2] === 'Bob');
+  ck('Proceed asks for an estimator when none is assigned', mod.indexOf("rec === 'proceed' && !String(est).trim()") > 0);
+  ck('a request may be logged unassigned', app.indexOf("|| 'Unassigned'") > 0);
+
   console.log(NL + 'the screens:');
-  ck('estimators get a Review button instead of a bare Accept', app.indexOf("onClick: () => setRceReview({e, mode: 'review'})") > 0);
+  ck('estimators get a Review button instead of a bare Accept', app.indexOf("onClick: () => openReview(e, 'review')") > 0);
   ck('the owner of a request gets Update, never on a declined or accepted one', app.indexOf("e.info.reviewStatus !== 'declined' && reqOwns(e.id)") > 0);
   ck('the requestor\'s My Work table shows the outcome and the note', app.indexOf("String(x.e.info.reviewStatus).toUpperCase() + (x.e.info.reviewNote") > 0);
   process.exit(bad ? 1 : 0);
 })();
+

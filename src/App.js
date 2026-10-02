@@ -5235,24 +5235,24 @@ function App({
        when the Cost Estimation team accepts it (acceptRequest). Until then the
        RCE No. is the key the request is filed under. */
     const ceNum = String(f.rceNo || '').trim().toUpperCase();
-    if (!ceNum) { showToast('RCE No. is required: it is how the request is known until the Cost Estimation team accepts it.', true); return; }
-    if (!/^[A-Z0-9\-_\/\.]{2,30}$/.test(ceNum)) { showToast('RCE No. must be 2–30 characters, letters/numbers/dashes only.', true); return; }
-    if (!String(f.client || '').trim()) { showToast('Customer is required.', true); return; }
-    if (!String(f.assignee || '').trim()) { showToast('Assign the request to an estimator.', true); return; }
+    /* Every problem is gathered and shown together, so the requestor fixes the
+       form in one pass instead of learning of one missing field per click. */
+    const _errs = {}, _todo = [];
+    if (!ceNum) { _errs.rceNo = 1; _todo.push('RCE No.'); }
+    else if (!/^[A-Z0-9\-_\/\.]{2,30}$/.test(ceNum)) { _errs.rceNo = 1; _todo.push('RCE No. (2-30 characters, letters/numbers/dashes only)'); }
+    if (!String(f.client || '').trim()) { _errs.client = 1; _todo.push('Customer'); }
+    if (!String(f.assignee || '').trim()) { _errs.assignee = 1; _todo.push('Assigned to (an estimator)'); }
     /* The checklist is the form. A request logged with items unanswered says
        nothing about whether it can be costed, which is the one question it
-       exists to answer -- so the first unanswered item is named and the
-       request waits. Answering No is not blocked: that is what 14.2 is for. */
+       exists to answer. Answering No is not blocked: that is what 14.2 is for. */
     const _miss = rceUnanswered(f);
-    if (_miss.length) {
-      showToast('Item ' + _miss[0].n + ', ' + _miss[0].t + ', has no answer. ' +
-        (_miss.length > 1 ? _miss.length + ' items are unanswered. ' : '') +
-        'Mark each one Yes, No or N/A -- No is how you record what did not arrive.', true);
+    if (_miss.length) { _errs.items = 1; _todo.push('checklist item' + (_miss.length > 1 ? 's ' : ' ') + _miss.map(x => x.n).join(', ') + ' (mark each Yes, No or N/A)'); }
+    if (!f.recommendation) _todo.push('item 14 recommendation (proceed, secure the missing reference data, or decline)');
+    else if (f.recommendation === 'decline' && !String(f.declineReason || '').trim()) _todo.push('the reason for declining');
+    if (_todo.length) {
+      setReqForm(p => ({ ...p, _errs }));
+      showToast('Still needed: ' + _todo.join('; ') + '.', true);
       return;
-    }
-    if (!f.recommendation) { showToast('Item 14: choose what you recommend -- proceed, secure the missing reference data first, or decline.', true); return; }
-    if (f.recommendation === 'decline' && !String(f.declineReason || '').trim()) {
-      showToast('A declined request needs its reason: it is the record of why SHIC did not quote.', true); return;
     }
     setReqBusy(true);
     try {
@@ -10956,7 +10956,7 @@ reqForm && (() => {
   /* One item's answer, or its remark, without disturbing the other twelve. */
   const setItem = (n, patch) => setReqForm(p => ({...p, items: {...(p.items || {}), [n]: {...((p.items || {})[n] || {}), ...patch}}}));
   const L = (label, el) => /*#__PURE__*/React.createElement("label", {style:{display:'flex',flexDirection:'column',gap:3,fontSize:11,color:MT}}, label, el);
-  const inp = (k, extra) => /*#__PURE__*/React.createElement("input", {style:INP, value:reqForm[k] || '', onChange:e=>set(k, e.target.value), ...(extra || {})});
+  const inp = (k, extra) => /*#__PURE__*/React.createElement("input", {style:(reqForm._errs && reqForm._errs[k] && !reqForm[k]) ? {...INP, border:'1px solid #ef4444'} : INP, value:reqForm[k] || '', onChange:e=>set(k, e.target.value), ...(extra || {})});
   const sect = (title, note) => /*#__PURE__*/React.createElement("div", {style:{marginTop:16,marginBottom:8,borderTop:'1px solid '+BDR,paddingTop:10}},
     /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:11,letterSpacing:'.5px',color:TX}}, title),
     note && /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:10,marginTop:2}}, note));

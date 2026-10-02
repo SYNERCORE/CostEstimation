@@ -46,7 +46,7 @@ ck('a full checklist leaves nothing unanswered',
 
 const submit = app.slice(app.indexOf('const submitRequest = async ()'), app.indexOf('const [statusPanel'));
 ck('the form refuses a request with items unanswered', submit.indexOf('const _miss = rceUnanswered(f);') > 0);
-ck('and names the first one, so it can be found', /_miss\[0\]\.n \+ ', ' \+ _miss\[0\]\.t/.test(submit));
+ck('and names every one, so each can be found', submit.indexOf('_miss.map(x => x.n).join') > 0);
 ck('item 14 is required as well', submit.indexOf("if (!f.recommendation)") > 0);
 ck('a decline must say why', /recommendation === 'decline' && !String\(f\.declineReason/.test(submit));
 

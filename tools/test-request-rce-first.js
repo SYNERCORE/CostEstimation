@@ -26,7 +26,7 @@ ck('a new form is not seeded with a CE number', app.indexOf("setReqForm({ ceType
 console.log(NL + 'submitting:');
 const sub = cut(app, 'const submitRequest = async () => {', 'const [statusDraft');
 ck('the request is filed under its RCE No.', sub.indexOf("const ceNum = String(f.rceNo || '').trim().toUpperCase();") > 0);
-ck('an empty RCE No. is refused', /RCE No\. is required/.test(sub));
+ck('an empty RCE No. is refused', sub.includes("_todo.push('RCE No.')"));
 ck('a repeated RCE No. is refused', /already on a request or a CE/.test(sub) && sub.indexOf('m.rceNo') > 0);
 ck('the request carries its RCE No. both as requestNum and rceNo', sub.indexOf('request: true, requestNum: ceNum, rceNo: ceNum,') > 0 && sub.indexOf('rceNo: ceNum };') > 0);
 ck('it does not claim a CE number in the sequence', sub.indexOf('setCeNums') < 0);

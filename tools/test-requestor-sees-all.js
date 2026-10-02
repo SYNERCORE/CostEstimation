@@ -44,5 +44,8 @@ ck('REQUEST badge while still a request, View after',
   app.indexOf("still ? /*#__PURE__*/React.createElement(\"span\"") > 0 && app.indexOf(": viewBtn(x)))") > 0);
 ck('the card is no longer shown to requestors', app.indexOf("!isRequestor && sent.length > 0 && section('📤 Requests I sent'") > 0);
 
+ck('the My Work button is New Request for a requestor, the CE editor for everyone else',
+  app.indexOf('onClick:openRequest,title:"Log a request for estimation') > 0 && app.indexOf('isRequestor ? "➕ New Request" : "➕ Go to the CE editor"') > 0);
+
 console.log(bad ? NL + bad + ' FAILURE(S)' : NL + 'requestor visibility OK');
 process.exit(bad ? 1 : 0);

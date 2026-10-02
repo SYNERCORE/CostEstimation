@@ -11358,7 +11358,10 @@ tab === 'mywork' && (() => {
     /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'baseline',gap:10,flexWrap:'wrap'}},
       /*#__PURE__*/React.createElement("div", {style:{fontSize:18,fontWeight:800}}, 'Good ' + (now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening') + ', ' + String(currentUser.name || me).split(' ')[0]),
       /*#__PURE__*/React.createElement("span", {style:{fontSize:12,color:MT}}, toSign.length + returned.length + overdue ? 'Here is what needs you today.' : 'Nothing urgent — you are all caught up.'),
-      /*#__PURE__*/React.createElement("button", {style:{...btn('acc',true),marginLeft:'auto'},onClick:()=>setTab('info')}, "➕ Go to the CE editor")),
+      /*#__PURE__*/React.createElement("button", isRequestor
+        ? {style:{...btn('acc',true),marginLeft:'auto'},onClick:openRequest,title:"Log a request for estimation: CE number, customer, deadline, who it is assigned to, and its documents"}
+        : {style:{...btn('acc',true),marginLeft:'auto'},onClick:()=>setTab('info')},
+        isRequestor ? "➕ New Request" : "➕ Go to the CE editor")),
     /*#__PURE__*/React.createElement("div", {style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}},
       kpi('Awaiting my signature', toSign.length, 'approvals routed to you', toSign.length ? 'var(--accent-cyan)' : null),
       kpi('Open CEs assigned', open.length, overdue + ' overdue · ' + dueSoon + ' due ≤3 days', overdue ? ERR : null),

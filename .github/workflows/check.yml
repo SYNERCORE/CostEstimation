@@ -294,6 +294,8 @@ jobs:
         run: node tools/test-monitoring-duplicate-rows.js
       - name: Storage warning clears what it can
         run: node tools/test-storage-warning.js
+      - name: The ship script's helpers behave
+        run: node tools/test-ship.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js
       - name: Tool power usage
@@ -504,6 +506,8 @@ jobs:
         run: node tools/test-monitoring-duplicate-rows.js
       - name: Storage warning clears what it can
         run: node tools/test-storage-warning.js
+      - name: The ship script's helpers behave
+        run: node tools/test-ship.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js
       - name: Detailed Excel export mirrors the printed CE

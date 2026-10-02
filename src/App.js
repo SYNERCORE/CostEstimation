@@ -5242,13 +5242,7 @@ function App({
     else if (!/^[A-Z0-9\-_\/\.]{2,30}$/.test(ceNum)) { _errs.rceNo = 1; _todo.push('RCE No. (2-30 characters, letters/numbers/dashes only)'); }
     if (!String(f.client || '').trim()) { _errs.client = 1; _todo.push('Customer'); }
     if (!String(f.assignee || '').trim()) { _errs.assignee = 1; _todo.push('Assigned to (an estimator)'); }
-    /* The checklist is the form. A request logged with items unanswered says
-       nothing about whether it can be costed, which is the one question it
-       exists to answer. Answering No is not blocked: that is what 14.2 is for. */
-    const _miss = rceUnanswered(f);
-    if (_miss.length) { _errs.items = 1; _todo.push('checklist item' + (_miss.length > 1 ? 's ' : ' ') + _miss.map(x => x.n).join(', ') + ' (mark each Yes, No or N/A)'); }
-    if (!f.recommendation) _todo.push('item 14 recommendation (proceed, secure the missing reference data, or decline)');
-    else if (f.recommendation === 'decline' && !String(f.declineReason || '').trim()) _todo.push('the reason for declining');
+    /* The checklist and item 14 are the estimators' review, done after the request is logged; they are not required to log it. */
     if (_todo.length) {
       setReqForm(p => ({ ...p, _errs }));
       showToast('Still needed: ' + _todo.join('; ') + '.', true);
@@ -11007,6 +11001,8 @@ reqForm && (() => {
         RCE_STAGES.map(k => /*#__PURE__*/React.createElement("option", {key:k, value:k}, k))))
     )),
 
+    /* The checklist and item 14 are the Cost Estimation team's review of what the requestor sent, so a requestor neither sees nor fills them. */
+    ...(isRequestor ? [] : [
     sect("COMPLETE?", "Every item is answered. No is not a refusal -- it is the record of what did not arrive, and item 14.2 is the recommendation that follows from it."),
     /*#__PURE__*/React.createElement("div", {style:{border:'1px solid '+BDR,borderRadius:7,overflow:'hidden'}},
       RCE_ITEMS.map((it, ix) => {
@@ -11051,7 +11047,8 @@ reqForm && (() => {
     reqForm.recommendation === 'decline' && /*#__PURE__*/React.createElement("div", {style:{marginTop:10}},
       L("Reason to decline / no quote *", /*#__PURE__*/React.createElement("textarea", {
         style:{...INP,height:46,resize:'vertical'}, value:reqForm.declineReason || '', disabled:reqBusy,
-        placeholder:'Why SHIC is not quoting this one', onChange:e=>set('declineReason', e.target.value)}))),
+        placeholder:'Why SHIC is not quoting this one', onChange:e=>set('declineReason', e.target.value)})))
+    ]),
     /*#__PURE__*/React.createElement("div", {style:{marginTop:10}}, L("Other remarks", /*#__PURE__*/React.createElement("textarea", {style:{...INP,height:46,resize:'vertical'}, value:reqForm.otherRemarks || '', placeholder:'Anything the estimator should know that no item above covers', onChange:e=>set('otherRemarks', e.target.value)}))),
     /*#__PURE__*/React.createElement("div", {style:{marginTop:10}}, L("Remarks for CE Monitoring", /*#__PURE__*/React.createElement("textarea", {style:{...INP,height:40,resize:'vertical'}, value:reqForm.remarks, placeholder:'Site visit needed, contact person, anything not to forget...', onChange:e=>set('remarks', e.target.value)}))),
 

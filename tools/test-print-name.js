@@ -27,7 +27,7 @@ ck('the viewer lends its title to the CE while it prints',
 ck('and finds the job title wherever it is kept',
   app.includes("return ceFileName(ceNum || e.info?.ceNum || e.ceNum, m.jobTitle || e.info?.description || '');") &&
   app.includes('const e = (history || []).find(h => h && h.id === id) || {};'));
-ck('and takes it back afterwards', app.includes('setTimeout(()=>{try{document.title=_was;}catch(_e){}},1000);'));
+ck('and takes it back afterwards', app.includes('setTimeout(()=>{try{document.title=_was;}catch(_e){logSwallowed('));
 
 /* The signature image is stamped with the date already; the line beneath the
    name repeated it. */

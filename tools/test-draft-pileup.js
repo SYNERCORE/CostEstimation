@@ -11,7 +11,7 @@ let bad = 0; const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + 
 
 /* ---- opening a CE is not work in progress ---- */
 ck('what was just loaded is recorded as already written',
-  app.includes("setTimeout(() => { try { if (_live.current) _lastAutoSig.current = _live.current.sig; } catch (_e) {} }, 400);"));
+  app.includes('setTimeout(() => { try { if (_live.current) _lastAutoSig.current = _live.current.sig; } catch(_e){logSwallowed('));
 ck('and the auto-save still only writes a CE that has changed',
   app.includes('if(live.sig===_lastAutoSig.current)return;') && app.includes('_lastAutoSig.current=live.sig;'));
 ck('a save still accounts for its own state, as it always did',

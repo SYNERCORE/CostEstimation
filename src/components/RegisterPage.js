@@ -294,7 +294,7 @@ function spErrText(t){
     const e=j.error||j['odata.error'];
     const v=e&&e.message&&(e.message.value||e.message);
     if(v)return String(v);
-  }catch(_){}
+  }catch(_){logSwallowed('RegisterPage:spErrText',_);}
   return String(t||'').slice(0,200);
 }
 /* SharePoint throttles a burst of schema writes with 429, and provisioning is
@@ -373,7 +373,7 @@ async function spCreateList(name, token, digest){
     const r=await _spFetchPatient(() => fetch(`${su}/_api/web/lists/getbytitle('${name}')`,
       {credentials:'omit',headers:{'Accept':'application/json;odata=nometadata','Authorization':'Bearer '+token}}));
     if(r.ok)return false; /* already exists */
-  }catch(e){}
+  }catch(e){logSwallowed('RegisterPage:spCreateList',e);}
   /* Create list */
   const res=await spRestPost(`${su}/_api/web/lists`,
     {BaseTemplate:100,Title:name,Description:'SHIC Cost Estimator - auto-created'},

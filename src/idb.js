@@ -51,7 +51,7 @@ const _idbAvailable = (() => {
       req.onsuccess = () => {
         clearTimeout(timer);
         const db = req.result;
-        db.onversionchange = () => { try { db.close(); } catch (_e) {} _idbConn = null; };
+        db.onversionchange = () => { try { db.close(); } catch(_e){logSwallowed('idb:L54',_e);} _idbConn = null; };
         done(db);
       };
       req.onerror = () => { clearTimeout(timer); console.warn('IndexedDB unavailable:', req.error && req.error.message); done(null); };
@@ -71,7 +71,7 @@ function _tx(db, storeName, mode, fn) {
     t.oncomplete = () => resolve(true);
     t.onerror = () => reject(t.error || new Error('IndexedDB transaction failed'));
     t.onabort = () => reject(t.error || new Error('IndexedDB transaction aborted'));
-    try { fn(t.objectStore(storeName)); } catch (e) { try { t.abort(); } catch (_e) {} reject(e); }
+    try { fn(t.objectStore(storeName)); } catch (e) { try { t.abort(); } catch(_e){logSwallowed('idb:_tx',_e);} reject(e); }
   });
 }
 
@@ -214,21 +214,21 @@ async function metaPut(key, value) {
    labelled estimate for browsers without it (Safari < 17, older Firefox). */
 async function storageReport() {
   const out = { idb: await idbReady(), ceCount: 0, byState: { synced: 0, local: 0, unknown: 0 }, lsBytes: 0, usage: null, quota: null, estimated: true, refs: {} };
-  try { out.ceCount = await ceCount(); out.byState = await ceCountBy(); } catch (_e) {}
+  try { out.ceCount = await ceCount(); out.byState = await ceCountBy(); } catch(_e){logSwallowed('idb:storageReport',_e);}
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
       out.lsBytes += ((localStorage.getItem(k) || '').length + (k || '').length) * 2;
     }
-  } catch (_e) {}
+  } catch(_e){logSwallowed('idb:storageReport',_e);}
   try {
     if (navigator.storage && navigator.storage.estimate) {
       const est = await navigator.storage.estimate();
       out.usage = est.usage; out.quota = est.quota; out.estimated = false;
     }
-  } catch (_e) {}
+  } catch(_e){logSwallowed('idb:storageReport',_e);}
   for (const k of ['masterlist', 'sowlib', 'monitoring']) {
-    try { const r = await refGet(k); if (r) out.refs[k] = { syncedAt: r.syncedAt, source: r.source, count: r.count }; } catch (_e) {}
+    try { const r = await refGet(k); if (r) out.refs[k] = { syncedAt: r.syncedAt, source: r.source, count: r.count }; } catch(_e){logSwallowed('idb:storageReport',_e);}
   }
   return out;
 }
@@ -259,7 +259,7 @@ const _shim = {
         if (!key || key.indexOf('shic:ce_cache:') !== 0) continue;
         try { const v = JSON.parse(localStorage.getItem(key)); if (v) out.push(_normalizeCE(v) || v); } catch (_e) {}
       }
-    } catch (_e) {}
+    } catch(_e){logSwallowed('idb:storageReport',_e);}
     return out;
   },
   refGet(key) { return LS.get('refdata:' + key); },

@@ -27,7 +27,7 @@ function spAdoptSetupLink(){
     /* The address is tidied so a shared screenshot of it is not a second,
        stale copy of the settings, and a reload does not run this again. */
     q.delete('setup');
-    try{ window.history.replaceState({}, '', window.location.pathname + (q.toString() ? '?' + q : '') + window.location.hash); }catch(_e){}
+    try{ window.history.replaceState({}, '', window.location.pathname + (q.toString() ? '?' + q : '') + window.location.hash); }catch(_e){logSwallowed('sp:spAdoptSetupLink',_e);}
     return true;
   }catch(_e){ return false; }
 }
@@ -159,9 +159,9 @@ async function _getSPTokenNow(opts){
         },
         cache:{cacheLocation:'sessionStorage',storeAuthStateInCookie:false}
       });
-      try{await _spMsalApp.initialize();}catch(e){}
+      try{await _spMsalApp.initialize();}catch(e){logSwallowed('sp:_getSPTokenNow',e);}
       /* Handle redirect response (from acquireTokenRedirect) */
-      try{const redirectResult=await _spMsalApp.handleRedirectPromise();if(redirectResult){_spToken=redirectResult.accessToken;_spExpiry=redirectResult.expiresOn?redirectResult.expiresOn.getTime():Date.now()+3600000;}}catch(e){}
+      try{const redirectResult=await _spMsalApp.handleRedirectPromise();if(redirectResult){_spToken=redirectResult.accessToken;_spExpiry=redirectResult.expiresOn?redirectResult.expiresOn.getTime():Date.now()+3600000;}}catch(e){logSwallowed('sp:_getSPTokenNow',e);}
     }
     const accts=_spMsalApp.getAllAccounts();
     let res;
@@ -243,7 +243,7 @@ function spNoteThrottled(seconds){
   const base = Number(seconds) > 0 ? Number(seconds) : 20;
   const wait = Math.min(base * Math.pow(2, Math.min(_spThrottleStreak - 1, 4)), 300);
   _spCooldownUntil = Math.max(_spCooldownUntil, Date.now() + wait * 1000);
-  try{ window._shicThrottleUntil = _spCooldownUntil; }catch(_){}
+  try{ window._shicThrottleUntil = _spCooldownUntil; }catch(_){logSwallowed('sp:spNoteThrottled',_);}
   return wait;
 }
 function spNoteOk(){ _spThrottleStreak = 0; }
@@ -349,7 +349,7 @@ async function spGet(l,f='',sel=''){
     if(!r.ok){
       /* The body is the only place SharePoint says WHY. Without it a threshold
          error, a missing column and a genuine outage all read as a bare 500. */
-      let body='';try{body=await r.text();}catch(_){}
+      let body='';try{body=await r.text();}catch(_){logSwallowed('sp:spGet',_);}
       /* Said once, in full, where it can be read: the toast keeps a hundred
          characters and the browser's own line cuts the URL. */
       if(r.status>=500)console.warn('SP '+r.status+' on '+l+' | filter: '+(f||'(none)')+' | select: '+(sel||'(all)')+' | '+String(body).slice(0,500));
@@ -362,8 +362,8 @@ async function spGet(l,f='',sel=''){
   return results;
 }
 async function spPost(l,data){const su=getSiteURL();if(!su)throw new Error('SP not configured');const{digest,token}=await spDigest();if(!token)throw new Error('SP: No auth token. Please sign in via Connect & Test first.');const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'Authorization':'Bearer '+token};const r=await spFetch(`${su}/_api/web/lists/getbytitle('${l}')/items`,{method:'POST',credentials:'omit',headers:h,body:JSON.stringify(data)},'post',l);if(!r.ok){const t=await r.text();throw spErr('post',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}return r.json();}
-async function spPatch(l,id,data){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*','X-HTTP-Method':'MERGE',...(token?{'Authorization':'Bearer '+token}:{})};const r=await spFetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'PATCH',credentials:'omit',headers:h,body:JSON.stringify(data)},'patch',l);if(!r.ok){let t='';try{t=await r.text();}catch(_){}throw spErr('patch',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}}
-async function spDelete(l,id){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*',...(token?{'Authorization':'Bearer '+token}:{})};const r=await spFetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'DELETE',credentials:'omit',headers:h},'delete',l);if(!r.ok){let t='';try{t=await r.text();}catch(_){}throw spErr('delete',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}}
+async function spPatch(l,id,data){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*','X-HTTP-Method':'MERGE',...(token?{'Authorization':'Bearer '+token}:{})};const r=await spFetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'PATCH',credentials:'omit',headers:h,body:JSON.stringify(data)},'patch',l);if(!r.ok){let t='';try{t=await r.text();}catch(_){logSwallowed('sp:spPatch',_);}throw spErr('patch',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}}
+async function spDelete(l,id){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*',...(token?{'Authorization':'Bearer '+token}:{})};const r=await spFetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'DELETE',credentials:'omit',headers:h},'delete',l);if(!r.ok){let t='';try{t=await r.text();}catch(_){logSwallowed('sp:spDelete',_);}throw spErr('delete',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}}
 
 /* SharePoint answers with a SERVER-relative url -- /sites/TSG/Lists/... -- and
    this app is served from synercore.github.io, so using one as a link href

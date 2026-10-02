@@ -72,14 +72,14 @@ function ToolPowerSwitch() {
   const [on, setOn] = React.useState(toolPowerEnabled());
   const [busy, setBusy] = React.useState(false);
   const [msg, setMsg] = React.useState('');
-  React.useEffect(() => { dbGetFeatures().then(() => setOn(toolPowerEnabled())).catch(() => {}); }, []);
+  React.useEffect(() => { dbGetFeatures().then(() => setOn(toolPowerEnabled())).catch(_e=>logSwallowed('ShiftRatesPanel:ToolPowerSwitch',_e)); }, []);
   const flip = async () => {
     const next = !on;
     if (!window.confirm(next
       ? 'Turn tool power ON?\n\nThe kW, Run hrs and Power columns come back on ShopWorks tools, and power is added to the totals.'
       : 'Turn tool power OFF?\n\nThe kW columns are hidden and no CE counts power in its totals until it is switched back on. Figures already typed are kept.')) return;
     setBusy(true); setMsg('');
-    let cur = {}; try { cur = await dbGetFeatures() || {}; } catch (e) {}
+    let cur = {}; try { cur = await dbGetFeatures() || {}; } catch(e){logSwallowed('ShiftRatesPanel:ToolPowerSwitch',e);}
     const sp = await dbSaveFeatures({ ...cur, toolPower: next, updatedAt: new Date().toISOString() });
     setOn(next); setBusy(false);
     try { window.dispatchEvent(new Event('shic-features')); } catch (e) {}

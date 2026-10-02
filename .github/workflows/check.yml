@@ -286,6 +286,8 @@ jobs:
         run: node tools/test-row-virtualization.js
       - name: Blank disciplines can be filled in bulk
         run: node tools/test-bulk-discipline.js
+      - name: No failure is swallowed without a console line
+        run: node tools/test-no-silent-catch.js
       - name: Monitoring - one CE, two rows, reunited
         run: node tools/test-monitoring-duplicate-rows.js
       - name: Storage warning clears what it can
@@ -492,6 +494,8 @@ jobs:
         run: node tools/test-row-virtualization.js
       - name: Blank disciplines can be filled in bulk
         run: node tools/test-bulk-discipline.js
+      - name: No failure is swallowed without a console line
+        run: node tools/test-no-silent-catch.js
       - name: Monitoring - one CE, two rows, reunited
         run: node tools/test-monitoring-duplicate-rows.js
       - name: Storage warning clears what it can

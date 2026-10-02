@@ -273,7 +273,7 @@ They become ` + says)) return;
         let full = h;
         if (full.tools === undefined) {
           if (typeof h.id === 'number') { try { full = (await dbLoadCE(h.id)) || h; } catch (_) { full = h; } }
-          if (full.tools === undefined) { try { full = LS.get('ce_cache:' + ceNum) || full; } catch (_) {} }
+          if (full.tools === undefined) { try { full = LS.get('ce_cache:' + ceNum) || full; } catch(_){logSwallowed('AdminPanel:AdminPanel',_);} }
         }
         if (full.tools === undefined && full.mp === undefined) { skipped++; continue; }
         checked++;

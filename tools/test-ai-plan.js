@@ -43,7 +43,7 @@ let M;
 try {
   const start = ai.indexOf('const AI_PLAN_SCHEMA');
   if (start < 0) throw new Error('AI_PLAN_SCHEMA not found in ' + aiPath);
-  M = new Function('uid', ai.slice(start) + '\nreturn {' + pick.join(',') + '};')(uid);
+  M = new Function('uid', 'logSwallowed', ai.slice(start) + '\nreturn {' + pick.join(',') + '};')(uid, () => {});
 } catch (e) { console.error('could not load helpers: ' + e.message); process.exit(1); }
 
 /* A reply in the shape the prompt asks for: three scope steps, and resources

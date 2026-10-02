@@ -174,7 +174,7 @@ async function dbDeleteDraft(draftId){
          the response never arrived) leaves two rows under one Title, and
          deleting one of them left the draft on screen after the CE was saved --
          looking exactly like the save had not worked. */
-      for(const x of r)await spDelete(spList('Drafts'),x.Id).catch(()=>{});
+      for(const x of r)await spDelete(spList('Drafts'),x.Id).catch(_e=>logSwallowed('db:dbDeleteDraft',_e));
     }catch(e){console.warn('dbDeleteDraft:',e.message);}
   }
   try{localStorage.removeItem('shic_draft_'+draftId);}catch{}
@@ -224,7 +224,7 @@ async function dbSaveMonEntry(ceId, ceNum, monFields, changed){
           const sorted=r.slice().sort((a,b)=>b.Id-a.Id);
           spId=sorted[0].Id;_monSpIdCache[ceId]=spId;
           alsoWrite=sorted.slice(1).map(x=>x.Id);
-          try{theirs=sorted[0].shicMonData?JSON.parse(sorted[0].shicMonData):null;}catch(_e){}
+          try{theirs=sorted[0].shicMonData?JSON.parse(sorted[0].shicMonData):null;}catch(_e){logSwallowed('db:dbSaveMonEntry',_e);}
         }
       }catch(_e){if(!spId)throw _e;}
     }
@@ -286,7 +286,7 @@ async function dbPatchCEInfo(ceId,info){
     const r=await spGet(spList('CEs'),`Id eq ${Number(ceId)}`,'Id');
     if(!r.length)return false;
     await spWithRetry(()=>spPatch(spList('CEs'),r[0].Id,{shicInfo:JSON.stringify(info||{})}));
-    try{const loc=await _ceLoadLocal(ceId);if(loc)await cePut({...loc,info:info,ceNum:(info&&info.ceNum)||loc.ceNum});}catch(_e){}
+    try{const loc=await _ceLoadLocal(ceId);if(loc)await cePut({...loc,info:info,ceNum:(info&&info.ceNum)||loc.ceNum});}catch(_e){logSwallowed('db:dbPatchCEInfo',_e);}
     return true;
   }catch(e){console.warn('dbPatchCEInfo:',e.message);return false;}
 }
@@ -300,7 +300,7 @@ async function dbSaveMonAll(monData, histItems){
   const BATCH=3;
   for(let i=0;i<entries.length;i+=BATCH){
     const chunk=entries.slice(i,i+BATCH);
-    await Promise.all(chunk.map(([ceId,fields])=>dbSaveMonEntry(ceId,ceNumMap[ceId]||String(ceId),fields).catch(()=>{})));
+    await Promise.all(chunk.map(([ceId,fields])=>dbSaveMonEntry(ceId,ceNumMap[ceId]||String(ceId),fields).catch(_e=>logSwallowed('db:dbSaveMonAll',_e))));
     if(i+BATCH<entries.length)await new Promise(r=>setTimeout(r,500));
   }
 }
@@ -378,7 +378,7 @@ async function dbGetMon(){
              save writes every copy, so the two cannot drift apart. */
           if(seen[cid]!=null){dups++;if(item.Id<seen[cid])continue;}
           seen[cid]=item.Id;
-          try{data[cid]=JSON.parse(item.shicMonData);_monSpIdCache[cid]=item.Id;}catch{}
+          try{data[cid]=JSON.parse(item.shicMonData);_monSpIdCache[cid]=item.Id;}catch(_e){logSwallowed('db:dbGetMon',_e);}
         }
         if(!latest||item.Modified>latest)latest=item.Modified;
       }
@@ -393,7 +393,7 @@ async function dbGetMon(){
     /* No per-CE items at all — check legacy blob */
     const legacy=await spGet(spList('Monitoring'),"Title eq 'config'",'Id,shicMonData,Modified');
     if(legacy.length&&legacy[0].shicMonData){
-      try{return{data:JSON.parse(legacy[0].shicMonData),modifiedAt:legacy[0].Modified,legacy:true};}catch{}
+      try{return{data:JSON.parse(legacy[0].shicMonData),modifiedAt:legacy[0].Modified,legacy:true};}catch(_e){logSwallowed('db:dbGetMon',_e);}
     }
     /* The list really is empty: the request succeeded and returned no items. */
     return{data:{},modifiedAt:null,empty:true,definitive:true};
@@ -464,7 +464,7 @@ const LS = {
                 'Most of it is ' + after.top.name + ' (' + LS.kb(after.top.bytes) + '). Sync to SharePoint or export a backup.', true), 500);
             }
           }
-        } catch {}
+        } catch(_e){logSwallowed('db:resetLockTimer',_e);}
       }
     } catch (e) {
       if (e && e.name === 'QuotaExceededError') {
@@ -499,7 +499,7 @@ const LS = {
           : 'other settings';
         groups[name] = (groups[name] || 0) + n;
       }
-    } catch (_e) {}
+    } catch(_e){logSwallowed('db:resetLockTimer',_e);}
     const top = Object.keys(groups).sort((a, b) => groups[b] - groups[a])[0] || 'other settings';
     return { total, groups, top: { name: top, bytes: groups[top] || 0 } };
   },
@@ -521,7 +521,7 @@ const LS = {
         if (!key || key.indexOf('shic:ce_cache:') !== 0) continue;
         const raw = localStorage.getItem(key) || '';
         let when = 0, local = false;
-        try { const v = JSON.parse(raw) || {}; when = new Date(v.savedAt || 0).getTime() || 0; local = v._syncState === 'local'; } catch (_e) {}
+        try { const v = JSON.parse(raw) || {}; when = new Date(v.savedAt || 0).getTime() || 0; local = v._syncState === 'local'; } catch(_e){logSwallowed('db:resetLockTimer',_e);}
         entries.push({ key, when, local, bytes: (raw.length + key.length) * 2 });
       }
       entries.sort((a, b) => b.when - a.when);
@@ -552,7 +552,7 @@ const LS = {
       }
     }
     localStorage.setItem('shic:_migv2', '1');
-  } catch {}
+  } catch(_e){logSwallowed('db:migrateLSEncoding',_e);}
 })();
 /* True when the last dbGetUsers could not read SharePoint and fell back to the
    handful of accounts cached on this machine. The login screen needs to tell
@@ -640,7 +640,7 @@ async function dbUpdateUser(id,data,opts){
     if(target&&isOwnerRole(target.role))
       throw new Error('dbUpdateUser: the owner cannot be demoted directly. Transfer ownership instead.');
   }
-  const mirror=()=>{try{const cur=LS.get('users')||[];if(cur.some(u=>u.id===id))LS.set('users',cur.map(u=>u.id===id?{...u,...data}:u));}catch(_){}};
+  const mirror=()=>{try{const cur=LS.get('users')||[];if(cur.some(u=>u.id===id))LS.set('users',cur.map(u=>u.id===id?{...u,...data}:u));}catch(_){logSwallowed('db:dbUpdateUser',_);}};
   if(USE_SP||getSiteURL()){
     /* Every editable field must be mapped. shicEmail was missing, so editing a
        user's email patched nothing and silently reported success — the change
@@ -730,7 +730,7 @@ async function dbFindCEByNum(ceNum){
   try{
     const rec=await ceGet(t);
     if(rec)return{id:rec.id,ceNum:t,savedBy:rec.savedBy||'',savedAt:rec.savedAt||'',_imported:rec._imported};
-  }catch(_){}
+  }catch(_){logSwallowed('db:dbFindCEByNum',_);}
   return null;
 }
 /* keep(id): a CE someone else saved that is still this user's to see -- a request assigned to them or received by them. Without it a non-admin only ever got their own saves, so an assigned request never reached the estimator. */
@@ -892,7 +892,7 @@ async function dbCacheAllCEs(progressCb){
   const mpBy=byCE(mpRows),resBy=byCE(resRows);
   step('Checking what is already stored...',0.75);
   const have=new Map();
-  try{for(const r of await ceAll()) have.set(String(r.ceNum||'').toUpperCase(),r.savedAt||'');}catch(_){}
+  try{for(const r of await ceAll()) have.set(String(r.ceNum||'').toUpperCase(),r.savedAt||'');}catch(_){logSwallowed('db:dbCacheAllCEs',_);}
   const out=[];let skipped=0;
   for(const h of heads){
     const num=String(h.Title||'').toUpperCase();
@@ -911,7 +911,7 @@ async function dbCacheAllCEs(progressCb){
   return{total:heads.length,stored:stored,skipped:skipped,
          rows:mpRows.length+resRows.length};
 }
-function _assembleCE(h,mR,rR){let _rk={};try{_rk=(h.shicMisc?JSON.parse(h.shicMisc):{})._rowKeys||{};}catch(_){}const _ord=(rows,k)=>_rowOrder(rows,_rk[k]).map(({r,id})=>{r._rid=id;return r;});mR=_ord(mR,'mp');rR=[..._ord(rR.filter(r=>r.shicTab==='tools'),'tools'),..._ord(rR.filter(r=>r.shicTab==='mats'),'mats'),..._ord(rR.filter(r=>r.shicTab==='ppe'),'ppe'),...rR.filter(r=>!['tools','mats','ppe'].includes(r.shicTab))];return {id:h.Id,ceType:h.shicType||'onsite',grand:h.shicTotal||0,savedBy:h.shicSavedBy||'',savedAt:h.shicSavedAt||'',info:(()=>{let base={};try{if(h.shicInfo)base=JSON.parse(h.shicInfo)||{};}catch(_){}/* The dedicated columns win for the three fields that also exist as columns: Title is what duplicate detection and every filter match on, so the JSON must never be able to disagree with it. A CE saved before shicInfo existed has no JSON and falls back to exactly what it had. */return{...base,ceNum:h.Title,client:h.shicClient||base.client||'',description:h.shicDesc||base.description||''};})(),scope:h.shicScope||'',mp:mR.map(r=>({id:r._rid||'sp'+r.Id,role:r.shicRole||'',rate:r.shicRate||0,shift:r.shicShift||'regular_day',days:r.shicDays||1,/* pax, not qty: the editor and every cost formula read `pax`, so a row loaded as `qty` costed 0. shicQty is the fallback for rows written before shicPax existed. */pax:r.shicPax||r.shicQty||1,otHours:r.shicOTHours||0,perDiem:r.shicPerDiem||0,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),tools:rR.filter(r=>r.shicTab==='tools').map(r=>({id:r._rid||'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,days:r.shicDays||1,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares),/* No tier stored means the row predates tiers, which is Tier 2 -- the pricing it was quoted at. */tier:r.shicTier||2,hours:r.shicHours||0,kw:r.shicKW||0,runHrs:r.shicRunHrs||0,..._srcParse(r.shicSrc)})),mats:rR.filter(r=>r.shicTab==='mats').map(r=>({id:r._rid||'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),ppe:rR.filter(r=>r.shicTab==='ppe').map(r=>({id:r._rid||'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),misc:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};/* _verifyNotes joins _addlCosts and _margin as a reserved key. Left in, it would come back as a miscellaneous cost group named '_verifyNotes'. */const{_addlCosts,_margin,_verifyNotes,_rates,_docRef,_rowKeys,_signatures,...rest}=m;return rest;})(),verifyNotes:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._verifyNotes||{};})(),rates:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._rates||{};})(),docRef:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._docRef||null;})(),signatures:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._signatures||{};})(),addlCosts:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._addlCosts||[];})(),margin:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._margin||0;})(),sowItems:(()=>{try{return h.shicSOW?JSON.parse(h.shicSOW):[];}catch(_){return [];}})(),notes:h.shicNotes?JSON.parse(h.shicNotes):[],approvers:h.shicApprovers?JSON.parse(h.shicApprovers):[],mobVehicles:h.shicMob?JSON.parse(h.shicMob):[],demobVehicles:h.shicDemob?JSON.parse(h.shicDemob):[]};}
+function _assembleCE(h,mR,rR){let _rk={};try{_rk=(h.shicMisc?JSON.parse(h.shicMisc):{})._rowKeys||{};}catch(_){logSwallowed('db:_assembleCE',_);}const _ord=(rows,k)=>_rowOrder(rows,_rk[k]).map(({r,id})=>{r._rid=id;return r;});mR=_ord(mR,'mp');rR=[..._ord(rR.filter(r=>r.shicTab==='tools'),'tools'),..._ord(rR.filter(r=>r.shicTab==='mats'),'mats'),..._ord(rR.filter(r=>r.shicTab==='ppe'),'ppe'),...rR.filter(r=>!['tools','mats','ppe'].includes(r.shicTab))];return {id:h.Id,ceType:h.shicType||'onsite',grand:h.shicTotal||0,savedBy:h.shicSavedBy||'',savedAt:h.shicSavedAt||'',info:(()=>{let base={};try{if(h.shicInfo)base=JSON.parse(h.shicInfo)||{};}catch(_){logSwallowed('db:_assembleCE',_);}/* The dedicated columns win for the three fields that also exist as columns: Title is what duplicate detection and every filter match on, so the JSON must never be able to disagree with it. A CE saved before shicInfo existed has no JSON and falls back to exactly what it had. */return{...base,ceNum:h.Title,client:h.shicClient||base.client||'',description:h.shicDesc||base.description||''};})(),scope:h.shicScope||'',mp:mR.map(r=>({id:r._rid||'sp'+r.Id,role:r.shicRole||'',rate:r.shicRate||0,shift:r.shicShift||'regular_day',days:r.shicDays||1,/* pax, not qty: the editor and every cost formula read `pax`, so a row loaded as `qty` costed 0. shicQty is the fallback for rows written before shicPax existed. */pax:r.shicPax||r.shicQty||1,otHours:r.shicOTHours||0,perDiem:r.shicPerDiem||0,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),tools:rR.filter(r=>r.shicTab==='tools').map(r=>({id:r._rid||'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,days:r.shicDays||1,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares),/* No tier stored means the row predates tiers, which is Tier 2 -- the pricing it was quoted at. */tier:r.shicTier||2,hours:r.shicHours||0,kw:r.shicKW||0,runHrs:r.shicRunHrs||0,..._srcParse(r.shicSrc)})),mats:rR.filter(r=>r.shicTab==='mats').map(r=>({id:r._rid||'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),ppe:rR.filter(r=>r.shicTab==='ppe').map(r=>({id:r._rid||'sp'+r.Id,desc:r.shicDesc||'',qty:r.shicQty||1,uom:r.shicUOM||'Lot',cost:r.shicCost||0,taskId:r.shicTaskId||'',shares:_shParse(r.shicShares)})),misc:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};/* _verifyNotes joins _addlCosts and _margin as a reserved key. Left in, it would come back as a miscellaneous cost group named '_verifyNotes'. */const{_addlCosts,_margin,_verifyNotes,_rates,_docRef,_rowKeys,_signatures,...rest}=m;return rest;})(),verifyNotes:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._verifyNotes||{};})(),rates:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._rates||{};})(),docRef:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._docRef||null;})(),signatures:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._signatures||{};})(),addlCosts:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._addlCosts||[];})(),margin:(()=>{const m=h.shicMisc?JSON.parse(h.shicMisc):{};return m._margin||0;})(),sowItems:(()=>{try{return h.shicSOW?JSON.parse(h.shicSOW):[];}catch(_){return [];}})(),notes:h.shicNotes?JSON.parse(h.shicNotes):[],approvers:h.shicApprovers?JSON.parse(h.shicApprovers):[],mobVehicles:h.shicMob?JSON.parse(h.shicMob):[],demobVehicles:h.shicDemob?JSON.parse(h.shicDemob):[]};}
 async function dbLoadCE(id){
   /* Offline (or SharePoint unreachable) this returned null and the CE simply
      would not open. The IndexedDB archive holds the full record -- line items
@@ -929,7 +929,7 @@ let _partial=false;
 if(_missing&&typeof computeCEGrand==='function'){
   const _tgt=Number(h.shicTotal)||0,_num=String(_ce.info.ceNum||'').trim().toUpperCase();
   let _loc=null;try{_loc=(await ceAll()).filter(r=>r&&String((r.info&&r.info.ceNum)||r.ceNum||'').trim().toUpperCase()===_num)
-    .find(r=>Math.abs(computeCEGrand(r)-_tgt)<=Math.max(1,_tgt*0.001));}catch(_){}
+    .find(r=>Math.abs(computeCEGrand(r)-_tgt)<=Math.max(1,_tgt*0.001));}catch(_){logSwallowed('db:dbLoadCE',_);}
   if(_loc){_ce={..._loc,id:h.Id};setTimeout(()=>(window._shicToast||console.warn)(_ce.info.ceNum+': only part of its last save reached SharePoint. Opened the complete copy kept in this browser — SAVE it now to upload the missing lines.',true),800);}
   else{_partial=true;_ce._partial=true;_ce._missingRows=_missing;setTimeout(()=>(window._shicToast||console.warn)(_ce.info.ceNum+': its last save was interrupted — '+_missing+' line(s) never reached SharePoint, so it adds up to less than its saved total. Do not save it from here. The complete copy is in the browser of '+(h.shicSavedBy||'whoever saved it')+': they should open the app and run Push All Local Data (Users tab).',true),800);}
   }
@@ -946,7 +946,7 @@ if(_extra&&typeof computeCEGrand==='function'){
    left nothing behind, and the same CE would not open offline an hour later. */
 /* Not a partial one: it would overwrite the complete local copy of the
    browser that saved it, the only place the missing lines still exist. */
-if(!_partial&&!_missing)try{await cePut({..._ce,ceNum:_ce.info.ceNum,savedAt:_ce.savedAt||new Date().toISOString(),savedBy:_ce.savedBy||'',_syncState:'synced'});}catch(_){}
+if(!_partial&&!_missing)try{await cePut({..._ce,ceNum:_ce.info.ceNum,savedAt:_ce.savedAt||new Date().toISOString(),savedBy:_ce.savedBy||'',_syncState:'synced'});}catch(_){logSwallowed('db:dbLoadCE',_);}
 return _ce;}catch(e){console.warn('dbLoadCE:',e.message);return await _ceLoadLocal(id);}}
 /* Full CE from the offline archive, by SharePoint item Id. */
 async function _ceLoadLocal(id){
@@ -1071,10 +1071,10 @@ async function dbFindDuplicateRevisions(progressCb){
       const rows=await spGet(spList('CEs'),q,'Id,shicInfo');
       rows.forEach(r=>{
         let st='none';
-        try{st=((JSON.parse(r.shicInfo||'{}')||{}).approval||{}).state||'none';}catch(_){}
+        try{st=((JSON.parse(r.shicInfo||'{}')||{}).approval||{}).state||'none';}catch(_){logSwallowed('db:dbFindDuplicateRevisions',_);}
         info[String(r.Id)]=st;
       });
-    }catch(_){}
+    }catch(_){logSwallowed('db:dbFindDuplicateRevisions',_);}
   }
   groups.forEach(g=>g.forEach(r=>{
     r.apvState=info[String(r.id)]||'none';
@@ -1085,8 +1085,8 @@ async function dbFindDuplicateRevisions(progressCb){
   return groups.map(g=>({keep:g[0],extras:g.slice(1)}))
     .filter(x=>x.extras.length>0);
 }
-async function dbSaveHistory(e){_spFailReason='';if(USE_SP||getSiteURL()){try{const existing=await spGet(spList('CEs'),`Title eq '${(e.info.ceNum||'').replace(/'/g,"''")}'`,'Id');const hdr={Title:e.info.ceNum,shicType:e.ceType,shicClient:e.info.client||'',shicDesc:e.info.description||'',shicTotal:Math.round((e.grand||0)*100)/100,shicSavedBy:e.savedBy||'',shicSavedAt:new Date().toISOString(),shicScope:e.scope||'',shicNotes:JSON.stringify(e.notes||[]),shicApprovers:JSON.stringify(e.approvers||[]),shicMob:JSON.stringify(e.mobVehicles||[]),shicDemob:JSON.stringify(e.demobVehicles||[]),shicMisc:JSON.stringify({...(e.misc||{}), _addlCosts:(e.addlCosts||[]), _margin:(e.margin||0), _verifyNotes:(e.verifyNotes||{}), _rates:(e.rates||{}), _docRef:(e.docRef||null), _rowKeys:_rowKeysOf(e), _signatures:(e.signatures||{})}),shicSOW:JSON.stringify(e.sowItems||[]),/* The whole info object. Only client and description had columns, so date, location, discipline, department, status, material, QUANTITY, DAYS, attention, end user and the issuing company never reached SharePoint at all -- they lived in the saving browser's cache and nowhere else. Anyone else opening the CE got BLANK_INFO defaults: today's date, qty 1, status DRAFT, discipline Electrical. Saving from there wrote those defaults back as if they were real. One JSON column carries the lot, and new fields ride along without another migration. */shicInfo:JSON.stringify(e.info||{})};let ceId;if(existing.length){ceId=existing[0].Id;await spWithRetry(()=>spPatch(spList('CEs'),ceId,hdr));}else{const r=await spWithRetry(()=>spPost(spList('CEs'),hdr));ceId=r.Id;/* Race-condition guard: if two users POSTed simultaneously, keep the lowest Id and delete the duplicate */const dupes=await spGet(spList('CEs'),`Title eq '${(e.info.ceNum||'').replace(/'/g,"''")}'`,'Id,shicSavedBy');if(dupes.length>1){dupes.sort((a,b)=>a.Id-b.Id);const winner=dupes[0];if(winner.Id!==ceId){/* We lost the race — our row is the duplicate. Delete it, preserve our data locally, and surface a clear error to the user so they can save under a different CE number. The winner row is left completely untouched. */await spDelete(spList('CEs'),ceId).catch(()=>{});const _savedAt=new Date().toISOString();try{const h=LS.get('history')||[];LS.set('history',[{...e,id:Date.now(),savedAt:_savedAt,_raceConflict:true},...h.filter(x=>(x.info?.ceNum||x.ceNum)!==e.info.ceNum)]);LS.set('ce_cache:'+e.info.ceNum,{...e,id:Date.now(),savedAt:_savedAt});}catch(_){}/* 'local': we LOST the race and deleted our own SharePoint row, so this browser holds the only copy of the user's work. Nothing may ever delete a 'local' record. */try{await cePut({...e,ceNum:e.info.ceNum,savedAt:_savedAt,savedBy:e.savedBy||'',_syncState:'local',_raceConflict:true});}catch(_){}throw new Error(`CE number "${e.info.ceNum}" was saved by "${winner.shicSavedBy||'another user'}" at the same time. Your data has been kept in this browser — load the local draft and save again with a different CE number.`);}else{for(const dup of dupes.slice(1))await spDelete(spList('CEs'),dup.Id).catch(()=>{});}}}/* Fresh, not the big-list snapshot: rows another browser added since it was
-   taken would be missed here, never deleted, and counted on every load. */_spInvalidateBigList();const[om,or]=await Promise.all([_spGetByCE(spList('CE_MP'),ceId,'Id'),_spGetByCE(spList('CE_Resources'),ceId,'Id')]);/* Insert new rows FIRST — if any insert fails the old rows are still intact */const mpPayloads=(e.mp||[]).filter(r=>r.role).map(r=>({shicCEId:ceId,shicRole:r.role,shicRate:r.rate||0,shicShift:r.shift||'regular_day',shicDays:r.days||1,shicPax:r.pax||1,shicOTHours:r.otHours||0,shicPerDiem:r.perDiem||0,shicTaskId:r.taskId||'',shicShares:_shDump(r.shares)}));const resPayloads=[...(e.tools||[]).filter(r=>r.desc).map(r=>({shicCEId:ceId,shicTab:'tools',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicDays:r.days||1,shicTaskId:r.taskId||'',shicShares:_shDump(r.shares),/* Tier 2 is the default and what every existing row already is, so it is written as 0 rather than 2: an unrepaired site rejects the column, and a row that never names a tier must still cost what it always did. */shicTier:r.tier||0,shicHours:r.hours||0,shicKW:r.kw||0,shicRunHrs:r.runHrs||0,shicSrc:_srcDump(r)})),...(e.mats||[]).filter(r=>r.desc).map(r=>({shicCEId:ceId,shicTab:'mats',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicTaskId:r.taskId||'',shicShares:_shDump(r.shares)})),...(e.ppe||[]).filter(r=>r.desc).map(r=>({shicCEId:ceId,shicTab:'ppe',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicTaskId:r.taskId||'',shicShares:_shDump(r.shares)}))];const insFns=[...mpPayloads.map(p=>()=>spWithRetry(()=>spPost(spList('CE_MP'),p))),...resPayloads.map(p=>()=>spWithRetry(()=>spPost(spList('CE_Resources'),p)))];let spErr=null;for(let i=0;i<insFns.length;i+=5){try{await Promise.all(insFns.slice(i,i+5).map(fn=>fn()));}catch(batchErr){spErr=batchErr;console.error('dbSaveHistory batch insert failed:',batchErr.message);break;}}if(spErr)throw spErr;/* Only delete OLD rows after new ones safely written */const dels=[...om.map(x=>()=>spDelete(spList('CE_MP'),x.Id)),...or.map(x=>()=>spDelete(spList('CE_Resources'),x.Id))];let _delFail=0;for(let i=0;i<dels.length;i+=5)await Promise.all(dels.slice(i,i+5).map(fn=>fn().catch(()=>{_delFail++;})));if(_delFail)setTimeout(()=>(window._shicToast||console.warn)(_delFail+' old line(s) of '+e.info.ceNum+' could not be removed from SharePoint. They are ignored when the CE opens; save it again to clear them.',true),1200);_spInvalidateBigList();try{LS.set('ce_cache:'+e.info.ceNum,{...e,id:ceId,savedAt:hdr.shicSavedAt});}catch(_){}/* Write through to IndexedDB alongside the localStorage cache. 'synced' -- SharePoint accepted it, so the migration may safely treat the two copies as agreeing. */try{await cePut({...e,ceNum:e.info.ceNum,id:ceId,savedAt:hdr.shicSavedAt,savedBy:e.savedBy||'',_syncState:'synced'});}catch(_){}return{sp:true,id:ceId};}catch(e2){const msg=e2.message||String(e2);_spFailReason=msg;console.warn('dbSaveHistory SP error:',msg);/* A 400 InvalidClientQueryException on an insert almost always means the
+async function dbSaveHistory(e){_spFailReason='';if(USE_SP||getSiteURL()){try{const existing=await spGet(spList('CEs'),`Title eq '${(e.info.ceNum||'').replace(/'/g,"''")}'`,'Id');const hdr={Title:e.info.ceNum,shicType:e.ceType,shicClient:e.info.client||'',shicDesc:e.info.description||'',shicTotal:Math.round((e.grand||0)*100)/100,shicSavedBy:e.savedBy||'',shicSavedAt:new Date().toISOString(),shicScope:e.scope||'',shicNotes:JSON.stringify(e.notes||[]),shicApprovers:JSON.stringify(e.approvers||[]),shicMob:JSON.stringify(e.mobVehicles||[]),shicDemob:JSON.stringify(e.demobVehicles||[]),shicMisc:JSON.stringify({...(e.misc||{}), _addlCosts:(e.addlCosts||[]), _margin:(e.margin||0), _verifyNotes:(e.verifyNotes||{}), _rates:(e.rates||{}), _docRef:(e.docRef||null), _rowKeys:_rowKeysOf(e), _signatures:(e.signatures||{})}),shicSOW:JSON.stringify(e.sowItems||[]),/* The whole info object. Only client and description had columns, so date, location, discipline, department, status, material, QUANTITY, DAYS, attention, end user and the issuing company never reached SharePoint at all -- they lived in the saving browser's cache and nowhere else. Anyone else opening the CE got BLANK_INFO defaults: today's date, qty 1, status DRAFT, discipline Electrical. Saving from there wrote those defaults back as if they were real. One JSON column carries the lot, and new fields ride along without another migration. */shicInfo:JSON.stringify(e.info||{})};let ceId;if(existing.length){ceId=existing[0].Id;await spWithRetry(()=>spPatch(spList('CEs'),ceId,hdr));}else{const r=await spWithRetry(()=>spPost(spList('CEs'),hdr));ceId=r.Id;/* Race-condition guard: if two users POSTed simultaneously, keep the lowest Id and delete the duplicate */const dupes=await spGet(spList('CEs'),`Title eq '${(e.info.ceNum||'').replace(/'/g,"''")}'`,'Id,shicSavedBy');if(dupes.length>1){dupes.sort((a,b)=>a.Id-b.Id);const winner=dupes[0];if(winner.Id!==ceId){/* We lost the race — our row is the duplicate. Delete it, preserve our data locally, and surface a clear error to the user so they can save under a different CE number. The winner row is left completely untouched. */await spDelete(spList('CEs'),ceId).catch(_e=>logSwallowed('db:dbSaveHistory',_e));const _savedAt=new Date().toISOString();try{const h=LS.get('history')||[];LS.set('history',[{...e,id:Date.now(),savedAt:_savedAt,_raceConflict:true},...h.filter(x=>(x.info?.ceNum||x.ceNum)!==e.info.ceNum)]);LS.set('ce_cache:'+e.info.ceNum,{...e,id:Date.now(),savedAt:_savedAt});}catch(_){logSwallowed('db:dbSaveHistory',_);}/* 'local': we LOST the race and deleted our own SharePoint row, so this browser holds the only copy of the user's work. Nothing may ever delete a 'local' record. */try{await cePut({...e,ceNum:e.info.ceNum,savedAt:_savedAt,savedBy:e.savedBy||'',_syncState:'local',_raceConflict:true});}catch(_){logSwallowed('db:dbSaveHistory',_);}throw new Error(`CE number "${e.info.ceNum}" was saved by "${winner.shicSavedBy||'another user'}" at the same time. Your data has been kept in this browser — load the local draft and save again with a different CE number.`);}else{for(const dup of dupes.slice(1))await spDelete(spList('CEs'),dup.Id).catch(_e=>logSwallowed('db:dbSaveHistory',_e));}}}/* Fresh, not the big-list snapshot: rows another browser added since it was
+   taken would be missed here, never deleted, and counted on every load. */_spInvalidateBigList();const[om,or]=await Promise.all([_spGetByCE(spList('CE_MP'),ceId,'Id'),_spGetByCE(spList('CE_Resources'),ceId,'Id')]);/* Insert new rows FIRST — if any insert fails the old rows are still intact */const mpPayloads=(e.mp||[]).filter(r=>r.role).map(r=>({shicCEId:ceId,shicRole:r.role,shicRate:r.rate||0,shicShift:r.shift||'regular_day',shicDays:r.days||1,shicPax:r.pax||1,shicOTHours:r.otHours||0,shicPerDiem:r.perDiem||0,shicTaskId:r.taskId||'',shicShares:_shDump(r.shares)}));const resPayloads=[...(e.tools||[]).filter(r=>r.desc).map(r=>({shicCEId:ceId,shicTab:'tools',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicDays:r.days||1,shicTaskId:r.taskId||'',shicShares:_shDump(r.shares),/* Tier 2 is the default and what every existing row already is, so it is written as 0 rather than 2: an unrepaired site rejects the column, and a row that never names a tier must still cost what it always did. */shicTier:r.tier||0,shicHours:r.hours||0,shicKW:r.kw||0,shicRunHrs:r.runHrs||0,shicSrc:_srcDump(r)})),...(e.mats||[]).filter(r=>r.desc).map(r=>({shicCEId:ceId,shicTab:'mats',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicTaskId:r.taskId||'',shicShares:_shDump(r.shares)})),...(e.ppe||[]).filter(r=>r.desc).map(r=>({shicCEId:ceId,shicTab:'ppe',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicTaskId:r.taskId||'',shicShares:_shDump(r.shares)}))];const insFns=[...mpPayloads.map(p=>()=>spWithRetry(()=>spPost(spList('CE_MP'),p))),...resPayloads.map(p=>()=>spWithRetry(()=>spPost(spList('CE_Resources'),p)))];let spErr=null;for(let i=0;i<insFns.length;i+=5){try{await Promise.all(insFns.slice(i,i+5).map(fn=>fn()));}catch(batchErr){spErr=batchErr;console.error('dbSaveHistory batch insert failed:',batchErr.message);break;}}if(spErr)throw spErr;/* Only delete OLD rows after new ones safely written */const dels=[...om.map(x=>()=>spDelete(spList('CE_MP'),x.Id)),...or.map(x=>()=>spDelete(spList('CE_Resources'),x.Id))];let _delFail=0;for(let i=0;i<dels.length;i+=5)await Promise.all(dels.slice(i,i+5).map(fn=>fn().catch(()=>{_delFail++;})));if(_delFail)setTimeout(()=>(window._shicToast||console.warn)(_delFail+' old line(s) of '+e.info.ceNum+' could not be removed from SharePoint. They are ignored when the CE opens; save it again to clear them.',true),1200);_spInvalidateBigList();try{LS.set('ce_cache:'+e.info.ceNum,{...e,id:ceId,savedAt:hdr.shicSavedAt});}catch(_){logSwallowed('db:dbSaveHistory',_);}/* Write through to IndexedDB alongside the localStorage cache. 'synced' -- SharePoint accepted it, so the migration may safely treat the two copies as agreeing. */try{await cePut({...e,ceNum:e.info.ceNum,id:ceId,savedAt:hdr.shicSavedAt,savedBy:e.savedBy||'',_syncState:'synced'});}catch(_){logSwallowed('db:dbSaveHistory',_);}return{sp:true,id:ceId};}catch(e2){const msg=e2.message||String(e2);_spFailReason=msg;console.warn('dbSaveHistory SP error:',msg);/* A 400 InvalidClientQueryException on an insert almost always means the
    site is missing a column this version writes -- exactly what happened when
    shicPax/shicOTHours/shicPerDiem shipped without being added to the
    provisioning list. The raw SharePoint JSON tells the user nothing they can
@@ -1094,7 +1094,7 @@ async function dbSaveHistory(e){_spFailReason='';if(USE_SP||getSiteURL()){try{co
 const schemaGap=/InvalidClientQueryException|does not exist on this list|Column .* does not exist/i.test(msg);
 setTimeout(()=>(window._shicToast||console.warn)(schemaGap
   ?'SharePoint is missing columns this version needs, so the CE was stored in this browser only. An admin should open SP Setup and press "Repair lists & columns", then save again.'
-  :'SharePoint save failed ('+msg.slice(0,80)+') — CE stored locally.',true),100);}}const h=LS.get('history')||[];const _eid=Date.now();const _savedAt=new Date().toISOString();LS.set('history',[{...e,id:_eid,savedAt:_savedAt},...h.filter(x=>(x.info?.ceNum||x.ceNum)!==e.info.ceNum)]);try{LS.set('ce_cache:'+e.info.ceNum,{...e,id:_eid,savedAt:_savedAt});}catch(_){}/* 'local': saved offline or after a SharePoint failure. Not yet uploaded. */try{await cePut({...e,ceNum:e.info.ceNum,id:_eid,savedAt:_savedAt,savedBy:e.savedBy||'',_syncState:'local'});}catch(_){}
+  :'SharePoint save failed ('+msg.slice(0,80)+') — CE stored locally.',true),100);}}const h=LS.get('history')||[];const _eid=Date.now();const _savedAt=new Date().toISOString();LS.set('history',[{...e,id:_eid,savedAt:_savedAt},...h.filter(x=>(x.info?.ceNum||x.ceNum)!==e.info.ceNum)]);try{LS.set('ce_cache:'+e.info.ceNum,{...e,id:_eid,savedAt:_savedAt});}catch(_){logSwallowed('db:dbSaveHistory',_);}/* 'local': saved offline or after a SharePoint failure. Not yet uploaded. */try{await cePut({...e,ceNum:e.info.ceNum,id:_eid,savedAt:_savedAt,savedBy:e.savedBy||'',_syncState:'local'});}catch(_){logSwallowed('db:dbSaveHistory',_);}
   /* Callers could not tell a SharePoint save from a browser-only one: the
      SharePoint failure is swallowed on purpose, so work is never lost offline,
      and then this returned exactly as if it had succeeded. A bulk import of a
@@ -1119,13 +1119,13 @@ async function dbUpdateCETotal(ceNum, id, total){
     LS.set('history', h.map(x => ((x.info&&x.info.ceNum)||x.ceNum)===ceNum ? {...x, grand:t} : x));
     const c = LS.get('ce_cache:'+ceNum);
     if(c) LS.set('ce_cache:'+ceNum, {...c, grand:t});
-  }catch(_){}
+  }catch(_){logSwallowed('db:dbUpdateCETotal',_);}
   /* Same for the IndexedDB archive, or a recompute would leave the offline copy
      showing the old total. Preserve _syncState -- do not silently re-mark. */
   try{
     const rec = await ceGet(ceNum);
     if(rec) await cePut({...rec, grand:t});
-  }catch(_){}
+  }catch(_){logSwallowed('db:dbUpdateCETotal',_);}
 }
 async function dbDeleteHistory(id,actorRole){
   /* Deleting a saved CE is an admin/owner action. The button is hidden from
@@ -1141,7 +1141,7 @@ async function _ceDeleteById(id){
     const all=await ceAll();
     const hit=all.find(r=>r.id===id);
     if(hit)await ceDelete(hit.ceNum);
-  }catch(_){}
+  }catch(_){logSwallowed('db:_ceDeleteById',_);}
 }
 async function dbGetML(){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Masterlist'),"Title eq 'config'",'Id,shicData');if(r.length&&r[0].shicData)return JSON.parse(r[0].shicData);}catch(e){console.warn('dbGetML:',e.message);}}return LS.get('masterlist');}
 /* Merges anything still waiting to upload into the SharePoint view. Showing the
@@ -1180,7 +1180,7 @@ async function spSaveMLImports(projects){
   /* Batch-save all projects in groups of 5 */
   if(!(USE_SP||getSiteURL())||!projects.length)return;
   for(let i=0;i<projects.length;i+=5){
-    await Promise.all(projects.slice(i,i+5).map(p=>spSaveMLImport(p).catch(()=>{})));
+    await Promise.all(projects.slice(i,i+5).map(p=>spSaveMLImport(p).catch(_e=>logSwallowed('db:spSaveMLImports',_e))));
   }
 }
 async function spLoadMLImports(){
@@ -1377,7 +1377,7 @@ async function dbMLTrashOp(op){
   let local=apply(LS.get('ml_trash'));LS.set('ml_trash',local);
   if(USE_SP||getSiteURL()){
     try{const r=await spGet(spList('Masterlist'),"Title eq 'trash'",'Id,shicData');
-      let theirs=[];try{theirs=r.length&&r[0].shicData?JSON.parse(r[0].shicData):[];}catch(_e){}
+      let theirs=[];try{theirs=r.length&&r[0].shicData?JSON.parse(r[0].shicData):[];}catch(_e){logSwallowed('db:dbMLTrashOp',_e);}
       const out=apply(theirs);
       if(r.length)await spWithRetry(()=>spPatch(spList('Masterlist'),r[0].Id,{shicData:JSON.stringify(out)}));
       else await spWithRetry(()=>spPost(spList('Masterlist'),{Title:'trash',shicData:JSON.stringify(out)}));
@@ -1395,7 +1395,7 @@ const o=opts||{};const _del=o.deleted||{};const _repl=new Set(o.replaceTabs||[])
 if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Masterlist'),"Title eq 'config'",'Id,Modified,shicData');
   let merged=data,adopted={},adoptedN=0;
   if(r.length&&r[0].shicData){
-    let theirs=null;try{theirs=JSON.parse(r[0].shicData);}catch(_e){}
+    let theirs=null;try{theirs=JSON.parse(r[0].shicData);}catch(_e){logSwallowed('db:dbSaveML',_e);}
     if(theirs&&typeof theirs==='object'){
       merged={...data};
       for(const sec of ML_SECS){
@@ -1451,7 +1451,7 @@ async function dbSaveSowLib(lib,opts){
       /* Build SP map: svc.id (string) → {spRowId, svc} */
       const spMap={};
       existing.forEach(r=>{
-        try{const d=JSON.parse(r.shicData||'{}');if(d&&d.id!=null)spMap[String(d.id)]={spId:r.Id,svc:d};}catch{}
+        try{const d=JSON.parse(r.shicData||'{}');if(d&&d.id!=null)spMap[String(d.id)]={spId:r.Id,svc:d};}catch(_e){logSwallowed('db:dbSaveSowLib',_e);}
       });
       /* Build local map: svc.id (string) → svc */
       const localMap={};
@@ -1475,17 +1475,17 @@ async function dbSaveSowLib(lib,opts){
       if(lib.length){
         for(const r of existing){
           let id=null;
-          try{const d=JSON.parse(r.shicData||'{}');id=d&&d.id!=null?String(d.id):null;}catch{}
+          try{const d=JSON.parse(r.shicData||'{}');id=d&&d.id!=null?String(d.id):null;}catch(_e){logSwallowed('db:dbSaveSowLib',_e);}
           /* A row with no readable id names no service, so nothing can ask for
              it back; it goes only when the caller is rewriting the whole list. */
           const gone=id===null?replace:(replace?localMap[id]===undefined:deleted.has(id));
-          if(gone)await spDelete(spList('SowLib'),r.Id).catch(()=>{});
+          if(gone)await spDelete(spList('SowLib'),r.Id).catch(_e=>logSwallowed('db:dbSaveSowLib',_e));
         }
       }
       return {sp:true,adopted};
     }catch(e){console.warn('dbSaveSowLib:',e.message);
       /* Reported, not swallowed. A save that failed used to return false into
-         a .catch(()=>{}) while the sidebar kept its tick, so a library edited
+         a .catch(_e=>logSwallowed('db:dbSaveSowLib',_e)) while the sidebar kept its tick, so a library edited
          all afternoon could exist in one browser and nowhere else. */
       try{localStorage.setItem('sy3:sowlib',JSON.stringify(lib));}catch(_e){}
       return {sp:false,adopted:[],reason:e.message};}
@@ -1770,12 +1770,12 @@ const session = {
   set: u => {
     try {
       sessionStorage.setItem('shics', JSON.stringify(u));
-    } catch {}
+    } catch(_e){logSwallowed('db:dbClaimOwnership',_e);}
   },
   clear: () => {
     try {
       sessionStorage.removeItem('shics');
-    } catch {}
+    } catch(_e){logSwallowed('db:dbClaimOwnership',_e);}
   }
 };
 /* ── One-time move of the CE archive into IndexedDB ──────────────────────────
@@ -1810,13 +1810,13 @@ async function dbMigrateToIDB(username, isAdmin){
         const k=localStorage.key(i);
         if(k&&k.indexOf('shic:ce_cache:')===0)cacheKeys.push(k);
       }
-    }catch(_){}
+    }catch(_){logSwallowed('db:dbMigrateToIDB',_);}
     for(const k of cacheKeys){
       try{
         const v=JSON.parse(localStorage.getItem(k));
         const num=ceKey((v&&((v.info&&v.info.ceNum)||v.ceNum))||k.slice('shic:ce_cache:'.length));
         if(num&&v)staged[num]={...v,ceNum:num,_syncState:'unknown'};
-      }catch(_){}
+      }catch(_){logSwallowed('db:dbMigrateToIDB',_);}
     }
 
     /* 2. Fat history records. A CE is "full" only if it carries line items; a
@@ -1888,7 +1888,7 @@ async function dbMigrateToIDB(username, isAdmin){
         if(staged[num]&&staged[num]._syncState==='local')return r;
         return{id:r.id,ceNum:r.ceNum,ceType:r.ceType,client:r.client||(r.info&&r.info.client)||'',grand:r.grand||0,savedBy:r.savedBy||'',savedAt:r.savedAt||'',info:r.info||{ceNum:r.ceNum}};
       }));
-    }catch(_){}
+    }catch(_){logSwallowed('db:dbMigrateToIDB',_);}
 
     let after=0;
     try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);after+=((localStorage.getItem(k)||'').length+k.length)*2;}}catch(_){}

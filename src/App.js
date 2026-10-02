@@ -500,7 +500,7 @@ function App({
   /* My Signature: the signed-in user's saved signature, and whether its editor is open. */
   const [mySig, setMySig] = useState('');
   const [mySigOpen, setMySigOpen] = useState(false);
-  useEffect(() => { if (currentUser && currentUser.username) dbGetMySig(currentUser.username).then(v => setMySig(v || '')).catch(() => {}); }, [currentUser && currentUser.username]);
+  useEffect(() => { if (currentUser && currentUser.username) dbGetMySig(currentUser.username).then(v => setMySig(v || '')).catch(_e=>logSwallowed('App:App',_e)); }, [currentUser && currentUser.username]);
   /* Any image, drawn onto a white 420x140 canvas the same shape as the pad. */
   const sigFit = src => new Promise((res, rej) => {
     const img = new Image();
@@ -598,14 +598,14 @@ function App({
     setCustomStatuses(n);
     try {
       localStorage.setItem('shic:statuses', JSON.stringify(n));
-    } catch {}
+    } catch(_e){logSwallowed('App:App',_e);}
   };
   const removeStatus = s => {
     const n = customStatuses.filter(x => x !== s);
     setCustomStatuses(n);
     try {
       localStorage.setItem('shic:statuses', JSON.stringify(n));
-    } catch {}
+    } catch(_e){logSwallowed('App:App',_e);}
   };
   const MON_KEY = 'shic:monitoring';
   /* When each CE's row was last changed here. A fetch that was already in
@@ -631,7 +631,7 @@ function App({
     try {
       const v = localStorage.getItem(MON_KEY);
       if (v) setMonData(JSON.parse(v));
-    } catch (_e) {}
+    } catch(_e){logSwallowed('App:App',_e);}
     try {
       /* Clear stale cache before every fetch so deleted SP items are not reused */
       Object.keys(_monSpIdCache).forEach(k => delete _monSpIdCache[k]);
@@ -656,14 +656,14 @@ function App({
         try { localStorage.setItem(MON_KEY, JSON.stringify(r.data)); } catch (e) { console.warn('monitoring not cached locally:', e && e.message); }
         setSyncStatus({monitoring:'synced', lastSyncAt: new Date().toISOString(), sp: 'connected'});
         if (r.legacy) {
-          dbSaveMonAll(r.data, []).catch(() => {});
+          dbSaveMonAll(r.data, []).catch(_e=>logSwallowed('App:App',_e));
         }
       } else {
         /* SP unreachable — fall back to localStorage so user isn't left with nothing */
         try {
           const v = localStorage.getItem(MON_KEY);
           if (v) setMonData(JSON.parse(v));
-        } catch {}
+        } catch(_e){logSwallowed('App:App',_e);}
         setSyncStatus({monitoring:'local'});
       }
     } catch {
@@ -671,7 +671,7 @@ function App({
       try {
         const v = localStorage.getItem(MON_KEY);
         if (v) setMonData(JSON.parse(v));
-      } catch {}
+      } catch(_e){logSwallowed('App:App',_e);}
       setSyncStatus({monitoring:'error'});
     }
   };
@@ -788,7 +788,7 @@ function App({
         setSyncStatus({monitoring:'error', dirty:true});
         showToast('Monitoring save failed: ' + (e && e.message ? e.message : e), true);
       });
-    } catch {}
+    } catch(_e){logSwallowed('App:App',_e);}
     return n;
   });
   const mlSaveTimer = React.useRef(null);
@@ -815,7 +815,7 @@ function App({
     if (USE_SP || getSiteURL()) {
       dbGetCompanies().then(list => {
         if (list && list.length) { saveCompanies(list); setCompanies(list); }
-      }).catch(() => {});
+      }).catch(_e=>logSwallowed('App:App',_e));
     }
     return () => window.removeEventListener('shic:companies:updated', onStorage);
   }, []);
@@ -825,7 +825,7 @@ function App({
      nothing ever read. */
   const cacheSowLib = lib => {
     try { localStorage.setItem('sy3:sowlib', JSON.stringify(lib)); } catch (e) { console.warn('scope library not cached locally:', e && e.message); }
-    try { refPut('sowlib', lib, (USE_SP || getSiteURL()) ? 'sharepoint' : 'local'); } catch (_e) {}
+    try { refPut('sowlib', lib, (USE_SP || getSiteURL()) ? 'sharepoint' : 'local'); } catch(_e){logSwallowed('App:App',_e);}
   };
   const loadSowLib = async () => {
     try {
@@ -1002,7 +1002,7 @@ function App({
   }] : [])];
   useEffect(() => {
     setTimeout(async()=>{const info=await checkForUpdate();if(info.available)setUpdateInfo(info);},3000);
-    const onKey=e=>{if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();try{handleSave();}catch(ex){}}if((e.ctrlKey||e.metaKey)&&e.key==='n'){e.preventDefault();try{handleNew();}catch(ex){}}};
+    const onKey=e=>{if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();try{handleSave();}catch(ex){logSwallowed('App:L1005',ex);}}if((e.ctrlKey||e.metaKey)&&e.key==='n'){e.preventDefault();try{handleNew();}catch(ex){logSwallowed('App:L1005',ex);}}};
     window.addEventListener('keydown',onKey);
     const onUnload=e=>{e.preventDefault();e.returnValue='';};
     window.addEventListener('beforeunload',onUnload);
@@ -1038,7 +1038,7 @@ function App({
       loadML();
       /* Trim the per-CE cache on open; it is the bulk of local storage use and
          nothing pruned it before, so it only ever grew. */
-      try { const n = LS.pruneCeCache(60); if (n) console.info('Pruned ' + n + ' cached CE(s) from local storage.'); } catch (_e) {}
+      try { const n = LS.pruneCeCache(60); if (n) console.info('Pruned ' + n + ' cached CE(s) from local storage.'); } catch(_e){logSwallowed('App:L1041',_e);}
       loadHist();
       loadMonData();
       /* Drafts are rows in Monitoring now, so they have to be loaded with the
@@ -1056,7 +1056,7 @@ function App({
         if (r && r.moved) showToast('Moved ' + r.moved + ' CE(s) to offline storage, freeing ' + Math.round((r.freedBytes||0)/1024) + ' KB.');
       }).catch(ex => console.warn('CE archive migration skipped:', ex.message));
       /* Notify admin of pending registrations */
-      if(isAdmin){try{const all=await dbGetUsers();const pCount=all.filter(u=>u.status==='pending').length;if(pCount>0)setTimeout(()=>showToast(`👤 ${pCount} user${pCount>1?'s':''} awaiting approval — check Admin Panel → Users`),1500);}catch(_){}};
+      if(isAdmin){try{const all=await dbGetUsers();const pCount=all.filter(u=>u.status==='pending').length;if(pCount>0)setTimeout(()=>showToast(`👤 ${pCount} user${pCount>1?'s':''} awaiting approval — check Admin Panel → Users`),1500);}catch(_){logSwallowed('App:L1059',_);}};
       /* Sync when the connection returns. Until now nothing did this: CEs
          saved offline stayed local until someone found the admin push button.
          Debounced, because 'online' can fire several times as an adapter
@@ -1077,7 +1077,7 @@ function App({
             const a = await dbPushAuditLog();
             if (a && a.pushed) console.info('audit log: uploaded ' + a.pushed + ' entr(y/ies) recorded offline.');
           } catch (ex) { console.warn('reconnect audit push failed:', ex.message); }
-          try { if (window._shicFullRefresh) await window._shicFullRefresh(); } catch (_e) {}
+          try { if (window._shicFullRefresh) await window._shicFullRefresh(); } catch(_e){logSwallowed('App:L1080',_e);}
         }, 2000);
       };
       window.addEventListener('shic-online', onReconnect);
@@ -1087,8 +1087,8 @@ function App({
       if (navigator.onLine !== false) {
         setTimeout(() => { dbPushLocalCEs().then(r => {
           if (r && r.pushed) showToast('Uploaded ' + r.pushed + ' CE(s) that were saved offline.');
-        }).catch(() => {}); }, 6000);
-        setTimeout(() => { dbPushAuditLog().catch(() => {}); }, 8000);
+        }).catch(_e=>logSwallowed('App:L1090',_e)); }, 6000);
+        setTimeout(() => { dbPushAuditLog().catch(_e=>logSwallowed('App:L1091',_e)); }, 8000);
       }
       /* Expose a global full-refresh so SyncStatusBar can trigger it */
       window._shicFullRefresh = async () => {
@@ -1148,7 +1148,7 @@ function App({
         if (urlDraft) {
           const d = JSON.parse(atob(urlDraft));
           if (d && d.info) {
-            setTimeout(() => { try { applyDraftData(d); showToast('Shared draft loaded from link!'); } catch(e){} }, 800);
+            setTimeout(() => { try { applyDraftData(d); showToast('Shared draft loaded from link!'); } catch(e){logSwallowed('App:L1151',e);} }, 800);
             window.history.replaceState({}, '', window.location.pathname);
           }
         }
@@ -1165,7 +1165,7 @@ function App({
       if (ml) {
         setMasterlist(ml);
         try { LS.set('masterlist', ml); } catch (e) { console.warn('masterlist not cached locally:', e && e.message); }
-        try { refPut('masterlist', ml, (USE_SP || getSiteURL()) ? 'sharepoint' : 'local'); } catch (_e) {}
+        try { refPut('masterlist', ml, (USE_SP || getSiteURL()) ? 'sharepoint' : 'local'); } catch(_e){logSwallowed('App:L1168',_e);}
         setSyncStatus({masterlist:'synced', lastSyncAt: new Date().toISOString(), sp:'connected'});
       } else setSyncStatus({masterlist:'local'});
     } catch (ex) { console.warn('Masterlist load failed:', ex.message); setSyncStatus({masterlist:'error', sp:'error'}); }
@@ -1204,13 +1204,13 @@ function App({
     try {
       const cached = LS.get('history') || [];
       if (cached.length) setHistory(canSeeAll ? cached : cached.filter(h => h.savedBy === currentUser.username || mineToSee(h.id)));
-    } catch (_e) {}
+    } catch(_e){logSwallowed('App:L1207',_e);}
     try {
       const spAvail = !!(USE_SP || getSiteURL());
       /* Alongside the history, never instead of it: this is Titles only and
          says nothing about anyone's estimates, but it is what stops two
          people being handed the same number. */
-      dbGetCeNumbers().then(ns => { if (ns && ns.length) setCeNums(ns); }).catch(() => {});
+      dbGetCeNumbers().then(ns => { if (ns && ns.length) setCeNums(ns); }).catch(_e=>logSwallowed('App:L1213',_e));
       const h = await dbGetHistory(currentUser.username, canSeeAll, canSeeAll ? null : mineToSee);
       /* Keep LS in sync with SP so fallback is never stale. Only ever write a
          NON-empty result. The old code purged the cache whenever SharePoint
@@ -1236,12 +1236,12 @@ function App({
         setSyncStatus({ sp: 'connected' });
       }
       setHistory(effective);
-      try{window.shicHistory=effective.map(function(e){return Object.assign({},e.data||{},e);});}catch(_e){}
+      try{window.shicHistory=effective.map(function(e){return Object.assign({},e.data||{},e);});}catch(_e){logSwallowed('App:L1239',_e);}
       spLoadMLImports().then(function(imports){
         if(imports&&imports.length){
           window.shicHistory=(window.shicHistory||[]).concat(imports);
         }
-      }).catch(function(){});
+      }).catch(_e=>logSwallowed('App:L1244',_e));
     } catch (e) {
       /* SP completely unreachable — show whatever is in LS */
       console.warn('loadHist error, using local cache:', e.message);
@@ -1249,7 +1249,7 @@ function App({
         const cached = LS.get('history') || [];
         const u = currentUser.username;
         setHistory(canSeeAll ? cached : cached.filter(h => h.savedBy === u || mineToSee(h.id)));
-      } catch (_e) {}
+      } catch(_e){logSwallowed('App:L1252',_e);}
     }
     setHistBusy(false);
   };
@@ -1263,7 +1263,7 @@ function App({
     Object.keys(_ml || {}).forEach(k => { _mlU[k] = Array.isArray(_ml[k]) ? _ml[k].map(r => r && r.uom ? {...r, uom: uomCase(r.uom)} : r) : _ml[k]; });
     const ml = mlRound(_mlU);
     setMasterlist(ml);
-    try{window.shicMasterlist=ml;}catch(_e){}
+    try{window.shicMasterlist=ml;}catch(_e){logSwallowed('App:L1266',_e);}
     setSyncStatus({masterlist:'saving', dirty:true});
     try {
       const res = await dbSaveML(ml, opts);
@@ -1272,8 +1272,8 @@ function App({
       if (res && res.sp && res.merged && res.adopted && Object.keys(res.adopted).length) {
         const kept = mlRound(res.merged);
         setMasterlist(kept);
-        try{window.shicMasterlist=kept;}catch(_e){}
-        try { LS.set('masterlist', kept); } catch (_e) {}
+        try{window.shicMasterlist=kept;}catch(_e){logSwallowed('App:L1275',_e);}
+        try { LS.set('masterlist', kept); } catch(_e){logSwallowed('App:L1276',_e);}
         const n = Object.values(res.adopted).reduce((s, a) => s + a.length, 0);
         const secs = Object.keys(res.adopted).join(', ');
         showToast(n + ' ' + secs + ' item' + (n === 1 ? '' : 's') +
@@ -1323,7 +1323,7 @@ function App({
        it, copy it, or notice it at all in the embedded viewer -- where a CE that
        would not open just left the page sitting on My Work. Errors go to the
        console as well, and stay up longer inside a frame. */
-    if (err) { try { console.warn('[toast] ' + msg); } catch (_e) {} }
+    if (err) { try { console.warn('[toast] ' + msg); } catch(_e){logSwallowed('App:L1326',_e);} }
     setToast(msg);
     setToastErr(err);
     setTimeout(() => setToast(''), (err && window !== window.top) ? 20000 : 3200);
@@ -2259,9 +2259,9 @@ function App({
        assignment would silently orphan on load. */
     const _R = ceIdRemapper(d.sowItems);
     const _sow = _R.sow;
-    const _mp=(d.mp||[]).map(_R.rt('mp'));setMp(_mp);try{window.shicCurrentMp=_mp;}catch(_e){}
-    const _tools=(d.tools||[]).map(_R.rt('tools'));setTools(_tools);try{window.shicCurrentTools=_tools;}catch(_e){}
-    const _mats=(d.mats||[]).map(_R.rt('mats'));setMats(_mats);try{window.shicCurrentMats=_mats;}catch(_e){}
+    const _mp=(d.mp||[]).map(_R.rt('mp'));setMp(_mp);try{window.shicCurrentMp=_mp;}catch(_e){logSwallowed('App:L2262',_e);}
+    const _tools=(d.tools||[]).map(_R.rt('tools'));setTools(_tools);try{window.shicCurrentTools=_tools;}catch(_e){logSwallowed('App:L2263',_e);}
+    const _mats=(d.mats||[]).map(_R.rt('mats'));setMats(_mats);try{window.shicCurrentMats=_mats;}catch(_e){logSwallowed('App:L2264',_e);}
     setPpe((d.ppe || []).map(_R.rt('ppe')));
     /* A drawn signature belongs to the CE it was drawn on. */
     setSignatures(d.signatures && typeof d.signatures === 'object' ? {...d.signatures} : {});
@@ -2413,7 +2413,7 @@ function App({
     };
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
-    } catch (e) {}
+    } catch(e){logSwallowed('App:L2416',e);}
     setSyncStatus({dirty: true});
     try {
       const ok = await dbSaveDraft(d);
@@ -2456,11 +2456,11 @@ function App({
       'Changes not yet saved will be lost for good. The saved CE and its CE Monitoring entry are not affected.')) return;
     try {
       await dbDeleteDraft(draftId);
-    } catch (e) {}
+    } catch(e){logSwallowed('App:L2459',e);}
     try {
       const loc = localStorage.getItem(DRAFT_KEY);
       if (loc && JSON.parse(loc).draftId === draftId) localStorage.removeItem(DRAFT_KEY);
-    } catch (e) {}
+    } catch(e){logSwallowed('App:L2463',e);}
     setSharedDrafts(p => p.filter(d => d.draftId !== draftId));
     showToast('Draft deleted.');
   };
@@ -2549,7 +2549,7 @@ function App({
   const clearDraft = () => {
     try {
       localStorage.removeItem(DRAFT_KEY);
-    } catch {}
+    } catch(_e){logSwallowed('App:L2552',_e);}
   };
   /* Re-price the CE on screen from today's masterlist.
 
@@ -2637,7 +2637,7 @@ function App({
       f.style.display = 'none';
       f.src = window.location.pathname + '?print=' + id + '&as=detailed';
       document.body.appendChild(f);
-      setTimeout(() => { try { f.remove(); } catch (_e) {} }, 60000);
+      setTimeout(() => { try { f.remove(); } catch(_e){logSwallowed('App:L2640',_e);} }, 60000);
       showToast('Preparing the Excel file — it will download in a few seconds...');
       return;
     }
@@ -2911,7 +2911,7 @@ function App({
       }
       // Still no tools — try the local cache written by dbSaveHistory
       if (d.tools === undefined) {
-        try { const cached = LS.get('ce_cache:' + (d.info?.ceNum || d.ceNum)); if (cached) d = cached; } catch(_) {}
+        try { const cached = LS.get('ce_cache:' + (d.info?.ceNum || d.ceNum)); if (cached) d = cached; } catch(_){logSwallowed('App:L2914',_);}
       }
       /* Every source failed: SharePoint would not answer and this browser has
          never held the CE. Opening it anyway produced an empty estimate under
@@ -2928,7 +2928,7 @@ function App({
       try {
         const cached = LS.get('ce_cache:' + (d.info?.ceNum || d.ceNum));
         if (cached && cached.savedAt && d.savedAt && cached.savedAt > d.savedAt) d = cached;
-      } catch(_) {}
+      } catch(_){logSwallowed('App:L2931',_);}
     }
     /* A CE whose header says it cost money but has no line items behind it.
 
@@ -2960,9 +2960,9 @@ function App({
        assignment would silently orphan on load. */
     const _R = ceIdRemapper(d.sowItems);
     const _sow = _R.sow;
-    const _mp=(d.mp||[]).map(_R.rt('mp'));setMp(_mp);try{window.shicCurrentMp=_mp;}catch(_e){}
-    const _tools=(d.tools||[]).map(_R.rt('tools'));setTools(_tools);try{window.shicCurrentTools=_tools;}catch(_e){}
-    const _mats=(d.mats||[]).map(_R.rt('mats'));setMats(_mats);try{window.shicCurrentMats=_mats;}catch(_e){}
+    const _mp=(d.mp||[]).map(_R.rt('mp'));setMp(_mp);try{window.shicCurrentMp=_mp;}catch(_e){logSwallowed('App:L2963',_e);}
+    const _tools=(d.tools||[]).map(_R.rt('tools'));setTools(_tools);try{window.shicCurrentTools=_tools;}catch(_e){logSwallowed('App:L2964',_e);}
+    const _mats=(d.mats||[]).map(_R.rt('mats'));setMats(_mats);try{window.shicCurrentMats=_mats;}catch(_e){logSwallowed('App:L2965',_e);}
     setPpe((d.ppe || []).map(_R.rt('ppe')));
     /* A drawn signature belongs to the CE it was drawn on. */
     setSignatures(d.signatures && typeof d.signatures === 'object' ? {...d.signatures} : {});
@@ -3020,7 +3020,7 @@ function App({
        from whatever was on screen before it -- so merely opening one wrote a
        draft of it. Every CE anybody opened ended up in Resume Work. What was
        just loaded is what is saved, so it is recorded as already written. */
-    setTimeout(() => { try { if (_live.current) _lastAutoSig.current = _live.current.sig; } catch (_e) {} }, 400);
+    setTimeout(() => { try { if (_live.current) _lastAutoSig.current = _live.current.sig; } catch(_e){logSwallowed('App:L3023',_e);} }, 400);
     showToast('Loaded: ' + (d.info?.ceNum || ''));
   };
   const handleClone = (e) => {
@@ -3055,7 +3055,7 @@ function App({
   useEffect(() => { if (saveReq) handleSave(); }, [saveReq]);
   useEffect(() => {
     if (tab !== 'summary') return;
-    dbGetUsers().then(u => setApvUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(() => {});
+    dbGetUsers().then(u => setApvUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(_e=>logSwallowed('App:L3058',_e));
   }, [tab]);
   /* Monitoring knows when a revision was superseded; the CE's own copy of the
      approval was written before that and still says pending. */
@@ -3116,7 +3116,7 @@ function App({
             const fixed = {...apv, figSig: apvFigSig(back), contentSig: apvContentSig(back)};
             if (await dbPatchCEInfo(dup.id, {...(back.info || {}), approval: fixed})) apv = fixed;
           }
-        } catch (_e) {}
+        } catch(_e){logSwallowed('App:L3119',_e);}
       }
       setSignatures(sigs); setInfo(p => ({...p, ceNum: num, approval: apv}));
       updateMon(dup.id, {
@@ -3254,7 +3254,7 @@ function App({
           }
           apv = merged; sigs = out.signatures;
         }
-      } catch (_e) {}
+      } catch(_e){logSwallowed('App:L3257',_e);}
       const res = await spWithRetry(() => dbSaveHistory({...out, grand: N(out.grand) || computeCEGrand(out)}));
       updateMon(ceId, {
         apv: apvMirror(out.approvers || full.approvers, apv),
@@ -3288,7 +3288,7 @@ function App({
         if (apvCanSign(full.approvers, a, currentUser.username)) setViewApvTurn(true);
         const fresh = apvMirror(full.approvers, a);
         if (JSON.stringify(fresh) !== JSON.stringify(((monData[id] || {}).apv) || null)) updateMon(id, { apv: fresh });
-      } catch (_e) {}
+      } catch(_e){logSwallowed('App:L3291',_e);}
     })();
     return () => { off = true; };
   }, [viewCE && viewCE.id, viewCE && viewCE.k, currentUser && currentUser.username]);
@@ -4206,7 +4206,7 @@ function App({
      the choice is remembered, because somebody maintaining tiers wants them up
      for the whole session and everybody else never wants them. */
   const [mlTierCols, setMlTierCols] = useState(() => { try { return !!LS.get('ml_tier_cols'); } catch (_e) { return false; } });
-  const toggleTierCols = () => setMlTierCols(v => { const n = !v; try { LS.set('ml_tier_cols', n); } catch (_e) {} return n; });
+  const toggleTierCols = () => setMlTierCols(v => { const n = !v; try { LS.set('ml_tier_cols', n); } catch(_e){logSwallowed('App:L4209',_e);} return n; });
   /* The tier calculator. Held here rather than inside MlEditor: state declared
      in a component that is itself declared in another component is thrown away
      on every render, which is what ate keystrokes in this very editor before. */
@@ -4597,7 +4597,7 @@ function App({
     const updML = (id, k, v) => {
       const next = { ...masterlist, [mlTab]: masterlist[mlTab].map(r => r.id === id ? { ...r, [k]: v } : r) };
       setMasterlist(next);
-      try { window.shicMasterlist = next; } catch (_e) {}
+      try { window.shicMasterlist = next; } catch(_e){logSwallowed('App:L4600',_e);}
       setSyncStatus(s => ({ ...s, dirty: true }));
       if (mlSaveTimer.current) clearTimeout(mlSaveTimer.current);
       mlSaveTimer.current = setTimeout(async () => {
@@ -4608,7 +4608,7 @@ function App({
            what "two decimals" means rather than a surprise. */
         const rounded = mlRound(next);
         setMasterlist(rounded);
-        try { window.shicMasterlist = rounded; } catch (_e) {}
+        try { window.shicMasterlist = rounded; } catch(_e){logSwallowed('App:L4611',_e);}
         try {
           const res = await dbSaveML(rounded);
           /* The debounced typing path writes straight to db.js, so it has to
@@ -4616,7 +4616,7 @@ function App({
           if (res && res.sp && res.merged && res.adopted && Object.keys(res.adopted).length) {
             const kept = mlRound(res.merged);
             setMasterlist(kept);
-            try { window.shicMasterlist = kept; } catch (_e) {}
+            try { window.shicMasterlist = kept; } catch(_e){logSwallowed('App:L4619',_e);}
             const n = Object.values(res.adopted).reduce((s, a) => s + a.length, 0);
             showToast(n + ' masterlist item' + (n === 1 ? '' : 's') + ' added by someone else ' +
               (n === 1 ? 'was' : 'were') + ' kept.');
@@ -5143,7 +5143,7 @@ function App({
     const m = monOf(e);
     const cur = m.ceeName || m.preparedBy || e.savedBy || '';
     setAssignPanel({ id: e.id, ceNum: e.info?.ceNum || e.ceNum || '', from: cur, to: cur });
-    dbGetUsers().then(u => setReqUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(() => {});
+    dbGetUsers().then(u => setReqUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(_e=>logSwallowed('App:L5146',_e));
   };
   const saveAssign = () => {
     const a = assignPanel || {};
@@ -5167,7 +5167,7 @@ function App({
       inquiryNo: '', inquiryDate: today, completionDate: '', workLocation: '', address: '',
       assignedSales: currentUser.name || currentUser.username || '', inquiryType: '', stage: 'New project',
       items: {}, recommendation: '', otherRemarks: '', declineReason: '' });
-    dbGetUsers().then(u => setReqUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(() => {});
+    dbGetUsers().then(u => setReqUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(_e=>logSwallowed('App:L5170',_e));
   };
   const submitRequest = async () => {
     const f = reqForm || {};
@@ -5495,7 +5495,7 @@ function App({
   /* And on the window title, so it shows while the app is in another window. */
   useEffect(() => {
     const base = 'SHIC Cost Estimator';
-    try { document.title = myTodo.total ? '(' + myTodo.total + ') ' + base : base; } catch (_e) {}
+    try { document.title = myTodo.total ? '(' + myTodo.total + ') ' + base : base; } catch(_e){logSwallowed('App:L5498',_e);}
   }, [myTodo.total]);
   /* Both fields have a monitoring value that falls back to the CE's own. Read
      the same way by the filter, the sort and the cell, or a row could be
@@ -6129,7 +6129,7 @@ function App({
         const chunk = toInsert.slice(i, i + BATCH);
         const results = await Promise.all(chunk.map(e =>
           spWithRetry(() => dbSaveHistory(e)).catch(err => ({sp: false, reason: err.message}))));
-        /* .catch(()=>{}) meant a batch where every CE failed counted as a
+        /* .catch(_e=>logSwallowed('App:L6132',_e)) meant a batch where every CE failed counted as a
            batch where every CE succeeded. */
         results.forEach((r, j) => { if (r && r.sp === false) importFails.push((chunk[j].info?.ceNum || '?') + ': ' + String(r.reason || 'unknown').slice(0, 80)); });
         imported += chunk.length;
@@ -6146,7 +6146,7 @@ function App({
       }
       setMonData(merged);
       try { localStorage.setItem(MON_KEY, JSON.stringify(merged)); } catch {}
-      await dbSaveMonAll(merged, fresh).catch(()=>{});
+      await dbSaveMonAll(merged, fresh).catch(_e=>logSwallowed('App:L6149',_e));
       setHistory(fresh);
       setImportProgress(null);
       const ok = imported - importFails.length;
@@ -7043,7 +7043,7 @@ function App({
           const cached = LS.get('ce_cache:' + ceNum);
           if (cached && cached.tools !== undefined) return cached;
           if (typeof id === 'number' && (USE_SP || getSiteURL())) {
-            try { const full = await dbLoadCE(id); if (full) return full; } catch {}
+            try { const full = await dbLoadCE(id); if (full) return full; } catch(_e){logSwallowed('App:L7046',_e);}
           }
           return e;
         };
@@ -11168,14 +11168,14 @@ viewCE && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset
          Estimator". The title is lent to the CE for the print and handed
          back afterwards. */
       const _was=document.title;
-      try{document.title=ceFileNameFor(viewCE.id, viewCE.ceNum);}catch(_e){}
+      try{document.title=ceFileNameFor(viewCE.id, viewCE.ceNum);}catch(_e){logSwallowed('App:L11171',_e);}
       /* Wait for the frame to finish laying itself into sheets, the same way
          the print window does: printing mid-layout prints it unpaginated. */
       const _w=document.getElementById('shic-view-ce').contentWindow;
       (function _go(n){
         let paged=false;
         try{paged=!!(_w.document.body&&_w.document.body.getAttribute('data-paged'));}catch(_e){paged=true;}
-        if(paged||n>40){_w.print();setTimeout(()=>{try{document.title=_was;}catch(_e){}},1000);return;}
+        if(paged||n>40){_w.print();setTimeout(()=>{try{document.title=_was;}catch(_e){logSwallowed('App:_go',_e);}},1000);return;}
         setTimeout(()=>_go(n+1),150);
       })(0);
     }catch(ex){showToast('Could not print: '+ex.message,true);}}}, "🖨 Print"),

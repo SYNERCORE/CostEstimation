@@ -63,7 +63,9 @@ ck('so a discipline added to the app gets a box and cannot go missing',
   require('fs').readFileSync(require('path').join(__dirname, '..', 'src', 'config.js'), 'utf8')
     .indexOf("const CE_DISCIPLINES = ['Electrical', 'Mechanical', 'Civil', 'General'];") > 0);
 ck("the CE's own discipline is the one ticked", /, info\.projType\)/.test(boxes));
-ck('ticked and empty are different glyphs', /&#9745;/.test(boxes) && /&#9744;/.test(boxes));
+ck('ticked and empty are different glyphs', /&#9746;/.test(boxes) && /&#9744;/.test(boxes));
+ck('the chosen one is a filled label, the others plain grey, and the fill survives printing',
+  /background:#000;color:#fff/.test(boxes) && /print-color-adjust:exact/.test(boxes) && /color:#777/.test(boxes));
 
 /* Where the work is done decides mobilization, the site incentive and whose
    power the tools draw. It was printed once, in a line of running text in the

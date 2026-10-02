@@ -8635,10 +8635,17 @@ function App({
        read: an approver looks for which box is marked. The boxes are
        CE_DISCIPLINES itself, so a discipline added there gets a box here and
        cannot go missing from the paper. */
-    const tickRow = (opts, chosen) => opts.map(o =>
-      `<span style="white-space:nowrap;margin-right:14px">${
-        String(chosen || '').toLowerCase() === String(o.k).toLowerCase() ? '&#9745;' : '&#9744;'
-      }&nbsp;<b>${esc(String(o.t).toUpperCase())}</b></span>`).join('');
+    /* The chosen option has to be unmistakable at a glance on a printed sheet:
+       a ticked box that looks like the empty ones, beside labels that are all
+       bold, left an approver reading every word to find which was meant. The
+       choice is a filled black label with a cross; the others are plain grey.
+       print-color-adjust keeps the fill when the browser would drop backgrounds. */
+    const tickRow = (opts, chosen) => opts.map(o => {
+      const on = String(chosen || '').toLowerCase() === String(o.k).toLowerCase();
+      return on
+        ? `<span style="white-space:nowrap;margin-right:14px;background:#000;color:#fff;padding:1px 7px;border-radius:2px;-webkit-print-color-adjust:exact;print-color-adjust:exact">&#9746;&nbsp;<b>${esc(String(o.t).toUpperCase())}</b></span>`
+        : `<span style="white-space:nowrap;margin-right:14px;color:#777">&#9744;&nbsp;${esc(String(o.t).toUpperCase())}</span>`;
+    }).join('');
     const typeBoxes = tickRow(CE_DISCIPLINES.map(d => ({ k: d, t: d })), info.projType);
     /* Whether the work is done in our shop or away on the client's site is
        the other thing an approver checks first: it decides mobilization, the

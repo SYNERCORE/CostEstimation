@@ -15016,7 +15016,10 @@ tab === 'dashboard' && (() => {
       name: '',
       title: ''
     }])
-  }, "+ Add Signatory"))))), /*#__PURE__*/React.createElement("div", {
+  }, "+ Add Signatory"))))), /* Live Totals describe the CE being built, so they show on its estimating
+     screens only -- on My Work, Monitoring, the Dashboard and the libraries they
+     read ₱0.00 or another CE's figures and take a quarter of the width. */
+  (TAB_GROUPS.find(g => g.id === 'estimate') || {tabs: []}).tabs.some(t => t.id === tab) && /*#__PURE__*/React.createElement("div", {
     className: "shic-rail" + (railSlim ? " shic-rail-slim" : ""),
     style: {
       padding: '14px 14px',

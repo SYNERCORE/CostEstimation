@@ -186,6 +186,8 @@ jobs:
         run: node tools/test-awarded-rce.js
       - name: RCE No. printed, quantity unit, SIL and ECC
         run: node tools/test-rce-uom-sil.js
+      - name: Quantity calculators (babbitt, painting, welding)
+        run: node tools/test-calculators.js
       - name: Signed CEs leave For my approval
         run: node tools/test-apv-signed.js
       - name: Printed CE file name and signature date

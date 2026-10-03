@@ -419,6 +419,13 @@ function App({
   const [mp, setMp] = useState([]);
   const [tools, setTools] = useState([mkRes()]);
   const [mats, setMats] = useState([mkRes()]);
+  /* The quantity calculators (babbitt, painting, welding). `calc` is what this CE
+     typed into them and is saved with it; the standards and the team's history are
+     company-wide and live in the Companies list. */
+  const [calc, setCalc] = useState(null);
+  const [calcOpen, setCalcOpen] = useState(false);
+  const [calcStored, setCalcStored] = useState(null);
+  const [calcHist, setCalcHist] = useState([]);
   const [ppe, setPpe] = useState([mkRes()]);
   const [misc, setMisc] = useState({
     ...BLANK_MISC
@@ -1417,6 +1424,7 @@ function App({
     addPpe: l => _lat.current().addRowsToML('ppe', l),
     readFile: f => _lat.current().readDoc(f),
     showToast: (m, e) => _lat.current().showToast(m, e),
+    openCalc: () => setCalcOpen(true),
     pwrFrac: r => _lat.current().pwrFrac(r),
     setDefaultTier: v => setInfo(p => ({...p, toolTier: v})),
     setKwhRate: v => setRates(p => {
@@ -2286,6 +2294,7 @@ function App({
       /* Drawn signatures, keyed like the signatories. Saved with the CE so a
          signed estimate reopens signed. */
       signatures: {...signatures},
+      calc: calc ? JSON.parse(JSON.stringify(calc)) : null,
       mobVehicles: [...mobVehicles],
       demobVehicles: [...demobVehicles],
       grand,
@@ -2321,6 +2330,8 @@ function App({
     setPpe((d.ppe || []).map(_R.rt('ppe')));
     /* A drawn signature belongs to the CE it was drawn on. */
     setSignatures(d.signatures && typeof d.signatures === 'object' ? {...d.signatures} : {});
+    setCalc(d.calc && typeof d.calc === 'object' ? JSON.parse(JSON.stringify(d.calc)) : null);
+    setCalcOpen(false);
     const rawMisc = d.misc || {};
     const migratedMisc = {};
     MISC_DEF[d.ceType || 'onsite']?.forEach(([k]) => {
@@ -2460,6 +2471,7 @@ function App({
       /* Drawn signatures, keyed like the signatories. Saved with the CE so a
          signed estimate reopens signed. */
       signatures: {...signatures},
+      calc: calc ? JSON.parse(JSON.stringify(calc)) : null,
       mobVehicles: [...mobVehicles],
       demobVehicles: [...demobVehicles],
       scope,
@@ -3047,6 +3059,8 @@ function App({
     setPpe((d.ppe || []).map(_R.rt('ppe')));
     /* A drawn signature belongs to the CE it was drawn on. */
     setSignatures(d.signatures && typeof d.signatures === 'object' ? {...d.signatures} : {});
+    setCalc(d.calc && typeof d.calc === 'object' ? JSON.parse(JSON.stringify(d.calc)) : null);
+    setCalcOpen(false);
     /* migrate old numeric misc to arrays */
     const rawMisc = d.misc || {};
     const migratedMisc = {};
@@ -3134,6 +3148,50 @@ function App({
   };
   /* ── Approval routing (approval.js) ── */
   useEffect(() => { if (saveReq) handleSave(); }, [saveReq]);
+  /* The quantity calculators' company standards and the team's history. */
+  useEffect(() => {
+    let live = true;
+    dbGetCompanyKey('calc_std').then(v => { if (live && v) setCalcStored(v); }).catch(_e => logSwallowed('App:calc_std', _e));
+    dbGetCompanyKey('calc_hist').then(v => { if (live && v && Array.isArray(v.rows)) setCalcHist(v.rows); }).catch(_e => logSwallowed('App:calc_hist', _e));
+    return () => { live = false; };
+  }, []);
+  const calcStdNow = useMemo(() => calcStd(calcStored), [calcStored]);
+  const calcNorm = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+  /* The Masterlist's unit cost for a line, matched on its description, or null. */
+  const calcPriceFor = desc => {
+    const k = calcNorm(desc), hit = (masterlist.materials || []).find(r => calcNorm(r.desc) === k);
+    return hit && isFinite(Number(hit.cost)) ? Number(hit.cost) : null;
+  };
+  /* An admin changes a company standard. Only the changed values are stored. */
+  const calcSaveStd = change => {
+    const next = {allow: {...((calcStored || {}).allow || {}), ...(change.allow || {})}, units: {...((calcStored || {}).units || {}), ...(change.units || {})}};
+    setCalcStored(next);
+    auditLog('calc_standard', JSON.stringify(change), currentUser?.username);
+    dbSaveCompanyKey('calc_std', next).then(ok => { if (!ok) showToast('Saved on this device only: SharePoint did not accept the standard.', true); });
+  };
+  /* Lines go to Materials as ordinary rows. A row with the same description is
+     updated instead of added again, so working a quantity out twice does not
+     order it twice; its unit cost, which someone may have changed, is left alone. */
+  const calcAddLines = (lines, kind, used) => {
+    let rows = mats.slice();
+    if (rows.length === 1 && !rows[0].desc && !N(rows[0].cost)) rows = [];
+    let added = 0, updated = 0, unpriced = 0;
+    lines.forEach(l => {
+      const i = rows.findIndex(r => calcNorm(r.desc) === calcNorm(l.desc)), price = calcPriceFor(l.desc);
+      if (i >= 0) { rows[i] = {...rows[i], qty: l.qty, uom: l.uom}; updated++; }
+      else { rows.push({...mkRes(), desc: l.desc, qty: l.qty, uom: l.uom, cost: price == null ? 0 : price}); added++; if (price == null) unpriced++; }
+    });
+    setMats(rows);
+    /* What this CE used goes into the team's history: one value per CE and allowance, the latest. */
+    const ce = String(info.ceNum || '').trim() || '(unsaved)', at = new Date().toISOString();
+    const keep = calcHist.filter(r => !(r && r.ce === ce && Object.prototype.hasOwnProperty.call(used || {}, r.k)));
+    const nextHist = [...keep, ...Object.keys(used || {}).map(k => ({ce, k, v: used[k], at}))].slice(-400);
+    setCalcHist(nextHist);
+    dbSaveCompanyKey('calc_hist', {rows: nextHist}).catch(_e => logSwallowed('App:calc_hist', _e));
+    setCalcOpen(false);
+    showToast((added + updated) + ' line' + (added + updated === 1 ? '' : 's') + ' ' + (updated && !added ? 'updated on' : 'added to') + ' Materials' +
+      (unpriced ? '. ' + unpriced + ' ha' + (unpriced === 1 ? 's' : 've') + ' no Masterlist price, so its unit cost is 0.' : '.'), unpriced > 0);
+  };
   useEffect(() => {
     if (tab !== 'summary') return;
     dbGetUsers().then(u => setApvUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(_e=>logSwallowed('App:L3058',_e));
@@ -3486,6 +3544,7 @@ function App({
   }, [ceType, info.projType, ceDefaults]);
   const handleNew = () => {
     _ownNum.current = '';
+    setCalc(null); setCalcOpen(false);
     setCeType('onsite');
     setInfo({
       ...BLANK_INFO,
@@ -11420,6 +11479,10 @@ diffModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',in
 
 /* ── Feature 11: E-Signature Modal ── */
 /* ── My Signature ── */
+calcOpen && /*#__PURE__*/React.createElement(CalcDrawer, {
+  open: true, onClose: () => setCalcOpen(false), calc, setCalc, std: calcStdNow, hist: calcHist,
+  isAdmin, onSaveStd: calcSaveStd, priceFor: calcPriceFor, onAdd: calcAddLines
+}),
 mySigOpen && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset:0,background:'#000b',zIndex:3100,display:'flex',alignItems:'center',justifyContent:'center'},onClick:()=>setMySigOpen(false)},
   /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid #A78BFA',borderRadius:10,padding:20,width:460},onClick:e=>e.stopPropagation()},
     /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}},
@@ -13533,6 +13596,7 @@ tab === 'dashboard' && (() => {
     set: setMats,
     total: matsT,
     label: "Materials & Consumables (BOCM)",
+    onCalc: resStable.openCalc,
     mlType: "materials",
     addToML: resStable.addMats,
     /* The same reader the Tools tab has. A BOM or a PPE issue list
@@ -15031,10 +15095,10 @@ tab === 'dashboard' && (() => {
     onClick: toggleRail,
     'aria-label': railSlim ? 'Show live totals' : 'Hide live totals',
     title: railSlim ? 'Show live totals' : 'Hide live totals',
-    style: {...btn('def', true), float: 'right', padding: '0 8px', lineHeight: '20px'}
+    style: {...btn('def', true), position: 'absolute', top: 8, right: 8, zIndex: 1, padding: '0 8px', lineHeight: '20px'}
   }, railSlim ? "\u2039" : "\u203a"), /*#__PURE__*/React.createElement("div", {
     className: "shic-rail-keep shic-rail-mini",
-    style: {textAlign: 'center', marginTop: 8, clear: 'both'}
+    style: {textAlign: 'center', marginTop: 30}
   }, /*#__PURE__*/React.createElement("div", {style: {fontSize: 9, color: MT, letterSpacing: '0.06em'}}, "TOTAL"),
     /*#__PURE__*/React.createElement("div", {style: {...MONO, fontSize: 10, fontWeight: 800, color: ACC, wordBreak: 'break-all'}}, "\u20b1", ph(grand))),
   /*#__PURE__*/React.createElement("div", {

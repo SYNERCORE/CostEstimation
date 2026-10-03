@@ -53,7 +53,9 @@ const e = {
   verifyNotes: { k: 'n' }, rates: { shiftMults: { regular_night: 1.3 }, otMult: 1.3 }, margin: 12, scope: 'Do it',
   notes: [{ id: 'n1', seq: 1, text: 'Note' }], approvers: [{ role: 'Prepared By', name: 'X' }], signatures: { 0: 'data:image/png;base64,AAA' },
   mobVehicles: [{ id: 'v1', desc: 'TRUCK (MOB)', qty: 1, days: 1, rate: 120000 }, { id: 'v2', kind: 'mp', auto: true, desc: 'Welder', qty: 4, days: 1, rate: 1100, paxSet: true }],
-  demobVehicles: [{ id: 'v3', desc: 'TRUCK (DEMOB)', qty: 1, days: 1, rate: 120000 }]
+  demobVehicles: [{ id: 'v3', desc: 'TRUCK (DEMOB)', qty: 1, days: 1, rate: 120000 }],
+  /* The quantity calculators' state rides in the misc JSON under _calc. */
+  calc: { tab: 'welding', k: { welding: { act: 0, loss: { waste: 10, smaw: 35, tig: 1, stub: 100 }, units: {}, jobs: [{ name: 'Shaft 1', vals: { d: 500 }, cons: [{ proc: 'SMAW', dia: 4, len: 350, share: 100 }] }] } } }
 };
 
 /* dbSaveHistory's header and payloads, reproduced from its source. */
@@ -61,7 +63,7 @@ ck('the save writes the row keys into the header', /_rowKeys:_rowKeysOf\(e\)/.te
 const hdr = {
   Id: 7, Title: e.info.ceNum, shicType: e.ceType, shicClient: e.info.client, shicDesc: e.info.description, shicScope: e.scope,
   shicNotes: JSON.stringify(e.notes), shicApprovers: JSON.stringify(e.approvers), shicMob: JSON.stringify(e.mobVehicles), shicDemob: JSON.stringify(e.demobVehicles),
-  shicMisc: JSON.stringify({ ...e.misc, _addlCosts: e.addlCosts, _margin: e.margin, _verifyNotes: e.verifyNotes, _rates: e.rates, _docRef: null, _rowKeys: lib._rowKeysOf(e), _signatures: e.signatures }),
+  shicMisc: JSON.stringify({ ...e.misc, _addlCosts: e.addlCosts, _margin: e.margin, _verifyNotes: e.verifyNotes, _rates: e.rates, _docRef: null, _rowKeys: lib._rowKeysOf(e), _calc: e.calc, _signatures: e.signatures }),
   shicSOW: JSON.stringify(e.sowItems), shicInfo: JSON.stringify(e.info)
 };
 let id = 100;
@@ -84,6 +86,10 @@ ck('misc rows keep days, kind and sub-items', JSON.stringify(d.misc) === JSON.st
 ck('the row keys and signatures do not come back as a misc category', !('_rowKeys' in d.misc) && !('_signatures' in d.misc));
 ck('drawn signatures come back with the CE', JSON.stringify(d.signatures) === JSON.stringify(e.signatures));
 ck('the save writes them', /_signatures:\(e\.signatures\|\|\{\}\)/.test(db));
+ck('the calculators\' state comes back with the CE', JSON.stringify(d.calc) === JSON.stringify(e.calc));
+ck('and does not come back as a misc category', !('_calc' in d.misc));
+ck('the save writes the calculators\' state', /_calc:\(e\.calc\|\|null\)/.test(db));
+ck('the editor saves it with the CE', /calc: calc \? JSON\.parse\(JSON\.stringify\(calc\)\) : null/.test(app));
 ck('mob / demob, rates, margin, notes, scope, info', JSON.stringify([d.mobVehicles, d.demobVehicles, d.rates, d.margin, d.notes, d.scope, d.info.qty, d.info.toolTier]) ===
   JSON.stringify([e.mobVehicles, e.demobVehicles, e.rates, e.margin, e.notes, e.scope, e.info.qty, e.info.toolTier]));
 

@@ -69,7 +69,7 @@ function SignInBanner() {
   };
   const dialog = pop && React.createElement('div', {
       role: 'alertdialog', 'aria-modal': true,
-      style: { position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 } },
+      style: { position: 'fixed', inset: 0, zIndex: 3000, visibility: 'visible', background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 } },
     React.createElement('div', { style: { background: CARD, color: TX, border: '1px solid ' + BDR, borderRadius: 12, padding: 22, maxWidth: 420, width: '100%', boxShadow: '0 12px 40px rgba(0,0,0,.4)' } },
       React.createElement('div', { style: { fontSize: 30, marginBottom: 6 } }, pop === 'offline' ? '📴' : '🔒'),
       React.createElement('div', { style: { fontSize: 16, fontWeight: 700, marginBottom: 8 } },
@@ -573,9 +573,9 @@ function ThemeSwitch() {
       style: { cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 6, fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
         background: 'var(--bg-surface-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }
     }, '🎨', React.createElement('span', { style: { display: 'flex', gap: 2 } }, cur0.sw.map(dot))),
-    open && React.createElement('div', { style: { position: 'fixed', inset: 0, zIndex: 3050 }, onClick: () => setOpen(null) }),
+    open && React.createElement('div', { style: { position: 'fixed', inset: 0, zIndex: 3050, visibility: 'visible' }, onClick: () => setOpen(null) }),
     open && React.createElement('div', {
-      style: { position: 'fixed', right: open.right, top: open.top, zIndex: 3060, width: 340, maxWidth: 'calc(100vw - 16px)', maxHeight: 'calc(100vh - ' + (open.top + 8) + 'px)', overflowY: 'auto', padding: 14, borderRadius: 10,
+      style: { position: 'fixed', right: open.right, top: open.top, zIndex: 3060, visibility: 'visible', width: 340, maxWidth: 'calc(100vw - 16px)', maxHeight: 'calc(100vh - ' + (open.top + 8) + 'px)', overflowY: 'auto', padding: 14, borderRadius: 10,
         background: 'var(--bg-surface)', border: '1px solid var(--border-strong)', boxShadow: '0 12px 32px rgba(0,0,0,.35)', color: 'var(--text-primary)' }
     },
       React.createElement('div', { style: { fontWeight: 700, fontSize: 13, marginBottom: 8 } }, 'Theme'),
@@ -686,13 +686,47 @@ window.SHIC_ML=(function(){
   return{suggestRates:suggestRates,predictCost:predictCost,matchScope:matchScope,detectAnomalies:detectAnomalies,cosineSim:cosineSim};
 })();
 
-
-
-
-
-
-
-
-
-
-
+/* The account menu: everything about the signed-in person that used to crowd
+   the top bar -- theme, password, signature, AI key, sign out -- behind one
+   avatar. Its children stay MOUNTED while it is shut and are only hidden, so a
+   dialog one of them opened (Password, the theme picker) is not torn down by
+   the menu closing; those dialogs set visibility:'visible' for that reason.
+   The panel is position:fixed because the top bar clips what overflows it. */
+function AccountMenu({ name, role, flag, children }) {
+  const [open, setOpen] = React.useState(false);
+  const [pos, setPos] = React.useState({ top: 0, right: 0 });
+  const root = React.useRef(null), btnRef = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const down = e => { if (root.current && !root.current.contains(e.target)) setOpen(false); };
+    const key = e => { if (e.key === 'Escape') { setOpen(false); if (btnRef.current) btnRef.current.focus(); } };
+    document.addEventListener('mousedown', down);
+    document.addEventListener('keydown', key);
+    return () => { document.removeEventListener('mousedown', down); document.removeEventListener('keydown', key); };
+  }, [open]);
+  const toggle = () => {
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      setPos({ top: Math.round(r.bottom + 6), right: Math.max(8, Math.round(window.innerWidth - r.right)) });
+    }
+    setOpen(o => !o);
+  };
+  const initials = String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0).toUpperCase()).join('') || '?';
+  return React.createElement('div', { ref: root, style: { position: 'relative', flexShrink: 0 } },
+    React.createElement('button', {
+      ref: btnRef, onClick: toggle, 'aria-haspopup': 'true', 'aria-expanded': open,
+      'aria-label': 'Account menu for ' + (name || 'you'), title: (name || '') + (role ? ' — ' + role : ''),
+      style: { width: 30, height: 30, borderRadius: '50%', border: '1px solid var(--border-strong)', cursor: 'pointer', fontFamily: 'inherit',
+        fontWeight: 700, fontSize: 11, background: 'var(--bg-surface-elevated)', color: 'var(--text-primary)', position: 'relative', padding: 0 }
+    }, initials, flag && React.createElement('span', { style: { position: 'absolute', top: -2, right: -2, width: 9, height: 9, borderRadius: '50%', background: 'var(--status-danger)', border: '2px solid var(--bg-surface)' } })),
+    React.createElement('div', {
+      role: 'menu', 'aria-hidden': !open,
+      style: { position: 'fixed', top: pos.top, right: pos.right, zIndex: 3040, width: 250, maxWidth: 'calc(100vw - 16px)', padding: 10, borderRadius: 10,
+        background: 'var(--bg-surface)', border: '1px solid var(--border-strong)', boxShadow: '0 12px 32px rgba(0,0,0,.35)', color: 'var(--text-primary)',
+        display: 'flex', flexDirection: 'column', gap: 6, visibility: open ? 'visible' : 'hidden' }
+    },
+      React.createElement('div', { style: { paddingBottom: 8, marginBottom: 2, borderBottom: '1px solid var(--border-subtle)' } },
+        React.createElement('div', { style: { fontWeight: 700, fontSize: 13 } }, name),
+        React.createElement('div', { style: { fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)' } }, role)),
+      children));
+}

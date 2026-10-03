@@ -45,14 +45,12 @@ ck('a full checklist leaves nothing unanswered',
   rceUnanswered({ items: Object.fromEntries(items.map(i => [i.n, { v: 'yes' }])) }).length === 0);
 
 const submit = app.slice(app.indexOf('const submitRequest = async ()'), app.indexOf('const [statusPanel'));
-ck('the form refuses a request with items unanswered', submit.indexOf('const _miss = rceUnanswered(f);') > 0);
-ck('and names the first one, so it can be found', /_miss\[0\]\.n \+ ', ' \+ _miss\[0\]\.t/.test(submit));
-ck('item 14 is required as well', submit.indexOf("if (!f.recommendation)") > 0);
-ck('a decline must say why', /recommendation === 'decline' && !String\(f\.declineReason/.test(submit));
+ck('logging a request does not require the checklist: that is the estimators review', submit.indexOf('rceUnanswered(f)') < 0);
+ck('a requestor can prefill the checklist and item 14; the estimators review them afterwards', app.indexOf('...(isRequestor ? [] : [') < 0);
 
 /* The gate must come BEFORE anything is written, or a refused request has
    already been saved and assigned by the time it is refused. */
-const gateAt = submit.indexOf('const _miss = rceUnanswered(f);');
+const gateAt = submit.indexOf('if (_todo.length)');
 ['dbSaveHistory(', 'dbSaveMonEntry(', 'auditLog('].forEach(w => {
   const at = submit.indexOf(w);
   ck('nothing is written before the gate: ' + w.replace('(', ''), at < 0 || gateAt < at);

@@ -25,7 +25,7 @@ const grab = (re, what) => { const m = db.match(re); if (!m) { console.error('no
 const src =
   'const _monSpIdCache={};\n' +
   grab(/function _monMergeLog\(theirs,mine\)\{[\s\S]*?\n\}/, '_monMergeLog') + '\n' +
-  grab(/async function _monRowsFor\(numId,ceNum\)\{[\s\S]*?\n\}/, '_monRowsFor') + '\n' +
+  grab(/async function _monRowsFor\(numId,ceNum\)\{[\s\S]*?\n\}\nasync function _monRowsForFiltered\(numId,ceNum\)\{[\s\S]*?\n\}/, '_monRowsFor') + '\n' +
   grab(/function _apvCols\(mon,ceNum\)\{[\s\S]*?\n\}/, '_apvCols') + '\n' +
   grab(/let _apvColsMissing=false;/, '_apvColsMissing') + '\n' +
   grab(/async function _monWrite\(send,payload\)\{[\s\S]*?\n\}/, '_monWrite') + '\n' +

@@ -23,10 +23,10 @@ console.log('Import list on Materials and PPE');
 
 /* ---- all three tabs get the reader ---- */
 ck('every resource tab is handed the document reader',
-  (app.match(/readFile: readDoc,/g) || []).length === 3);
+  (app.match(/readFile: resStable.readFile,/g) || []).length === 3);
 ['materials', 'ppe'].forEach(t => {
   const at = app.indexOf('mlType: "' + t + '"');
-  ck('the ' + t + ' tab has it', at > 0 && app.slice(at, at + 400).indexOf('readFile: readDoc') > 0);
+  ck('the ' + t + ' tab has it', at > 0 && app.slice(at, at + 400).indexOf('readFile: resStable.readFile') > 0);
 });
 ck('and the button appears wherever the reader does',
   /readFile && \/\*#__PURE__\*\/React\.createElement\("button"/.test(tab));

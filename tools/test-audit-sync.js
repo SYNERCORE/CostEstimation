@@ -46,6 +46,7 @@ function makeEnv(opts) {
   const store = {};
   const posted = [];
   const ctx = {
+    logSwallowed() {},
     console: { warn() {}, info() {}, log() {} },
     Promise, JSON, Object, Array, Math, String, Number, Date,
     USE_SP: opts.configured !== false,

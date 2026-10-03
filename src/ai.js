@@ -15,7 +15,7 @@ function getCompanies(){
 }
 function saveCompanies(list){
   try{localStorage.setItem('shic:companies',JSON.stringify(list));window.dispatchEvent(new Event('shic:companies:updated'));}catch{}
-  if(USE_SP||getSiteURL())dbSaveCompanies(list).catch(()=>{});
+  if(USE_SP||getSiteURL())dbSaveCompanies(list).catch(_e=>logSwallowed('ai:saveCompanies',_e));
 }
 
 /* === MULTI-PROVIDER AI =====================================================
@@ -140,7 +140,7 @@ async function aiFetch(url, opts) {
       if (typeof navigator !== "undefined" && navigator.onLine === false)
         throw new Error("No internet connection, so the AI could not be reached.");
       let host = url;
-      try { host = new URL(url).host; } catch (_) {}
+      try { host = new URL(url).host; } catch(_){logSwallowed('ai:aiFetch',_);}
       throw new Error("The browser blocked the request to " + host + " before it was sent. " +
         "This is the page security policy (connect-src in index.html), not your API key. " +
         "Check the browser console for a Content Security Policy message.");
@@ -452,10 +452,10 @@ const AI_EXTRACT_RULES = [
 function aiParseJSON(raw) {
   const s = String(raw == null ? '' : raw).replace(/```+\s*json/gi, '').replace(/```+/g, '').trim();
   if (!s) throw new Error('The AI returned an empty response. Try again.');
-  try { return JSON.parse(s); } catch (_) {}
+  try { return JSON.parse(s); } catch(_){logSwallowed('ai:aiParseJSON',_);}
   const a = s.indexOf('{'), b = s.lastIndexOf('}');
   if (a !== -1 && b > a) {
-    try { return JSON.parse(s.slice(a, b + 1)); } catch (_) {}
+    try { return JSON.parse(s.slice(a, b + 1)); } catch(_){logSwallowed('ai:aiParseJSON',_);}
   }
   /* A truncated reply is the common failure -- the token cap cut it off
      mid-object -- and it deserves to say so instead of "Unexpected end of JSON

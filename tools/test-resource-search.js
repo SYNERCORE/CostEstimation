@@ -59,7 +59,7 @@ console.log('\nwhat the table does with it:');
 /* The number shown is the row's index in the WHOLE list: the index is taken
    before the filter runs, then carried through it. */
 ck('the row keeps its real number when the view is filtered',
-  /rows\.map\(\(r, _ix\) => \(\{ r, _ix \}\)\)\.filter\(x => _hit\(x\.r\)\)\.map\(\(\{ r, _ix \}\) => \{/.test(tab));
+  tab.indexOf('const _list = rows.map((r, _ix) => ({ r, _ix })).filter(x => _hit(x.r));') > 0 && tab.indexOf('_vis.items.map(({ r, _ix }) => {') > 0);
 /* Edits are keyed by id, never by position, so editing a filtered row edits
    that row and not whatever sits at its index in the full list. */
 ck('and edits still find the row by id, not by position',

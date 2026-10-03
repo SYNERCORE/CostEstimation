@@ -29,7 +29,7 @@ function getUpdateCfg() {
 function saveUpdateCfg(cfg) {
   try {
     localStorage.setItem(UPDATE_CHECK_KEY, JSON.stringify(cfg));
-  } catch {}
+  } catch(_e){logSwallowed('update:saveUpdateCfg',_e);}
 }
 async function checkForUpdate() {
   try {
@@ -50,7 +50,7 @@ async function checkForUpdate() {
       available: true,
       ...info
     };
-  } catch (e) {}
+  } catch(e){logSwallowed('update:checkForUpdate',e);}
   return {
     available: false
   };

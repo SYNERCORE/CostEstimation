@@ -97,7 +97,7 @@
       // Migrate legacy SHA-256 hash to PBKDF2 on successful login
       if (u.hash && !u.hash.startsWith('pbkdf2:')) {
         const newHash = await hashPassword(pw);
-        await dbUpdateUser(u.id, { hash: newHash }).catch(() => {});
+        await dbUpdateUser(u.id, { hash: newHash }).catch(_e=>logSwallowed('LoginPage:LoginPage',_e));
       }
       session.set({
         id: u.id,

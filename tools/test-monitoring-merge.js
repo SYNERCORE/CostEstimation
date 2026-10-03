@@ -35,7 +35,7 @@ const src =
      no longer running the real function. */
   /* One CE can own more than one Monitoring row -- see _monRowsFor -- so the
      lookup is part of what this exercises. */
-  grab(/async function _monRowsFor\(numId,ceNum\)\{[\s\S]*?\n\}/, '_monRowsFor') + '\n' +
+  grab(/async function _monRowsFor\(numId,ceNum\)\{[\s\S]*?\n\}\nasync function _monRowsForFiltered\(numId,ceNum\)\{[\s\S]*?\n\}/, '_monRowsFor') + '\n' +
   grab(/function _apvCols\(mon,ceNum\)\{[\s\S]*?\n\}/, '_apvCols') + '\n' +
   grab(/let _apvColsMissing=false;/, '_apvColsMissing') + '\n' +
   grab(/async function _monWrite\(send,payload\)\{[\s\S]*?\n\}/, '_monWrite') + '\n' +

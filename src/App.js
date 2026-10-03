@@ -399,6 +399,11 @@ function MlTrendModal({ mlTrend, setMlTrend, masterlist, ML_HIST_KIND }) {
       )));
 }
 
+/* The resource tabs skip a render when nothing they show has changed. Every
+   prop is compared as is; the callbacks come through resStable (see App), which
+   keep their identity but always run the newest closure. */
+const ResTabM = React.memo(ResTab);
+
 function App({
   currentUser,
   onLogout
@@ -458,6 +463,8 @@ function App({
   const [sowItems, setSowItems] = useState([]); /* [{id,type:'main'|'sub',text}] */
   /* SOW Breakdown view state */
   const [sbCollapsed, setSbCollapsed] = useState({}); /* {taskId:true} */
+  const [sbDlOn, setSbDlOn] = useState(false);   /* Masterlist suggestions built on first focus */
+  const [sbShow, setSbShow] = useState({});      /* {taskId|tabKey: rows drawn} */
   const [sbSel, setSbSel] = useState({});             /* bulk-assign selection, {selKey:descriptor} */
   const [sbSearch, setSbSearch] = useState('');
   const [addMode, setAddMode] = useState(false);
@@ -498,7 +505,7 @@ function App({
   /* My Signature: the signed-in user's saved signature, and whether its editor is open. */
   const [mySig, setMySig] = useState('');
   const [mySigOpen, setMySigOpen] = useState(false);
-  useEffect(() => { if (currentUser && currentUser.username) dbGetMySig(currentUser.username).then(v => setMySig(v || '')).catch(() => {}); }, [currentUser && currentUser.username]);
+  useEffect(() => { if (currentUser && currentUser.username) dbGetMySig(currentUser.username).then(v => setMySig(v || '')).catch(_e=>logSwallowed('App:App',_e)); }, [currentUser && currentUser.username]);
   /* Any image, drawn onto a white 420x140 canvas the same shape as the pad. */
   const sigFit = src => new Promise((res, rej) => {
     const img = new Image();
@@ -596,14 +603,14 @@ function App({
     setCustomStatuses(n);
     try {
       localStorage.setItem('shic:statuses', JSON.stringify(n));
-    } catch {}
+    } catch(_e){logSwallowed('App:App',_e);}
   };
   const removeStatus = s => {
     const n = customStatuses.filter(x => x !== s);
     setCustomStatuses(n);
     try {
       localStorage.setItem('shic:statuses', JSON.stringify(n));
-    } catch {}
+    } catch(_e){logSwallowed('App:App',_e);}
   };
   const MON_KEY = 'shic:monitoring';
   /* When each CE's row was last changed here. A fetch that was already in
@@ -629,7 +636,7 @@ function App({
     try {
       const v = localStorage.getItem(MON_KEY);
       if (v) setMonData(JSON.parse(v));
-    } catch (_e) {}
+    } catch(_e){logSwallowed('App:App',_e);}
     try {
       /* Clear stale cache before every fetch so deleted SP items are not reused */
       Object.keys(_monSpIdCache).forEach(k => delete _monSpIdCache[k]);
@@ -654,14 +661,14 @@ function App({
         try { localStorage.setItem(MON_KEY, JSON.stringify(r.data)); } catch (e) { console.warn('monitoring not cached locally:', e && e.message); }
         setSyncStatus({monitoring:'synced', lastSyncAt: new Date().toISOString(), sp: 'connected'});
         if (r.legacy) {
-          dbSaveMonAll(r.data, []).catch(() => {});
+          dbSaveMonAll(r.data, []).catch(_e=>logSwallowed('App:App',_e));
         }
       } else {
         /* SP unreachable — fall back to localStorage so user isn't left with nothing */
         try {
           const v = localStorage.getItem(MON_KEY);
           if (v) setMonData(JSON.parse(v));
-        } catch {}
+        } catch(_e){logSwallowed('App:App',_e);}
         setSyncStatus({monitoring:'local'});
       }
     } catch {
@@ -669,7 +676,7 @@ function App({
       try {
         const v = localStorage.getItem(MON_KEY);
         if (v) setMonData(JSON.parse(v));
-      } catch {}
+      } catch(_e){logSwallowed('App:App',_e);}
       setSyncStatus({monitoring:'error'});
     }
   };
@@ -689,6 +696,7 @@ function App({
      the browser showed it happily. Pass an object to write several fields as
      one change. */
   const updateMon = (ceId, field, val) => setMonData(prev => {
+    if (isRequestor && !reqOwns(ceId, prev)) { console.warn('[blocked] a requestor tried to change CE ' + ceId + ', which they did not raise'); return prev; }
     const fields = (field && typeof field === 'object') ? field : { [field]: val };
     const extra = {};
     /* Stamp who moved a CE and when, on EVERY status change.
@@ -785,7 +793,7 @@ function App({
         setSyncStatus({monitoring:'error', dirty:true});
         showToast('Monitoring save failed: ' + (e && e.message ? e.message : e), true);
       });
-    } catch {}
+    } catch(_e){logSwallowed('App:App',_e);}
     return n;
   });
   const mlSaveTimer = React.useRef(null);
@@ -812,7 +820,7 @@ function App({
     if (USE_SP || getSiteURL()) {
       dbGetCompanies().then(list => {
         if (list && list.length) { saveCompanies(list); setCompanies(list); }
-      }).catch(() => {});
+      }).catch(_e=>logSwallowed('App:App',_e));
     }
     return () => window.removeEventListener('shic:companies:updated', onStorage);
   }, []);
@@ -822,7 +830,7 @@ function App({
      nothing ever read. */
   const cacheSowLib = lib => {
     try { localStorage.setItem('sy3:sowlib', JSON.stringify(lib)); } catch (e) { console.warn('scope library not cached locally:', e && e.message); }
-    try { refPut('sowlib', lib, (USE_SP || getSiteURL()) ? 'sharepoint' : 'local'); } catch (_e) {}
+    try { refPut('sowlib', lib, (USE_SP || getSiteURL()) ? 'sharepoint' : 'local'); } catch(_e){logSwallowed('App:App',_e);}
   };
   const loadSowLib = async () => {
     try {
@@ -990,6 +998,9 @@ function App({
      that comes back is theirs to read in full, which is what View is for. */
   const isRequestor = isRequestorRole(currentUser.role);
   const REQUESTOR_TABS = ['mywork', 'info', 'sow', 'history', 'dashboard'];
+  /* A requestor reads every CE in CE Monitoring and the Dashboard -- the owner's
+     decision -- but changes only the ones they raised (see reqOwns). */
+  const canSeeAll = isAdmin || isRequestor;
   /* Every CE number in use, not just this user's. See dbGetCeNumbers. */
   const [ceNums, setCeNums] = useState([]);
   const isOwner = isOwnerRole(currentUser.role);
@@ -1000,7 +1011,7 @@ function App({
   }] : [])];
   useEffect(() => {
     setTimeout(async()=>{const info=await checkForUpdate();if(info.available)setUpdateInfo(info);},3000);
-    const onKey=e=>{if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();try{handleSave();}catch(ex){}}if((e.ctrlKey||e.metaKey)&&e.key==='n'){e.preventDefault();try{handleNew();}catch(ex){}}};
+    const onKey=e=>{if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();try{handleSave();}catch(ex){logSwallowed('App:L1005',ex);}}if((e.ctrlKey||e.metaKey)&&e.key==='n'){e.preventDefault();try{handleNew();}catch(ex){logSwallowed('App:L1005',ex);}}};
     window.addEventListener('keydown',onKey);
     const onUnload=e=>{e.preventDefault();e.returnValue='';};
     window.addEventListener('beforeunload',onUnload);
@@ -1036,7 +1047,7 @@ function App({
       loadML();
       /* Trim the per-CE cache on open; it is the bulk of local storage use and
          nothing pruned it before, so it only ever grew. */
-      try { const n = LS.pruneCeCache(60); if (n) console.info('Pruned ' + n + ' cached CE(s) from local storage.'); } catch (_e) {}
+      try { const n = LS.pruneCeCache(60); if (n) console.info('Pruned ' + n + ' cached CE(s) from local storage.'); } catch(_e){logSwallowed('App:L1041',_e);}
       loadHist();
       loadMonData();
       /* Drafts are rows in Monitoring now, so they have to be loaded with the
@@ -1054,7 +1065,7 @@ function App({
         if (r && r.moved) showToast('Moved ' + r.moved + ' CE(s) to offline storage, freeing ' + Math.round((r.freedBytes||0)/1024) + ' KB.');
       }).catch(ex => console.warn('CE archive migration skipped:', ex.message));
       /* Notify admin of pending registrations */
-      if(isAdmin){try{const all=await dbGetUsers();const pCount=all.filter(u=>u.status==='pending').length;if(pCount>0)setTimeout(()=>showToast(`👤 ${pCount} user${pCount>1?'s':''} awaiting approval — check Admin Panel → Users`),1500);}catch(_){}};
+      if(isAdmin){try{const all=await dbGetUsers();const pCount=all.filter(u=>u.status==='pending').length;if(pCount>0)setTimeout(()=>showToast(`👤 ${pCount} user${pCount>1?'s':''} awaiting approval — check Admin Panel → Users`),1500);}catch(_){logSwallowed('App:L1059',_);}};
       /* Sync when the connection returns. Until now nothing did this: CEs
          saved offline stayed local until someone found the admin push button.
          Debounced, because 'online' can fire several times as an adapter
@@ -1075,7 +1086,7 @@ function App({
             const a = await dbPushAuditLog();
             if (a && a.pushed) console.info('audit log: uploaded ' + a.pushed + ' entr(y/ies) recorded offline.');
           } catch (ex) { console.warn('reconnect audit push failed:', ex.message); }
-          try { if (window._shicFullRefresh) await window._shicFullRefresh(); } catch (_e) {}
+          try { if (window._shicFullRefresh) await window._shicFullRefresh(); } catch(_e){logSwallowed('App:L1080',_e);}
         }, 2000);
       };
       window.addEventListener('shic-online', onReconnect);
@@ -1085,8 +1096,8 @@ function App({
       if (navigator.onLine !== false) {
         setTimeout(() => { dbPushLocalCEs().then(r => {
           if (r && r.pushed) showToast('Uploaded ' + r.pushed + ' CE(s) that were saved offline.');
-        }).catch(() => {}); }, 6000);
-        setTimeout(() => { dbPushAuditLog().catch(() => {}); }, 8000);
+        }).catch(_e=>logSwallowed('App:L1090',_e)); }, 6000);
+        setTimeout(() => { dbPushAuditLog().catch(_e=>logSwallowed('App:L1091',_e)); }, 8000);
       }
       /* Expose a global full-refresh so SyncStatusBar can trigger it */
       window._shicFullRefresh = async () => {
@@ -1117,10 +1128,10 @@ function App({
           setTimeout(async () => {
             try {
               const full = await dbLoadCE(_pid);
-              if (!full) { showToast('Could not open that CE — it is not in SharePoint or this browser.', true); return; }
+              if (!full) { console.error('open CE ' + _pid + ': dbLoadCE returned nothing'); showToast('Could not open that CE — it is not in SharePoint or this browser.', true); return; }
               await handleLoad(full);
               setAutoPrint({as: _as, ceNum: (full.info || {}).ceNum || ''});
-            } catch (ex) { showToast('Could not open that CE: ' + ex.message, true); }
+            } catch (ex) { console.error('open CE ' + _pid + ' failed:', ex); showToast('Could not open that CE: ' + ex.message, true); }
           }, 600);
         }
       } catch (e) { console.warn('print URL parse failed:', e.message); }
@@ -1146,7 +1157,7 @@ function App({
         if (urlDraft) {
           const d = JSON.parse(atob(urlDraft));
           if (d && d.info) {
-            setTimeout(() => { try { applyDraftData(d); showToast('Shared draft loaded from link!'); } catch(e){} }, 800);
+            setTimeout(() => { try { applyDraftData(d); showToast('Shared draft loaded from link!'); } catch(e){logSwallowed('App:L1151',e);} }, 800);
             window.history.replaceState({}, '', window.location.pathname);
           }
         }
@@ -1163,7 +1174,7 @@ function App({
       if (ml) {
         setMasterlist(ml);
         try { LS.set('masterlist', ml); } catch (e) { console.warn('masterlist not cached locally:', e && e.message); }
-        try { refPut('masterlist', ml, (USE_SP || getSiteURL()) ? 'sharepoint' : 'local'); } catch (_e) {}
+        try { refPut('masterlist', ml, (USE_SP || getSiteURL()) ? 'sharepoint' : 'local'); } catch(_e){logSwallowed('App:L1168',_e);}
         setSyncStatus({masterlist:'synced', lastSyncAt: new Date().toISOString(), sp:'connected'});
       } else setSyncStatus({masterlist:'local'});
     } catch (ex) { console.warn('Masterlist load failed:', ex.message); setSyncStatus({masterlist:'error', sp:'error'}); }
@@ -1174,6 +1185,16 @@ function App({
      latest monitoring data. */
   const _monRef = React.useRef({});
   _monRef.current = monData;
+  /* Whether a requestor raised this CE: receivedBy is stamped at request time
+     and never changes; savedBy covers a request whose monitoring row has not
+     arrived yet. */
+  const reqOwns = (id, mon) => {
+    const m = (mon || _monRef.current || {})[id] || {};
+    const me = [currentUser?.name, currentUser?.username].map(x => String(x || '').trim().toUpperCase()).filter(Boolean);
+    if (me.includes(String(m.receivedBy || '').trim().toUpperCase()) && String(m.receivedBy || '').trim()) return true;
+    const h = (history || []).find(x => String(x.id) === String(id));
+    return !!(h && h.savedBy === currentUser?.username && !m.receivedBy);
+  };
   const mineToSee = id => {
     const m = (_monRef.current || {})[id];
     if (!m) return false;
@@ -1191,15 +1212,15 @@ function App({
        on it made opening the app feel like it had hung. */
     try {
       const cached = LS.get('history') || [];
-      if (cached.length) setHistory(isAdmin ? cached : cached.filter(h => h.savedBy === currentUser.username || mineToSee(h.id)));
-    } catch (_e) {}
+      if (cached.length) setHistory(canSeeAll ? cached : cached.filter(h => h.savedBy === currentUser.username || mineToSee(h.id)));
+    } catch(_e){logSwallowed('App:L1207',_e);}
     try {
       const spAvail = !!(USE_SP || getSiteURL());
       /* Alongside the history, never instead of it: this is Titles only and
          says nothing about anyone's estimates, but it is what stops two
          people being handed the same number. */
-      dbGetCeNumbers().then(ns => { if (ns && ns.length) setCeNums(ns); }).catch(() => {});
-      const h = await dbGetHistory(currentUser.username, isAdmin, isAdmin ? null : mineToSee);
+      dbGetCeNumbers().then(ns => { if (ns && ns.length) setCeNums(ns); }).catch(_e=>logSwallowed('App:L1213',_e));
+      const h = await dbGetHistory(currentUser.username, canSeeAll, canSeeAll ? null : mineToSee);
       /* Keep LS in sync with SP so fallback is never stale. Only ever write a
          NON-empty result. The old code purged the cache whenever SharePoint
          returned zero rows, which was wrong twice over: a failed/trimmed query
@@ -1219,25 +1240,25 @@ function App({
            rows, fell into this branch, and was handed the lot. */
         try {
           const _c = LS.get('history') || [];
-          effective = isAdmin ? _c : _c.filter(x => x.savedBy === currentUser.username || mineToSee(x.id));
+          effective = canSeeAll ? _c : _c.filter(x => x.savedBy === currentUser.username || mineToSee(x.id));
         } catch (_e) { effective = []; }
         setSyncStatus({ sp: 'connected' });
       }
       setHistory(effective);
-      try{window.shicHistory=effective.map(function(e){return Object.assign({},e.data||{},e);});}catch(_e){}
+      try{window.shicHistory=effective.map(function(e){return Object.assign({},e.data||{},e);});}catch(_e){logSwallowed('App:L1239',_e);}
       spLoadMLImports().then(function(imports){
         if(imports&&imports.length){
           window.shicHistory=(window.shicHistory||[]).concat(imports);
         }
-      }).catch(function(){});
+      }).catch(_e=>logSwallowed('App:L1244',_e));
     } catch (e) {
       /* SP completely unreachable — show whatever is in LS */
       console.warn('loadHist error, using local cache:', e.message);
       try {
         const cached = LS.get('history') || [];
         const u = currentUser.username;
-        setHistory(isAdmin ? cached : cached.filter(h => h.savedBy === u || mineToSee(h.id)));
-      } catch (_e) {}
+        setHistory(canSeeAll ? cached : cached.filter(h => h.savedBy === u || mineToSee(h.id)));
+      } catch(_e){logSwallowed('App:L1252',_e);}
     }
     setHistBusy(false);
   };
@@ -1251,7 +1272,7 @@ function App({
     Object.keys(_ml || {}).forEach(k => { _mlU[k] = Array.isArray(_ml[k]) ? _ml[k].map(r => r && r.uom ? {...r, uom: uomCase(r.uom)} : r) : _ml[k]; });
     const ml = mlRound(_mlU);
     setMasterlist(ml);
-    try{window.shicMasterlist=ml;}catch(_e){}
+    try{window.shicMasterlist=ml;}catch(_e){logSwallowed('App:L1266',_e);}
     setSyncStatus({masterlist:'saving', dirty:true});
     try {
       const res = await dbSaveML(ml, opts);
@@ -1260,8 +1281,8 @@ function App({
       if (res && res.sp && res.merged && res.adopted && Object.keys(res.adopted).length) {
         const kept = mlRound(res.merged);
         setMasterlist(kept);
-        try{window.shicMasterlist=kept;}catch(_e){}
-        try { LS.set('masterlist', kept); } catch (_e) {}
+        try{window.shicMasterlist=kept;}catch(_e){logSwallowed('App:L1275',_e);}
+        try { LS.set('masterlist', kept); } catch(_e){logSwallowed('App:L1276',_e);}
         const n = Object.values(res.adopted).reduce((s, a) => s + a.length, 0);
         const secs = Object.keys(res.adopted).join(', ');
         showToast(n + ' ' + secs + ' item' + (n === 1 ? '' : 's') +
@@ -1307,9 +1328,14 @@ function App({
     showToast(add.length + ' item(s) added to the Masterlist (' + tab + '), category General.');
   };
   const showToast = (msg, err = false) => {
+    /* An error toast is gone in three seconds, which is not long enough to read
+       it, copy it, or notice it at all in the embedded viewer -- where a CE that
+       would not open just left the page sitting on My Work. Errors go to the
+       console as well, and stay up longer inside a frame. */
+    if (err) { try { console.warn('[toast] ' + msg); } catch(_e){logSwallowed('App:L1326',_e);} }
     setToast(msg);
     setToastErr(err);
-    setTimeout(() => setToast(''), 3200);
+    setTimeout(() => setToast(''), (err && window !== window.top) ? 20000 : 3200);
     window._shicToast = showToast;
   };
   window._shicToast = showToast;
@@ -1352,6 +1378,28 @@ function App({
   const _workMap = useMemo(() => ceSplitOn(ceType) ? ceWorkMap(sowItems) : null, [ceType, sowItems]);
   const siteFrac = r => _workMap ? ceSiteFrac(r, _workMap) : 1;
   const pwrFrac = r => cfg.power === 'shop' ? 1 - siteFrac(r) : 1;
+  /* Callbacks for the memoised resource tabs. A new arrow on every render would
+     defeat the memo, and wrapping each in useCallback would need its whole
+     chain of dependencies listed (and a missed one is a stale price). Instead
+     the wrappers are made once and read the newest functions from a ref each
+     time they are called. What the tab DRAWS from pwrFrac is covered by the
+     _pfk / _wm props, which change when its inputs do. */
+  const _lat = useRef(null);
+  _lat.current = () => ({ addRowsToML, readDoc, showToast, pwrFrac });
+  const resStable = useMemo(() => ({
+    addTools: l => _lat.current().addRowsToML('tools', l),
+    addMats: l => _lat.current().addRowsToML('materials', l),
+    addPpe: l => _lat.current().addRowsToML('ppe', l),
+    readFile: f => _lat.current().readDoc(f),
+    showToast: (m, e) => _lat.current().showToast(m, e),
+    pwrFrac: r => _lat.current().pwrFrac(r),
+    setDefaultTier: v => setInfo(p => ({...p, toolTier: v})),
+    setKwhRate: v => setRates(p => {
+      const n = {...p}, f = parseFloat(v);
+      if (!isFinite(f) || f < 0 || f === KWH_RATE_DEFAULT) delete n.kwhRate; else n.kwhRate = f;
+      return n;
+    })
+  }), []);
   const calcBen = r => {
     const pax = N(r.pax),
       days = N(r.days),
@@ -2242,9 +2290,9 @@ function App({
        assignment would silently orphan on load. */
     const _R = ceIdRemapper(d.sowItems);
     const _sow = _R.sow;
-    const _mp=(d.mp||[]).map(_R.rt('mp'));setMp(_mp);try{window.shicCurrentMp=_mp;}catch(_e){}
-    const _tools=(d.tools||[]).map(_R.rt('tools'));setTools(_tools);try{window.shicCurrentTools=_tools;}catch(_e){}
-    const _mats=(d.mats||[]).map(_R.rt('mats'));setMats(_mats);try{window.shicCurrentMats=_mats;}catch(_e){}
+    const _mp=(d.mp||[]).map(_R.rt('mp'));setMp(_mp);try{window.shicCurrentMp=_mp;}catch(_e){logSwallowed('App:L2262',_e);}
+    const _tools=(d.tools||[]).map(_R.rt('tools'));setTools(_tools);try{window.shicCurrentTools=_tools;}catch(_e){logSwallowed('App:L2263',_e);}
+    const _mats=(d.mats||[]).map(_R.rt('mats'));setMats(_mats);try{window.shicCurrentMats=_mats;}catch(_e){logSwallowed('App:L2264',_e);}
     setPpe((d.ppe || []).map(_R.rt('ppe')));
     /* A drawn signature belongs to the CE it was drawn on. */
     setSignatures(d.signatures && typeof d.signatures === 'object' ? {...d.signatures} : {});
@@ -2396,7 +2444,7 @@ function App({
     };
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
-    } catch (e) {}
+    } catch(e){logSwallowed('App:L2416',e);}
     setSyncStatus({dirty: true});
     try {
       const ok = await dbSaveDraft(d);
@@ -2439,11 +2487,11 @@ function App({
       'Changes not yet saved will be lost for good. The saved CE and its CE Monitoring entry are not affected.')) return;
     try {
       await dbDeleteDraft(draftId);
-    } catch (e) {}
+    } catch(e){logSwallowed('App:L2459',e);}
     try {
       const loc = localStorage.getItem(DRAFT_KEY);
       if (loc && JSON.parse(loc).draftId === draftId) localStorage.removeItem(DRAFT_KEY);
-    } catch (e) {}
+    } catch(e){logSwallowed('App:L2463',e);}
     setSharedDrafts(p => p.filter(d => d.draftId !== draftId));
     showToast('Draft deleted.');
   };
@@ -2532,7 +2580,7 @@ function App({
   const clearDraft = () => {
     try {
       localStorage.removeItem(DRAFT_KEY);
-    } catch {}
+    } catch(_e){logSwallowed('App:L2552',_e);}
   };
   /* Re-price the CE on screen from today's masterlist.
 
@@ -2620,7 +2668,7 @@ function App({
       f.style.display = 'none';
       f.src = window.location.pathname + '?print=' + id + '&as=detailed';
       document.body.appendChild(f);
-      setTimeout(() => { try { f.remove(); } catch (_e) {} }, 60000);
+      setTimeout(() => { try { f.remove(); } catch(_e){logSwallowed('App:L2640',_e);} }, 60000);
       showToast('Preparing the Excel file — it will download in a few seconds...');
       return;
     }
@@ -2702,7 +2750,8 @@ function App({
     const dup = await dbFindCEByNum(ceNum).catch(() => null);
     /* A logged request is built out and saved over under its own number. Only
        that number: renaming the CE to someone else's number is still refused. */
-    const _fromRequest = !!(info.request && String(info.requestNum || '').toUpperCase() === ceNum);
+    const _fromRequest = !!(info.request && (String(info.requestNum || '').toUpperCase() === ceNum ||
+      (info.acceptedCeNum && String(info.acceptedCeNum).toUpperCase() === ceNum)));
     /* One sequence across companies: SY3-CE-2026-1131 may not exist beside
        SHIC-CE-2026-1131. Refused in bulk mode too -- that overwrites the same
        number, never another company's. */
@@ -2902,6 +2951,11 @@ function App({
     return hasInfo || hasRows;
   };
   const handleLoad = async e => {
+    /* A request nobody has accepted has no CE number to build the estimate
+       under -- its RCE No. is only the key it is filed by. */
+    { const _ri = ((e && e.data) || e || {}).info || {};
+      if (_ri.request && !_ri.acceptedCeNum && String(_ri.ceNum || '') === String(_ri.requestNum || '')) {
+        showToast('Accept this request first -- it gets its CE number when the Cost Estimation team accepts it. Use Accept beside its number.', true); return; } }
     if (hasUnsavedWork() && !confirm('Load this CE? Your current unsaved work will be replaced.\n\nTip: save a draft first (Ctrl+S or the Save Draft button) if you need to keep it.')) return;
     let d = e.data || e;
     // SP history items have numeric id but no tools — fetch full CE before applying
@@ -2912,7 +2966,7 @@ function App({
       }
       // Still no tools — try the local cache written by dbSaveHistory
       if (d.tools === undefined) {
-        try { const cached = LS.get('ce_cache:' + (d.info?.ceNum || d.ceNum)); if (cached) d = cached; } catch(_) {}
+        try { const cached = LS.get('ce_cache:' + (d.info?.ceNum || d.ceNum)); if (cached) d = cached; } catch(_){logSwallowed('App:L2914',_);}
       }
       /* Every source failed: SharePoint would not answer and this browser has
          never held the CE. Opening it anyway produced an empty estimate under
@@ -2929,7 +2983,7 @@ function App({
       try {
         const cached = LS.get('ce_cache:' + (d.info?.ceNum || d.ceNum));
         if (cached && cached.savedAt && d.savedAt && cached.savedAt > d.savedAt) d = cached;
-      } catch(_) {}
+      } catch(_){logSwallowed('App:L2931',_);}
     }
     /* A CE whose header says it cost money but has no line items behind it.
 
@@ -2937,7 +2991,14 @@ function App({
        fails in between leaves exactly this in SharePoint. It used to open as a
        blank estimate reporting P0.00 with a cheerful "Loaded" toast, which
        reads as "this CE is empty" rather than "this CE did not come back". */
-    const _rowCount = (d.mp || []).length + (d.tools || []).length + (d.mats || []).length + (d.ppe || []).length;
+    /* Every place a CE keeps cost, not just the four line-item tabs. A CE that is
+       only mobilisation, or only a third-party rental under Miscellaneous, has no
+       manpower, tools, materials or PPE rows and a perfectly good total -- and was
+       refused here as though its rows had never reached SharePoint. */
+    const _arr = v => Array.isArray(v) ? v.length : 0;
+    const _rowCount = _arr(d.mp) + _arr(d.tools) + _arr(d.mats) + _arr(d.ppe) +
+      _arr(d.mobVehicles) + _arr(d.demobVehicles) + _arr(d.addlCosts) +
+      Object.keys(d.misc && typeof d.misc === 'object' ? d.misc : {}).reduce((t, k) => t + _arr(d.misc[k]), 0);
     if (!_rowCount && N(d.grand) > 0) {
       showToast('⚠ ' + (d.info?.ceNum || d.ceNum || 'This CE') + ' has a stored total of ' +
         'P' + N(d.grand).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' but no line items in SharePoint — the header was written and the rows were not. ' +
@@ -2955,9 +3016,9 @@ function App({
        assignment would silently orphan on load. */
     const _R = ceIdRemapper(d.sowItems);
     const _sow = _R.sow;
-    const _mp=(d.mp||[]).map(_R.rt('mp'));setMp(_mp);try{window.shicCurrentMp=_mp;}catch(_e){}
-    const _tools=(d.tools||[]).map(_R.rt('tools'));setTools(_tools);try{window.shicCurrentTools=_tools;}catch(_e){}
-    const _mats=(d.mats||[]).map(_R.rt('mats'));setMats(_mats);try{window.shicCurrentMats=_mats;}catch(_e){}
+    const _mp=(d.mp||[]).map(_R.rt('mp'));setMp(_mp);try{window.shicCurrentMp=_mp;}catch(_e){logSwallowed('App:L2963',_e);}
+    const _tools=(d.tools||[]).map(_R.rt('tools'));setTools(_tools);try{window.shicCurrentTools=_tools;}catch(_e){logSwallowed('App:L2964',_e);}
+    const _mats=(d.mats||[]).map(_R.rt('mats'));setMats(_mats);try{window.shicCurrentMats=_mats;}catch(_e){logSwallowed('App:L2965',_e);}
     setPpe((d.ppe || []).map(_R.rt('ppe')));
     /* A drawn signature belongs to the CE it was drawn on. */
     setSignatures(d.signatures && typeof d.signatures === 'object' ? {...d.signatures} : {});
@@ -3015,7 +3076,7 @@ function App({
        from whatever was on screen before it -- so merely opening one wrote a
        draft of it. Every CE anybody opened ended up in Resume Work. What was
        just loaded is what is saved, so it is recorded as already written. */
-    setTimeout(() => { try { if (_live.current) _lastAutoSig.current = _live.current.sig; } catch (_e) {} }, 400);
+    setTimeout(() => { try { if (_live.current) _lastAutoSig.current = _live.current.sig; } catch(_e){logSwallowed('App:L3023',_e);} }, 400);
     showToast('Loaded: ' + (d.info?.ceNum || ''));
   };
   const handleClone = (e) => {
@@ -3050,7 +3111,7 @@ function App({
   useEffect(() => { if (saveReq) handleSave(); }, [saveReq]);
   useEffect(() => {
     if (tab !== 'summary') return;
-    dbGetUsers().then(u => setApvUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(() => {});
+    dbGetUsers().then(u => setApvUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(_e=>logSwallowed('App:L3058',_e));
   }, [tab]);
   /* Monitoring knows when a revision was superseded; the CE's own copy of the
      approval was written before that and still says pending. */
@@ -3111,7 +3172,7 @@ function App({
             const fixed = {...apv, figSig: apvFigSig(back), contentSig: apvContentSig(back)};
             if (await dbPatchCEInfo(dup.id, {...(back.info || {}), approval: fixed})) apv = fixed;
           }
-        } catch (_e) {}
+        } catch(_e){logSwallowed('App:L3119',_e);}
       }
       setSignatures(sigs); setInfo(p => ({...p, ceNum: num, approval: apv}));
       updateMon(dup.id, {
@@ -3249,7 +3310,7 @@ function App({
           }
           apv = merged; sigs = out.signatures;
         }
-      } catch (_e) {}
+      } catch(_e){logSwallowed('App:L3257',_e);}
       const res = await spWithRetry(() => dbSaveHistory({...out, grand: N(out.grand) || computeCEGrand(out)}));
       updateMon(ceId, {
         apv: apvMirror(out.approvers || full.approvers, apv),
@@ -3283,7 +3344,7 @@ function App({
         if (apvCanSign(full.approvers, a, currentUser.username)) setViewApvTurn(true);
         const fresh = apvMirror(full.approvers, a);
         if (JSON.stringify(fresh) !== JSON.stringify(((monData[id] || {}).apv) || null)) updateMon(id, { apv: fresh });
-      } catch (_e) {}
+      } catch(_e){logSwallowed('App:L3291',_e);}
     })();
     return () => { off = true; };
   }, [viewCE && viewCE.id, viewCE && viewCE.k, currentUser && currentUser.username]);
@@ -4202,7 +4263,7 @@ function App({
      the choice is remembered, because somebody maintaining tiers wants them up
      for the whole session and everybody else never wants them. */
   const [mlTierCols, setMlTierCols] = useState(() => { try { return !!LS.get('ml_tier_cols'); } catch (_e) { return false; } });
-  const toggleTierCols = () => setMlTierCols(v => { const n = !v; try { LS.set('ml_tier_cols', n); } catch (_e) {} return n; });
+  const toggleTierCols = () => setMlTierCols(v => { const n = !v; try { LS.set('ml_tier_cols', n); } catch(_e){logSwallowed('App:L4209',_e);} return n; });
   /* The tier calculator. Held here rather than inside MlEditor: state declared
      in a component that is itself declared in another component is thrown away
      on every render, which is what ate keystrokes in this very editor before. */
@@ -4593,7 +4654,7 @@ function App({
     const updML = (id, k, v) => {
       const next = { ...masterlist, [mlTab]: masterlist[mlTab].map(r => r.id === id ? { ...r, [k]: v } : r) };
       setMasterlist(next);
-      try { window.shicMasterlist = next; } catch (_e) {}
+      try { window.shicMasterlist = next; } catch(_e){logSwallowed('App:L4600',_e);}
       setSyncStatus(s => ({ ...s, dirty: true }));
       if (mlSaveTimer.current) clearTimeout(mlSaveTimer.current);
       mlSaveTimer.current = setTimeout(async () => {
@@ -4604,7 +4665,7 @@ function App({
            what "two decimals" means rather than a surprise. */
         const rounded = mlRound(next);
         setMasterlist(rounded);
-        try { window.shicMasterlist = rounded; } catch (_e) {}
+        try { window.shicMasterlist = rounded; } catch(_e){logSwallowed('App:L4611',_e);}
         try {
           const res = await dbSaveML(rounded);
           /* The debounced typing path writes straight to db.js, so it has to
@@ -4612,7 +4673,7 @@ function App({
           if (res && res.sp && res.merged && res.adopted && Object.keys(res.adopted).length) {
             const kept = mlRound(res.merged);
             setMasterlist(kept);
-            try { window.shicMasterlist = kept; } catch (_e) {}
+            try { window.shicMasterlist = kept; } catch(_e){logSwallowed('App:L4619',_e);}
             const n = Object.values(res.adopted).reduce((s, a) => s + a.length, 0);
             showToast(n + ' masterlist item' + (n === 1 ? '' : 's') + ' added by someone else ' +
               (n === 1 ? 'was' : 'were') + ' kept.');
@@ -5132,6 +5193,7 @@ function App({
      is saved -- so they are held here and sent the moment there is one. */
   const [reqFiles, setReqFiles] = React.useState([]);
   const [reqBusy, setReqBusy] = React.useState(false);
+  const [rceReview, setRceReview] = React.useState(null);
   const [reqUsers, setReqUsers] = React.useState([]);
   const [monMine, setMonMine] = React.useState(false);
   const [monApvMine, setMonApvMine] = React.useState(false);
@@ -5141,7 +5203,7 @@ function App({
     const m = monOf(e);
     const cur = m.ceeName || m.preparedBy || e.savedBy || '';
     setAssignPanel({ id: e.id, ceNum: e.info?.ceNum || e.ceNum || '', from: cur, to: cur });
-    dbGetUsers().then(u => setReqUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(() => {});
+    dbGetUsers().then(u => setReqUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(_e=>logSwallowed('App:L5146',_e));
   };
   const saveAssign = () => {
     const a = assignPanel || {};
@@ -5158,48 +5220,116 @@ function App({
   const openRequest = () => {
     setReqFiles([]);
     const today = new Date().toISOString().slice(0, 10);
-    setReqForm({ ceNum: nextCeNum(history, null, ceNums), ceType: 'onsite', client: '', description: '',
+    setReqForm({ ceType: 'onsite', client: '', description: '',
       projType: 'Mechanical', dateRecv: today, deadline: '', assignee: '', remarks: '', rceNo: '',
       /* The checklist starts blank on purpose. Seeding every item as Yes would
          make a complete-looking request out of one that nobody has read. */
       inquiryNo: '', inquiryDate: today, completionDate: '', workLocation: '', address: '',
       assignedSales: currentUser.name || currentUser.username || '', inquiryType: '', stage: 'New project',
       items: {}, recommendation: '', otherRemarks: '', declineReason: '' });
-    dbGetUsers().then(u => setReqUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(() => {});
+    dbGetUsers().then(u => setReqUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(_e=>logSwallowed('App:L5170',_e));
+  };
+  /* The Cost Estimation team accepts a request: only now does it get a CE
+     number. The request row keeps its place (same id, same attachments, same
+     Monitoring row) and is renamed from its RCE No. to the CE number. */
+  const acceptRequest = async (e, extra) => {
+    if (isRequestor) { showToast('Only the Cost Estimation team can accept a request.', true); return false; }
+    const i0 = e.info || {};
+    if (!i0.request || i0.acceptedCeNum || typeof e.id !== 'number') return false;
+    const rce = String(i0.requestNum || i0.ceNum || '').trim();
+    const NL = String.fromCharCode(10);
+    const ans = window.prompt('Accept request ' + rce + ' and give it its CE number:' + NL + NL +
+      'Change the prefix (SHIC, SY3) if it belongs to the other company.', nextCeNum(history, null, ceNums));
+    if (ans === null) return false;
+    const newNum = String(ans).trim().toUpperCase();
+    if (!/^[A-Z0-9\-_\/\.]{2,30}$/.test(newNum)) { showToast('CE Number must be 2–30 characters, letters/numbers/dashes only.', true); return false; }
+    const taken = (await dbFindCEByNum(newNum).catch(() => null)) || (await dbFindCESeqClash(newNum, ceNums).catch(() => null));
+    if (taken) { showToast('CE Number "' + newNum + '" is already taken. Next free: ' + nextCeNum(history, (newNum.split('-CE-')[0] || null), [...ceNums, newNum]), true); return false; }
+    const newInfo = { ...i0, ...(extra || {}), ceNum: newNum, requestNum: rce, rceNo: i0.rceNo || rce, acceptedCeNum: newNum,
+      acceptedBy: currentUser.name || currentUser.username || '', acceptedAt: new Date().toISOString() };
+    const res = await dbAcceptRequest(e.id, rce, newNum, newInfo);
+    if (!res || !res.ok) { showToast('Not accepted — ' + ((res && res.reason) || 'SharePoint refused it') + '.', true); return false; }
+    const re = h => String(h.id) === String(e.id) ? { ...h, ceNum: newNum, info: newInfo } : h;
+    setHistory(p => p.map(re));
+    try { LS.set('history', (LS.get('history') || []).map(re)); } catch (_e) { logSwallowed('App:acceptRequest', _e); }
+    setCeNums(p => p.indexOf(newNum) < 0 ? [...p, newNum] : p);
+    auditLog('accept_request', rce + ' -> ' + newNum, currentUser?.username);
+    showToast('Request ' + rce + ' accepted as ' + newNum + '. Load it to build the estimate.');
+    return true;
+  };
+  /* The Cost Estimation team's review of a request (mode 'review'), or the
+     requestor's update of one that came back (mode 'update'). Proceed is the
+     acceptance; Secure returns it; Decline closes it with the reason. */
+  const openReview = (e, mode) => {
+    setRceReview({ e, mode });
+    if (!reqUsers.length) dbGetUsers().then(u => setReqUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(_e => logSwallowed('App:openReview', _e));
+  };
+  const saveReview = async p => {
+    const e = rceReview && rceReview.e, mode = rceReview && rceReview.mode;
+    if (!e || typeof e.id !== 'number') return;
+    if (mode === 'review' && isRequestor) { showToast('Only the Cost Estimation team can review a request.', true); return; }
+    if (mode === 'update' && !reqOwns(e.id, monData[e.id])) { showToast('You can only update a request you raised.', true); return; }
+    const i0 = e.info || {}, who = currentUser.name || currentUser.username || '', now = new Date().toISOString();
+    const rce = { ...(i0.rce || {}), items: p.items, otherRemarks: p.otherRemarks, recommendation: p.recommendation, declineReason: p.declineReason };
+    const label = String(i0.requestNum || i0.ceNum || '');
+    const curEst = String((monData[e.id] || {}).ceeName || '').trim(), newEst = String(p.assignee || '').trim();
+    setReqBusy(true);
+    try {
+      if (mode === 'review' && newEst && newEst !== curEst) { updateMon(e.id, 'ceeName', newEst); auditLog('assign_request', label + ' -> ' + newEst, currentUser?.username); }
+      if (mode === 'review' && p.recommendation === 'proceed') {
+        const ok = await acceptRequest(e, { rce, reviewStatus: 'accepted', reviewedBy: who, reviewedAt: now, reviewNote: p.note });
+        if (ok) { auditLog('review_request', label + ' proceed', currentUser?.username); setRceReview(null); }
+        return;
+      }
+      const st = mode === 'update' ? 'resubmitted' : p.recommendation === 'decline' ? 'declined' : 'returned';
+      const newInfo = { ...i0, rce, reviewStatus: st,
+        reviewNote: mode === 'update' ? '' : (p.recommendation === 'decline' ? p.declineReason : p.note),
+        ...(mode === 'update' ? { resubmittedBy: who, resubmittedAt: now, resubmitNote: p.note } : { reviewedBy: who, reviewedAt: now }) };
+      const okp = await dbPatchCEInfo(e.id, newInfo);
+      if (!okp) { showToast('Not saved — SharePoint refused it.', true); return; }
+      const re = h => String(h.id) === String(e.id) ? { ...h, info: newInfo } : h;
+      setHistory(q => q.map(re));
+      try { LS.set('history', (LS.get('history') || []).map(re)); } catch (_e) { logSwallowed('App:saveReview', _e); }
+      /* A declined request is closed, so it must not count as open work; reopening it puts it back to Draft. */
+      if (st === 'declined') updateMon(e.id, 'status', 'No Quote');
+      else if (mode === 'review' && ((monData[e.id] || {}).status === 'No Quote')) updateMon(e.id, 'status', 'Draft');
+      auditLog('review_request', label + ' ' + st, currentUser?.username);
+      setRceReview(null);
+      showToast(mode === 'update' ? 'Sent back to Cost Estimation.' : st === 'declined' ? 'Request ' + label + ' declined.' : 'Request ' + label + ' returned to the requestor.');
+    } finally { setReqBusy(false); }
   };
   const submitRequest = async () => {
     const f = reqForm || {};
-    const ceNum = String(f.ceNum || '').trim().toUpperCase();
-    if (!/^[A-Z0-9\-_\/\.]{2,30}$/.test(ceNum)) { showToast('CE Number must be 2–30 characters, letters/numbers/dashes only.', true); return; }
-    if (!String(f.client || '').trim()) { showToast('Customer is required.', true); return; }
-    if (!String(f.assignee || '').trim()) { showToast('Assign the request to an estimator.', true); return; }
-    /* The checklist is the form. A request logged with items unanswered says
-       nothing about whether it can be costed, which is the one question it
-       exists to answer -- so the first unanswered item is named and the
-       request waits. Answering No is not blocked: that is what 14.2 is for. */
-    const _miss = rceUnanswered(f);
-    if (_miss.length) {
-      showToast('Item ' + _miss[0].n + ', ' + _miss[0].t + ', has no answer. ' +
-        (_miss.length > 1 ? _miss.length + ' items are unanswered. ' : '') +
-        'Mark each one Yes, No or N/A -- No is how you record what did not arrive.', true);
+    /* A request is known by its RCE No. It has no CE number yet: that is given
+       when the Cost Estimation team accepts it (acceptRequest). Until then the
+       RCE No. is the key the request is filed under. */
+    const ceNum = String(f.rceNo || '').trim().toUpperCase();
+    /* Every problem is gathered and shown together, so the requestor fixes the
+       form in one pass instead of learning of one missing field per click. */
+    const _errs = {}, _todo = [];
+    if (!ceNum) { _errs.rceNo = 1; _todo.push('RCE No.'); }
+    else if (!/^[A-Z0-9\-_\/\.]{2,30}$/.test(ceNum)) { _errs.rceNo = 1; _todo.push('RCE No. (2-30 characters, letters/numbers/dashes only)'); }
+    if (!String(f.client || '').trim()) { _errs.client = 1; _todo.push('Customer'); }
+    /* Assigning is optional here: a reviewer of the Cost Estimation team assigns an estimator when they review the request. */
+    /* The checklist and item 14 are the estimators' review, done after the request is logged; they are not required to log it. */
+    if (_todo.length) {
+      setReqForm(p => ({ ...p, _errs }));
+      showToast('Still needed: ' + _todo.join('; ') + '.', true);
       return;
-    }
-    if (!f.recommendation) { showToast('Item 14: choose what you recommend -- proceed, secure the missing reference data first, or decline.', true); return; }
-    if (f.recommendation === 'decline' && !String(f.declineReason || '').trim()) {
-      showToast('A declined request needs its reason: it is the record of why SHIC did not quote.', true); return;
     }
     setReqBusy(true);
     try {
-      const dup = (await dbFindCEByNum(ceNum).catch(() => null)) || (await dbFindCESeqClash(ceNum, ceNums).catch(() => null));
+      const dup = (await dbFindCEByNum(ceNum).catch(() => null)) ||
+        Object.values(monData || {}).some(m => String((m && m.rceNo) || '').trim().toUpperCase() === ceNum);
       if (dup) {
-        showToast('CE Number "' + ceNum + '" is already taken. Next free: ' + nextCeNum(history, (ceNum.split('-CE-')[0] || null), [...ceNums, ceNum]), true);
+        showToast('RCE No. "' + ceNum + '" is already on a request or a CE. Each RCE No. is logged once.', true);
         setReqBusy(false); return;
       }
       const entry = {
         ceType: f.ceType || 'onsite',
         info: { ...BLANK_INFO, ceNum, date: f.dateRecv || BLANK_INFO.date, client: f.client.trim(),
           description: String(f.description || '').trim(), projType: f.projType || BLANK_INFO.projType,
-          status: 'DRAFT', request: true, requestNum: ceNum,
+          status: 'DRAFT', request: true, requestNum: ceNum, rceNo: ceNum,
           /* info is stored whole as one JSON column, so the checklist rides
              along with it and needs no new SharePoint column of its own. */
           rce: { inquiryNo: String(f.inquiryNo || '').trim(), inquiryDate: f.inquiryDate || '',
@@ -5220,7 +5350,7 @@ function App({
         showToast('Request NOT logged — SharePoint did not accept it' + (saved && saved.reason ? ': ' + String(saved.reason).slice(0, 80) : '') + '.', true);
         setReqBusy(false); return;
       }
-      const fields = { status: 'Pending', ceeName: f.assignee.trim(), customer: f.client.trim(),
+      const fields = { status: 'Pending', ceeName: String(f.assignee || '').trim() || 'Unassigned', customer: f.client.trim(),
         jobTitle: String(f.description || '').trim(), designation: f.projType || '', dateRecv: f.dateRecv || '',
         deadline: f.deadline || '', receivedBy: currentUser.name || currentUser.username || '',
         /* The recommendation belongs where the estimator looks first. Left
@@ -5229,16 +5359,15 @@ function App({
         remarks: [(RCE_RECOMMENDATIONS.find(r => r.v === f.recommendation) || {}).t,
           f.recommendation === 'decline' ? String(f.declineReason || '').trim() : '',
           String(f.remarks || '').trim()].filter(Boolean).join(' — '),
-        rceNo: String(f.rceNo || '').trim() };
+        rceNo: ceNum };
       const mres = await dbSaveMonEntry(saved.id, ceNum, fields, Object.keys(fields));
       setMonData(p => ({ ...p, [saved.id]: (mres && mres.fields) || fields }));
-      setCeNums(p => p.indexOf(ceNum) < 0 ? [...p, ceNum] : p);
       auditLog('log_request', ceNum + ' -> ' + fields.ceeName, currentUser?.username);
       await loadHist();
       setReqForm(null);
       const _docs = reqFiles.slice();
       setReqFiles([]);
-      showToast('Request ' + ceNum + ' logged and assigned to ' + fields.ceeName +
+      showToast('Request RCE ' + ceNum + (fields.ceeName === 'Unassigned' ? ' logged. A reviewer will assign an estimator' : ' logged and assigned to ' + fields.ceeName) +
         (_docs.length ? '. Sending ' + _docs.length + ' document(s)...' : '. Attach the documents that came with it.'));
       openAttachPanel(saved.id);
       /* The request is logged either way. An upload that fails says so and
@@ -5341,11 +5470,11 @@ function App({
      once for each new set of such CEs. */
   const _assignedKey = React.useRef('');
   React.useEffect(() => {
-    if (isAdmin) return;
+    if (canSeeAll) return;
     const have = new Set(history.map(h => String(h.id)));
     const missing = Object.keys(monData || {}).filter(id => !have.has(String(id)) && mineToSee(id)).sort().join(',');
     if (missing && missing !== _assignedKey.current) { _assignedKey.current = missing; loadHist(); }
-  }, [monData, history, isAdmin]);
+  }, [monData, history, canSeeAll]);
   /* A draft is work in progress. Once the CE has been saved the work is in
      history and the draft is finished with -- but it was only ever retired by
      the person who saved it, in the session that saved it, so drafts of CEs
@@ -5493,7 +5622,7 @@ function App({
   /* And on the window title, so it shows while the app is in another window. */
   useEffect(() => {
     const base = 'SHIC Cost Estimator';
-    try { document.title = myTodo.total ? '(' + myTodo.total + ') ' + base : base; } catch (_e) {}
+    try { document.title = myTodo.total ? '(' + myTodo.total + ') ' + base : base; } catch(_e){logSwallowed('App:L5498',_e);}
   }, [myTodo.total]);
   /* Both fields have a monitoring value that falls back to the CE's own. Read
      the same way by the filter, the sort and the cell, or a row could be
@@ -5539,6 +5668,25 @@ function App({
     return Object.values(seen).sort((a, b) => b.n - a.n || a.label.localeCompare(b.label));
   }, [monRows, monData]);
   const discOptions = useMonFacet(monDisc);
+  /* CEs saved before the Discipline field existed carry none, and the column
+     reads blank. Admins can give every blank CE in the current view one:
+     only blanks are written, so a CE that already has a discipline is never
+     overwritten, and the view's own filters pick which ones. */
+  const fillBlankDisc = () => {
+    if (!isAdmin) return;
+    const blanks = sortedHistory.filter(e => !e._draft && typeof e.id === 'number' && !String(monDisc(e, monOf(e)) || '').trim());
+    if (!blanks.length) { showToast('Every CE in this view already has a discipline.'); return; }
+    const NL = String.fromCharCode(10);
+    const ans = window.prompt(blanks.length + ' CE(s) in this view have no discipline.' + NL + NL +
+      'Type the discipline to give them (' + CE_DISCIPLINES.join(', ') + '):');
+    if (ans === null) return;
+    const pick = CE_DISCIPLINES.find(d => d.toUpperCase() === String(ans).trim().toUpperCase());
+    if (!pick) { showToast('"' + ans + '" is not one of: ' + CE_DISCIPLINES.join(', ') + '.', true); return; }
+    if (!window.confirm('Set ' + pick + ' on ' + blanks.length + ' CE(s)? Ones that already have a discipline are not touched.')) return;
+    blanks.forEach(e => updateMon(e.id, 'designation', pick));
+    auditLog('bulk_discipline', pick + ' x' + blanks.length, currentUser?.username);
+    showToast(pick + ' set on ' + blanks.length + ' CE(s).');
+  };
   const custOptions = useMonFacet(monCust);
 
   const sortedHistory = useMemo(() => {
@@ -6109,7 +6257,7 @@ function App({
         const chunk = toInsert.slice(i, i + BATCH);
         const results = await Promise.all(chunk.map(e =>
           spWithRetry(() => dbSaveHistory(e)).catch(err => ({sp: false, reason: err.message}))));
-        /* .catch(()=>{}) meant a batch where every CE failed counted as a
+        /* .catch(_e=>logSwallowed('App:L6132',_e)) meant a batch where every CE failed counted as a
            batch where every CE succeeded. */
         results.forEach((r, j) => { if (r && r.sp === false) importFails.push((chunk[j].info?.ceNum || '?') + ': ' + String(r.reason || 'unknown').slice(0, 80)); });
         imported += chunk.length;
@@ -6126,7 +6274,7 @@ function App({
       }
       setMonData(merged);
       try { localStorage.setItem(MON_KEY, JSON.stringify(merged)); } catch {}
-      await dbSaveMonAll(merged, fresh).catch(()=>{});
+      await dbSaveMonAll(merged, fresh).catch(_e=>logSwallowed('App:L6149',_e));
       setHistory(fresh);
       setImportProgress(null);
       const ok = imported - importFails.length;
@@ -6252,6 +6400,11 @@ function App({
     /*#__PURE__*/React.createElement("option", {value:'shopworks'}, "Shopworks"),
     /*#__PURE__*/React.createElement("option", {value:'supply'}, "Supply")
   ),
+  isAdmin && discOptions.some(o => !o.label) && /*#__PURE__*/React.createElement("button", {
+    style: {...btn('def', true), fontSize: 10},
+    onClick: fillBlankDisc,
+    title: "Give a discipline to every CE in this view that has none. Ones that already have one are left alone."
+  }, "Set blank disciplines"),
   /*#__PURE__*/React.createElement("select", {
     style: {...INP, fontSize:11, width:150},
     value: monDiscFilter,
@@ -6633,9 +6786,23 @@ function App({
       style: {marginLeft: 5, fontSize: 8, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 8, background: '#8B5CF622', color: 'var(--accent-violet)', border: '1px solid #8B5CF644'}
     }, 'UNSAVED'),
     e.info?.request && !e._draft && /*#__PURE__*/React.createElement("span", {
-      title: 'Logged request, not costed yet — Load it to build the estimate, then Save under the same number',
+      title: e.info.acceptedCeNum ? 'Accepted as ' + e.info.acceptedCeNum + ', not costed yet — Load it to build the estimate' : 'Logged request, not accepted yet — it is known by its RCE No. until the Cost Estimation team accepts it',
       style: {marginLeft: 5, fontSize: 8, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 8, background: alpha(OK, '22'), color: OK, border: '1px solid ' + alpha(OK, '44')}
     }, 'REQUEST'),
+    e.info?.request && e.info.reviewStatus && e.info.reviewStatus !== 'accepted' && !e._draft && /*#__PURE__*/React.createElement("span", {
+      title: e.info.reviewNote || '',
+      style: {marginLeft: 5, fontSize: 8, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 8, color: e.info.reviewStatus === 'declined' ? ERR : e.info.reviewStatus === 'returned' ? ACC : INFO, border: '1px solid currentColor'}
+    }, String(e.info.reviewStatus).toUpperCase()),
+    !isRequestor && e.info?.request && !e.info.acceptedCeNum && !e._draft && typeof e.id === 'number' && /*#__PURE__*/React.createElement("button", {
+      style: {...btn('ok', true), marginLeft: 5, fontSize: 9, padding: '1px 7px'},
+      title: 'Review the checklist and decide: proceed, secure the missing data first, or decline',
+      onClick: () => openReview(e, 'review')
+    }, 'Review'),
+    isRequestor && e.info?.request && !e.info.acceptedCeNum && e.info.reviewStatus !== 'declined' && reqOwns(e.id) && !e._draft && typeof e.id === 'number' && /*#__PURE__*/React.createElement("button", {
+      style: {...btn('info', true), marginLeft: 5, fontSize: 9, padding: '1px 7px'},
+      title: 'Add or correct what the Cost Estimation team asked for',
+      onClick: () => setRceReview({e, mode: 'update'})
+    }, 'Update'),
     /* Superseded revisions are folded into the row that supersedes them. The
        chip says how many, so a CE with history is visible as such without
        having to take three rows to say it. */
@@ -6877,22 +7044,22 @@ function App({
       /* Status changes constantly and everything else in the row does not, so
          it gets its own action rather than sharing Edit with the reference
          fields. It opens a panel: pick the new status, and read the trail. */
-      disabled: !!e._draft,
+      disabled: !!e._draft || (isRequestor && !reqOwns(e.id)),
       style: {gridRow: 1, gridColumn: 1, ...btn(statusPanel === e.id ? 'acc' : 'def', true), fontSize: 10, padding: '2px 8px', opacity: e._draft ? .4 : 1, cursor: e._draft ? 'not-allowed' : 'pointer'},
       title: e._draft ? 'A draft is always Draft — save the CE to start tracking it' : 'Update status and view its history',
       onClick: () => { if (!e._draft) setStatusPanel(statusPanel === e.id ? null : e.id); }
     }, '⚑ Status'), /*#__PURE__*/React.createElement("button", {
-      disabled: !!e._draft,
+      disabled: !!e._draft || (isRequestor && !reqOwns(e.id)),
       style: {gridRow: 1, gridColumn: 2, ...btn('def', true), fontSize: 10, padding: '2px 8px', opacity: e._draft ? .4 : 1, cursor: e._draft ? 'not-allowed' : 'pointer'},
       title: e._draft ? 'Save the CE to start its remarks' : 'Add a remark and read every earlier one',
       onClick: () => { if (!e._draft) { setRemarkDraft(''); setRemarksPanel({ id: e.id, ceNum: e.info?.ceNum || e.ceNum || '' }); } }
     }, '💬 Remarks' + (((monData[e.id] || {}).remarksLog || []).length > 1 ? ' (' + monData[e.id].remarksLog.length + ')' : '')), /*#__PURE__*/React.createElement("button", {
-      disabled: !!e._draft,
+      disabled: !!e._draft || (isRequestor && !reqOwns(e.id)),
       style: {gridRow: 1, gridColumn: 3, ...btn(assignPanel && assignPanel.id === e.id ? 'acc' : 'def', true), fontSize: 10, padding: '2px 8px', opacity: e._draft ? .4 : 1, cursor: e._draft ? 'not-allowed' : 'pointer'},
       title: e._draft ? 'Save the CE first — a draft has no monitoring record to assign' : 'Reassign this CE to another estimator',
       onClick: () => { if (!e._draft) openAssign(e); }
     }, '👤 Assign'), /*#__PURE__*/React.createElement("button", {
-      disabled: !!e._draft,
+      disabled: !!e._draft || (isRequestor && !reqOwns(e.id)),
       style: {gridRow: 2, gridColumn: 3, ...btn(editingRow === e.id ? 'ok' : 'def', true), fontSize: 10, padding: '2px 8px', opacity: e._draft ? .4 : 1, cursor: e._draft ? 'not-allowed' : 'pointer'},
       title: e._draft ? 'Save the CE first — a draft has no monitoring record to hold a deadline' : 'Edit monitoring fields',
       onClick: () => { if (!e._draft) setEditingRow(editingRow === e.id ? null : e.id); }
@@ -7018,7 +7185,7 @@ function App({
           const cached = LS.get('ce_cache:' + ceNum);
           if (cached && cached.tools !== undefined) return cached;
           if (typeof id === 'number' && (USE_SP || getSiteURL())) {
-            try { const full = await dbLoadCE(id); if (full) return full; } catch {}
+            try { const full = await dbLoadCE(id); if (full) return full; } catch(_e){logSwallowed('App:L7046',_e);}
           }
           return e;
         };
@@ -8583,10 +8750,17 @@ function App({
        read: an approver looks for which box is marked. The boxes are
        CE_DISCIPLINES itself, so a discipline added there gets a box here and
        cannot go missing from the paper. */
-    const tickRow = (opts, chosen) => opts.map(o =>
-      `<span style="white-space:nowrap;margin-right:14px">${
-        String(chosen || '').toLowerCase() === String(o.k).toLowerCase() ? '&#9745;' : '&#9744;'
-      }&nbsp;<b>${esc(String(o.t).toUpperCase())}</b></span>`).join('');
+    /* The chosen option has to be unmistakable at a glance on a printed sheet:
+       a ticked box that looks like the empty ones, beside labels that are all
+       bold, left an approver reading every word to find which was meant. The
+       choice is a filled black label with a cross; the others are plain grey.
+       print-color-adjust keeps the fill when the browser would drop backgrounds. */
+    const tickRow = (opts, chosen) => opts.map(o => {
+      const on = String(chosen || '').toLowerCase() === String(o.k).toLowerCase();
+      return on
+        ? `<span style="white-space:nowrap;margin-right:14px;background:#000;color:#fff;padding:1px 7px;border-radius:2px;-webkit-print-color-adjust:exact;print-color-adjust:exact">&#9746;&nbsp;<b>${esc(String(o.t).toUpperCase())}</b></span>`
+        : `<span style="white-space:nowrap;margin-right:14px;color:#777">&#9744;&nbsp;${esc(String(o.t).toUpperCase())}</span>`;
+    }).join('');
     const typeBoxes = tickRow(CE_DISCIPLINES.map(d => ({ k: d, t: d })), info.projType);
     /* Whether the work is done in our shop or away on the client's site is
        the other thing an approver checks first: it decides mobilization, the
@@ -9570,7 +9744,10 @@ function App({
       border: `1px solid ${toastErr ? ERR : BDR}`,
       borderRadius: 8,
       padding: '9px 18px',
-      zIndex: 999,
+      /* Above every modal (they sit at 3000-9999). At 999 a message raised while a
+         form was open -- "Assign the request to an estimator" -- was drawn behind
+         it, and the form seemed to ignore the button. */
+      zIndex: 10000,
       color: TX,
       fontSize: 13,
       boxShadow: '0 4px 24px #0009',
@@ -9580,7 +9757,7 @@ function App({
     style: {
       position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
       background: CARD, border: `1px solid ${BDR}`, borderRadius: 8,
-      padding: '10px 18px', zIndex: 1000, color: TX, fontSize: 13,
+      padding: '10px 18px', zIndex: 10000, color: TX, fontSize: 13,
       boxShadow: '0 4px 24px #0009', display: 'flex', alignItems: 'center', gap: 12
     }
   }, undoToast.msg, /*#__PURE__*/React.createElement("button", {
@@ -10188,6 +10365,12 @@ function App({
 
 /* ── SOW Breakdown: assign resources per scope task ── */
 tab === 'sowbreak' && (() => {
+  /* Every open task card draws all of its resource rows. On a CE with several
+     hundred that is thousands of inputs, and it is what made this tab -- and
+     every click while it was open -- slow. Past 150 resources the cards start
+     closed; a card the user has opened or closed keeps what they chose. */
+  const _sbBig = ((mp || []).length + (tools || []).length + (mats || []).length + (ppe || []).length) > 150;
+  const _sbOpen = id => sbCollapsed[id] === undefined ? !_sbBig : !sbCollapsed[id];
   const UOMS = UOM_OPTIONS;
   const named = t => t.rows.filter(r => r[t.nameKey]);
   const _miscNamed = miscFlat().filter(r => r.desc);
@@ -10237,6 +10420,15 @@ tab === 'sowbreak' && (() => {
     }, c[0]))));
 
   /* One resource group (Manpower / Tools / Consumables / PPE) inside a task card. */
+  const SB_PAGE = 100;
+  /* A task holding hundreds of rows draws the first page and says how many it
+     is holding back; drawing them all is what made the tab unusable. */
+  const _moreRow = (n, lim, k) => n > lim ? /*#__PURE__*/React.createElement("tr", { key: '_more' },
+    /*#__PURE__*/React.createElement("td", { colSpan: 8, style: { ...TDS, paddingLeft: 128, color: MT, fontSize: 10.5 } },
+      'Showing ' + lim + ' of ' + n + '.  ',
+      /*#__PURE__*/React.createElement("button", { style: { ...btn('def', true), fontSize: 10 }, onClick: () => setSbShow(p => ({ ...p, [k]: lim + SB_PAGE })) }, 'Show ' + Math.min(SB_PAGE, n - lim) + ' more'),
+      ' ',
+      /*#__PURE__*/React.createElement("button", { style: { ...btn('def', true), fontSize: 10 }, onClick: () => setSbShow(p => ({ ...p, [k]: n })) }, 'Show all'))) : null;
   const group = (t, taskId) => {
     /* A consolidated row serves several tasks, so it is listed under each of
        them -- carrying the slice of its cost that this task asked for. */
@@ -10244,6 +10436,7 @@ tab === 'sowbreak' && (() => {
     if (!rows.length) return null;
     const isMp = t.key === 'mp';
     const hasDays = isMp || t.key === 'tools'; /* tools are charged qty x days x cost */
+    const _lim = sbShow[taskId + '|' + t.key] || SB_PAGE;
     return /*#__PURE__*/React.createElement("div", { key: t.key, style: { marginBottom: 6 } },
       /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 } },
         /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, fontWeight: 700, color: MT, textTransform: 'uppercase', letterSpacing: '.06em', minWidth: 128 } }, t.label),
@@ -10252,11 +10445,11 @@ tab === 'sowbreak' && (() => {
         /*#__PURE__*/React.createElement("span", { style: { ...MONO, marginLeft: 'auto', fontSize: 10, color: MT }, title: t.label + " subtotal for this task" },
           "₱" + ph(rows.reduce((a, r) => a + rowCostForTask(t.key, r, taskId), 0)))
       ),
-      /*#__PURE__*/React.createElement("datalist", { id: 'sb_ml_' + t.ml },
+      sbDlOn && /*#__PURE__*/React.createElement("datalist", { id: 'sb_ml_' + t.ml },
         ((masterlist && masterlist[t.ml]) || []).map(x => /*#__PURE__*/React.createElement("option", { key: x.id, value: x[t.nameKey] || x.desc || x.role || '' }))),
-      /*#__PURE__*/React.createElement("table", { style: { width: '100%', borderCollapse: 'collapse', fontSize: 11, marginBottom: 2 } },
+      /*#__PURE__*/React.createElement("table", { onFocusCapture: sbDlOn ? undefined : (() => setSbDlOn(true)), style: { width: '100%', borderCollapse: 'collapse', fontSize: 11, marginBottom: 2 } },
         hdr([['Item description'], [isMp ? 'Pax' : 'Qty', 58], ...(hasDays ? [['Days', 56]] : []), ...(isMp ? [] : [['UOM', 66]]), [isMp ? 'Rate' : 'Unit cost', 92], ['Cost', 92], ['', 56]]),
-        /*#__PURE__*/React.createElement("tbody", null, rows.map(r =>
+        /*#__PURE__*/React.createElement("tbody", null, rows.slice(0, _lim).map(r =>
           /*#__PURE__*/React.createElement("tr", { key: r.id },
             /*#__PURE__*/React.createElement("td", { style: { ...TDS, paddingLeft: 128 } },
               /*#__PURE__*/React.createElement("input", {
@@ -10315,7 +10508,7 @@ tab === 'sowbreak' && (() => {
               }, "×")
             )
           )
-        ))
+        ), _moreRow(rows.length, _lim, taskId + '|' + t.key))
       )
     );
   };
@@ -10337,9 +10530,9 @@ tab === 'sowbreak' && (() => {
         /*#__PURE__*/React.createElement("span", { style: { ...MONO, marginLeft: 'auto', fontSize: 10, color: MT }, title: "Miscellaneous subtotal for this task" },
           "₱" + ph(rows.reduce((a, r) => a + rowCost('misc', r), 0)))
       ),
-      /*#__PURE__*/React.createElement("datalist", { id: 'sb_ml_misc' },
+      sbDlOn && /*#__PURE__*/React.createElement("datalist", { id: 'sb_ml_misc' },
         ((masterlist && masterlist.vehicles) || []).map(x => /*#__PURE__*/React.createElement("option", { key: x.id, value: x.desc || '' }))),
-      /*#__PURE__*/React.createElement("table", { style: { width: '100%', borderCollapse: 'collapse', fontSize: 11, marginBottom: 2 } },
+      /*#__PURE__*/React.createElement("table", { onFocusCapture: sbDlOn ? undefined : (() => setSbDlOn(true)), style: { width: '100%', borderCollapse: 'collapse', fontSize: 11, marginBottom: 2 } },
         hdr([['Item description'], ['Qty', 58], ['UOM', 66], ['Unit cost', 92], ['Cost', 92], ['', 56]]),
         /*#__PURE__*/React.createElement("tbody", null, rows.map(r =>
           /*#__PURE__*/React.createElement("tr", { key: r.id },
@@ -10470,12 +10663,12 @@ tab === 'sowbreak' && (() => {
         (sowItems || []).length > 1 && /*#__PURE__*/React.createElement("button", {
           style: { ...btn('def', true), fontSize: 10 },
           onClick: () => {
-            const allOpen = (sowItems || []).every(it => !sbCollapsed[it.id]);
+            const allOpen = (sowItems || []).every(it => _sbOpen(it.id));
             const n = {};
-            if (allOpen) (sowItems || []).forEach(it => { n[it.id] = true; });
+            (sowItems || []).forEach(it => { n[it.id] = allOpen; });
             setSbCollapsed(n);
           }
-        }, (sowItems || []).every(it => !sbCollapsed[it.id]) ? "Collapse all" : "Expand all"),
+        }, (sowItems || []).every(it => _sbOpen(it.id)) ? "Collapse all" : "Expand all"),
         /*#__PURE__*/React.createElement("div", { style: { textAlign: 'right' } },
           /*#__PURE__*/React.createElement("div", { style: { ...MONO, fontSize: 15, fontWeight: 700, color: assignedNamed === totalNamed && totalNamed > 0 ? OK : ACC } }, assignedNamed + " / " + totalNamed),
           /*#__PURE__*/React.createElement("div", { style: { color: MT, fontSize: 10 } }, "resources assigned")
@@ -10501,7 +10694,7 @@ tab === 'sowbreak' && (() => {
       const hasSubs = grp.length > 1;
       const rollN = hasSubs ? taskResCountRollup(it) : n;
       const rollCost = hasSubs ? taskCostRollup(it) : cost;
-      const open = !sbCollapsed[it.id];
+      const open = _sbOpen(it.id);
       const others = (sowItems || []).filter(o => o.id !== it.id && taskResCount(o.id) > 0);
       return /*#__PURE__*/React.createElement("div", {
         key: it.id,
@@ -10830,13 +11023,20 @@ statusPanel && (() => {
   ));
 })(),
 
+/* ── Request review / update ── */
+rceReview && /*#__PURE__*/React.createElement(RceReviewModal, {
+  key: rceReview.e.id + rceReview.mode, mode: rceReview.mode, rce: (rceReview.e.info || {}).rce || {}, busy: reqBusy,
+  title: (rceReview.mode === 'review' ? 'Review request ' : 'Update request ') + (rceReview.e.info?.requestNum || rceReview.e.ceNum),
+  users: reqUsers, assignee: String((monData[rceReview.e.id] || {}).ceeName || '').replace(/^Unassigned$/, ''), onClose: () => setRceReview(null), onDone: saveReview
+}),
+
 /* ── New Request Modal ── */
 reqForm && (() => {
   const set = (k, v) => setReqForm(p => ({...p, [k]: v}));
   /* One item's answer, or its remark, without disturbing the other twelve. */
   const setItem = (n, patch) => setReqForm(p => ({...p, items: {...(p.items || {}), [n]: {...((p.items || {})[n] || {}), ...patch}}}));
   const L = (label, el) => /*#__PURE__*/React.createElement("label", {style:{display:'flex',flexDirection:'column',gap:3,fontSize:11,color:MT}}, label, el);
-  const inp = (k, extra) => /*#__PURE__*/React.createElement("input", {style:INP, value:reqForm[k] || '', onChange:e=>set(k, e.target.value), ...(extra || {})});
+  const inp = (k, extra) => /*#__PURE__*/React.createElement("input", {style:(reqForm._errs && reqForm._errs[k] && !reqForm[k]) ? {...INP, border:'1px solid #ef4444'} : INP, value:reqForm[k] || '', onChange:e=>set(k, e.target.value), ...(extra || {})});
   const sect = (title, note) => /*#__PURE__*/React.createElement("div", {style:{marginTop:16,marginBottom:8,borderTop:'1px solid '+BDR,paddingTop:10}},
     /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:11,letterSpacing:'.5px',color:TX}}, title),
     note && /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:10,marginTop:2}}, note));
@@ -10852,13 +11052,12 @@ reqForm && (() => {
     /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:14,marginBottom:2}}, "Request for Costing (RCE) Checklist"),
     /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:10,marginBottom:10,...MONO}}, "SHIC-F-SMD-002 Rev 01"),
     /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:11,marginBottom:12}},
-      "Logs the request in CE Monitoring, assigns it, and sends whatever came with it. The estimator Loads it, builds the estimate, and Saves under the same number."),
+      "Logs the request in CE Monitoring, assigns it, and sends whatever came with it. A request is known by its RCE No.; it gets a CE number only when the Cost Estimation team accepts it, and the estimator then builds the estimate under that number."),
 
     sect("THE INQUIRY"),
     grid(
-      L("CE Number *", inp('ceNum', {style:{...INP,...MONO}})),
+      L("RCE No. *", inp('rceNo', {placeholder:'From Sales', style:{...INP,...MONO}})),
       L("Inquiry number", inp('inquiryNo', {placeholder:'e.g. HSAB - RFQ 130000516', style:{...INP,...MONO}})),
-      L("RCE No.", inp('rceNo', {placeholder:'From Sales', style:{...INP,...MONO}})),
       L("Inquiry date", inp('inquiryDate', {type:'date'})),
       L("Submission deadline", inp('deadline', {type:'date'})),
       L("Completion date", inp('completionDate', {type:'date'})),
@@ -10874,8 +11073,8 @@ reqForm && (() => {
     /*#__PURE__*/React.createElement("div", {style:{marginTop:10}}, L("Address", inp('address', {placeholder:'Site or office address as the inquiry gives it'}))),
     /*#__PURE__*/React.createElement("div", {style:{marginTop:10}}, L("Project title", /*#__PURE__*/React.createElement("textarea", {style:{...INP,height:46,resize:'vertical'}, value:reqForm.description, placeholder:'What the client is asking for', onChange:e=>set('description', e.target.value)}))),
     /*#__PURE__*/React.createElement("div", {style:{marginTop:10}}, grid(
-      L("Assigned to *", /*#__PURE__*/React.createElement(React.Fragment, null,
-        inp('assignee', {list:'req-users', placeholder:'Estimator'}),
+      L("Assigned to (optional)", /*#__PURE__*/React.createElement(React.Fragment, null,
+        inp('assignee', {list:'req-users', placeholder:'Leave blank: a reviewer will assign one'}),
         /*#__PURE__*/React.createElement("datalist", {id:'req-users'}, reqUsers.map(u => /*#__PURE__*/React.createElement("option", {key:u.username, value:u.name || u.username}))))),
       L("Inquiry type", /*#__PURE__*/React.createElement("select", {style:INP, value:reqForm.inquiryType || '', onChange:e=>set('inquiryType', e.target.value)},
         /*#__PURE__*/React.createElement("option", {value:''}, '--'),
@@ -10888,6 +11087,7 @@ reqForm && (() => {
         RCE_STAGES.map(k => /*#__PURE__*/React.createElement("option", {key:k, value:k}, k))))
     )),
 
+    /* Prefill only: a requestor who already has this information can enter it, and the Cost Estimation team reviews and decides item 14 afterwards. */
     sect("COMPLETE?", "Every item is answered. No is not a refusal -- it is the record of what did not arrive, and item 14.2 is the recommendation that follows from it."),
     /*#__PURE__*/React.createElement("div", {style:{border:'1px solid '+BDR,borderRadius:7,overflow:'hidden'}},
       RCE_ITEMS.map((it, ix) => {
@@ -11127,14 +11327,14 @@ viewCE && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset
          Estimator". The title is lent to the CE for the print and handed
          back afterwards. */
       const _was=document.title;
-      try{document.title=ceFileNameFor(viewCE.id, viewCE.ceNum);}catch(_e){}
+      try{document.title=ceFileNameFor(viewCE.id, viewCE.ceNum);}catch(_e){logSwallowed('App:L11171',_e);}
       /* Wait for the frame to finish laying itself into sheets, the same way
          the print window does: printing mid-layout prints it unpaginated. */
       const _w=document.getElementById('shic-view-ce').contentWindow;
       (function _go(n){
         let paged=false;
         try{paged=!!(_w.document.body&&_w.document.body.getAttribute('data-paged'));}catch(_e){paged=true;}
-        if(paged||n>40){_w.print();setTimeout(()=>{try{document.title=_was;}catch(_e){}},1000);return;}
+        if(paged||n>40){_w.print();setTimeout(()=>{try{document.title=_was;}catch(_e){logSwallowed('App:_go',_e);}},1000);return;}
         setTimeout(()=>_go(n+1),150);
       })(0);
     }catch(ex){showToast('Could not print: '+ex.message,true);}}}, "🖨 Print"),
@@ -11284,6 +11484,11 @@ tab === 'mywork' && (() => {
   const open = mine.filter(x => ceIsOpen(x.m.status) && apv(x).state !== 'pending')
     .map(x => ({...x, dl: ceDeadline(x.m.deadline, x.m.dateSubmitted, x.m.status)}))
     .sort((a, b) => (a.dl.days == null) - (b.dl.days == null) || (a.dl.days || 0) - (b.dl.days || 0));
+  /* Requests this user raised, wherever they have got to. `mine` stops matching
+     once the estimator's first costed save flips savedBy, so a request that has
+     moved on would vanish from here; receivedBy is stamped at request time and
+     never changes, the same field mineToSee uses to keep it visible. */
+  const sent = rows.filter(x => !x.e._draft && x.m.receivedBy && names.includes(String(x.m.receivedBy).trim().toUpperCase()));
   const drafts = (sharedDrafts || []).filter(d => d.savedBy === me);
   const now = new Date(), inMonth = v => { const d = v ? new Date(v) : null; return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); };
   const subMonth = mine.filter(x => inMonth(x.m.dateSubmitted ? x.m.dateSubmitted + 'T00:00:00' : null) || (x.m.status === 'Submitted' && inMonth(x.m.statusChangedAt)));
@@ -11312,7 +11517,10 @@ tab === 'mywork' && (() => {
     /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'baseline',gap:10,flexWrap:'wrap'}},
       /*#__PURE__*/React.createElement("div", {style:{fontSize:18,fontWeight:800}}, 'Good ' + (now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening') + ', ' + String(currentUser.name || me).split(' ')[0]),
       /*#__PURE__*/React.createElement("span", {style:{fontSize:12,color:MT}}, toSign.length + returned.length + overdue ? 'Here is what needs you today.' : 'Nothing urgent — you are all caught up.'),
-      /*#__PURE__*/React.createElement("button", {style:{...btn('acc',true),marginLeft:'auto'},onClick:()=>setTab('info')}, "➕ Go to the CE editor")),
+      /*#__PURE__*/React.createElement("button", isRequestor
+        ? {style:{...btn('acc',true),marginLeft:'auto'},onClick:openRequest,title:"Log a request for estimation: CE number, customer, deadline, who it is assigned to, and its documents"}
+        : {style:{...btn('acc',true),marginLeft:'auto'},onClick:()=>setTab('info')},
+        isRequestor ? "➕ New Request" : "➕ Go to the CE editor")),
     /*#__PURE__*/React.createElement("div", {style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}},
       kpi('Awaiting my signature', toSign.length, 'approvals routed to you', toSign.length ? 'var(--accent-cyan)' : null),
       kpi('Open CEs assigned', open.length, overdue + ' overdue · ' + dueSoon + ' due ≤3 days', overdue ? ERR : null),
@@ -11329,7 +11537,26 @@ tab === 'mywork' && (() => {
         /*#__PURE__*/React.createElement("span", {style:{flex:1,color:MT,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, ((d.info && d.info.client) || '') + ' · saved ' + new Date(d.savedAt).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})),
         /*#__PURE__*/React.createElement("button", {style:btn('acc',true),onClick:()=>resumeDraft(d)}, "Resume")), 'No saved drafts.'),
       section('⏳ My CEs in approval', inApproval, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT,whiteSpace:'nowrap'}}, apv(x).signed + '/' + apv(x).total + ' signed · waiting on ' + (apv(x).waiting || []).join(', ')), viewBtn(x)), 'None of your CEs are in approval.'),
-      forReview.length > 0 && section('🔎 For review (status For Approval)', forReview, x => line(x, null, viewBtn(x)), '')));
+      !isRequestor && sent.length > 0 && section('📤 Requests I sent', sent, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,whiteSpace:'nowrap',color:MT}},
+        (x.m.status || 'Pending') + (x.m.ceeName ? ' · with ' + x.m.ceeName : '')), viewBtn(x)), 'You have not sent a request yet. Use + New Request in CE Monitoring.'),
+      !isRequestor && forReview.length > 0 && section('🔎 For review (status For Approval)', forReview, x => line(x, null, viewBtn(x)), '')),
+    isRequestor && /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:'12px 14px',overflowX:'auto'}},
+      /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:13,marginBottom:8}}, '📤 My requests', /*#__PURE__*/React.createElement("span", {style:{marginLeft:6,fontSize:11,color:MT}}, '(' + sent.length + ')')),
+      sent.length ? /*#__PURE__*/React.createElement("table", {style:{width:'100%',borderCollapse:'collapse',fontSize:12}},
+        /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['RCE / CE NO.', 'CUSTOMER', 'JOB', 'ASSIGNED TO', 'STATUS', ''].map((h, i) => /*#__PURE__*/React.createElement("th", {key: i, style:{textAlign:'left',padding:'6px 8px',fontSize:10,color:MT,letterSpacing:'.06em',borderBottom:'1px solid '+BDR}}, h)))),
+        /*#__PURE__*/React.createElement("tbody", null, sent.map(x => {
+          const st = x.m.status || 'Pending', col = getStatusColor(st), still = !!(x.e.info && x.e.info.request);
+          const td = {padding:'7px 8px',borderBottom:'1px solid '+alpha(BDR,'44'),verticalAlign:'middle'};
+          return /*#__PURE__*/React.createElement("tr", {key: x.e.id},
+            /*#__PURE__*/React.createElement("td", {style:{...td,...MONO,fontWeight:700,whiteSpace:'nowrap'}}, ceLabel(x.e)),
+            /*#__PURE__*/React.createElement("td", {style:td}, (x.e.info && x.e.info.client) || x.m.customer || '—'),
+            /*#__PURE__*/React.createElement("td", {style:td}, x.m.jobTitle || (x.e.info && x.e.info.description) || '—'),
+            /*#__PURE__*/React.createElement("td", {style:td}, x.m.ceeName || '—'),
+            /*#__PURE__*/React.createElement("td", {style:td}, /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'2px 10px',borderRadius:12,fontSize:11,fontWeight:700,color:col,border:'1px solid '+col,background:alpha(col,'18')}}, st),
+              still && x.e.info.reviewStatus && /*#__PURE__*/React.createElement("div", {style:{fontSize:10,marginTop:3,color:x.e.info.reviewStatus === 'declined' ? ERR : MT}},
+                String(x.e.info.reviewStatus).toUpperCase() + (x.e.info.reviewNote ? ': ' + x.e.info.reviewNote : ''))),
+            /*#__PURE__*/React.createElement("td", {style:{...td,textAlign:'right'}}, still && !x.e.info.acceptedCeNum && x.e.info.reviewStatus !== 'declined' && typeof x.e.id === 'number' && /*#__PURE__*/React.createElement("button", {style:{...btn('info',true),marginRight:6},onClick:()=>setRceReview({e:x.e,mode:'update'})}, 'Update'), still ? /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'3px 12px',borderRadius:6,fontSize:11,fontWeight:800,color:'#fff',background:'#16a34a',letterSpacing:'.06em'}}, 'REQUEST') : viewBtn(x)));
+        }))) : /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,padding:'6px 0'}}, 'You have not sent a request yet. Use + New Request in CE Monitoring.')));
 })(),
 
 tab === 'dashboard' && (() => {
@@ -13231,62 +13458,60 @@ tab === 'dashboard' && (() => {
     /* The sum of the rows above it, so this footer can never report a figure
        the table it sits under does not add up to. Equal to `ben` -- the one
        the CE is costed on -- and tools/test-manpower-totals.js keeps it so. */
-  }, "P", ph(benefitsT)))))))), tab === 'tools' && /*#__PURE__*/React.createElement(ResTab, {
+  }, "P", ph(benefitsT)))))))), tab === 'tools' && /*#__PURE__*/React.createElement(ResTabM, {
     rows: tools,
     set: setTools,
     total: toolsT,
     label: "Tools & Equipment (BOTE)",
     mlType: "tools",
-    addToML: list => addRowsToML('tools', list),
+    addToML: resStable.addTools,
     showDays: true,
     /* Lives on info, so it rides to SharePoint inside shicInfo with no column
        of its own and comes back with the CE. */
     defaultTier: N(info.toolTier) || 2,
-    setDefaultTier: v => setInfo(p => ({...p, toolTier: v})),
+    setDefaultTier: resStable.setDefaultTier,
     showPower: powerOn,
     kwhRate,
-    pwrFrac,
-    readFile: readDoc,
+    pwrFrac: resStable.pwrFrac,
+    /* What pwrFrac depends on, so the memoised tab redraws when it changes. */
+    _pfk: cfg.power, _wm: _workMap,
+    readFile: resStable.readFile,
     /* A rate equal to the default is removed rather than stored, so a CE that
        was never touched is not frozen against a future change to it -- the
        same rule the shift multipliers follow. */
-    setKwhRate: v => setRates(p => {
-      const n = {...p}, f = parseFloat(v);
-      if (!isFinite(f) || f < 0 || f === KWH_RATE_DEFAULT) delete n.kwhRate; else n.kwhRate = f;
-      return n;
-    }),
+    setKwhRate: resStable.setKwhRate,
     /* The CE's own duration, offered as the days to charge the equipment for.
        With 900 rows on a CE, typing it into each one is not a thing anyone
        will do -- so it is one click, and it is the number already on the
        Project Info tab rather than a second one to keep in step. */
     ceDays: N(info.days) || 0,
-    masterlist, showToast, setPicker
-  }), tab === 'materials' && /*#__PURE__*/React.createElement(ResTab, {
+    masterlist, showToast: resStable.showToast, setPicker
+  }), tab === 'materials' && /*#__PURE__*/React.createElement(ResTabM, {
     rows: mats,
     set: setMats,
     total: matsT,
     label: "Materials & Consumables (BOCM)",
     mlType: "materials",
-    addToML: list => addRowsToML('materials', list),
+    addToML: resStable.addMats,
     /* The same reader the Tools tab has. A BOM or a PPE issue list
        arrives as the same kind of list -- description, quantity,
        unit -- and was being typed in by hand only because the tab
        was never handed the reader. */
-    readFile: readDoc,
-    masterlist, showToast, setPicker
-  }), tab === 'ppe' && /*#__PURE__*/React.createElement(ResTab, {
+    readFile: resStable.readFile,
+    masterlist, showToast: resStable.showToast, setPicker
+  }), tab === 'ppe' && /*#__PURE__*/React.createElement(ResTabM, {
     rows: ppe,
     set: setPpe,
     total: ppeT,
     label: "Personal Protective Equipment (PPE)",
     mlType: "ppe",
-    addToML: list => addRowsToML('ppe', list),
+    addToML: resStable.addPpe,
     /* The same reader the Tools tab has. A BOM or a PPE issue list
        arrives as the same kind of list -- description, quantity,
        unit -- and was being typed in by hand only because the tab
        was never handed the reader. */
-    readFile: readDoc,
-    masterlist, showToast, setPicker
+    readFile: resStable.readFile,
+    masterlist, showToast: resStable.showToast, setPicker
   }), tab === 'misc' && /*#__PURE__*/React.createElement("div", null, (MISC_DEF[ceType] || MISC_DEF.onsite).map(([miscKey, label]) => {
     const rows = Array.isArray(misc[miscKey]) ? misc[miscKey] : [];
     const catTotal = rows.reduce((s, r) => s + miscRowCost(r), 0);

@@ -22,19 +22,33 @@ function spAdoptSetupLink(){
     if(!j || !/^https:\/\/[^\/]+\//.test(String(j.s||''))) return false;
     const cur = getSPConfig();
     saveSPConfig({...cur, siteUrl: String(j.s).replace(/\/$/,''), clientId: String(j.c||cur.clientId||''),
+      ...(j.t ? {tenantId: String(j.t)} : {}),
       ...(j.p ? {listPrefix: String(j.p)} : {})});
     /* The address is tidied so a shared screenshot of it is not a second,
        stale copy of the settings, and a reload does not run this again. */
     q.delete('setup');
-    try{ window.history.replaceState({}, '', window.location.pathname + (q.toString() ? '?' + q : '') + window.location.hash); }catch(_e){}
+    try{ window.history.replaceState({}, '', window.location.pathname + (q.toString() ? '?' + q : '') + window.location.hash); }catch(_e){logSwallowed('sp:spAdoptSetupLink',_e);}
     return true;
   }catch(_e){ return false; }
 }
 /* The link an admin hands to a new device. */
+/* Which Microsoft tenant a sign-in goes to. 'common' lets an account choose its
+   OWN tenant -- so someone whose work account lives elsewhere (an SY3 address
+   given access to this Synercore site as a guest) signs in to THEIR tenant,
+   where this app was never registered, and is told "Need admin approval" for a
+   consent that was in fact granted. The site address names the tenant: a
+   SharePoint Online host is <tenant>.sharepoint.com and the tenant's first
+   domain is <tenant>.onmicrosoft.com, so use that unless one was configured. */
+function spAuthorityTenant(cfg, siteUrl){
+  const c = cfg || {};
+  if(c.tenantId) return String(c.tenantId).trim();
+  const m = /^https:\/\/([a-z0-9-]+)\.sharepoint\.com(?:\/|$)/i.exec(String(siteUrl || c.siteUrl || ''));
+  return m ? m[1].toLowerCase() + '.onmicrosoft.com' : 'common';
+}
 function spSetupLink(cfg){
   const c = cfg || getSPConfig();
   if(!c.siteUrl) return '';
-  const j = JSON.stringify({s: c.siteUrl, c: c.clientId || '', ...(c.listPrefix && c.listPrefix !== 'SHICCE' ? {p: c.listPrefix} : {})});
+  const j = JSON.stringify({s: c.siteUrl, c: c.clientId || '', ...(c.tenantId ? {t: c.tenantId} : {}), ...(c.listPrefix && c.listPrefix !== 'SHICCE' ? {p: c.listPrefix} : {})});
   const b64 = btoa(unescape(encodeURIComponent(j))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
   return window.location.origin + window.location.pathname + '?setup=' + b64;
 }
@@ -140,14 +154,14 @@ async function _getSPTokenNow(opts){
       _spMsalApp=new msal.PublicClientApplication({
         auth:{
           clientId:cfg.clientId,
-          authority:'https://login.microsoftonline.com/'+(cfg.tenantId||'common'),
+          authority:'https://login.microsoftonline.com/'+spAuthorityTenant(cfg,su),
           redirectUri:window.location.origin+window.location.pathname.replace(/\/[^\/]*$/,'/')
         },
         cache:{cacheLocation:'sessionStorage',storeAuthStateInCookie:false}
       });
-      try{await _spMsalApp.initialize();}catch(e){}
+      try{await _spMsalApp.initialize();}catch(e){logSwallowed('sp:_getSPTokenNow',e);}
       /* Handle redirect response (from acquireTokenRedirect) */
-      try{const redirectResult=await _spMsalApp.handleRedirectPromise();if(redirectResult){_spToken=redirectResult.accessToken;_spExpiry=redirectResult.expiresOn?redirectResult.expiresOn.getTime():Date.now()+3600000;}}catch(e){}
+      try{const redirectResult=await _spMsalApp.handleRedirectPromise();if(redirectResult){_spToken=redirectResult.accessToken;_spExpiry=redirectResult.expiresOn?redirectResult.expiresOn.getTime():Date.now()+3600000;}}catch(e){logSwallowed('sp:_getSPTokenNow',e);}
     }
     const accts=_spMsalApp.getAllAccounts();
     let res;
@@ -229,7 +243,7 @@ function spNoteThrottled(seconds){
   const base = Number(seconds) > 0 ? Number(seconds) : 20;
   const wait = Math.min(base * Math.pow(2, Math.min(_spThrottleStreak - 1, 4)), 300);
   _spCooldownUntil = Math.max(_spCooldownUntil, Date.now() + wait * 1000);
-  try{ window._shicThrottleUntil = _spCooldownUntil; }catch(_){}
+  try{ window._shicThrottleUntil = _spCooldownUntil; }catch(_){logSwallowed('sp:spNoteThrottled',_);}
   return wait;
 }
 function spNoteOk(){ _spThrottleStreak = 0; }
@@ -292,9 +306,13 @@ function spErr(verb,list,status,body,retryAfter){
      than anything that sounds like a limit -- so it reads as an outage. With
      ~900 CEs the line-item lists hold tens of thousands of rows, which is
      exactly when this starts. The remedy is an index, not a retry. */
+  /* Matched on SharePoint's words only. -2146232832 looked like the throttle
+     code and was matched here once; it is the generic SPException code, and a
+     query on a column that does not exist carries it too -- which sent a bad
+     query down the wrong road for three builds. */
   if(/list view threshold|exceeds the list view|throttl/i.test(String(body||'')))
     return new Error('SP '+verb+' '+list+': this list has passed the SharePoint 5,000-item view threshold and '+
-      'shicCEId is not indexed, so filtered reads fail. An admin should open SP Setup and press '+
+      'a column it is filtered on is not indexed (for Monitoring: shicCEId and shicCENum), so filtered reads fail. An admin should open SP Setup and press '+
       '"Repair lists & columns", which now adds the index. (SharePoint reported '+status+'.)');
   if(status===403||status===401)
     return new Error('SP '+verb+' '+list+': '+status+' access denied — this SharePoint account is not allowed to '+
@@ -331,7 +349,10 @@ async function spGet(l,f='',sel=''){
     if(!r.ok){
       /* The body is the only place SharePoint says WHY. Without it a threshold
          error, a missing column and a genuine outage all read as a bare 500. */
-      let body='';try{body=await r.text();}catch(_){}
+      let body='';try{body=await r.text();}catch(_){logSwallowed('sp:spGet',_);}
+      /* Said once, in full, where it can be read: the toast keeps a hundred
+         characters and the browser's own line cuts the URL. */
+      if(r.status>=500)console.warn('SP '+r.status+' on '+l+' | filter: '+(f||'(none)')+' | select: '+(sel||'(all)')+' | '+String(body).slice(0,500));
       throw spErr('get',l,r.status,body,r.headers&&r.headers.get('Retry-After'));
     }
     const json=await r.json();
@@ -341,8 +362,8 @@ async function spGet(l,f='',sel=''){
   return results;
 }
 async function spPost(l,data){const su=getSiteURL();if(!su)throw new Error('SP not configured');const{digest,token}=await spDigest();if(!token)throw new Error('SP: No auth token. Please sign in via Connect & Test first.');const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'Authorization':'Bearer '+token};const r=await spFetch(`${su}/_api/web/lists/getbytitle('${l}')/items`,{method:'POST',credentials:'omit',headers:h,body:JSON.stringify(data)},'post',l);if(!r.ok){const t=await r.text();throw spErr('post',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}return r.json();}
-async function spPatch(l,id,data){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*','X-HTTP-Method':'MERGE',...(token?{'Authorization':'Bearer '+token}:{})};const r=await spFetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'PATCH',credentials:'omit',headers:h,body:JSON.stringify(data)},'patch',l);if(!r.ok){let t='';try{t=await r.text();}catch(_){}throw spErr('patch',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}}
-async function spDelete(l,id){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*',...(token?{'Authorization':'Bearer '+token}:{})};const r=await spFetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'DELETE',credentials:'omit',headers:h},'delete',l);if(!r.ok){let t='';try{t=await r.text();}catch(_){}throw spErr('delete',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}}
+async function spPatch(l,id,data){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*','X-HTTP-Method':'MERGE',...(token?{'Authorization':'Bearer '+token}:{})};const r=await spFetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'PATCH',credentials:'omit',headers:h,body:JSON.stringify(data)},'patch',l);if(!r.ok){let t='';try{t=await r.text();}catch(_){logSwallowed('sp:spPatch',_);}throw spErr('patch',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}}
+async function spDelete(l,id){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*',...(token?{'Authorization':'Bearer '+token}:{})};const r=await spFetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'DELETE',credentials:'omit',headers:h},'delete',l);if(!r.ok){let t='';try{t=await r.text();}catch(_){logSwallowed('sp:spDelete',_);}throw spErr('delete',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}}
 
 /* SharePoint answers with a SERVER-relative url -- /sites/TSG/Lists/... -- and
    this app is served from synercore.github.io, so using one as a link href

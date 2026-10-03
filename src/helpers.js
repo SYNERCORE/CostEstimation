@@ -1,4 +1,17 @@
-﻿/* Anything that is not a finite number is zero. parseFloat lets Infinity
+﻿/* Where a failure is deliberately not shown to the user, it is still written to
+   the console -- once or twice per distinct message, so a failure inside a poll
+   cannot flood it. An empty catch hid the cause of most of the faults found in
+   live use; this keeps best-effort code best-effort without making it blind. */
+const _swallowSeen = {};
+function logSwallowed(tag, err) {
+  try {
+    const m = String((err && err.message) || err || '');
+    const k = tag + '|' + m.slice(0, 80);
+    const n = (_swallowSeen[k] = (_swallowSeen[k] || 0) + 1);
+    if (n <= 2) console.warn('[swallowed] ' + tag + ': ' + m.slice(0, 200));
+  } catch (_) { /* never throw from the logger */ }
+}
+/* Anything that is not a finite number is zero. parseFloat lets Infinity
    through -- '1e999' pasted into a rate, or a stored value that arrived that
    way -- and one Infinity in a CE turns its total into NaN, which reaches
    SharePoint as null and takes the figure with it. */

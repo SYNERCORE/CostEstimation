@@ -54,7 +54,7 @@ ck('loadHist found in source', histBody.length > 0);
 ck("no LS.set('history', []) purge", !/LS\.set\('history',\s*\[\]\)/.test(histBody), 'still purges');
 ck('only caches a non-empty result', /h\.length > 0[\s\S]{0,160}LS\.set\('history', h\)/.test(histBody));
 ck('falls back to the cached list when SP returns zero rows',
-  /h\.length === 0[\s\S]{0,200}LS\.get\('history'\)/.test(histBody));
+  /h\.length === 0[\s\S]{0,900}LS\.get\('history'\)/.test(histBody));
 
 console.log('\ndbGetDrafts can be told apart from a failure:');
 ck('success path sets ok = true', /out\.ok=true/.test(db));

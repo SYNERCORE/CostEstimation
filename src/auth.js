@@ -92,7 +92,7 @@ function auditLog(action, detail, user) {
     _synced: false
   };
   _auditWrite(_auditTrim([entry].concat(_auditRead())));
-  if (getSiteURL()) Promise.resolve().then(() => _auditPushOne(entry)).catch(() => {});
+  if (getSiteURL()) Promise.resolve().then(() => _auditPushOne(entry)).catch(_e=>logSwallowed('auth:auditLog',_e));
 }
 async function _auditPushOne(entry) {
   await spPost(spList('AuditLog'), {
@@ -161,8 +161,8 @@ async function _checkAutoBackup(getCEData) {
           a.download = filename;
           a.click();
           setTimeout(() => URL.revokeObjectURL(a.href), 3000);
-        } catch {}
+        } catch(_e){logSwallowed('auth:_checkAutoBackup',_e);}
       }, 600);
-    } catch {}
+    } catch(_e){logSwallowed('auth:_checkAutoBackup',_e);}
   }
 }

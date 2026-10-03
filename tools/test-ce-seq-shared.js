@@ -29,7 +29,7 @@ console.log('\nsaving:');
 ck('a clash lookup exists', /async function dbFindCESeqClash\(ceNum,known\)/.test(db));
 ck('it only counts a different prefix as a clash', /s\.seq===me\.seq&&s\.prefix!==me\.prefix/.test(db));
 ck('handleSave refuses a clash', /const _clash = await dbFindCESeqClash\(ceNum, ceNums\)/.test(app));
-ck('logging a request refuses one too', /\|\| \(await dbFindCESeqClash\(ceNum, ceNums\)/.test(app));
+ck('accepting a request, which is when it gets its CE number, refuses one too', /await dbFindCESeqClash\(newNum, ceNums\)/.test(app));
 
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nshared CE sequence OK');
 process.exit(bad ? 1 : 0);

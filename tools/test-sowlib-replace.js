@@ -38,14 +38,14 @@ const src = m[0];
 function run(lib, spRows, opts) {
   const posted = [], patched = [], deleted = [];
   const scope = new Function(
-    'spGet', 'spPost', 'spPatch', 'spDelete', 'spList', 'USE_SP', 'getSiteURL', 'localStorage', 'console',
+    'spGet', 'spPost', 'spPatch', 'spDelete', 'spList', 'USE_SP', 'getSiteURL', 'localStorage', 'console', 'logSwallowed',
     src + '; return dbSaveSowLib;'
   )(
     async () => spRows,
     async (l, d) => { posted.push(d); },
     async (l, id, d) => { patched.push({id, d}); },
     async (l, id) => { deleted.push(id); },
-    n => n, true, () => 'https://x', {setItem() {}}, {warn() {}}
+    n => n, true, () => 'https://x', {setItem() {}}, {warn() {}}, () => {}
   );
   return scope(lib, opts).then(res => ({posted, patched, deleted, res}));
 }
@@ -109,12 +109,12 @@ const row = (spId, id, title) => ({Id: spId, shicData: JSON.stringify({id, title
 
   console.log('\na save that fails says so instead of reporting success:');
   const failing = new Function(
-    'spGet', 'spPost', 'spPatch', 'spDelete', 'spList', 'USE_SP', 'getSiteURL', 'localStorage', 'console',
+    'spGet', 'spPost', 'spPatch', 'spDelete', 'spList', 'USE_SP', 'getSiteURL', 'localStorage', 'console', 'logSwallowed',
     src + '; return dbSaveSowLib;'
   )(
     async () => { throw new Error('403 Forbidden'); },
     async () => {}, async () => {}, async () => {},
-    n => n, true, () => 'https://x', {setItem() {}}, {warn() {}}
+    n => n, true, () => 'https://x', {setItem() {}}, {warn() {}}, () => {}
   );
   const f = await failing([{id: 1, title: 'A', cat: 'X'}]);
   ck('sp is false', f.sp === false);

@@ -19,15 +19,15 @@ const has = re => re.test(app);
 
 console.log('logging a request:');
 ck('Monitoring has a + New Request button', has(/onClick: openRequest\n  \}, "\+ New Request"\)/));
-ck('it suggests the next free CE number', has(/ceNum: nextCeNum\(history, null, ceNums\)/));
-ck('customer and assignee are required', has(/Customer is required\./) && has(/Assign the request to an estimator\./));
-ck('a number already in use is refused', has(/const dup = \(await dbFindCEByNum\(ceNum\)\.catch\(\(\) => null\)\) \|\| \(await dbFindCESeqClash\(ceNum, ceNums\)\.catch\(\(\) => null\)\);\n      if \(dup\) \{/));
+ck('it is filed under the RCE No., not a suggested CE number (that comes on acceptance)', has(/const ceNum = String\(f\.rceNo \|\| ''\)\.trim\(\)\.toUpperCase\(\);/) && !has(/setReqForm\(\{ ceNum:/));
+ck('customer is required; assigning is optional, a reviewer assigns', app.includes("_todo.push('Customer')") && app.indexOf("_todo.push('Assigned to") < 0);
+ck('an RCE No. already in use is refused', has(/is already on a request or a CE/) && has(/String\(\(m && m\.rceNo\) \|\| ''\)\.trim\(\)\.toUpperCase\(\) === ceNum/));
 ck('it is saved as an empty CE flagged as a request, under its own number',
   has(/status: 'DRAFT', request: true, requestNum: ceNum/));
 ck('only a SharePoint save counts -- a request nobody else can see is not assigned',
   has(/if \(!saved \|\| saved\.sp === false \|\| saved\.id == null\)/));
 ck('the assignment is the Estimator column, with status Pending and who received it',
-  has(/status: 'Pending', ceeName: f\.assignee\.trim\(\)/) && has(/receivedBy: currentUser\.name \|\| currentUser\.username/));
+  has(/status: 'Pending', ceeName: String(f.assignee || '').trim() || 'Unassigned'/) && has(/receivedBy: currentUser.name || currentUser.username/));
 ck('deadline, date received and job title are written too',
   has(/deadline: f\.deadline \|\| ''/) && has(/dateRecv: f\.dateRecv \|\| ''/) && has(/jobTitle: String\(f\.description/));
 /* The remarks column now leads with item 14, because that is the one thing
@@ -52,7 +52,7 @@ ck('and the list recomputes when it is toggled', has(/monCustFilter, monMine, (m
 console.log('\nthe estimator can actually see it:');
 const db = fs.readFileSync('src/db.js', 'utf8');
 ck('a non-admin history keeps CEs assigned to or received by them, not only their own saves',
-  /h\.savedBy===username\|\|\(keep&&keep\(h\.id\)\)/.test(db) && has(/dbGetHistory\(currentUser\.username, isAdmin, isAdmin \? null : mineToSee\)/));
+  /h\.savedBy===username\|\|\(keep&&keep\(h\.id\)\)/.test(db) && has(/dbGetHistory\(currentUser\.username, canSeeAll, canSeeAll \? null : mineToSee\)/));
 ck('mineToSee reads the Estimator and Received By columns',
   has(/me\.includes\(String\(m\.ceeName \|\| ''\)\.trim\(\)\.toUpperCase\(\)\) \|\| me\.includes\(String\(m\.receivedBy/));
 ck('history reloads when monitoring reveals an assigned CE it lacks', has(/if \(missing && missing !== _assignedKey\.current\)/));
@@ -65,8 +65,8 @@ ck('and the change is audited', has(/auditLog\('reassign_ce'/));
 ck('an unchanged pick writes nothing', has(/if \(to !== String\(a\.from \|\| ''\)\.trim\(\)\) \{/));
 
 console.log('\nbuilding it out:');
-ck('saving over the request is allowed only under the number it was raised as',
-  has(/const _fromRequest = !!\(info\.request && String\(info\.requestNum \|\| ''\)\.toUpperCase\(\) === ceNum\);/));
+ck('saving over the request is allowed only under the number it was raised or accepted as',
+  has(/const _fromRequest = !!\(info\.request && \(String\(info\.requestNum \|\| ''\)\.toUpperCase\(\) === ceNum \|\|/) && has(/info\.acceptedCeNum && String\(info\.acceptedCeNum\)\.toUpperCase\(\) === ceNum/));
 ck('every other existing number is still refused', has(/if \(dup && !dup\._imported && !_fromRequest\) \{/));
 ck('and the saved CE is no longer a request',
   has(/if \(_fromRequest\) \{ _entry\.info = \{\.\.\._entry\.info, request: false\}; setInfo\(p => \(\{\.\.\.p, request: false\}\)\); \}/));

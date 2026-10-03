@@ -1022,6 +1022,18 @@ function App({
     id: 'admin',
     label: 'Users'
   }] : [])];
+  /* The tabs are filed under three headings so only one group's worth is on
+     screen at a time: fourteen in one row ran past the edge of a tablet. The
+     group is derived from the open tab, never stored, so it cannot disagree
+     with it; each group remembers the tab last used in it. */
+  const TAB_GROUPS = [
+    {id: 'workspace', label: 'Workspace', ids: ['mywork', 'history', 'dashboard', 'admin']},
+    {id: 'estimate', label: 'Estimate', ids: ['info', 'sow', 'sowbreak', 'manpower', 'tools', 'materials', 'ppe', 'misc', 'summary'], steps: true},
+    {id: 'libraries', label: 'Libraries', ids: ['scopelib', 'masterlist']}
+  ].map(g => ({...g, tabs: g.ids.map(id => TABS.find(t => t.id === id)).filter(Boolean)})).filter(g => g.tabs.length);
+  const _tabMemory = useRef({});
+  const [railSlim, setRailSlim] = useState(() => { try { return localStorage.getItem('shic:railSlim') === '1'; } catch (_e) { return false; } });
+  const toggleRail = () => setRailSlim(v => { const n = !v; try { localStorage.setItem('shic:railSlim', n ? '1' : '0'); } catch (_e) {} return n; });
   useEffect(() => {
     setTimeout(async()=>{const info=await checkForUpdate();if(info.available)setUpdateInfo(info);},3000);
     const onKey=e=>{if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();try{handleSave();}catch(ex){logSwallowed('App:L1005',ex);}}if((e.ctrlKey||e.metaKey)&&e.key==='n'){e.preventDefault();try{handleNew();}catch(ex){logSwallowed('App:L1005',ex);}}};
@@ -10056,22 +10068,23 @@ function App({
       padding: '0 10px',
       borderRight: `1px solid ${BDR}`
     }
-  }, Object.entries(CE_CFG).map(([ceKey, ceVal]) => /*#__PURE__*/React.createElement("button", {
-    key: ceKey,
-    onClick: () => setCeType(ceKey),
+  }, /*#__PURE__*/React.createElement("select", {
+    value: ceType,
+    onChange: e => setCeType(e.target.value),
+    'aria-label': 'CE type',
+    title: 'CE type',
     style: {
-      background: ceType === ceKey ? alpha(ceVal.color, '1A') : 'transparent',
-      color: ceType === ceKey ? ceVal.color : MT,
-      border: ceType === ceKey ? `1px solid ${alpha(ceVal.color, '55')}` : '1px solid transparent',
+      background: alpha((CE_CFG[ceType] || {}).color || ACC, '1A'),
+      color: (CE_CFG[ceType] || {}).color || ACC,
+      border: `1px solid ${alpha((CE_CFG[ceType] || {}).color || ACC, '55')}`,
       borderRadius: 5,
-      padding: '5px 10px',
+      padding: '5px 8px',
       cursor: 'pointer',
       fontFamily: 'inherit',
-      fontWeight: ceType === ceKey ? 700 : 400,
-      fontSize: 11,
-      transition: 'all .12s'
+      fontWeight: 700,
+      fontSize: 11
     }
-  }, ceTypeLabel(ceKey)))), /*#__PURE__*/React.createElement("div", {
+  }, Object.keys(CE_CFG).map(ceKey => /*#__PURE__*/React.createElement("option", { key: ceKey, value: ceKey }, ceTypeLabel(ceKey))))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -10096,19 +10109,7 @@ function App({
     style: btn('acc', true),
     onClick: handleExport,
     title: "CE template — the standard SY3 Cost Estimate Summary layout"
-  }, "Export CE"), /*#__PURE__*/React.createElement("button", {
-    style: {
-      ...btn('def', true),
-      fontSize: 10,
-      borderColor: getApiKey() && provInfo ? alpha(provInfo.bc, '88') : alpha(ERR, '88'),
-      color: getApiKey() && provInfo ? provInfo.bc : ERR
-    },
-    onClick: () => {
-      setApiKeyInput('');
-      setShowApiKey(true);
-    },
-    title: getApiKey() && provInfo ? provInfo.label + ' active' : 'No AI key - click to set'
-  }, getApiKey() && provInfo ? 'AI: ' + provInfo.badge : 'Set AI Key'), /*#__PURE__*/React.createElement(SignInBanner, null)), /*#__PURE__*/React.createElement("div", {
+  }, "Export CE"), /*#__PURE__*/React.createElement(SignInBanner, null)), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -10117,52 +10118,77 @@ function App({
       paddingLeft: 12,
       borderLeft: `1px solid ${BDR}`
     }
-  }, /*#__PURE__*/React.createElement(ThemeSwitch, null), /*#__PURE__*/React.createElement("div", {
-    className: "shic-hide-narrow",
+  }, /*#__PURE__*/React.createElement(OnlinePill,null), /*#__PURE__*/React.createElement(AccountMenu, {
+    name: currentUser.name || currentUser.username, role: currentUser.role, flag: !(getApiKey() && provInfo)
+  }, /*#__PURE__*/React.createElement(ThemeSwitch, null), /*#__PURE__*/React.createElement(ChangePasswordModal,{currentUser}), /*#__PURE__*/React.createElement("button", {style:{...btn('def',true), width:'100%', textAlign:'left'},title:"Your saved signature — used when you Approve & Sign",onClick:()=>setMySigOpen(true)}, "✍ My Signature"), /*#__PURE__*/React.createElement("button", {
     style: {
-      textAlign: 'right'
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 600,
-      fontSize: 12
-    }
-  }, currentUser.name || currentUser.username), /*#__PURE__*/React.createElement("div", {
-    style: {
-      color: isAdmin ? ACC : MT,
-      fontSize: 9,
-      textTransform: 'uppercase',
-      letterSpacing: '0.07em'
-    }
-  }, currentUser.role)), /*#__PURE__*/React.createElement(OnlinePill,null), /*#__PURE__*/React.createElement(ChangePasswordModal,{currentUser}), /*#__PURE__*/React.createElement("button", {style:btn('def',true),title:"Your saved signature — used when you Approve & Sign",onClick:()=>setMySigOpen(true)}, "✍ My Signature"), /*#__PURE__*/React.createElement("button", {
+      ...btn('def', true),
+      fontSize: 11, width: '100%', textAlign: 'left',
+      borderColor: getApiKey() && provInfo ? alpha(provInfo.bc, '88') : alpha(ERR, '88'),
+      color: getApiKey() && provInfo ? provInfo.bc : ERR
+    },
+    onClick: () => {
+      setApiKeyInput('');
+      setShowApiKey(true);
+    },
+    title: getApiKey() && provInfo ? provInfo.label + ' active' : 'No AI key - click to set'
+  }, getApiKey() && provInfo ? 'AI: ' + provInfo.badge : 'Set AI Key'), /*#__PURE__*/React.createElement("button", {
     onClick: onLogout,
-    style: btn('danger', true)
-  }, "Sign Out"))), /*#__PURE__*/React.createElement("div", {
+    style: {...btn('danger', true), width: '100%', textAlign: 'left'}
+  }, "Sign Out")))), /*#__PURE__*/React.createElement("div", {
+    className: "shic-nav",
     style: {
       background: CARD,
       borderBottom: `1px solid ${BDR}`,
-      display: 'flex',
-      padding: '0 16px',
-      overflowX: 'auto',
+      height: 'var(--h-tabs)',
+      boxSizing: 'border-box',
       position: 'sticky',
       top: 'var(--y-tabs)',
       zIndex: 49
     }
-  }, TABS.map(t => {
+  }, (() => {
+    const _grp = TAB_GROUPS.find(g => g.tabs.some(t => t.id === tab)) || TAB_GROUPS[0];
+    if (_grp) _tabMemory.current[_grp.id] = tab;
+    return /*#__PURE__*/React.createElement("div", {
+      role: "tablist", "aria-label": "Section",
+      style: {display: 'flex', alignItems: 'center', gap: 4, padding: '0 16px', height: 'var(--h-groups)', overflowX: 'auto'}
+    }, TAB_GROUPS.map(g => {
+      const on = _grp && g.id === _grp.id;
+      /* The red count that used to sit on My Work sits on its group too, or the
+         things waiting on a person would be hidden behind the Estimate heading. */
+      const waiting = g.id === 'workspace' && !on ? ((myTodo.sign || []).length + (myTodo.returned || []).length) : 0;
+      return /*#__PURE__*/React.createElement("button", {
+        key: g.id, role: "tab", "aria-selected": on,
+        onClick: () => setTab(_tabMemory.current[g.id] && g.tabs.some(t => t.id === _tabMemory.current[g.id]) ? _tabMemory.current[g.id] : g.tabs[0].id),
+        style: {
+          background: on ? TX : 'transparent', color: on ? CARD : MT, border: 'none', borderRadius: 6,
+          padding: '5px 14px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: 12,
+          whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6
+        }
+      }, g.label, waiting > 0 && /*#__PURE__*/React.createElement("span", {
+        style: {background: ERR, color: '#fff', fontSize: 9, fontWeight: 700, borderRadius: 8, padding: '1px 5px', lineHeight: 1.4}
+      }, waiting));
+    }));
+  })(), /*#__PURE__*/React.createElement("div", {
+    role: "tablist", "aria-label": "Screens",
+    style: {display: 'flex', padding: '0 16px', overflowX: 'auto', height: 'var(--h-subtabs)', borderTop: `1px solid ${BDR}`}
+  }, ((TAB_GROUPS.find(g => g.tabs.some(t => t.id === tab)) || TAB_GROUPS[0] || {tabs: TABS}).tabs).map((t, _ti) => {
     /* Count only rows the user actually filled in. mkMP() defaults pax to 1, so
        `r.role||r.pax` counted the blank starter row and every new CE showed a
        phantom "1" on the Manpower tab. */
     const tabCounts = {manpower: mp.filter(r=>r.role).length, tools: tools.filter(r=>r.desc).length, materials: mats.filter(r=>r.desc).length, ppe: ppe.filter(r=>r.desc).length, /* Miscellaneous is the one tab that keeps its rows in per-category lists, which is why it was the one tab with no badge -- there is no flat array to count. */ misc: Object.values(misc || {}).reduce((n, arr) => n + (Array.isArray(arr) ? arr.filter(r => r && r.desc).length : 0), 0), sowbreak: sowUnassignedCount, mywork: myTodo.total};
     const cnt = tabCounts[t.id];
+    const _isSteps = (TAB_GROUPS.find(g => g.tabs.some(x => x.id === tab)) || {}).steps;
     return /*#__PURE__*/React.createElement("button", {
       key: t.id,
+      role: "tab", "aria-selected": tab === t.id,
       onClick: () => setTab(t.id),
       style: {
         background: 'none',
         border: 'none',
         borderBottom: tab === t.id ? `2px solid ${ACC}` : '2px solid transparent',
         color: tab === t.id ? ACC : MT,
-        padding: '9px 13px',
+        padding: _isSteps ? '9px 9px' : '9px 13px',
         cursor: 'pointer',
         fontFamily: 'inherit',
         fontWeight: tab === t.id ? 700 : 400,
@@ -10173,7 +10199,11 @@ function App({
         alignItems: 'center',
         gap: 5
       }
-    }, t.label, cnt > 0 && /*#__PURE__*/React.createElement("span", {
+    }, _isSteps && /*#__PURE__*/React.createElement("span", {
+      "aria-hidden": "true",
+      style: {width: 17, height: 17, borderRadius: '50%', display: 'inline-grid', placeItems: 'center', fontSize: 9, fontWeight: 700,
+        border: `1px solid ${tab === t.id ? ACC : BDR}`, background: tab === t.id ? ACC : 'transparent', color: tab === t.id ? ON_ACC : MT}
+    }, _ti + 1), t.label, cnt > 0 && /*#__PURE__*/React.createElement("span", {
       title: t.id === 'mywork'
         ? [myTodo.sign.length ? myTodo.sign.length + ' waiting for your signature' : '', myTodo.returned.length ? myTodo.returned.length + ' returned to you' : ''].filter(Boolean).join(' · ')
         : t.id === 'sowbreak'
@@ -10190,7 +10220,7 @@ function App({
         lineHeight: 1.4
       }
     }, cnt));
-  })), /*#__PURE__*/React.createElement("div", {
+  }))), /*#__PURE__*/React.createElement("div", {
     className: "shic-workspace"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -14987,13 +15017,24 @@ tab === 'dashboard' && (() => {
       title: ''
     }])
   }, "+ Add Signatory"))))), /*#__PURE__*/React.createElement("div", {
-    className: "shic-rail",
+    className: "shic-rail" + (railSlim ? " shic-rail-slim" : ""),
     style: {
       padding: '14px 14px',
       borderLeft: `1px solid ${BDR}`,
       background: CARD
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "shic-rail-keep shic-rail-toggle",
+    onClick: toggleRail,
+    'aria-label': railSlim ? 'Show live totals' : 'Hide live totals',
+    title: railSlim ? 'Show live totals' : 'Hide live totals',
+    style: {...btn('def', true), float: 'right', padding: '0 8px', lineHeight: '20px'}
+  }, railSlim ? "\u2039" : "\u203a"), /*#__PURE__*/React.createElement("div", {
+    className: "shic-rail-keep shic-rail-mini",
+    style: {textAlign: 'center', marginTop: 8, clear: 'both'}
+  }, /*#__PURE__*/React.createElement("div", {style: {fontSize: 9, color: MT, letterSpacing: '0.06em'}}, "TOTAL"),
+    /*#__PURE__*/React.createElement("div", {style: {...MONO, fontSize: 10, fontWeight: 800, color: ACC, wordBreak: 'break-all'}}, "\u20b1", ph(grand))),
+  /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 10,
       color: MT,

@@ -586,7 +586,20 @@ function App({
   const [masterlist, setMasterlist] = useState(() => mlShape(LS.get('masterlist')) || DEFAULT_ML);
   const [history, setHistory] = useState([]);
   const [histBusy, setHistBusy] = useState(false);
-  const [monData, setMonData] = useState({});
+  const [monData, _setMonDataRaw] = useState({});
+  /* Every write passes through here so a renamed status is read under its new name. */
+  const _renameStatuses = d => {
+    if (!d || typeof d !== 'object') return d;
+    let out = null;
+    Object.keys(d).forEach(k => {
+      const r = d[k];
+      if (r && typeof r === 'object' && r.status && ceStatusName(r.status) !== r.status) {
+        out = out || {...d}; out[k] = {...r, status: ceStatusName(r.status)};
+      }
+    });
+    return out || d;
+  };
+  const setMonData = v => _setMonDataRaw(typeof v === 'function' ? (p => _renameStatuses(v(p))) : _renameStatuses(v));
   const [customStatuses, setCustomStatuses] = useState(() => {
     try {
       const v = localStorage.getItem('shic:statuses');
@@ -5141,7 +5154,7 @@ function App({
     'Sourcing': '#A855F7',
     'Waiting for Information': '#EAB308',
     'Revised': '#38BDF8',
-    'For site insp.': 'var(--accent-violet)',
+    'For site Inspection': 'var(--accent-violet)',
     'For Approval': 'var(--accent-cyan)',
     'Approved': 'var(--status-success)',
     'Cancelled': 'var(--status-danger)',
@@ -6144,7 +6157,7 @@ function App({
         'ongoing':'Ongoing',
         'revised':'Revised',
         'pending':'Pending',
-        'for site insp':'For site insp.',
+        'for site insp':'For site Inspection', 'for site inspection':'For site Inspection',
         'for approval':'For Approval',
         'waiting in':'For Approval',
         'waiting for information':'Waiting for Information', 'waiting for info':'Waiting for Information', 'wfi':'Waiting for Information',

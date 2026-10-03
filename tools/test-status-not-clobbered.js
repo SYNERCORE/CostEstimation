@@ -26,7 +26,7 @@ ck('a CE nobody has triaged is seeded from the document', go('', null).status ==
 ck('and one submitted for approval starts there', go('', pending).status === 'For Approval');
 ck('a Draft moves on when it goes out for approval', go('Draft', pending).status === 'For Approval');
 /* The reported fault: everything anyone set by hand stays set. */
-['Submitted', 'Ongoing', 'Awarded', 'For site insp.', 'No Quote', 'Approved', 'Cancelled'].forEach(st => {
+['Submitted', 'Ongoing', 'Awarded', 'For site Inspection', 'No Quote', 'Approved', 'Cancelled'].forEach(st => {
   const w = go(st, pending);
   ck('a CE moved to ' + st + ' stays there when it is saved', !('status' in w));
 });

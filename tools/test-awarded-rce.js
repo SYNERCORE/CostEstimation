@@ -8,7 +8,7 @@ const fs = require('fs');
 const app = fs.readFileSync('src/App.js', 'utf8'), cfg = fs.readFileSync('src/config.js', 'utf8');
 let bad = 0; const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 console.log('Awarded:');
-ck('is a status', cfg.includes("'Submitted', 'Awarded', 'Superseded'];"));
+ck('is a status', /const DEFAULT_STATUS_OPTIONS = \[[^\]]*'Awarded'[^\]]*\];/.test(cfg));
 ck('is closed (nothing more is owed on the estimate)', cfg.includes("['Approved', 'Submitted', 'Awarded', 'No Quote', 'Cancelled', 'Superseded']"));
 ck('prints as APPROVED on the document', cfg.includes("'Awarded': 'APPROVED',"));
 ck('Won counts Awarded, not Approved', app.includes("x.m.status === 'Awarded').length") && !app.includes("x.m.status === 'Approved').length"));

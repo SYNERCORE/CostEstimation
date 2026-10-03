@@ -51,7 +51,7 @@ for (const s of ['Submitted', 'No Quote', 'Cancelled'])
   ck(s, open(s) === false);
 
 console.log('\nwork still owed is still open:');
-for (const s of ['Draft', 'Pending', 'Ongoing', 'For site insp.', 'For Approval', 'Sourcing', 'Waiting for Information'])
+for (const s of ['Draft', 'Pending', 'Ongoing', 'For site Inspection', 'For Approval', 'Sourcing', 'Waiting for Information'])
   ck(s, open(s) === true);
 ck('On Hold stays open', open('On Hold') === true,
   'paused work comes back, and dropping it out of view is how it gets forgotten');

@@ -452,7 +452,15 @@ const DEFAULT_ML={
 /* 'Draft' and 'No Quote' were referenced by the app's own logic -- the Open CE
    rule, the dashboard donut and the xlsx import all name them -- but were
    missing from this list, so nobody could actually select them. */
-const DEFAULT_STATUS_OPTIONS = ['Draft', 'Pending', 'Ongoing', 'Sourcing', 'Waiting for Information', 'Revised', 'For site insp.', 'For Approval', 'Approved', 'Cancelled', 'On Hold', 'No Quote', 'Submitted', 'Awarded', 'Superseded'];
+/* A status that was renamed: stored rows still carry the old spelling, and
+   are read under the new one so nothing is left holding a status that can no
+   longer be picked. */
+const STATUS_RENAMED = { 'For site insp.': 'For site Inspection' };
+function ceStatusName(s) {
+  const t = String(s == null ? '' : s).trim();
+  return Object.prototype.hasOwnProperty.call(STATUS_RENAMED, t) ? STATUS_RENAMED[t] : s;
+}
+const DEFAULT_STATUS_OPTIONS = ['Draft', 'Pending', 'Ongoing', 'Sourcing', 'Waiting for Information', 'Revised', 'For site Inspection', 'For Approval', 'Approved', 'Cancelled', 'On Hold', 'No Quote', 'Submitted', 'Awarded', 'Superseded'];
 
 /* WHEN A CE IS FINISHED WITH.
    ===========================
@@ -509,7 +517,7 @@ const MON_TO_DOC = {
   'Sourcing': 'DRAFT',
   'Waiting for Information': 'DRAFT',
   'Revised': 'REVISED',
-  'For site insp.': 'FOR REVIEW',
+  'For site Inspection': 'FOR REVIEW',
   'For Approval': 'FOR REVIEW',
   'Approved': 'APPROVED',
   'Submitted': 'APPROVED',

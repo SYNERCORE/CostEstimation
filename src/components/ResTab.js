@@ -5,6 +5,7 @@ const ResTab = ({
   set,
   total,
   label,
+  onCalc, /* Materials only: opens the quantity calculators */
   mlType,
   masterlist,
   showToast,
@@ -338,7 +339,11 @@ showPower && /*#__PURE__*/React.createElement("label", {
     rowGap: 6,
     alignItems: 'center'
   }
-}, /*#__PURE__*/React.createElement("button", {
+}, onCalc && /*#__PURE__*/React.createElement("button", {
+  style: { ...btn('def', true), color: 'var(--brand-accent)', borderColor: 'color-mix(in srgb, var(--brand-accent) 45%, transparent)', background: 'color-mix(in srgb, var(--brand-accent) 14%, transparent)' },
+  onClick: onCalc,
+  title: 'Work out how much to buy for babbitt, painting or welding, and add it here'
+}, "\uD83E\uDDEE Calculators"), /*#__PURE__*/React.createElement("button", {
   style: btn('info', true),
   onClick: () => setPicker({
     type: mlType,

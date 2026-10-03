@@ -979,6 +979,10 @@ function App({
     return () => { window.removeEventListener('shic:bulk:changed', h); clearInterval(t); clearInterval(tick); };
   }, []);
   const _live = useRef(null);       /* current state for the auto-save timer */
+  /* The CE number this editor is working on because it was opened from, or
+     saved to, history -- the only CE a Save may replace. A number that merely
+     matches someone else's CE is still refused. */
+  const _ownNum = useRef('');
   /* The owner holds every admin power on top of being unmanageable by them. */
   const isAdmin = hasAdminPowers(currentUser.role);
   /* A requestor raises a request and hands it over. The costing tabs are not
@@ -2708,7 +2712,23 @@ function App({
         '. SHIC and SY3 share one sequence. Next free: ' + nextCeNum(history, (ceNum.split('-CE-')[0] || null), [...ceNums, ceNum]), true);
       return;
     }
-    if (dup && !dup._imported && !_fromRequest) {
+    /* A saved CE stays editable until it is routed for approval. Save used to
+       refuse any number already on file, so changing a CE after its first save
+       meant a Revise -- a new number -- for what was only a correction. It may
+       be replaced when it is the one open here, belongs to this user (or an
+       admin), has not been routed or approved, and its pipeline status is not
+       a finished one. Routed work still goes through Revise. */
+    const _own = !!(dup && !dup._imported && _ownNum.current === ceNum && (isAdmin || !dup.savedBy || dup.savedBy === currentUser?.username));
+    const _dupApv = dup ? ((monData[dup.id] || {}).apv || {}).state || ((info.approval && info.approval.state) || 'none') : 'none';
+    const _dupMon = dup ? String((monData[dup.id] || {}).status || '').trim() : '';
+    const _routed = _dupApv === 'pending' || _dupApv === 'approved' || _dupApv === 'superseded' || (_dupMon && !ceIsOpen(_dupMon));
+    if (_own && !_routed) {
+      /* Falls through: dbSaveHistory updates the CE in place. */
+    } else if (_own && _routed && !(isAdmin && bulkMode.on(currentUser?.username))) {
+      showToast(ceNum + ' is ' + (_dupApv === 'approved' ? 'approved' : _dupApv === 'pending' ? 'out for approval' : _dupMon ? 'marked ' + _dupMon : 'closed') +
+        ' and can no longer be edited in place. Use ↻ Revise to save your changes as a new revision.', true);
+      return;
+    } else if (dup && !dup._imported && !_fromRequest) {
       /* Bulk upload mode lets an admin load historical CEs whose numbers already
          exist. Saving then UPDATES that CE rather than adding a second one, so
          say which one is being replaced instead of failing silently. */
@@ -2766,6 +2786,7 @@ function App({
       if (_fromRequest) { _entry.info = {..._entry.info, request: false}; setInfo(p => ({...p, request: false})); }
       const _res = await spWithRetry(() => dbSaveHistory(_entry));
       auditLog('save_ce', ceNum, currentUser?.username);
+      _ownNum.current = ceNum;
       /* Without this the next New CE in the same session is handed the
          number just used: ceNums is only fetched on load. */
       setCeNums(p => p.indexOf(ceNum) < 0 ? [...p, ceNum] : p);
@@ -2809,6 +2830,7 @@ function App({
           + '. Nobody else can open ' + ceNum + ' until you run "Push All Local Data to SharePoint".', true);
       } else showToast(_overwrote
         ? 'Saved — REPLACED existing CE ' + ceNum + ' (previously saved ' + _overwrote + ').'
+        : (_own && !_routed) ? 'Saved — CE ' + ceNum + ' updated.'
         : 'Saved! CE ' + ceNum + ' added to history.');
     } catch (e) {
       showToast('Save failed: ' + e.message, true);
@@ -2922,6 +2944,7 @@ function App({
         'Nothing was loaded. Re-import or re-save this CE to restore it.', true);
       return;
     }
+    _ownNum.current = String((d.info && d.info.ceNum) || d.ceNum || '').trim().toUpperCase();
     setCeType(d.ceType);
     setInfo({
       ...BLANK_INFO,
@@ -3376,6 +3399,7 @@ function App({
     if (_defaultsUntouched()) applyCeDefaults(ceType, info.projType, true);
   }, [ceType, info.projType, ceDefaults]);
   const handleNew = () => {
+    _ownNum.current = '';
     setCeType('onsite');
     setInfo({
       ...BLANK_INFO,
@@ -5053,6 +5077,8 @@ function App({
     'No Quote': '#94A3B8',
     'Pending': '#6B7280',
     'Ongoing': 'var(--status-warning)',
+    'Sourcing': '#A855F7',
+    'Waiting for Information': '#EAB308',
     'Revised': '#38BDF8',
     'For site insp.': 'var(--accent-violet)',
     'For Approval': 'var(--accent-cyan)',
@@ -5974,6 +6000,7 @@ function App({
         'for site insp':'For site insp.',
         'for approval':'For Approval',
         'waiting':'Waiting in...', 'waiting in':'Waiting in...',
+        'waiting for information':'Waiting for Information', 'waiting for info':'Waiting for Information', 'wfi':'Waiting for Information',
         'on hold':'On Hold', 'onhold':'On Hold',
         'awarded':'Awarded', 'won':'Awarded',
         'cancelled':'Cancelled',
@@ -14150,7 +14177,7 @@ tab === 'dashboard' && (() => {
     onClick: saveDraft,
     title: "Park unfinished work as a draft the team can see and pick up. Saving the CE clears it."
   }, busyOp.draft ? "\u2B07 Saving\u2026" : "\u2B07 Draft"), /*#__PURE__*/React.createElement("button", {
-    title: "Save this CE and share it with the team (Ctrl+S). The CE Number must be unique.",
+    title: "Save this CE and share it with the team (Ctrl+S). A saved CE can be saved again until it is routed for approval; after that, use Revise.",
     style: busyBtn('save', { ...btn('acc'), fontWeight: 800, padding: '6px 18px' }),
     disabled: !!busyOp.save,
     onClick: handleSave

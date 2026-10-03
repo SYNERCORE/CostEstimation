@@ -452,7 +452,7 @@ const DEFAULT_ML={
 /* 'Draft' and 'No Quote' were referenced by the app's own logic -- the Open CE
    rule, the dashboard donut and the xlsx import all name them -- but were
    missing from this list, so nobody could actually select them. */
-const DEFAULT_STATUS_OPTIONS = ['Draft', 'Pending', 'Ongoing', 'Revised', 'For site insp.', 'For Approval', 'Waiting in...', 'Approved', 'Cancelled', 'On Hold', 'No Quote', 'Submitted', 'Awarded', 'Superseded'];
+const DEFAULT_STATUS_OPTIONS = ['Draft', 'Pending', 'Ongoing', 'Sourcing', 'Waiting for Information', 'Revised', 'For site insp.', 'For Approval', 'Waiting in...', 'Approved', 'Cancelled', 'On Hold', 'No Quote', 'Submitted', 'Awarded', 'Superseded'];
 
 /* WHEN A CE IS FINISHED WITH.
    ===========================
@@ -506,6 +506,8 @@ const MON_TO_DOC = {
   'Draft': 'DRAFT',
   'Pending': 'DRAFT',
   'Ongoing': 'REVISED',
+  'Sourcing': 'DRAFT',
+  'Waiting for Information': 'DRAFT',
   'Revised': 'REVISED',
   'For site insp.': 'FOR REVIEW',
   'For Approval': 'FOR REVIEW',

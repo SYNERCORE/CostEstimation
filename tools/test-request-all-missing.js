@@ -17,7 +17,7 @@ const run = f => {
 let o = run({});
 ck('an empty form is refused with ONE message', o.r === undefined && o.toasts.length === 1);
 ck('it names RCE No., Customer and the assignee together', /RCE No./.test(o.toasts[0]) && /Customer/.test(o.toasts[0]) && /Assigned to/.test(o.toasts[0]));
-o = run({ rceNo: 'RCE-1', client: 'X', assignee: 'Ana Cruz' });
+o = run({ rceNo: 'RCE-1', client: 'X', companyId: '1', assignee: 'Ana Cruz' });
 ck('the checklist and item 14 are not asked of whoever logs it', o.r === 'ok' && o.toasts.length === 0);
 ck('a complete form goes through with no message', o.r === 'ok' && o.toasts.length === 0);
 ck('flagged inputs get a red border', app.indexOf("reqForm._errs[k] && !reqForm[k]") > 0);

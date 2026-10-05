@@ -17,10 +17,10 @@ const run = f => {
   const body = head.slice(head.indexOf('const _errs'), head.indexOf('if (_todo.length)'));
   return new Function('f', 'ceNum', body + '; return _todo;')(f, 'T-1');
 };
-ck('no assignee: refused', run({ client: 'ACME', assignee: '' }).some(t => /Assigned to/.test(t)));
-ck('only spaces: refused', run({ client: 'ACME', assignee: '   ' }).some(t => /Assigned to/.test(t)));
-ck('one estimator: accepted', run({ client: 'ACME', assignee: 'Ana Cruz' }).length === 0);
-ck('several estimators: accepted', run({ client: 'ACME', assignee: 'Ana Cruz, Ben Reyes' }).length === 0);
+ck('no assignee: refused', run({ client: 'ACME', companyId: '1', assignee: '' }).some(t => /Assigned to/.test(t)));
+ck('only spaces: refused', run({ client: 'ACME', companyId: '1', assignee: '   ' }).some(t => /Assigned to/.test(t)));
+ck('one estimator: accepted', run({ client: 'ACME', companyId: '1', assignee: 'Ana Cruz' }).length === 0);
+ck('several estimators: accepted', run({ client: 'ACME', companyId: '1', assignee: 'Ana Cruz, Ben Reyes' }).length === 0);
 
 ck('the label is starred and no longer says optional', app.indexOf('"Assigned to * (one or more)"') > 0 && app.indexOf('Assigned to (optional') < 0);
 ck('the field turns red until one is picked', app.indexOf("reqForm._errs.assignee && !String(reqForm.assignee || '').trim()") > 0);

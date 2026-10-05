@@ -5408,7 +5408,7 @@ function App({
     setReqFiles([]);
     const today = new Date().toISOString().slice(0, 10);
     setReqForm({ ceType: 'onsite', client: '', description: '',
-      projType: 'Mechanical', dateRecv: today, deadline: '', assignee: '', remarks: '', rceNo: '',
+      projType: 'Mechanical', dateRecv: today, deadline: '', assignee: '', remarks: '', rceNo: '', companyId: '',
       /* The checklist starts blank on purpose. Seeding every item as Yes would
          make a complete-looking request out of one that nobody has read. */
       inquiryNo: '', inquiryDate: today, completionDate: '', workLocation: '', address: '',
@@ -5425,8 +5425,10 @@ function App({
     if (!i0.request || i0.acceptedCeNum || typeof e.id !== 'number') return false;
     const rce = String(i0.requestNum || i0.ceNum || '').trim();
     const NL = String.fromCharCode(10);
+    const co = (companies || []).find(c => i0.companyId != null && i0.companyId !== '' && String(c.id) === String(i0.companyId));
     const ans = window.prompt('Accept request ' + rce + ' and give it its CE number:' + NL + NL +
-      'Change the prefix (SHIC, SY3) if it belongs to the other company.', nextCeNum(history, null, ceNums));
+      (co ? 'Issuing company: ' + co.name + '. The number follows its prefix (' + (co.cePrefix || 'SHIC') + ').' : 'This request names no company. Change the prefix (SHIC, SY3) if it belongs to the other company.'),
+      co ? nextCeNumForCompany(history, co, ceNums) : nextCeNum(history, null, ceNums));
     if (ans === null) return false;
     const newNum = String(ans).trim().toUpperCase();
     if (!/^[A-Z0-9\-_\/\.]{2,30}$/.test(newNum)) { showToast('CE Number must be 2–30 characters, letters/numbers/dashes only.', true); return false; }
@@ -5504,6 +5506,8 @@ function App({
     if (!ceNum) { _errs.rceNo = 1; _todo.push('RCE No.'); }
     else if (!/^[A-Z0-9\-_\/\.]{2,30}$/.test(ceNum)) { _errs.rceNo = 1; _todo.push('RCE No. (2-30 characters, letters/numbers/dashes only)'); }
     if (!String(f.client || '').trim()) { _errs.client = 1; _todo.push('Customer'); }
+    /* The company decides the CE number prefix and the printed form, so it is asked here and not guessed at acceptance. */
+    if (f.companyId == null || f.companyId === '') { _errs.companyId = 1; _todo.push('Issuing company'); }
     /* A request names who it is for. Left blank it reached nobody in particular and sat unseen. */
     if (!String(f.assignee || '').trim()) { _errs.assignee = 1; _todo.push('Assigned to (pick at least one estimator)'); }
     /* The checklist and item 14 are the estimators' review, done after the request is logged; they are not required to log it. */
@@ -5523,6 +5527,7 @@ function App({
       const entry = {
         ceType: f.ceType || 'onsite',
         info: { ...BLANK_INFO, ceNum, date: f.dateRecv || BLANK_INFO.date, client: f.client.trim(),
+          companyId: isNaN(f.companyId) ? f.companyId : Number(f.companyId),
           description: String(f.description || '').trim(), projType: f.projType || BLANK_INFO.projType,
           status: 'DRAFT', request: true, requestNum: ceNum, rceNo: ceNum,
           /* info is stored whole as one JSON column, so the checklist rides
@@ -11284,7 +11289,8 @@ rceReview && /*#__PURE__*/React.createElement(RceReviewModal, {
   facts: (() => {
     const e = rceReview.e, i = e.info || {}, r = i.rce || {}, mo = monData[e.id] || {};
     const bl = v => (v == null || v === '') ? '—' : v;
-    return [['RCE No.', i.requestNum || i.ceNum || e.ceNum], ['CE No.', i.acceptedCeNum || 'not yet — given when accepted'], ['Customer', i.client || mo.customer], ['Project title', i.description || mo.jobTitle],
+    return [['RCE No.', i.requestNum || i.ceNum || e.ceNum], ['CE No.', i.acceptedCeNum || 'not yet — given when accepted'], ['Customer', i.client || mo.customer],
+      ['Issuing company', (() => { const c = (companies || []).find(x => String(x.id) === String(i.companyId)); return c ? c.name + (c.cePrefix ? ' (' + c.cePrefix + ')' : '') : ''; })()], ['Project title', i.description || mo.jobTitle],
       ['Project type', i.projType || mo.designation], ['Inquiry No.', r.inquiryNo], ['Inquiry date', r.inquiryDate], ['Submission deadline', r.deadline || mo.deadline || reqDeadline('', r.inquiryDate, mo.dateRecv || i.date)],
       ['Completion date', r.completionDate], ['Date received', mo.dateRecv || i.date], ['Assigned sales', r.assignedSales], ['Work location', r.workLocation],
       ['Address', r.address], ['Inquiry type', r.inquiryType], ['Stage', r.stage], ['CE type', e.ceType],
@@ -11332,6 +11338,9 @@ reqForm && (() => {
     sect("THE CUSTOMER AND THE WORK"),
     grid(
       L("Customer *", inp('client', {placeholder:'e.g. SLTEC'})),
+      L("Issuing company *", /*#__PURE__*/React.createElement("select", {style:(reqForm._errs && reqForm._errs.companyId && (reqForm.companyId == null || reqForm.companyId === '')) ? {...INP, border:'1px solid #ef4444'} : INP, value: reqForm.companyId == null ? '' : reqForm.companyId, onChange:e=>set('companyId', e.target.value)},
+        /*#__PURE__*/React.createElement("option", {value:''}, '\u2014 Select issuing company \u2014'),
+        (companies || []).map(c => /*#__PURE__*/React.createElement("option", {key:c.id, value:c.id}, c.name + (c.sub ? ' \u2014 ' + c.sub : ''))))),
       L("Work location", inp('workLocation', {placeholder:'Where the work happens'}))
     ),
     /*#__PURE__*/React.createElement("div", {style:{marginTop:10}}, L("Address", inp('address', {placeholder:'Site or office address as the inquiry gives it'}))),
@@ -11869,7 +11878,11 @@ tab === 'dashboard' && (() => {
      with no deadline set cannot be ranked, so it sorts to the bottom; as a
      plain string compare an empty deadline would sort to the very top and
      bury the genuinely urgent rows. */
-  const openCEs = liveRows.map(h => ({h, m: monOf(h)}))
+  /* A request nobody has accepted is not a CE yet: it is counted once, in Requests Awaiting Review, and not again as an open CE. */
+  const isUnacceptedReq = h => { const i = h.info || {}; return !!(i.request && !i.acceptedCeNum); };
+  const reqAwaitingN = liveRows.filter(h => isUnacceptedReq(h) && !h._draft && typeof h.id === 'number' && (h.info || {}).reviewStatus !== 'returned' && (h.info || {}).reviewStatus !== 'declined').length;
+  const reqReturnedN = liveRows.filter(h => isUnacceptedReq(h) && !h._draft && (h.info || {}).reviewStatus === 'returned').length;
+  const openCEs = liveRows.filter(h => !isUnacceptedReq(h)).map(h => ({h, m: monOf(h)}))
     .filter(x => ceIsOpen(x.m.status))
     .sort((a, b) => {
       const da = a.m.deadline || '', db = b.m.deadline || '';
@@ -11902,7 +11915,9 @@ tab === 'dashboard' && (() => {
       kpiCard('Value This Month', '₱'+ph(totalThis), OK),
       kpiCard('Avg CE Value', '₱'+ph(avgVal), ACC),
       kpiCard('Total CEs', history.length, MT),
-      kpiCard('Open CEs', openCEs.length, ERR)),
+      kpiCard('Open CEs', openCEs.length, ERR),
+      /* What the Cost Estimation team has to decide on. Returned ones are with their requestors, so they are named but not counted. */
+      kpiCard('Requests Awaiting Review' + (reqReturnedN ? ' (' + reqReturnedN + ' returned)' : ''), reqAwaitingN, reqAwaitingN ? ACC : MT)),
     /* Monthly trend */
     /*#__PURE__*/React.createElement("div",{style:{...CS,marginBottom:16}},
       /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,marginBottom:12,fontSize:12}}, "📈 Monthly Trend (Last 6 Months)"),

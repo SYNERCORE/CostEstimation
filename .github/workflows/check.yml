@@ -405,5 +405,7 @@ jobs:
         run: node tools/test-request-needs-assignee.js
       - name: Resume Work in the top bar
         run: node tools/test-resume-work-in-top-bar.js
+      - name: Request company and Dashboard count
+        run: node tools/test-request-company-and-dashboard.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

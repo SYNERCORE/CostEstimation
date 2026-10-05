@@ -10298,7 +10298,14 @@ function App({
     disabled: !!busyOp.save,
     onClick: handleSave,
     title: "Save CE (Ctrl+S)"
-  }, busyOp.save ? "Saving\u2026" : "Save"), /*#__PURE__*/React.createElement("span", {
+  }, busyOp.save ? "Saving\u2026" : "Save"), /* Resume Work is reachable from any tab here; it used to live only on the Summary step. */
+  /*#__PURE__*/React.createElement("button", {
+    style: { ...btn('def', true), position: 'relative', color: 'var(--accent-violet)', borderColor: '#8B5CF655' },
+    onClick: () => { loadSharedDrafts(); setDraftsOpen(true); },
+    title: "Open the list of unsaved drafts \u2014 yours and the team's \u2014 to resume one or clear the old ones."
+  }, "\ud83d\udccb Resume", sharedDrafts.length > 0 && /*#__PURE__*/React.createElement("span", {
+    style: { marginLeft: 5, background: 'var(--accent-violet)', color: '#fff', borderRadius: 8, padding: '0 5px', fontSize: 9, fontWeight: 700 }
+  }, sharedDrafts.length)), /*#__PURE__*/React.createElement("span", {
     className: "shic-hide-narrow",
     title: "Keyboard shortcuts: Ctrl+S = Save  •  Ctrl+N = New CE",
     style: {fontSize:9, color:BDR, cursor:'default', userSelect:'none', letterSpacing:.3}

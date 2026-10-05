@@ -124,7 +124,7 @@ save is expected, as with the approval flow.
 | Do this in the app | Expect |
 |---|---|
 | A requestor files a request with an estimator picked | that estimator gets one message |
-| A requestor files a request with nobody assigned | the three reviewers each get one message |
+| A requestor tries to file a request with nobody assigned | the app refuses (an estimator is required). The reviewer fallback in the flow only matters for older requests that have no estimator |
 | A reviewer chooses **Return to requestor** | the requestor gets one message with the note |
 | The requestor presses **Send back** | the estimators (or reviewers) get one message |
 | A reviewer chooses **Accept** | the requestor and the estimators each get one message |

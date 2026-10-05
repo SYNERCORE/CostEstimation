@@ -5338,6 +5338,7 @@ function App({
   const [monSearch, setMonSearch] = useState('');
   const [monStatusFilter, setMonStatusFilter] = useState(new Set());
   const [monTypeFilter, setMonTypeFilter] = useState('all');
+  const [monReqFilter, setMonReqFilter] = useState('all');
   const [monDiscFilter, setMonDiscFilter] = useState('all');
   const [monCustFilter, setMonCustFilter] = useState('all');
   const [compareSet, setCompareSet] = useState(new Set()); // CE comparison: max 2 ids
@@ -5871,9 +5872,14 @@ function App({
   };
   const custOptions = useMonFacet(monCust);
 
+  /* The RCE No. a row goes by: the one on its monitoring row, else the one the request was filed under. */
+  const rceOf = (e, m) => String((m && m.rceNo) || (e.info && (e.info.requestNum || e.info.rceNo)) || '').trim();
+  /* 'pending' a request nobody has accepted, 'accepted' a request that became a CE, 'ce' everything else. */
+  const reqKind = e => { const i = e.info || {}; return i.request ? (i.acceptedCeNum ? 'accepted' : 'pending') : 'ce'; };
   const sortedHistory = useMemo(() => {
     const filtered = monRows.filter(e => {
       const m = monOf(e);
+      if (monReqFilter !== 'all' && reqKind(e) !== monReqFilter) return false;
       if (monStatusFilter.size > 0) {
         const s = m.status || '';
         if (!monStatusFilter.has(s)) return false;
@@ -5890,7 +5896,7 @@ function App({
       if (monMine && !meNames().includes(String(m.ceeName || m.preparedBy || e.savedBy || '').trim().toUpperCase())) return false;
       if (!monSearch) return true;
       const q = monSearch.toLowerCase();
-      return (e.info?.ceNum || '').toLowerCase().includes(q) || (e.info?.client || '').toLowerCase().includes(q) || (e.info?.description || '').toLowerCase().includes(q) || (m.customer || '').toLowerCase().includes(q) || (m.receivedBy || '').toLowerCase().includes(q) || (m.rceNo || '').toLowerCase().includes(q) || (m.remarks || '').toLowerCase().includes(q);
+      return (e.info?.ceNum || '').toLowerCase().includes(q) || rceOf(e, m).toLowerCase().includes(q) || (e.info?.client || '').toLowerCase().includes(q) || (e.info?.description || '').toLowerCase().includes(q) || (m.customer || '').toLowerCase().includes(q) || (m.receivedBy || '').toLowerCase().includes(q) || (m.rceNo || '').toLowerCase().includes(q) || (m.remarks || '').toLowerCase().includes(q);
     });
     /* What each column actually SHOWS, so sorting agrees with the eye.
 
@@ -5929,7 +5935,7 @@ function App({
         case 'dateSubmitted':return m.dateSubmitted || '';
         case 'status':       return m.status || '';
         case 'receivedBy':   return m.receivedBy || '';
-        case 'rceNo':        return m.rceNo || '';
+        case 'rceNo':        return rceOf(e, m);
         case 'remarks':      return m.remarks || '';
         default:             return e.savedAt || '';   /* Date Recv. */
       }
@@ -5971,7 +5977,7 @@ function App({
          SY3-CE-2026-10, and "aestillore" must sit with "Aestillore". */
       return String(va).localeCompare(String(vb), 'en', {numeric: true, sensitivity: 'base'}) * dir;
     });
-  }, [monRows, monData, monSearch, monStatusFilter, monTypeFilter, monDiscFilter, monCustFilter, monMine, monApvMine, monSortCol, monSortDir]);
+  }, [monRows, monData, monSearch, monStatusFilter, monTypeFilter, monReqFilter, monDiscFilter, monCustFilter, monMine, monApvMine, monSortCol, monSortDir]);
   /* The rows actually drawn: one page of CEs, with the superseded revisions of
      any CE that has been expanded slotted in underneath it. Expanded after the
      page is cut, so a page is always the same 25 CEs whether or not anyone has
@@ -6572,6 +6578,17 @@ function App({
     s)
   ))),
   /*#__PURE__*/React.createElement("select", {
+    style: {...INP, fontSize:11, width:150},
+    value: monReqFilter,
+    onChange: e => { setMonReqFilter(e.target.value); setMonPage(0); },
+    title: "RCE requests and CEs: requests waiting for the team, requests that became a CE, or CEs that never were requests"
+  },
+    /*#__PURE__*/React.createElement("option", {value:'all'}, "RCE + CE"),
+    /*#__PURE__*/React.createElement("option", {value:'pending'}, "RCE awaiting review"),
+    /*#__PURE__*/React.createElement("option", {value:'accepted'}, "RCE accepted \u2192 CE"),
+    /*#__PURE__*/React.createElement("option", {value:'ce'}, "CE only")
+  ),
+  /*#__PURE__*/React.createElement("select", {
     style: {...INP, fontSize:11, width:120},
     value: monTypeFilter,
     onChange: e => { setMonTypeFilter(e.target.value); setMonPage(0); },
@@ -6617,10 +6634,10 @@ function App({
     title: "Only the CEs waiting on your signature",
     onClick: () => { setMonApvMine(v => !v); setMonPage(0); }
   }, "✍ Awaiting my signature (" + Object.values(monData || {}).filter(m => apvMonWaitsOn(m, currentUser.username)).length + ")"),
-  (monSearch || monStatusFilter.size > 0 || monTypeFilter !== 'all' || monDiscFilter !== 'all' || monCustFilter !== 'all') && /*#__PURE__*/React.createElement("button", {
+  (monSearch || monStatusFilter.size > 0 || monReqFilter !== 'all' || monTypeFilter !== 'all' || monDiscFilter !== 'all' || monCustFilter !== 'all') && /*#__PURE__*/React.createElement("button", {
     style: {...btn('danger', true), fontSize:10},
     title: "Clear all filters",
-    onClick: () => { setMonSearch(''); setMonStatusFilter(new Set()); setMonTypeFilter('all'); setMonDiscFilter('all'); setMonCustFilter('all'); setMonPage(0); }
+    onClick: () => { setMonSearch(''); setMonStatusFilter(new Set()); setMonTypeFilter('all'); setMonReqFilter('all'); setMonDiscFilter('all'); setMonCustFilter('all'); setMonPage(0); }
   }, "\u2715 Clear Filters"),
   /*#__PURE__*/React.createElement("div", {
     style: {
@@ -6810,7 +6827,7 @@ function App({
     }
   }, /*#__PURE__*/React.createElement("th", {style:{...THS,width:28,padding:'6px 4px',fontSize:10,textAlign:'center'}, title:"Select to compare (max 2)"}, "⚖"), [['ceeName', 'Estimator', 80], ['companyDesig', 'Co.', 60], ['ceNum', 'CE No.', 120], ['rceNo', 'RCE No.', 100], ['designation', 'Discipline', 90], ['customer', 'Customer', 100], ['jobTitle', 'Job Title', 180], ['grand', 'Total (₱)', 110], ['dateRecv', 'Date Recv.', 95], ['deadline', 'Deadline', 95], ['deadlineDays', 'Days Left', 65], ['dateSubmitted', 'Date Submitted', 105], ['status', 'Status', 120], ['receivedBy', 'Received By', 100], ['remarks', 'Remarks', 140]].map(([col, label, w]) => /*#__PURE__*/React.createElement("th", {
     key: col,
-    onClick: () => ['ceNum', 'deadline', 'status', 'grand'].includes(col) && toggleSort(col),
+    onClick: () => ['ceNum', 'rceNo', 'deadline', 'status', 'grand'].includes(col) && toggleSort(col),
     style: {
       ...THS,
       width: w,
@@ -6818,10 +6835,10 @@ function App({
       padding: '6px 8px',
       fontSize: 10,
       whiteSpace: 'nowrap',
-      cursor: ['ceNum', 'deadline', 'status', 'grand'].includes(col) ? 'pointer' : 'default',
+      cursor: ['ceNum', 'rceNo', 'deadline', 'status', 'grand'].includes(col) ? 'pointer' : 'default',
       userSelect: 'none'
     }
-  }, label, ['ceNum', 'deadline', 'status', 'grand'].includes(col) && SortIcon({
+  }, label, ['ceNum', 'rceNo', 'deadline', 'status', 'grand'].includes(col) && SortIcon({
     col: col
   }))), /*#__PURE__*/React.createElement("th", {
     style: {
@@ -6955,7 +6972,7 @@ function App({
         fontSize: 10,
         whiteSpace: 'nowrap'
       }
-    }, e._isRev ? '↳ ' + ceNum : (e.info?.request && !e.info.acceptedCeNum ? /*#__PURE__*/React.createElement("span", {title: 'No CE number until the Cost Estimation team accepts this request', style:{color:MT}}, 'RCE ' + (e.info.requestNum || ceNum)) : ceNum),
+    }, e._isRev ? '↳ ' + ceNum : (e.info?.request && !e.info.acceptedCeNum ? /*#__PURE__*/React.createElement("span", {title: 'No CE number until the Cost Estimation team accepts this request. Its RCE No. is in the next column.', style:{color:MT}}, '\u2014') : ceNum),
     e._isRev && /*#__PURE__*/React.createElement("span", {
       title: 'Superseded by a later revision — kept for reference, and not counted as a separate CE',
       style: {marginLeft: 5, fontSize: 8, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 8,
@@ -7013,7 +7030,7 @@ function App({
       defaultValue: m.rceNo || '',
       onBlur: ev => { const v = ev.target.value.trim(); if (v !== String(m.rceNo || '')) updateMon(e.id, 'rceNo', v); },
       placeholder: "RCE No. from Sales"
-    }) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11,...MONO}}, m.rceNo || '—')), /*#__PURE__*/React.createElement("td", {
+    }) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11,...MONO}}, rceOf(e, m) || '—')), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
         padding: '4px 6px'

@@ -383,5 +383,7 @@ jobs:
         run: node tools/test-calc-english-units.js
       - name: My Work review button
         run: node tools/test-mywork-review.js
+      - name: CE list carries the request flag
+        run: node tools/test-history-carries-request-flag.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

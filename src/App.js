@@ -3182,12 +3182,20 @@ function App({
       else { rows.push({...mkRes(), desc: l.desc, qty: l.qty, uom: l.uom, cost: price == null ? 0 : price}); added++; if (price == null) unpriced++; }
     });
     setMats(rows);
-    /* What this CE used goes into the team's history: one value per CE and allowance, the latest. */
-    const ce = String(info.ceNum || '').trim() || '(unsaved)', at = new Date().toISOString();
-    const keep = calcHist.filter(r => !(r && r.ce === ce && Object.prototype.hasOwnProperty.call(used || {}, r.k)));
-    const nextHist = [...keep, ...Object.keys(used || {}).map(k => ({ce, k, v: used[k], at}))].slice(-400);
-    setCalcHist(nextHist);
-    dbSaveCompanyKey('calc_hist', {rows: nextHist}).catch(_e => logSwallowed('App:calc_hist', _e));
+    /* What this CE used goes into the team's history: one value per CE and allowance, the latest.
+       The stored list is read again just before it is written, so another estimator's entries made since this
+       session started are kept; an unsaved CE is filed under its user, not under one name shared by everyone. */
+    const ce = String(info.ceNum || '').trim() || '(unsaved ' + (currentUser?.username || '') + ')', at = new Date().toISOString();
+    const merge = base => {
+      const keep = (base || []).filter(r => !(r && r.ce === ce && Object.prototype.hasOwnProperty.call(used || {}, r.k)));
+      return [...keep, ...Object.keys(used || {}).map(k => ({ce, k, v: used[k], at}))].slice(-400);
+    };
+    setCalcHist(merge(calcHist));
+    dbGetCompanyKey('calc_hist').then(v => {
+      const next = merge(v && Array.isArray(v.rows) ? v.rows : calcHist);
+      setCalcHist(next);
+      return dbSaveCompanyKey('calc_hist', {rows: next});
+    }).catch(_e => logSwallowed('App:calc_hist', _e));
     setCalcOpen(false);
     showToast((added + updated) + ' line' + (added + updated === 1 ? '' : 's') + ' ' + (updated && !added ? 'updated on' : 'added to') + ' Materials' +
       (unpriced ? '. ' + unpriced + ' ha' + (unpriced === 1 ? 's' : 've') + ' no Masterlist price, so its unit cost is 0.' : '.'), unpriced > 0);
@@ -6230,7 +6238,7 @@ function App({
         'pending':'Pending',
         'for site insp':'For site Inspection', 'for site inspection':'For site Inspection',
         'for approval':'For Approval',
-        'waiting in':'For Approval',
+        'waiting in':'Waiting for Information', 'waiting':'Waiting for Information',
         'waiting for information':'Waiting for Information', 'waiting for info':'Waiting for Information', 'wfi':'Waiting for Information',
         'on hold':'On Hold', 'onhold':'On Hold',
         'awarded':'Awarded', 'won':'Awarded',

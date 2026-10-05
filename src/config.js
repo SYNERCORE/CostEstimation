@@ -458,7 +458,7 @@ const DEFAULT_ML={
 /* A status that was renamed: stored rows still carry the old spelling, and
    are read under the new one so nothing is left holding a status that can no
    longer be picked. */
-const STATUS_RENAMED = { 'For site insp.': 'For site Inspection' };
+const STATUS_RENAMED = { 'For site insp.': 'For site Inspection', 'Waiting in...': 'Waiting for Information' };
 function ceStatusName(s) {
   const t = String(s == null ? '' : s).trim();
   return Object.prototype.hasOwnProperty.call(STATUS_RENAMED, t) ? STATUS_RENAMED[t] : s;

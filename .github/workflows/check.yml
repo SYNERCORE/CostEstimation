@@ -367,5 +367,7 @@ jobs:
         run: node tools/test-request-all-missing.js
       - name: The request review flow: proceed, return, decline, update
         run: node tools/test-request-review.js
+      - name: Waiting in maps to Waiting for Information; calculator history merges
+        run: node tools/test-waiting-in-and-calc-history.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

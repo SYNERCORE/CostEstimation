@@ -84,7 +84,7 @@ const REQ = { ceNum: 'RCE-45', requestNum: 'RCE-45', request: true };
   ck('the local archive follows', rec.local && rec.local.ceNum === 'SHIC-CE-2026-1190');
 
   console.log(NL + 'loading and saving:');
-  ck('Load refuses a request nobody has accepted', /Accept this request first/.test(app) && app.indexOf('!_ri.acceptedCeNum') > 0);
+  ck('Load refuses a request nobody has accepted', /Review this request first/.test(app) && app.indexOf('!_ri.acceptedCeNum') > 0);
   ck('saving the accepted CE under its new number is not mistaken for a duplicate', app.indexOf('(info.acceptedCeNum && String(info.acceptedCeNum).toUpperCase() === ceNum)') > 0);
   ck('Accept sits beside the REQUEST badge, for the team only', app.indexOf("!isRequestor && e.info?.request && !e.info.acceptedCeNum && !e._draft && typeof e.id === 'number'") > 0);
   ck('the requestor\'s table says RCE / CE', app.indexOf("'RCE / CE NO.'") > 0);

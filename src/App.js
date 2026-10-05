@@ -3043,7 +3043,7 @@ function App({
        under -- its RCE No. is only the key it is filed by. */
     { const _ri = ((e && e.data) || e || {}).info || {};
       if (_ri.request && !_ri.acceptedCeNum && String(_ri.ceNum || '') === String(_ri.requestNum || '')) {
-        showToast('Accept this request first -- it gets its CE number when the Cost Estimation team accepts it. Use Accept beside its number.', true); return; } }
+        showToast('Review this request first -- it gets its CE number when the Cost Estimation team proceeds with it. Use Review beside its number.', true); return; } }
     if (hasUnsavedWork() && !confirm('Load this CE? Your current unsaved work will be replaced.\n\nTip: save a draft first (Ctrl+S or the Save Draft button) if you need to keep it.')) return;
     let d = e.data || e;
     // SP history items have numeric id but no tools — fetch full CE before applying
@@ -11517,6 +11517,14 @@ viewCE && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',inset
                       : "This CE did not come from a logged request, so there is no checklist to show",
           onClick: () => setViewRce(viewRce === viewCE.id ? null : viewCE.id)
         }, "📋 Request");
+      })(),
+      /* Reviewing a request does not need it accepted first: Review is how it gets accepted. */
+      !isRequestor && !viewCE.draftKey && (() => {
+        const _e = sortedHistory.find(x => x.id === viewCE.id), _i = (_e && _e.info) || {};
+        return _e && _i.request && !_i.acceptedCeNum && typeof _e.id === 'number' && /*#__PURE__*/React.createElement("button", {
+          style: btn('ok', true), title: 'Review the checklist and decide: proceed, secure the missing data first, or decline',
+          onClick: () => { setViewCE(null); openReview(_e, 'review'); }
+        }, "Review");
       })(),
       !viewCE.draftKey && /*#__PURE__*/React.createElement("button", {
         style: btn(attachPanel === viewCE.id ? 'acc' : 'def', true),

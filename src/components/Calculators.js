@@ -226,11 +226,11 @@ function CalcStdInput({ value, onCommit, label }) {
 }
 
 function CalcDrawer(props) {
-  const { open, onClose, calc, setCalc, std, hist, isAdmin, onSaveStd, priceFor, onAdd } = props;
+  const { open, onClose, calc, setCalc, std, hist, isAdmin, onSaveStd, priceFor, onAdd, page } = props;
   const [adminOn, setAdminOn] = React.useState(false);
   const [rev, setRev] = React.useState(0);
   React.useEffect(() => {
-    if (!open) return;
+    if (!open || page) return;
     const key = e => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', key);
     return () => document.removeEventListener('keydown', key);
@@ -382,11 +382,11 @@ function CalcDrawer(props) {
       st.jobs.length > 1 ? h('i', { role: 'button', 'aria-label': 'Remove ' + j.name, onClick: e => { e.stopPropagation(); upd(s => { s.jobs.splice(i, 1); s.act = Math.min(s.act, s.jobs.length - 1); }); } }, '×') : null)),
     h('button', { className: 'calc-addjob', onClick: () => upd(s => { const copy = JSON.parse(JSON.stringify(s.jobs[s.act])); copy.name = kdef.job + ' ' + (s.jobs.reduce((m, j) => Math.max(m, parseInt(String(j.name).replace(/\D+/g, ''), 10) || 0), 0) + 1); s.jobs.push(copy); s.act = s.jobs.length - 1; }) }, '+ Add another ' + kdef.job.toLowerCase()));
 
-  return h('aside', { className: 'calc-drawer', 'aria-label': 'Quantity calculators' },
+  return h('aside', { className: 'calc-drawer' + (page ? ' calc-page' : ''), 'aria-label': 'Quantity calculators' },
     h('div', { className: 'calc-hd' },
       h('b', { style: { fontSize: 14, flex: 1 } }, 'Quantity calculators'),
       h('div', { className: 'calc-tabs', role: 'tablist' }, CALC_KINDS.map(k => h('button', { key: k.id, role: 'tab', 'aria-selected': k.id === kind, onClick: () => setTab(k.id) }, k.label))),
-      h('button', { className: 'calc-x', 'aria-label': 'Close calculators', onClick: onClose }, '×')),
+      page ? null : h('button', { className: 'calc-x', 'aria-label': 'Close calculators', onClick: onClose }, '×')),
     h('div', { className: 'calc-bd' },
       jobsRow,
       h('section', { style: C.sec }, h('h3', { style: C.h3 }, 'Inputs'), inputs),

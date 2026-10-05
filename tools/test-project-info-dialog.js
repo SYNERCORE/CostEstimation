@@ -24,7 +24,7 @@ ck('it names what is still needed', all(t).some(n => n.kids && n.kids.join('').i
 ck('it asks for all four', all(t).filter(n => n.type === 'select').length === 3 && all(t).filter(n => n.type === 'textarea').length === 1);
 t = render({ ...base, missing: [], companyId: 1, ceType: 'onsite', projType: 'Civil', description: 'x' });
 ck('Continue opens once all four are in', buttons(t).find(b => b.kids.join('').indexOf('Continue') >= 0).props.disabled === false);
-ck('and the last field filled does not close it by itself (only Continue does)', app.indexOf('onContinue: () => setPiGate(false)') > 0 && app.indexOf('piGate && tab === ' + String.fromCharCode(34) + 'info' + String.fromCharCode(34)) > 0);
+ck('and the last field filled does not close it by itself (only Continue does)', app.indexOf('onContinue: continueGate') > 0 && app.indexOf('const continueGate = () => {' + NL + '    setPiGate(false);') > 0);
 
 console.log(NL + 'in the app:');
 ck('it is opened when Project Info is entered incomplete', app.indexOf("if (!isRequestor && tab === \"info\" && infoMissing.length) setPiGate(true);") > 0);

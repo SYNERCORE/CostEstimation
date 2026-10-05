@@ -72,7 +72,7 @@ const mk = (store, opts) => {
   console.log(NL + 'the app:');
   ck('New CE claims its number', /const _newGuess = nextCeNum\(history, null, ceNums\);\s+claimCeNum\(null, _newGuess\);/.test(app));
   ck('Clone claims its number', /claimCeNum\(null, _guess\);/.test(app));
-  ck('choosing the company only changes the prefix of the number already claimed', app.indexOf("(selCo?.cePrefix || 'SHIC').toUpperCase() + '-CE-' + _sq.seq") > 0 && app.indexOf("claimCeNum(selCo") < 0);
+  ck('choosing the company only changes the prefix of the number already claimed', app.indexOf("(selCo?.cePrefix || 'SHIC').toUpperCase() + '-CE-' + _sq.seq") > 0 && app.slice(app.indexOf('const pickCompany'), app.indexOf('const continueGate')).indexOf('claimCeNum') < 0);
   ck('a number the person has already typed over is not replaced', app.indexOf("String(p.ceNum || '').toUpperCase() === String(from).toUpperCase() ? { ...p, ceNum: n } : p") > 0);
   ck('and the person is told when the number changed', app.indexOf('was just taken by someone else. This CE is') > 0);
   process.exit(bad ? 1 : 0);

@@ -1014,6 +1014,8 @@ function App({
      saved to, history -- the only CE a Save may replace. A number that merely
      matches someone else's CE is still refused. */
   const _ownNum = useRef('');
+  /* The sequence part of the number this editor has claimed for its new CE, so Continue does not claim a second. */
+  const _claimedSeq = useRef('');
   /* The owner holds every admin power on top of being unmanageable by them. */
   const isAdmin = hasAdminPowers(currentUser.role);
   /* A requestor raises a request and hands it over. The costing tabs are not
@@ -1039,7 +1041,8 @@ function App({
   const TAB_GROUPS = [
     {id: 'workspace', label: 'Workspace', ids: ['mywork', 'history', 'dashboard', 'admin']},
     {id: 'estimate', label: 'Estimate', ids: ['info', 'sow', 'sowbreak', 'manpower', 'tools', 'materials', 'ppe', 'misc', 'summary'], steps: true},
-    {id: 'libraries', label: 'Libraries', ids: ['scopelib', 'masterlist']}
+    {id: 'libraries', label: 'Libraries', ids: ['scopelib', 'masterlist']},
+    {id: 'calculators', label: 'Calculators', ids: ['calculators']}
   ].map(g => ({...g, tabs: g.ids.map(id => TABS.find(t => t.id === id)).filter(Boolean)})).filter(g => g.tabs.length);
   const _tabMemory = useRef({});
   /* The estimate cannot be worked on until Project Info says what it is for: the issuing
@@ -1068,6 +1071,18 @@ function App({
   /* The four are asked for in front of Project Info, and the dialog stays until Continue. */
   const [piGate, setPiGate] = useState(false);
   useEffect(() => { if (!isRequestor && tab === "info" && infoMissing.length) setPiGate(true); }, [tab]);
+  /* Continue is where a new CE gets its number, if it has not claimed one already: a fresh editor
+     starts on a placeholder, and a CE that was opened or saved keeps the number it has. */
+  const continueGate = () => {
+    setPiGate(false);
+    if (_ownNum.current) return;
+    const sq = ceSeqOf(info.ceNum);
+    if (sq && sq.seq === _claimedSeq.current) return;
+    const selCo = (companies || []).find(c => String(c.id) === String(info.companyId)) || (companies || [])[0];
+    const guess = nextCeNumForCompany(history, selCo, ceNums);
+    setInfo(p => ({ ...p, ceNum: guess }));
+    claimCeNum(selCo?.cePrefix || 'SHIC', guess);
+  };
   const _gated = ['sow', 'sowbreak', 'manpower', 'tools', 'materials', 'ppe', 'misc', 'summary'];
   useEffect(() => {
     if (infoMissing.length && _gated.indexOf(tab) >= 0) {
@@ -3161,9 +3176,11 @@ function App({
      unless the person has already typed their own. */
   const claimCeNum = (prefix, guess) => {
     let shown = guess;
+    _claimedSeq.current = (ceSeqOf(guess) || {}).seq || '';
     const apply = n => {
       if (!n || n === shown) return;
       const from = shown; shown = n;
+      _claimedSeq.current = (ceSeqOf(n) || {}).seq || '';
       setInfo(p => String(p.ceNum || '').toUpperCase() === String(from).toUpperCase() ? { ...p, ceNum: n } : p);
       showToast('CE Number ' + from + ' was just taken by someone else. This CE is ' + n + '.');
     };
@@ -11030,6 +11047,10 @@ tab === 'sowbreak' && (() => {
   );
 })(),
 tab === 'scopelib' && ScopeLibraryEditor(),
+tab === 'calculators' && /*#__PURE__*/React.createElement(CalcDrawer, {
+  page: true, open: true, onClose: () => setTab('materials'), calc, setCalc, std: calcStdNow, hist: calcHist,
+  isAdmin, onSaveStd: calcSaveStd, priceFor: calcPriceFor, onAdd: (l, k, u) => { calcAddLines(l, k, u); setTab('materials'); }
+}),
 tab === 'masterlist' && MlEditor(), tab === 'masterlist' && MlCalcModal(), tab === 'masterlist' && /*#__PURE__*/React.createElement(MlTrendModal, { mlTrend, setMlTrend, masterlist, ML_HIST_KIND }),
 tab === 'history' && HistPanel(),   /* invoked, not rendered — see its declaration */
 
@@ -11194,7 +11215,7 @@ piGate && tab === "info" && !isRequestor && /*#__PURE__*/React.createElement(Pro
   missing: infoMissing, companies, companyId: info.companyId, ceType, projType: info.projType, description: info.description,
   ceTypes: Object.keys(CE_CFG).map(k => ({ k, label: ceTypeLabel(k) })),
   onCompany: pickCompany, onType: setCeType, onDiscipline: v => setInfo(p => ({ ...p, projType: v })), onDescription: v => setInfo(p => ({ ...p, description: v })),
-  onCancel: () => { setPiGate(false); setTab('mywork'); }, onContinue: () => setPiGate(false)
+  onCancel: () => { setPiGate(false); setTab('mywork'); }, onContinue: continueGate
 }),
 
 /* ── Request review / update ── */

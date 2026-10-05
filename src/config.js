@@ -139,7 +139,7 @@ function toolGroupLabel(k) {
   return g ? g.t : '';
 }
 
-const CE_TABS=[{id:"mywork",label:"🏠 My Work"},{id:"info",label:"Project Info"},{id:"sow",label:"Scope of Work"},{id:"sowbreak",label:"SOW Breakdown"},{id:"manpower",label:"Manpower"},{id:"tools",label:"Tools & Equipment"},{id:"materials",label:"Materials"},{id:"ppe",label:"PPE"},{id:"misc",label:"Miscellaneous"},{id:"summary",label:"Summary"},{id:"scopelib",label:"Scope Library"},{id:"masterlist",label:"Masterlist"},{id:"history",label:"CE Monitoring"},{id:"dashboard",label:"📊 Dashboard"}];
+const CE_TABS=[{id:"mywork",label:"🏠 My Work"},{id:"info",label:"Project Info"},{id:"sow",label:"Scope of Work"},{id:"sowbreak",label:"SOW Breakdown"},{id:"manpower",label:"Manpower"},{id:"tools",label:"Tools & Equipment"},{id:"materials",label:"Materials"},{id:"ppe",label:"PPE"},{id:"misc",label:"Miscellaneous"},{id:"summary",label:"Summary"},{id:"scopelib",label:"Scope Library"},{id:"masterlist",label:"Masterlist"},{id:"calculators",label:"🧮 Calculators"},{id:"history",label:"CE Monitoring"},{id:"dashboard",label:"📊 Dashboard"}];
 const DEFAULT_ML={
   manpower:[
     {id:"m1",code:"SHIC-MP-001",category:"Electrical",role:"Electrical Supervisor",rate:1200,perDiem:0,uom:"Day"},

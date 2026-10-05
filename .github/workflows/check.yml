@@ -375,5 +375,7 @@ jobs:
         run: node tools/test-project-info-gate.js
       - name: The Project Info start dialog
         run: node tools/test-project-info-dialog.js
+      - name: Continue assigns the CE number; Calculators main tab
+        run: node tools/test-continue-number-and-calc-tab.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

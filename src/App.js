@@ -3038,6 +3038,14 @@ function App({
     const hasRows = mp.some(r=>r.role) || tools.some(r=>r.desc) || mats.some(r=>r.desc) || ppe.some(r=>r.desc);
     return hasInfo || hasRows;
   };
+  /* A request with no deadline is due three days after its inquiry date. */
+  const reqDeadline = (dl, inquiryDate, dateRecv) => {
+    if (dl) return dl;
+    const b = inquiryDate || dateRecv; if (!b) return '';
+    const d = new Date(b + 'T00:00:00'); if (isNaN(d)) return '';
+    d.setDate(d.getDate() + 3);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  };
   const handleLoad = async e => {
     /* A request nobody has accepted has no CE number to build the estimate
        under -- its RCE No. is only the key it is filed by. */
@@ -5507,7 +5515,7 @@ function App({
           /* info is stored whole as one JSON column, so the checklist rides
              along with it and needs no new SharePoint column of its own. */
           rce: { inquiryNo: String(f.inquiryNo || '').trim(), inquiryDate: f.inquiryDate || '',
-            completionDate: f.completionDate || '', deadline: f.deadline || '',
+            completionDate: f.completionDate || '', deadline: reqDeadline(f.deadline, f.inquiryDate, f.dateRecv),
             workLocation: String(f.workLocation || '').trim(), address: String(f.address || '').trim(),
             assignedSales: String(f.assignedSales || '').trim(), inquiryType: f.inquiryType || '',
             stage: f.stage || '', items: f.items || {}, recommendation: f.recommendation || '',
@@ -5526,7 +5534,7 @@ function App({
       }
       const fields = { status: 'Pending', ceeName: String(f.assignee || '').trim() || 'Unassigned', customer: f.client.trim(),
         jobTitle: String(f.description || '').trim(), designation: f.projType || '', dateRecv: f.dateRecv || '',
-        deadline: f.deadline || '', receivedBy: currentUser.name || currentUser.username || '',
+        deadline: reqDeadline(f.deadline, f.inquiryDate, f.dateRecv), receivedBy: currentUser.name || currentUser.username || '',
         /* The recommendation belongs where the estimator looks first. Left
            only inside the CE it would be found after the work started, not
            before -- and 14.2 and 14.3 are both reasons not to start. */
@@ -6947,7 +6955,7 @@ function App({
         fontSize: 10,
         whiteSpace: 'nowrap'
       }
-    }, e._isRev ? '↳ ' + ceNum : ceNum,
+    }, e._isRev ? '↳ ' + ceNum : (e.info?.request && !e.info.acceptedCeNum ? /*#__PURE__*/React.createElement("span", {title: 'No CE number until the Cost Estimation team accepts this request', style:{color:MT}}, 'RCE ' + (e.info.requestNum || ceNum)) : ceNum),
     e._isRev && /*#__PURE__*/React.createElement("span", {
       title: 'Superseded by a later revision — kept for reference, and not counted as a separate CE',
       style: {marginLeft: 5, fontSize: 8, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 8,
@@ -11234,12 +11242,13 @@ rceReview && /*#__PURE__*/React.createElement(RceReviewModal, {
   users: reqUsers, assignee: String((monData[rceReview.e.id] || {}).ceeName || '').replace(/^Unassigned$/, ''), onClose: () => setRceReview(null), onDone: saveReview,
   facts: (() => {
     const e = rceReview.e, i = e.info || {}, r = i.rce || {}, mo = monData[e.id] || {};
-    return [['RCE No.', i.requestNum || i.ceNum || e.ceNum], ['Company', i.client || mo.customer], ['Project', i.description || mo.jobTitle],
-      ['Project type', i.projType || mo.designation], ['Date received', mo.dateRecv || i.date], ['Deadline', r.deadline || mo.deadline],
-      ['Inquiry No.', r.inquiryNo], ['Inquiry date', r.inquiryDate], ['Completion date', r.completionDate], ['Work location', r.workLocation],
-      ['Address', r.address], ['Assigned sales', r.assignedSales], ['Inquiry type', r.inquiryType], ['Stage', r.stage],
+    const bl = v => (v == null || v === '') ? '—' : v;
+    return [['RCE No.', i.requestNum || i.ceNum || e.ceNum], ['CE No.', i.acceptedCeNum || 'not yet — given when accepted'], ['Customer', i.client || mo.customer], ['Project title', i.description || mo.jobTitle],
+      ['Project type', i.projType || mo.designation], ['Inquiry No.', r.inquiryNo], ['Inquiry date', r.inquiryDate], ['Submission deadline', r.deadline || mo.deadline || reqDeadline('', r.inquiryDate, mo.dateRecv || i.date)],
+      ['Completion date', r.completionDate], ['Date received', mo.dateRecv || i.date], ['Assigned sales', r.assignedSales], ['Work location', r.workLocation],
+      ['Address', r.address], ['Inquiry type', r.inquiryType], ['Stage', r.stage], ['CE type', e.ceType],
       ['Requested by', mo.receivedBy || r.preparedBy || e.savedBy], ['Assigned estimator', mo.ceeName], ['Remarks', mo.remarks]
-    ].filter(p => p[1]);
+    ].map(p => [p[0], bl(p[1])]);
   })(),
   loadFiles: async () => { const sp = _monSpIdCache[rceReview.e.id]; return sp ? await spGetAttachments(spList('Monitoring'), sp) : []; }
 }),
@@ -11732,7 +11741,8 @@ tab === 'mywork' && (() => {
     /*#__PURE__*/React.createElement("div", {style:{fontSize:10,color:MT,textTransform:'uppercase',letterSpacing:'.06em'}}, label),
     /*#__PURE__*/React.createElement("div", {style:{fontSize:24,fontWeight:800,color:col||'inherit',...MONO}}, val),
     sub && /*#__PURE__*/React.createElement("div", {style:{fontSize:10,color:MT}}, sub));
-  const ceLabel = e => (e.info && e.info.ceNum) || e.ceNum || '(no number)';
+  /* A request nobody has accepted has no CE number: it shows as its RCE No. */
+  const ceLabel = e => { const i = e.info || {}; return i.request && !i.acceptedCeNum ? 'RCE ' + (i.requestNum || i.ceNum || e.ceNum) : i.ceNum || e.ceNum || '(no number)'; };
   const line = (x, extra, actions) => /*#__PURE__*/React.createElement("div", {key: x.e.id, style:{display:'flex',alignItems:'center',gap:8,padding:'6px 2px',borderBottom:'1px solid '+alpha(BDR,'44'),fontSize:12}},
     /*#__PURE__*/React.createElement("b", {style:{...MONO,fontSize:11,whiteSpace:'nowrap'}}, ceLabel(x.e)),
     /*#__PURE__*/React.createElement("span", {style:{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:MT}}, [(x.e.info && x.e.info.client) || x.m.customer || '', (x.e.info && x.e.info.description) || ''].filter(Boolean).join(' · ')),

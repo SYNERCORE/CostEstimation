@@ -29,7 +29,7 @@ ck('only a SharePoint save counts -- a request nobody else can see is not assign
 ck('the assignment is the Estimator column, with status Pending and who received it',
   has(/status: 'Pending', ceeName: String(f.assignee || '').trim() || 'Unassigned'/) && has(/receivedBy: currentUser.name || currentUser.username/));
 ck('deadline, date received and job title are written too',
-  has(/deadline: f\.deadline \|\| ''/) && has(/dateRecv: f\.dateRecv \|\| ''/) && has(/jobTitle: String\(f\.description/));
+  has(/deadline: reqDeadline\(f\.deadline, f\.inquiryDate, f\.dateRecv\)/) && has(/dateRecv: f\.dateRecv \|\| ''/) && has(/jobTitle: String\(f\.description/));
 /* The remarks column now leads with item 14, because that is the one thing
    the estimator must read before starting: two of the three recommendations
    are reasons not to. What Sales typed still follows it. */

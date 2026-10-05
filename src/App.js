@@ -408,10 +408,13 @@ function App({
   currentUser,
   onLogout
 }) {
-  const [ceType, setCeType] = useState("onsite");
+  /* Project type and issuing company start blank on a new CE: they decide the number's prefix, the
+     rates that apply and the printed form, so they are chosen, not assumed. */
+  const [ceType, setCeType] = useState("");
   const [tab, setTab] = useState("mywork");
   const [info, setInfo] = useState({
-    ...BLANK_INFO
+    ...BLANK_INFO,
+    companyId: ''
   });
   /* No starter row. Every shift group already has its own empty state, so a
      blank row bought nothing and cost the user a stray "Role name..." line
@@ -1044,7 +1047,7 @@ function App({
      the screens after Project Info stay shut until they are filled. A requestor only logs
      a request, so none of this applies to them. */
   const infoMissing = isRequestor ? [] : [
-    (info.companyId == null && !(companies || []).length) ? 'Issuing Company' : '',
+    (info.companyId == null || info.companyId === '') ? 'Issuing Company' : '',
     !String(ceType || '').trim() ? 'Project Type' : '',
     !String(info.projType || '').trim() ? 'Discipline' : '',
     !String(info.description || '').trim() ? 'Project Description' : ''
@@ -3060,10 +3063,12 @@ function App({
       return;
     }
     _ownNum.current = String((d.info && d.info.ceNum) || d.ceNum || '').trim().toUpperCase();
-    setCeType(d.ceType);
+    setCeType(d.ceType || 'onsite');
     setInfo({
       ...BLANK_INFO,
-      ...d.info
+      ...d.info,
+      /* Saved before the company was a choice: it was using the first one. */
+      companyId: (d.info && d.info.companyId != null && d.info.companyId !== '') ? d.info.companyId : (((companies || [])[0] || {}).id != null ? companies[0].id : '')
     });
     /* Loading regenerates every row id, scope tasks included. Remap each
        resource row's taskId through the same mapping, or every SOW Breakdown
@@ -3585,11 +3590,12 @@ function App({
   const handleNew = () => {
     _ownNum.current = '';
     setCalc(null); setCalcOpen(false);
-    setCeType('onsite');
+    setCeType('');
     const _newGuess = nextCeNum(history, null, ceNums);
     claimCeNum(null, _newGuess);
     setInfo({
       ...BLANK_INFO,
+      companyId: '',
       ceNum: _newGuess,
       date: new Date().toISOString().slice(0, 10)
     });
@@ -10172,12 +10178,12 @@ function App({
   }, /*#__PURE__*/React.createElement("select", {
     value: ceType,
     onChange: e => setCeType(e.target.value),
-    'aria-label': 'CE type',
-    title: 'CE type',
+    'aria-label': 'Project type',
+    title: ceType ? 'Project type' : 'Required: choose the project type',
     style: {
       background: alpha((CE_CFG[ceType] || {}).color || ACC, '1A'),
       color: (CE_CFG[ceType] || {}).color || ACC,
-      border: `1px solid ${alpha((CE_CFG[ceType] || {}).color || ACC, '55')}`,
+      border: ceType ? `1px solid ${alpha((CE_CFG[ceType] || {}).color || ACC, '55')}` : `1px solid ${ERR}`,
       borderRadius: 5,
       padding: '5px 8px',
       cursor: 'pointer',
@@ -10185,7 +10191,7 @@ function App({
       fontWeight: 700,
       fontSize: 11
     }
-  }, Object.keys(CE_CFG).map(ceKey => /*#__PURE__*/React.createElement("option", { key: ceKey, value: ceKey }, ceTypeLabel(ceKey))))), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("option", { value: "", disabled: true }, "— Project type * —"), Object.keys(CE_CFG).map(ceKey => /*#__PURE__*/React.createElement("option", { key: ceKey, value: ceKey }, ceTypeLabel(ceKey))))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -11833,23 +11839,24 @@ tab === 'dashboard' && (() => {
   }, secHead("Project Details", MT, null, {size: 11, mb: 14}), /*#__PURE__*/React.createElement("div", {
     style: {marginBottom: 16, padding: '12px 14px', background: '#A78BFA11', borderRadius: 8, border: '2px solid #A78BFA44', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap'}
   }, /*#__PURE__*/React.createElement("div", {style: {flex: 1, minWidth: 200}},
-    /*#__PURE__*/React.createElement("label", {style: {...LBL, color: 'var(--accent-violet)', fontWeight: 700, fontSize: 11, letterSpacing: '0.05em'}}, "🏢 Issuing Company"),
+    /*#__PURE__*/React.createElement("label", {style: {...LBL, color: 'var(--accent-violet)', fontWeight: 700, fontSize: 11, letterSpacing: '0.05em'}}, "🏢 Issuing Company", /*#__PURE__*/React.createElement("span", { style: { color: ERR } }, " *")),
     /*#__PURE__*/React.createElement("select", {
-      style: INP,
-      value: info.companyId != null ? info.companyId : (companies[0]||{}).id || '',
+      style: { ...INP, ...((info.companyId == null || info.companyId === '') ? { borderColor: ERR } : {}) },
+      value: info.companyId != null ? info.companyId : '',
       onChange: e => {
         const rawId = e.target.value === '' ? null : (isNaN(e.target.value) ? e.target.value : Number(e.target.value));
         const selCo = companies.find(c => String(c.id) === String(rawId)) || companies[0];
         setInfo(p => {
           const pfx = ((selCo?.cePrefix || 'SHIC') + '-CE-').toUpperCase();
           const isDefault = !p.ceNum || p.ceNum.toUpperCase().startsWith(pfx) || /^[A-Z0-9]+-CE-\d{4}-\d+$/i.test(p.ceNum);
-          const newCeNum = isDefault ? nextCeNumForCompany(history, selCo, ceNums) : p.ceNum;
+          /* The number was claimed when the CE was started and the sequence is shared by every company,
+             so choosing the company only changes its prefix; it does not claim another number. */
+          const _sq = ceSeqOf(p.ceNum);
+          const newCeNum = isDefault ? (_sq ? (selCo?.cePrefix || 'SHIC').toUpperCase() + '-CE-' + _sq.seq : nextCeNumForCompany(history, selCo, ceNums)) : p.ceNum;
           return {...p, companyId: rawId, ceNum: newCeNum};
         });
-        { const _cur = String(info.ceNum || '').toUpperCase(), _p = ((selCo?.cePrefix || 'SHIC') + '-CE-').toUpperCase();
-          if (!_cur || _cur.startsWith(_p) || /^[A-Z0-9]+-CE-\d{4}-\d+$/i.test(_cur)) claimCeNum(selCo?.cePrefix || 'SHIC', nextCeNumForCompany(history, selCo, ceNums)); }
       }
-    }, companies.map(c => /*#__PURE__*/React.createElement("option", {key: c.id, value: c.id}, c.name + (c.sub ? ' — ' + c.sub : ''))))
+    }, /*#__PURE__*/React.createElement("option", {value: "", disabled: true}, "— Select issuing company —"), companies.map(c => /*#__PURE__*/React.createElement("option", {key: c.id, value: c.id}, c.name + (c.sub ? ' — ' + c.sub : ''))))
   ), (() => {
     const selCo = companies.find(c => String(c.id) === String(info.companyId != null ? info.companyId : (companies[0]||{}).id)) || companies[0] || {};
     return /*#__PURE__*/React.createElement("div", {style: {display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0}},

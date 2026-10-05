@@ -377,5 +377,7 @@ jobs:
         run: node tools/test-project-info-dialog.js
       - name: Continue assigns the CE number; Calculators main tab
         run: node tools/test-continue-number-and-calc-tab.js
+      - name: Cut-list calculators (bar and sheet cutting)
+        run: node tools/test-cut-calculators.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

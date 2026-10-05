@@ -17,7 +17,9 @@
 const CALC_KINDS = [
   { id: 'babbitt', label: 'Babbitt', job: 'Bearing' },
   { id: 'painting', label: 'Painting', job: 'Surface' },
-  { id: 'welding', label: 'Welding', job: 'Shaft' }
+  { id: 'welding', label: 'Welding', job: 'Shaft' },
+  { id: 'cut1d', label: 'Bar cutting', job: 'Cut' },
+  { id: 'cut2d', label: 'Sheet cutting', job: 'Layout' }
 ];
 
 /* kind: src = a published figure, est = our own estimate (shown as such).
@@ -37,7 +39,7 @@ const CALC_DEFAULTS = {
     tin: { label: 'Tin ingot', v: 3.8, unit: 'kg' }
   }
 };
-const CALC_ROWS = { babbitt: ['babbitt'], painting: ['brush', 'spray'], welding: ['waste', 'smaw', 'tig', 'stub'] };
+const CALC_ROWS = { babbitt: ['babbitt'], painting: ['brush', 'spray'], welding: ['waste', 'smaw', 'tig', 'stub'], cut1d: [], cut2d: [] };
 const CALC_SOURCES = {
   babbitt: [['No published figure was found for babbitt pour waste.', null]],
   painting: [['Industrial Coatings Ltd', 'https://industrialcoatingsltd.com/pages/how-to-work-out-paint-coverage-for-protective-coatings']],
@@ -59,6 +61,14 @@ const CALC_FIELDS = {
     { id: 'p1', label: 'Primer rate', unit: 'm2/L', v: 10, hint: 'Practical rate from the TDS' },
     { id: 'p2', label: 'Intermediate rate', unit: 'm2/L', v: 6.2 },
     { id: 'p3', label: 'Topcoat rate', unit: 'm2/L', v: 9.8 }],
+  cut1d: [
+    { id: 'stock', label: 'Stock length', unit: 'mm', v: 6000, hint: 'A pipe, bar or angle as the supplier sells it' },
+    { id: 'kerf', label: 'Cut width (saw or torch kerf)', unit: 'mm', v: 3, std: 1, hint: 'Lost at every cut' }],
+  cut2d: [
+    { id: 'sw', label: 'Sheet width', unit: 'mm', v: 1220 },
+    { id: 'sh', label: 'Sheet length', unit: 'mm', v: 2440 },
+    { id: 'kerf', label: 'Cut width (saw or torch kerf)', unit: 'mm', v: 3, std: 1, hint: 'Lost at every cut' },
+    { id: 'rot', label: 'Pieces may be turned 90 degrees', unit: '1 = yes, 0 = no', v: 1, hint: 'Say 0 when the grain or pattern matters' }],
   welding: [
     { id: 'dens', label: 'Density of weld metal', unit: 'g/cm3', v: 7.85, std: 1, hint: '7.85 carbon steel, about 8.0 stainless' },
     { id: 'd', label: 'Shaft diameter before welding', unit: 'mm', v: 500 },
@@ -96,6 +106,8 @@ function calcNewJob(kind, n) {
   const j = { name: CALC_KINDS.find(k => k.id === kind).job + ' ' + n, vals: {} };
   CALC_FIELDS[kind].forEach(f => { j.vals[f.id] = f.v; });
   if (kind === 'welding') j.cons = [{ proc: 'SMAW', dia: 4, len: 350, share: 100 }];
+  if (kind === 'cut1d') { j.mat = ''; j.pieces = [{ len: 1500, qty: 4 }, { len: 900, qty: 6 }]; }
+  if (kind === 'cut2d') { j.mat = ''; j.pieces = [{ w: 600, h: 400, qty: 8 }, { w: 300, h: 300, qty: 10 }]; }
   return j;
 }
 /* A calculator's state on this CE, created from the standards the first time it is opened. */
@@ -114,6 +126,63 @@ function calcYield(c, loss) {
   if (c.proc === 'GTAW') return Math.max(0.05, (1 - Math.min(loss.stub, c.len - 1) / c.len) * (1 - loss.tig / 100));
   return Math.max(0.05, 1 - loss.smaw / 100);
 }
+
+/* Cutting stock into pieces, the way cutlistoptimizer.com does it: how many full lengths or
+   sheets to buy, and which piece goes where. These are heuristics, fast and close to the
+   best layout but not guaranteed to be it, so a layout is an estimate to buy against, not
+   a cutting instruction. Kerf is the width the saw or torch takes at every cut. */
+function calcCut1D(stock, kerf, pieces) {
+  const items = [], unfit = [];
+  (pieces || []).forEach(p => {
+    const n = Math.max(0, Math.floor(Number(p.qty) || 0)), l = Number(p.len) || 0;
+    if (l > 0) for (let i = 0; i < n; i++) items.push(l);
+  });
+  items.sort((a, b) => b - a);
+  const bins = [];
+  /* best fit: the bar this piece leaves the least over on */
+  items.forEach(l => {
+    if (l > stock) { unfit.push(l); return; }
+    let best = -1, bestLeft = Infinity;
+    bins.forEach((b, i) => {
+      const left = stock - b.used - kerf - l;
+      if (left >= -1e-9 && left < bestLeft) { best = i; bestLeft = left; }
+    });
+    if (best < 0) bins.push({ items: [l], used: l });
+    else { bins[best].used += kerf + l; bins[best].items.push(l); }
+  });
+  const placed = bins.reduce((a, b) => a + b.items.reduce((x, y) => x + y, 0), 0);
+  return { bins, unfit, placed, count: bins.length, waste: bins.length ? 1 - placed / (bins.length * stock) : 0 };
+}
+function calcCut2D(sw, sh, kerf, pieces, rotate) {
+  const items = [], unfit = [];
+  (pieces || []).forEach(p => {
+    const n = Math.max(0, Math.floor(Number(p.qty) || 0)), w = Number(p.w) || 0, h = Number(p.h) || 0;
+    if (w > 0 && h > 0) for (let i = 0; i < n; i++) items.push({ w, h });
+  });
+  const ready = [];
+  items.forEach(it => {
+    const o = rotate ? [[Math.min(it.w, it.h), Math.max(it.w, it.h)], [Math.max(it.w, it.h), Math.min(it.w, it.h)]] : [[it.w, it.h]];
+    const fit = o.find(x => x[0] <= sw && x[1] <= sh);
+    if (fit) ready.push({ w: fit[0], h: fit[1] }); else unfit.push(it);
+  });
+  /* shelves: pieces sorted tallest first, laid in rows across the sheet */
+  ready.sort((a, b) => b.h - a.h || b.w - a.w);
+  const sheets = [];
+  ready.forEach(p => {
+    for (const s of sheets) {
+      for (const sf of s.shelves) {
+        const x = sf.x + (sf.x ? kerf : 0);
+        if (p.h <= sf.h && x + p.w <= sw) { s.placed.push({ x, y: sf.y, w: p.w, h: p.h }); sf.x = x + p.w; return; }
+      }
+      const y = s.usedH + (s.shelves.length ? kerf : 0);
+      if (y + p.h <= sh) { s.shelves.push({ y, h: p.h, x: p.w }); s.placed.push({ x: 0, y, w: p.w, h: p.h }); s.usedH = y + p.h; return; }
+    }
+    sheets.push({ shelves: [{ y: 0, h: p.h, x: p.w }], placed: [{ x: 0, y: 0, w: p.w, h: p.h }], usedH: p.h });
+  });
+  const area = sheets.reduce((a, s) => a + s.placed.reduce((x, r) => x + r.w * r.h, 0), 0);
+  return { sheets, unfit, placed: ready.length, count: sheets.length, waste: sheets.length ? 1 - area / (sheets.length * sw * sh) : 0, area };
+}
+function calcPieceCount(pieces) { return (pieces || []).reduce((a, p) => a + Math.max(0, Math.floor(Number(p.qty) || 0)) * (Number(p.len != null ? p.len : p.w) > 0 ? 1 : 0), 0); }
 
 /* One job through its calculator. Returns the figures to show and the lines to buy:
    net is before loss, raw is after loss and before rounding. */
@@ -146,6 +215,30 @@ function calcRun(kind, job, st) {
       lines: [
         { k: 'primer', d: 'Primer', u: 'L', net: a / v.p1, raw: pr }, { k: 'inter', d: 'Intermediate coat', u: 'L', net: a / v.p2, raw: it },
         { k: 'top', d: 'Topcoat', u: 'L', net: a / v.p3, raw: tc }, { k: 'thin', d: 'Thinner', u: 'L', net: thN, raw: th }]
+    };
+  }
+  if (kind === 'cut1d') {
+    const c = calcCut1D(v.stock, v.kerf, job.pieces), total = c.placed;
+    const d = (String(job.mat || '').trim() || 'Stock bar') + ', ' + calcG(v.stock) + ' mm';
+    return {
+      rows: [
+        { l: 'Pieces to cut', net: calcPieceCount(job.pieces) - c.unfit.length, buy: calcPieceCount(job.pieces) - c.unfit.length, u: 'pcs', how: 'the quantities added up' },
+        { l: 'Stock lengths to buy', net: total / v.stock, buy: c.count, u: 'pcs', how: 'pieces laid onto stock lengths, longest first, each into the length it leaves the least over on; every cut takes the cut width' },
+        { l: 'Offcut and kerf', net: c.waste * 100, buy: c.waste * 100, u: '%', how: '1 - (length of pieces placed / length bought)' }],
+      lines: c.count ? [{ k: 'cut1d:' + d, d, u: 'pc', net: total / v.stock, raw: c.count }] : [],
+      cut: c
+    };
+  }
+  if (kind === 'cut2d') {
+    const c = calcCut2D(v.sw, v.sh, v.kerf, job.pieces, v.rot > 0);
+    const d = (String(job.mat || '').trim() || 'Sheet') + ', ' + calcG(v.sw) + ' x ' + calcG(v.sh) + ' mm';
+    return {
+      rows: [
+        { l: 'Pieces to cut', net: c.placed, buy: c.placed, u: 'pcs', how: 'the quantities added up' },
+        { l: 'Sheets to buy', net: c.area / (v.sw * v.sh), buy: c.count, u: 'sheets', how: 'pieces laid in rows across each sheet, tallest first, with the cut width between them' },
+        { l: 'Offcut and kerf', net: c.waste * 100, buy: c.waste * 100, u: '%', how: '1 - (area of pieces placed / area of sheets bought)' }],
+      lines: c.count ? [{ k: 'cut2d:' + d, d, u: 'pc', net: c.area / (v.sw * v.sh), raw: c.count }] : [],
+      cut: c
     };
   }
   /* welding: buildup on a shaft */
@@ -325,6 +418,43 @@ function CalcDrawer(props) {
     h('p', { className: 'calc-foot' }, 'Split the weld metal between processes and rod sizes. Stick yield comes from the electrode loss below; TIG yield from the stub and the rod length.'));
 
   /* allowance table */
+  const cutOn = kind === 'cut1d' || kind === 'cut2d';
+  const two = kind === 'cut2d';
+  const cutSec = !cutOn ? null : h('section', { style: C.sec },
+    h('h3', { style: C.h3 }, h('span', null, 'Pieces to cut'),
+      h('button', { className: 'calc-btn', onClick: () => upd(s => { s.jobs[s.act].pieces.push(two ? { w: 0, h: 0, qty: 1 } : { len: 0, qty: 1 }); }) }, '+ Add')),
+    h('div', { style: { marginBottom: 8 } },
+      h('label', { className: 'calc-lbl', htmlFor: 'cut_mat' }, 'Material (goes on the Materials line)'),
+      h('input', { key: 'mat' + kind + st.act + rev, id: 'cut_mat', className: 'calc-in', style: { width: '100%', textAlign: 'left' }, type: 'text', defaultValue: job.mat || '',
+        placeholder: two ? 'e.g. Steel plate 6 mm A36' : 'e.g. Pipe 6 in SCH40', onChange: e => { const t = e.target.value; upd(s => { s.jobs[s.act].mat = t; }); } })),
+    h('div', { className: 'calc-tw' }, h('table', { className: 'calc-tbl' },
+      h('thead', null, h('tr', null, (two ? ['Width', 'Length', 'Qty', ''] : ['Length', 'Qty', '']).map((t, i) => h('th', { key: i, className: i < (two ? 3 : 2) ? 'n' : '' }, t)))),
+      h('tbody', null, (job.pieces || []).map((p, i) => {
+        const fld = (key, label, unit) => h('td', { className: 'n', key: key }, h('input', { className: 'calc-in', type: 'number', min: 0, step: 'any', defaultValue: p[key], 'aria-label': label,
+          onChange: e => { const n = Math.max(0, num(e)); upd(s => { s.jobs[s.act].pieces[i][key] = n; }); } }), unit ? ' ' + unit : '');
+        return h('tr', { key: kind + st.act + i + rev },
+          two ? [fld('w', 'Piece width in mm', 'mm'), fld('h', 'Piece length in mm', 'mm')] : fld('len', 'Piece length in mm', 'mm'),
+          fld('qty', 'How many'),
+          h('td', null, job.pieces.length > 1 ? h('button', { className: 'calc-btn', 'aria-label': 'Remove piece', onClick: () => upd(s => { s.jobs[s.act].pieces.splice(i, 1); }) }, 'x') : null));
+      })))),
+    out.cut && out.cut.unfit.length ? h('div', { style: { color: 'var(--status-danger)', fontSize: 11, fontWeight: 600, marginTop: 6 } },
+      out.cut.unfit.length + ' piece' + (out.cut.unfit.length === 1 ? ' is' : 's are') + ' larger than the ' + (two ? 'sheet' : 'stock length') + ' and left out.') : null,
+    h('p', { className: 'calc-foot' }, 'Quick estimate by a standard packing method, close to the best layout but not guaranteed to be it. Check it against the real cutting before ordering to the last piece.'));
+  /* the layout, drawn: each stock length or sheet, with its pieces */
+  const PAL = ['#3b82f6', '#10b981', '#f59e0b', '#a855f7', '#ef4444', '#14b8a6', '#eab308', '#ec4899'];
+  const layoutSec = !cutOn || !out.cut || !out.cut.count ? null : h('section', { style: C.sec },
+    h('h3', { style: C.h3 }, h('span', null, 'Layout'), h('span', { style: C.mute }, calcF(100 - out.cut.waste * 100, 1) + '% used, ' + out.cut.count + (two ? ' sheet' : ' stock length') + (out.cut.count === 1 ? '' : 's'))),
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+      two ? out.cut.sheets.slice(0, 12).map((sht, si) => h('div', { key: si },
+        h('div', { style: C.mute }, 'Sheet ' + (si + 1)),
+        h('div', { style: { position: 'relative', width: '100%', maxWidth: 360, aspectRatio: job.vals.sw + ' / ' + job.vals.sh, background: 'var(--bg-surface)', border: '1px solid var(--border-strong)' } },
+          sht.placed.map((r, ri) => h('div', { key: ri, title: r.w + ' x ' + r.h + ' mm', style: { position: 'absolute', left: (r.x / job.vals.sw * 100) + '%', top: (r.y / job.vals.sh * 100) + '%', width: (r.w / job.vals.sw * 100) + '%', height: (r.h / job.vals.sh * 100) + '%', background: PAL[(r.w + r.h) % PAL.length], opacity: .8, boxSizing: 'border-box', border: '1px solid var(--bg-surface)' } })))))
+      : out.cut.bins.slice(0, 24).map((b, bi) => h('div', { key: bi, style: { display: 'flex', alignItems: 'center', gap: 8 } },
+        h('span', { style: { ...C.mute, minWidth: 18 } }, bi + 1),
+        h('div', { style: { display: 'flex', flex: 1, height: 18, background: 'var(--bg-surface)', border: '1px solid var(--border-strong)', overflow: 'hidden' } },
+          b.items.map((l, li) => h('div', { key: li, title: l + ' mm', style: { width: (l / job.vals.stock * 100) + '%', marginRight: (job.vals.kerf / job.vals.stock * 100) + '%', background: PAL[Math.round(l) % PAL.length], opacity: .85, flexShrink: 0 } }))),
+        h('span', { style: { ...C.mute, minWidth: 70, textAlign: 'right' } }, calcF(job.vals.stock - b.used, 0) + ' mm left')))),
+    (two ? out.cut.sheets.length > 12 : out.cut.bins.length > 24) ? h('p', { className: 'calc-foot' }, 'The first ' + (two ? 12 : 24) + ' are drawn; the count above is for all of them.') : null);
   const rows = CALC_ROWS[kind];
   const allowSec = h('section', { style: C.sec },
     h('h3', { style: C.h3 }, h('span', null, 'Allowances used here'),
@@ -391,7 +521,7 @@ function CalcDrawer(props) {
       jobsRow,
       h('section', { style: C.sec }, h('h3', { style: C.h3 }, 'Inputs'), inputs),
       h('section', { style: C.sec }, h('h3', { style: C.h3 }, 'Results for this job'), results),
-      unitsSec, consSec, allowSec, linesSec),
+      unitsSec, consSec, cutSec, layoutSec, rows.length ? allowSec : null, linesSec),
     h('div', { className: 'calc-ft' },
       h('div', { style: { flex: 1, fontSize: 11, color: 'var(--text-secondary)' } }, 'Lines total',
         h('b', { style: { display: 'block', fontSize: 15, color: 'var(--brand-accent)', ...C.mono } }, total ? '₱' + calcF(total, 0) : '-')),

@@ -1039,6 +1039,23 @@ function App({
     {id: 'libraries', label: 'Libraries', ids: ['scopelib', 'masterlist']}
   ].map(g => ({...g, tabs: g.ids.map(id => TABS.find(t => t.id === id)).filter(Boolean)})).filter(g => g.tabs.length);
   const _tabMemory = useRef({});
+  /* The estimate cannot be worked on until Project Info says what it is for: the issuing
+     company, the project type, the discipline and a description. They are listed all together, and
+     the screens after Project Info stay shut until they are filled. A requestor only logs
+     a request, so none of this applies to them. */
+  const infoMissing = isRequestor ? [] : [
+    (info.companyId == null && !(companies || []).length) ? 'Issuing Company' : '',
+    !String(ceType || '').trim() ? 'Project Type' : '',
+    !String(info.projType || '').trim() ? 'Discipline' : '',
+    !String(info.description || '').trim() ? 'Project Description' : ''
+  ].filter(Boolean);
+  const _gated = ['sow', 'sowbreak', 'manpower', 'tools', 'materials', 'ppe', 'misc', 'summary'];
+  useEffect(() => {
+    if (infoMissing.length && _gated.indexOf(tab) >= 0) {
+      setTab('info');
+      showToast('Fill in Project Info first. Still needed: ' + infoMissing.join(', ') + '.', true);
+    }
+  }, [tab, infoMissing.join('|')]);
   const [railSlim, setRailSlim] = useState(() => { try { return localStorage.getItem('shic:railSlim') === '1'; } catch (_e) { return false; } });
   const toggleRail = () => setRailSlim(v => { const n = !v; try { localStorage.setItem('shic:railSlim', n ? '1' : '0'); } catch (_e) {} return n; });
   useEffect(() => {
@@ -2767,8 +2784,8 @@ function App({
       showToast('Client name is required.', true);
       return;
     }
-    if (!String(info.projType || '').trim()) {
-      showToast('Discipline is required — choose it on Project Info.', true);
+    if (infoMissing.length) {
+      showToast('Project Info is incomplete. Still needed: ' + infoMissing.join(', ') + '.', true);
       return;
     }
     /* Every figure on a row, not just its price. A negative quantity quietly
@@ -11904,11 +11921,12 @@ tab === 'dashboard' && (() => {
     }
   }, /*#__PURE__*/React.createElement("label", {
     style: LBL
-  }, "Project Description / Scope Summary"), /*#__PURE__*/React.createElement("textarea", {
+  }, "Project Description / Scope Summary", /*#__PURE__*/React.createElement("span", { style: { color: ERR } }, " *")), /*#__PURE__*/React.createElement("textarea", {
     style: {
       ...INP,
       height: 66,
-      resize: 'vertical'
+      resize: 'vertical',
+      ...(String(info.description || '').trim() ? {} : { borderColor: ERR })
     },
     value: info.description,
     onChange: e => setInfo(p => ({

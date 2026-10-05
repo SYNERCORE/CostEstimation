@@ -379,5 +379,7 @@ jobs:
         run: node tools/test-continue-number-and-calc-tab.js
       - name: Cut-list calculators (bar and sheet cutting)
         run: node tools/test-cut-calculators.js
+      - name: Calculators in English units
+        run: node tools/test-calc-english-units.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

@@ -76,6 +76,20 @@ const CALC_FIELDS = {
     { id: 't', label: 'Thickness of buildup', unit: 'mm', v: 6, hint: 'Include the machining allowance' }]
 };
 
+/* English units. Every value is STORED in metric, so switching the system never changes a quantity and
+   a CE worked in one system opens correctly in the other; only what is shown and typed is converted.
+   The lines sent to Materials stay in metric, the units the Masterlist is priced in. */
+const CALC_U = {
+  mm: { i: 'in', f: 1 / 25.4 }, m2: { i: 'ft2', f: 10.763910417 }, L: { i: 'gal', f: 0.264172052 }, kg: { i: 'lb', f: 2.204622622 },
+  g: { i: 'oz', f: 0.035273962 }, 'g/cm3': { i: 'lb/in3', f: 0.036127292 }, 'm2/L': { i: 'ft2/gal', f: 10.763910417 / 0.264172052 }
+};
+function calcUnitPref() { try { return localStorage.getItem('shic:calcUnits') === 'imperial' ? 'imperial' : 'metric'; } catch (_e) { return 'metric'; } }
+function calcConv(x, unit, imp) { const u = imp && CALC_U[unit]; return u ? Math.round(x * u.f * 10000) / 10000 : x; }
+function calcUnback(x, unit, imp) { const u = imp && CALC_U[unit]; return u ? x / u.f : x; }
+function calcUnitLabel(unit, imp) { return imp && CALC_U[unit] ? CALC_U[unit].i : unit; }
+/* "350 mm" inside a sentence, shown in inches. */
+function calcTextUnits(s, imp) { return imp ? String(s).replace(/(\d+(?:\.\d+)?) mm\b/g, (m, n) => calcF(Number(n) / 25.4, 2) + ' in') : s; }
+
 function calcUp(x) { return isFinite(x) ? Math.ceil(x - 1e-9) : 0; }
 function calcBuy(net, lossPct) { return net / (1 - Math.min(Math.max(lossPct, 0), 95) / 100); }
 function calcMed(a) {
@@ -349,6 +363,10 @@ function CalcDrawer(props) {
     return next;
   });
   const setTab = k => setCalc(prev => ({ ...(prev || {}), tab: k }));
+  const imp = ((calc && calc.units) || calcUnitPref()) === 'imperial';
+  const revK = rev + (imp ? 'i' : 'm');
+  const dv = (x, unit) => calcConv(x, unit, imp), sv = (x, unit) => calcUnback(x, unit, imp), dl = unit => calcUnitLabel(unit, imp), dt = s => calcTextUnits(s, imp);
+  const setUnits = u => { try { localStorage.setItem('shic:calcUnits', u); } catch (_e) { /* the choice still holds for this CE */ } setCalc(prev => ({ ...(prev || {}), units: u })); };
   const num = (e, fallback) => { const n = parseFloat(e.target.value); return isFinite(n) ? n : (fallback == null ? 0 : fallback); };
 
   const C = {
@@ -360,12 +378,12 @@ function CalcDrawer(props) {
   const tag = (txt, color) => h('span', { className: 'calc-tag', style: color ? { color, borderColor: color } : null }, txt);
 
   /* inputs */
-  const inputs = h('div', { className: 'calc-fg' }, CALC_FIELDS[kind].map(f => h('div', { key: kind + st.act + job.name + f.id + rev },
+  const inputs = h('div', { className: 'calc-fg' }, CALC_FIELDS[kind].map(f => h('div', { key: kind + st.act + job.name + f.id + revK },
     h('label', { className: 'calc-lbl', htmlFor: 'ci_' + f.id }, f.label, f.std ? tag('default') : null),
     h('div', { className: 'calc-inp' },
-      h('input', { id: 'ci_' + f.id, type: 'number', step: 'any', inputMode: 'decimal', defaultValue: job.vals[f.id],
-        onChange: e => { const v = num(e); upd(s => { s.jobs[s.act].vals[f.id] = v; }); } }),
-      h('span', null, f.unit)),
+      h('input', { id: 'ci_' + f.id, type: 'number', step: 'any', inputMode: 'decimal', defaultValue: dv(job.vals[f.id], f.unit),
+        onChange: e => { const v = sv(num(e), f.unit); upd(s => { s.jobs[s.act].vals[f.id] = v; }); } }),
+      h('span', null, dl(f.unit))),
     f.hint ? h('div', { style: C.mute }, f.hint) : null)));
 
   /* results */
@@ -375,8 +393,8 @@ function CalcDrawer(props) {
       h('div', { style: { minWidth: 0 } }, h('div', null, r.l),
         h('details', null, h('summary', null, 'How it is worked out'), h('div', { className: 'calc-how' }, r.how))),
       h('div', { style: { textAlign: 'right' } },
-        h('div', { style: { ...C.mono, fontSize: 17, fontWeight: 700, whiteSpace: 'nowrap' } }, calcF(r.buy, 2), h('small', { style: { ...C.mute, marginLeft: 3, fontWeight: 400 } }, r.u)),
-        h('div', { style: { ...C.mute, ...C.mono } }, r.extra ? r.extra : (showNet ? 'net ' + calcF(r.net, 2) + ' ' + r.u : ''))));
+        h('div', { style: { ...C.mono, fontSize: 17, fontWeight: 700, whiteSpace: 'nowrap' } }, calcF(dv(r.buy, r.u), 2), h('small', { style: { ...C.mute, marginLeft: 3, fontWeight: 400 } }, dl(r.u))),
+        h('div', { style: { ...C.mute, ...C.mono } }, r.extra ? dt(r.extra) : (showNet ? 'net ' + calcF(dv(r.net, r.u), 2) + ' ' + dl(r.u) : ''))));
   });
 
   /* babbitt purchase units */
@@ -389,10 +407,10 @@ function CalcDrawer(props) {
         return h('tr', { key: k },
           h('td', null, u.label + ' weight'),
           h('td', { className: 'n' }, isAdmin && adminOn
-            ? [h(CalcStdInput, { key: 's' + u.v, value: u.v, label: 'Standard ' + u.label + ' weight', onCommit: n => onSaveStd({ units: { [k]: n } }) }), ' ' + u.unit]
-            : u.v + ' ' + u.unit),
-          h('td', { className: 'n', key: 'u' + rev }, h('input', { className: 'calc-in', type: 'number', step: 'any', defaultValue: using, 'aria-label': u.label + ' weight in ' + u.unit,
-            onChange: e => { const n = num(e); upd(s => { s.units[k] = n > 0 ? n : u.v; }); } }), ' ' + u.unit),
+            ? [h(CalcStdInput, { key: 's' + u.v + revK, value: dv(u.v, u.unit), label: 'Standard ' + u.label + ' weight', onCommit: n => onSaveStd({ units: { [k]: sv(n, u.unit) } }) }), ' ' + dl(u.unit)]
+            : calcF(dv(u.v, u.unit), imp ? 2 : 4).replace(/\.?0+$/, '') + ' ' + dl(u.unit)),
+          h('td', { className: 'n', key: 'u' + revK }, h('input', { className: 'calc-in', type: 'number', step: 'any', defaultValue: dv(using, u.unit), 'aria-label': u.label + ' weight in ' + dl(u.unit),
+            onChange: e => { const n = sv(num(e), u.unit); upd(s => { s.units[k] = n > 0 ? n : u.v; }); } }), ' ' + dl(u.unit)),
           h('td', null, h('span', { className: 'calc-st ' + (same ? 'ok' : 'warn') }, same ? 'standard' : 'changed on this CE')));
       }))),
     h('p', { className: 'calc-foot' }, 'A different weight typed here applies to this CE only. The line on Materials follows the weight, for example "Tin ingot, 3.8 kg".'));
@@ -402,16 +420,16 @@ function CalcDrawer(props) {
     h('h3', { style: C.h3 }, h('span', null, 'Consumables for this shaft'),
       h('button', { className: 'calc-btn', onClick: () => upd(s => { const j = s.jobs[s.act], used = j.cons.reduce((a, c) => a + c.share, 0); j.cons.push({ proc: 'GTAW', dia: 2.4, len: 1000, share: Math.max(0, 100 - used) }); }) }, '+ Add')),
     h('div', { className: 'calc-tw' }, h('table', { className: 'calc-tbl' },
-      h('thead', null, h('tr', null, ['Process', 'Size', 'Length', 'Share', 'Yield', 'kg', ''].map((t, i) => h('th', { key: i, className: i > 0 && i < 6 ? 'n' : '' }, t)))),
+      h('thead', null, h('tr', null, ['Process', 'Size', 'Length', 'Share', 'Yield', dl('kg'), ''].map((t, i) => h('th', { key: i, className: i > 0 && i < 6 ? 'n' : '' }, t)))),
       h('tbody', null, job.cons.map((c, i) => {
-        const y = calcYield(c, st.loss), kg = out.need * c.share / 100 / y, k0 = kind + st.act + job.name + i + rev;
+        const y = calcYield(c, st.loss), kg = out.need * c.share / 100 / y, k0 = kind + st.act + job.name + i + revK;
         return h('tr', { key: k0 },
           h('td', null, h('select', { className: 'calc-in', style: { width: 'auto', textAlign: 'left' }, defaultValue: c.proc, 'aria-label': 'Process', onChange: e => { const p = e.target.value; upd(s => { s.jobs[s.act].cons[i].proc = p; }); } },
             h('option', { value: 'SMAW' }, 'Stick'), h('option', { value: 'GTAW' }, 'TIG'))),
-          h('td', { className: 'n' }, h('input', { className: 'calc-in', type: 'number', step: 'any', defaultValue: c.dia, 'aria-label': 'Rod size in mm', onChange: e => { const n = num(e); upd(s => { s.jobs[s.act].cons[i].dia = n; }); } }), ' mm'),
-          h('td', { className: 'n' }, h('input', { className: 'calc-in', type: 'number', step: 'any', defaultValue: c.len, 'aria-label': 'Rod length in mm', onChange: e => { const n = Math.max(1, num(e, 1)); upd(s => { s.jobs[s.act].cons[i].len = n; }); } }), ' mm'),
+          h('td', { className: 'n' }, h('input', { className: 'calc-in', type: 'number', step: 'any', defaultValue: dv(c.dia, 'mm'), 'aria-label': 'Rod size in ' + dl('mm'), onChange: e => { const n = sv(num(e), 'mm'); upd(s => { s.jobs[s.act].cons[i].dia = n; }); } }), ' ' + dl('mm')),
+          h('td', { className: 'n' }, h('input', { className: 'calc-in', type: 'number', step: 'any', defaultValue: dv(c.len, 'mm'), 'aria-label': 'Rod length in ' + dl('mm'), onChange: e => { const n = Math.max(1, sv(num(e, 1), 'mm')); upd(s => { s.jobs[s.act].cons[i].len = n; }); } }), ' ' + dl('mm')),
           h('td', { className: 'n' }, h('input', { className: 'calc-in', type: 'number', step: '1', defaultValue: c.share, 'aria-label': 'Share of weld metal', onChange: e => { const n = num(e); upd(s => { s.jobs[s.act].cons[i].share = n; }); } }), ' %'),
-          h('td', { className: 'n' }, calcF(y * 100, 1) + '%'), h('td', { className: 'n' }, calcF(kg, 2)),
+          h('td', { className: 'n' }, calcF(y * 100, 1) + '%'), h('td', { className: 'n' }, calcF(dv(kg, 'kg'), 2)),
           h('td', null, job.cons.length > 1 ? h('button', { className: 'calc-btn', 'aria-label': 'Remove consumable', onClick: () => upd(s => { s.jobs[s.act].cons.splice(i, 1); }) }, 'x') : null));
       })))),
     Math.abs(out.shareSum - 100) > 0.01 ? h('div', { style: { color: 'var(--brand-accent)', fontSize: 11, fontWeight: 600, marginTop: 6 } }, 'The shares add up to ' + out.shareSum + '%, not 100%. Weld metal is ' + (out.shareSum < 100 ? 'left out.' : 'counted more than once.')) : null,
@@ -430,10 +448,10 @@ function CalcDrawer(props) {
     h('div', { className: 'calc-tw' }, h('table', { className: 'calc-tbl' },
       h('thead', null, h('tr', null, (two ? ['Width', 'Length', 'Qty', ''] : ['Length', 'Qty', '']).map((t, i) => h('th', { key: i, className: i < (two ? 3 : 2) ? 'n' : '' }, t)))),
       h('tbody', null, (job.pieces || []).map((p, i) => {
-        const fld = (key, label, unit) => h('td', { className: 'n', key: key }, h('input', { className: 'calc-in', type: 'number', min: 0, step: 'any', defaultValue: p[key], 'aria-label': label,
-          onChange: e => { const n = Math.max(0, num(e)); upd(s => { s.jobs[s.act].pieces[i][key] = n; }); } }), unit ? ' ' + unit : '');
-        return h('tr', { key: kind + st.act + i + rev },
-          two ? [fld('w', 'Piece width in mm', 'mm'), fld('h', 'Piece length in mm', 'mm')] : fld('len', 'Piece length in mm', 'mm'),
+        const fld = (key, label, unit) => h('td', { className: 'n', key: key }, h('input', { className: 'calc-in', type: 'number', min: 0, step: 'any', defaultValue: key === 'qty' ? p[key] : dv(p[key], 'mm'), 'aria-label': label,
+          onChange: e => { const n = Math.max(0, key === 'qty' ? num(e) : sv(num(e), 'mm')); upd(s => { s.jobs[s.act].pieces[i][key] = n; }); } }), unit ? ' ' + dl(unit) : '');
+        return h('tr', { key: kind + st.act + i + revK },
+          two ? [fld('w', 'Piece width in ' + dl('mm'), 'mm'), fld('h', 'Piece length in ' + dl('mm'), 'mm')] : fld('len', 'Piece length in ' + dl('mm'), 'mm'),
           fld('qty', 'How many'),
           h('td', null, job.pieces.length > 1 ? h('button', { className: 'calc-btn', 'aria-label': 'Remove piece', onClick: () => upd(s => { s.jobs[s.act].pieces.splice(i, 1); }) }, 'x') : null));
       })))),
@@ -448,12 +466,12 @@ function CalcDrawer(props) {
       two ? out.cut.sheets.slice(0, 12).map((sht, si) => h('div', { key: si },
         h('div', { style: C.mute }, 'Sheet ' + (si + 1)),
         h('div', { style: { position: 'relative', width: '100%', maxWidth: 360, aspectRatio: job.vals.sw + ' / ' + job.vals.sh, background: 'var(--bg-surface)', border: '1px solid var(--border-strong)' } },
-          sht.placed.map((r, ri) => h('div', { key: ri, title: r.w + ' x ' + r.h + ' mm', style: { position: 'absolute', left: (r.x / job.vals.sw * 100) + '%', top: (r.y / job.vals.sh * 100) + '%', width: (r.w / job.vals.sw * 100) + '%', height: (r.h / job.vals.sh * 100) + '%', background: PAL[(r.w + r.h) % PAL.length], opacity: .8, boxSizing: 'border-box', border: '1px solid var(--bg-surface)' } })))))
+          sht.placed.map((r, ri) => h('div', { key: ri, title: calcF(dv(r.w, 'mm'), imp ? 2 : 0) + ' x ' + calcF(dv(r.h, 'mm'), imp ? 2 : 0) + ' ' + dl('mm'), style: { position: 'absolute', left: (r.x / job.vals.sw * 100) + '%', top: (r.y / job.vals.sh * 100) + '%', width: (r.w / job.vals.sw * 100) + '%', height: (r.h / job.vals.sh * 100) + '%', background: PAL[(r.w + r.h) % PAL.length], opacity: .8, boxSizing: 'border-box', border: '1px solid var(--bg-surface)' } })))))
       : out.cut.bins.slice(0, 24).map((b, bi) => h('div', { key: bi, style: { display: 'flex', alignItems: 'center', gap: 8 } },
         h('span', { style: { ...C.mute, minWidth: 18 } }, bi + 1),
         h('div', { style: { display: 'flex', flex: 1, height: 18, background: 'var(--bg-surface)', border: '1px solid var(--border-strong)', overflow: 'hidden' } },
-          b.items.map((l, li) => h('div', { key: li, title: l + ' mm', style: { width: (l / job.vals.stock * 100) + '%', marginRight: (job.vals.kerf / job.vals.stock * 100) + '%', background: PAL[Math.round(l) % PAL.length], opacity: .85, flexShrink: 0 } }))),
-        h('span', { style: { ...C.mute, minWidth: 70, textAlign: 'right' } }, calcF(job.vals.stock - b.used, 0) + ' mm left')))),
+          b.items.map((l, li) => h('div', { key: li, title: calcF(dv(l, 'mm'), imp ? 2 : 0) + ' ' + dl('mm'), style: { width: (l / job.vals.stock * 100) + '%', marginRight: (job.vals.kerf / job.vals.stock * 100) + '%', background: PAL[Math.round(l) % PAL.length], opacity: .85, flexShrink: 0 } }))),
+        h('span', { style: { ...C.mute, minWidth: 70, textAlign: 'right' } }, calcF(dv(job.vals.stock - b.used, 'mm'), imp ? 1 : 0) + ' ' + dl('mm') + ' left')))),
     (two ? out.cut.sheets.length > 12 : out.cut.bins.length > 24) ? h('p', { className: 'calc-foot' }, 'The first ' + (two ? 12 : 24) + ' are drawn; the count above is for all of them.') : null);
   const rows = CALC_ROWS[kind];
   const allowSec = h('section', { style: C.sec },
@@ -471,14 +489,14 @@ function CalcDrawer(props) {
               h('input', { type: 'radio', name: 'calc-method', checked: st.method === k, onChange: () => upd(s => { s.method = k; }) }), def.label) : def.label,
             tag(def.kind === 'src' ? 'published' : 'estimate', def.kind === 'src' ? 'var(--status-success)' : 'var(--brand-accent)')),
           h('td', { className: 'n' }, isAdmin && adminOn
-            ? [h(CalcStdInput, { key: 's' + def.pct, value: def.pct, label: 'Standard for ' + def.label, onCommit: n => onSaveStd({ allow: { [k]: n } }) }), ' ' + def.unit]
-            : def.pct + ' ' + def.unit),
-          h('td', null, def.range),
+            ? [h(CalcStdInput, { key: 's' + def.pct + revK, value: dv(def.pct, def.unit), label: 'Standard for ' + def.label, onCommit: n => onSaveStd({ allow: { [k]: sv(n, def.unit) } }) }), ' ' + dl(def.unit)]
+            : dv(def.pct, def.unit) + ' ' + dl(def.unit)),
+          h('td', null, dt(def.range)),
           h('td', { className: 'n' }, ty.med == null ? h('span', { style: C.mute }, 'no history yet')
-            : [ty.med + ' ' + def.unit + ' ', h('span', { key: 'n', style: C.mute }, '(n=' + ty.n + ') '),
+            : [dv(ty.med, def.unit) + ' ' + dl(def.unit) + ' ', h('span', { key: 'n', style: C.mute }, '(n=' + ty.n + ') '),
               h('button', { key: 'b', className: 'calc-btn', onClick: () => { upd(s => { s.loss[k] = ty.med; }); setRev(r => r + 1); } }, 'Use')]),
-          h('td', { className: 'n', key: 'l' + k + rev }, h('input', { className: 'calc-in', type: 'number', min: 0, step: 1, defaultValue: using, 'aria-label': 'Value used for ' + def.label,
-            onChange: e => { const n = Math.max(0, num(e)); upd(s => { s.loss[k] = n; }); } }), ' ' + def.unit),
+          h('td', { className: 'n', key: 'l' + k + revK }, h('input', { className: 'calc-in', type: 'number', min: 0, step: 1, defaultValue: dv(using, def.unit), 'aria-label': 'Value used for ' + def.label,
+            onChange: e => { const n = Math.max(0, sv(num(e), def.unit)); upd(s => { s.loss[k] = n; }); } }), ' ' + dl(def.unit)),
           h('td', null, h('span', { className: 'calc-st ' + status[1] }, status[0])));
       })))),
     kind === 'painting' ? h('label', { className: 'calc-chk' }, h('input', { type: 'checkbox', checked: !!st.incl, onChange: e => { const c = e.target.checked; upd(s => { s.incl = c; }); } }),
@@ -503,7 +521,8 @@ function CalcDrawer(props) {
     h('p', { className: 'calc-foot' },
       unpriced ? unpriced + ' line' + (unpriced === 1 ? ' has' : 's have') + ' no price on the Masterlist yet. Its unit cost is left at 0 for you to fill in. ' : '',
       total ? 'Of which allowance: about ₱' + calcF(allow, 0) + '. ' : '',
-      st.jobs.length > 1 ? 'Added across ' + st.jobs.length + ' jobs and rounded up once.' : ''));
+      st.jobs.length > 1 ? 'Added across ' + st.jobs.length + ' jobs and rounded up once. ' : '',
+      imp ? 'Lines go to Materials in metric, the units the Masterlist is priced in.' : ''));
 
   /* the jobs strip */
   const kdef = CALC_KINDS.find(k => k.id === kind);
@@ -515,6 +534,7 @@ function CalcDrawer(props) {
   return h('aside', { className: 'calc-drawer' + (page ? ' calc-page' : ''), 'aria-label': 'Quantity calculators' },
     h('div', { className: 'calc-hd' },
       h('b', { style: { fontSize: 14, flex: 1 } }, 'Quantity calculators'),
+      h('div', { className: 'calc-tabs', role: 'group', 'aria-label': 'Units' }, ['metric', 'imperial'].map(u => h('button', { key: u, 'aria-pressed': (u === 'imperial') === imp, onClick: () => setUnits(u), title: u === 'imperial' ? 'Show and type English units (inches, feet, pounds, gallons)' : 'Show and type metric units' }, u === 'imperial' ? 'English' : 'Metric'))),
       h('div', { className: 'calc-tabs', role: 'tablist' }, CALC_KINDS.map(k => h('button', { key: k.id, role: 'tab', 'aria-selected': k.id === kind, onClick: () => setTab(k.id) }, k.label))),
       page ? null : h('button', { className: 'calc-x', 'aria-label': 'Close calculators', onClick: onClose }, '×')),
     h('div', { className: 'calc-bd' },

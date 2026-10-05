@@ -11688,6 +11688,10 @@ tab === 'mywork' && (() => {
   const apv = x => x.m.apv || {};
   const toSign = myTodo.sign, returned = myTodo.returned;
   const inApproval = mine.filter(x => apv(x).state === 'pending');
+  /* A logged request nobody has accepted cannot be loaded (it has no CE number yet); the team reviews it here. */
+  const _unaccepted = x => { const i = ((x.e && x.e.data) || x.e || {}).info || x.e.info || {}; return !isRequestor && i.request && !i.acceptedCeNum && String(i.ceNum || '') === String(i.requestNum || '') && typeof x.e.id === 'number'; };
+  /* Every logged request still waiting for the team, whoever it is assigned to: Review is how it gets accepted. */
+  const awaitingReq = rows.filter(x => !x.e._draft && typeof x.e.id === 'number' && _unaccepted(x));
   const forReview = rows.filter(x => !x.e._draft && x.m.status === 'For Approval' && !isMine(x) && !(apv(x).state === 'pending'));
   const open = mine.filter(x => ceIsOpen(x.m.status) && apv(x).state !== 'pending')
     .map(x => ({...x, dl: ceDeadline(x.m.deadline, x.m.dateSubmitted, x.m.status)}))
@@ -11716,8 +11720,6 @@ tab === 'mywork' && (() => {
     /*#__PURE__*/React.createElement("span", {style:{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:MT}}, [(x.e.info && x.e.info.client) || x.m.customer || '', (x.e.info && x.e.info.description) || ''].filter(Boolean).join(' · ')),
     extra, actions);
   const viewBtn = x => typeof x.e.id === 'number' && /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setViewCE({id:x.e.id,ceNum:ceLabel(x.e)})}, "👁 View");
-  /* A logged request nobody has accepted cannot be loaded (it has no CE number yet); the team reviews it here. */
-  const _unaccepted = x => { const i = ((x.e && x.e.data) || x.e || {}).info || x.e.info || {}; return !isRequestor && i.request && !i.acceptedCeNum && String(i.ceNum || '') === String(i.requestNum || '') && typeof x.e.id === 'number'; };
   const loadBtn = x => _unaccepted(x)
     ? /*#__PURE__*/React.createElement("button", {style:btn('ok',true),title:'Review the checklist and decide: proceed, secure the missing data first, or decline',onClick:()=>openReview(x.e, 'review')}, "Review")
     : /*#__PURE__*/React.createElement("button", {style:btn('acc',true),onClick:()=>handleLoad(x.e.data || x.e)}, "Load");
@@ -11751,6 +11753,7 @@ tab === 'mywork' && (() => {
       section('⏳ My CEs in approval', inApproval, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT,whiteSpace:'nowrap'}}, apv(x).signed + '/' + apv(x).total + ' signed · waiting on ' + (apv(x).waiting || []).join(', ')), viewBtn(x)), 'None of your CEs are in approval.'),
       !isRequestor && sent.length > 0 && section('📤 Requests I sent', sent, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,whiteSpace:'nowrap',color:MT}},
         (x.m.status || 'Pending') + (x.m.ceeName ? ' · with ' + x.m.ceeName : '')), viewBtn(x)), 'You have not sent a request yet. Use + New Request in CE Monitoring.'),
+      !isRequestor && awaitingReq.length > 0 && section('📥 Requests awaiting review', awaitingReq, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,whiteSpace:'nowrap',color:MT}}, (x.m.ceeName || 'Unassigned') + (((x.e.info || {}).reviewStatus) ? ' · ' + (x.e.info || {}).reviewStatus : '')), [viewBtn(x), /*#__PURE__*/React.createElement("button", {key:'rv',style:btn('ok',true),title:'Review the checklist and decide: proceed, secure the missing data first, or decline',onClick:()=>openReview(x.e, 'review')}, "Review")]), ''),
       !isRequestor && forReview.length > 0 && section('🔎 For review (status For Approval)', forReview, x => line(x, null, viewBtn(x)), '')),
     isRequestor && /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:'12px 14px',overflowX:'auto'}},
       /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:13,marginBottom:8}}, '📤 My requests', /*#__PURE__*/React.createElement("span", {style:{marginLeft:6,fontSize:11,color:MT}}, '(' + sent.length + ')')),

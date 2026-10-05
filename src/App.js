@@ -5504,7 +5504,8 @@ function App({
     if (!ceNum) { _errs.rceNo = 1; _todo.push('RCE No.'); }
     else if (!/^[A-Z0-9\-_\/\.]{2,30}$/.test(ceNum)) { _errs.rceNo = 1; _todo.push('RCE No. (2-30 characters, letters/numbers/dashes only)'); }
     if (!String(f.client || '').trim()) { _errs.client = 1; _todo.push('Customer'); }
-    /* Assigning is optional here: a reviewer of the Cost Estimation team assigns an estimator when they review the request. */
+    /* A request names who it is for. Left blank it reached nobody in particular and sat unseen. */
+    if (!String(f.assignee || '').trim()) { _errs.assignee = 1; _todo.push('Assigned to (pick at least one estimator)'); }
     /* The checklist and item 14 are the estimators' review, done after the request is logged; they are not required to log it. */
     if (_todo.length) {
       setReqForm(p => ({ ...p, _errs }));
@@ -11329,8 +11330,8 @@ reqForm && (() => {
     /*#__PURE__*/React.createElement("div", {style:{marginTop:10}}, L("Address", inp('address', {placeholder:'Site or office address as the inquiry gives it'}))),
     /*#__PURE__*/React.createElement("div", {style:{marginTop:10}}, L("Project title", /*#__PURE__*/React.createElement("textarea", {style:{...INP,height:46,resize:'vertical'}, value:reqForm.description, placeholder:'What the client is asking for', onChange:e=>set('description', e.target.value)}))),
     /*#__PURE__*/React.createElement("div", {style:{marginTop:10}}, grid(
-      L("Assigned to (optional, one or more)", /*#__PURE__*/React.createElement(React.Fragment, null,
-        /*#__PURE__*/React.createElement(NamePicker, {value: reqForm.assignee || '', users: reqUsers, listId: 'req-users', placeholder: 'Leave blank: a reviewer will assign one', onChange: v => set('assignee', v)}))),
+      L("Assigned to * (one or more)", /*#__PURE__*/React.createElement("div", {style:(reqForm._errs && reqForm._errs.assignee && !String(reqForm.assignee || '').trim()) ? {border:'1px solid #ef4444', borderRadius:6} : {}},
+        /*#__PURE__*/React.createElement(NamePicker, {value: reqForm.assignee || '', users: reqUsers, listId: 'req-users', placeholder: 'Pick the estimator(s) this is for', onChange: v => set('assignee', v)}))),
       L("Inquiry type", /*#__PURE__*/React.createElement("select", {style:INP, value:reqForm.inquiryType || '', onChange:e=>set('inquiryType', e.target.value)},
         /*#__PURE__*/React.createElement("option", {value:''}, '--'),
         RCE_INQUIRY_TYPES.map(k => /*#__PURE__*/React.createElement("option", {key:k, value:k}, k)))),

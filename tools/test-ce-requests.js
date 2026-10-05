@@ -20,7 +20,7 @@ const has = re => re.test(app);
 console.log('logging a request:');
 ck('Monitoring has a + New Request button', has(/onClick: openRequest\n  \}, "\+ New Request"\)/));
 ck('it is filed under the RCE No., not a suggested CE number (that comes on acceptance)', has(/const ceNum = String\(f\.rceNo \|\| ''\)\.trim\(\)\.toUpperCase\(\);/) && !has(/setReqForm\(\{ ceNum:/));
-ck('customer is required; assigning is optional, a reviewer assigns', app.includes("_todo.push('Customer')") && app.indexOf("_todo.push('Assigned to") < 0);
+ck('customer and an assigned estimator are both required', app.includes("_todo.push('Customer')") && app.includes("_todo.push('Assigned to"));
 ck('an RCE No. already in use is refused', has(/is already on a request or a CE/) && has(/String\(\(m && m\.rceNo\) \|\| ''\)\.trim\(\)\.toUpperCase\(\) === ceNum/));
 ck('it is saved as an empty CE flagged as a request, under its own number',
   has(/status: 'DRAFT', request: true, requestNum: ceNum/));

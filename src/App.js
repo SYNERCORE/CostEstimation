@@ -1052,6 +1052,22 @@ function App({
     !String(info.projType || '').trim() ? 'Discipline' : '',
     !String(info.description || '').trim() ? 'Project Description' : ''
   ].filter(Boolean);
+  const pickCompany = val => {
+        const rawId = val === '' ? null : (isNaN(val) ? val : Number(val));
+        const selCo = companies.find(c => String(c.id) === String(rawId)) || companies[0];
+        setInfo(p => {
+          const pfx = ((selCo?.cePrefix || 'SHIC') + '-CE-').toUpperCase();
+          const isDefault = !p.ceNum || p.ceNum.toUpperCase().startsWith(pfx) || /^[A-Z0-9]+-CE-\d{4}-\d+$/i.test(p.ceNum);
+          /* The number was claimed when the CE was started and the sequence is shared by every company,
+             so choosing the company only changes its prefix; it does not claim another number. */
+          const _sq = ceSeqOf(p.ceNum);
+          const newCeNum = isDefault ? (_sq ? (selCo?.cePrefix || 'SHIC').toUpperCase() + '-CE-' + _sq.seq : nextCeNumForCompany(history, selCo, ceNums)) : p.ceNum;
+          return {...p, companyId: rawId, ceNum: newCeNum};
+        });
+  };
+  /* The four are asked for in front of Project Info, and the dialog stays until Continue. */
+  const [piGate, setPiGate] = useState(false);
+  useEffect(() => { if (!isRequestor && tab === "info" && infoMissing.length) setPiGate(true); }, [tab]);
   const _gated = ['sow', 'sowbreak', 'manpower', 'tools', 'materials', 'ppe', 'misc', 'summary'];
   useEffect(() => {
     if (infoMissing.length && _gated.indexOf(tab) >= 0) {
@@ -3591,6 +3607,7 @@ function App({
     _ownNum.current = '';
     setCalc(null); setCalcOpen(false);
     setCeType('');
+    if (!isRequestor) setPiGate(true);
     const _newGuess = nextCeNum(history, null, ceNums);
     claimCeNum(null, _newGuess);
     setInfo({
@@ -11172,6 +11189,14 @@ statusPanel && (() => {
   ));
 })(),
 
+/* ── The four things a CE needs before it is estimated ── */
+piGate && tab === "info" && !isRequestor && /*#__PURE__*/React.createElement(ProjectInfoGate, {
+  missing: infoMissing, companies, companyId: info.companyId, ceType, projType: info.projType, description: info.description,
+  ceTypes: Object.keys(CE_CFG).map(k => ({ k, label: ceTypeLabel(k) })),
+  onCompany: pickCompany, onType: setCeType, onDiscipline: v => setInfo(p => ({ ...p, projType: v })), onDescription: v => setInfo(p => ({ ...p, description: v })),
+  onCancel: () => { setPiGate(false); setTab('mywork'); }, onContinue: () => setPiGate(false)
+}),
+
 /* ── Request review / update ── */
 rceReview && /*#__PURE__*/React.createElement(RceReviewModal, {
   key: rceReview.e.id + rceReview.mode, mode: rceReview.mode, rce: (rceReview.e.info || {}).rce || {}, busy: reqBusy,
@@ -11843,19 +11868,7 @@ tab === 'dashboard' && (() => {
     /*#__PURE__*/React.createElement("select", {
       style: { ...INP, ...((info.companyId == null || info.companyId === '') ? { borderColor: ERR } : {}) },
       value: info.companyId != null ? info.companyId : '',
-      onChange: e => {
-        const rawId = e.target.value === '' ? null : (isNaN(e.target.value) ? e.target.value : Number(e.target.value));
-        const selCo = companies.find(c => String(c.id) === String(rawId)) || companies[0];
-        setInfo(p => {
-          const pfx = ((selCo?.cePrefix || 'SHIC') + '-CE-').toUpperCase();
-          const isDefault = !p.ceNum || p.ceNum.toUpperCase().startsWith(pfx) || /^[A-Z0-9]+-CE-\d{4}-\d+$/i.test(p.ceNum);
-          /* The number was claimed when the CE was started and the sequence is shared by every company,
-             so choosing the company only changes its prefix; it does not claim another number. */
-          const _sq = ceSeqOf(p.ceNum);
-          const newCeNum = isDefault ? (_sq ? (selCo?.cePrefix || 'SHIC').toUpperCase() + '-CE-' + _sq.seq : nextCeNumForCompany(history, selCo, ceNums)) : p.ceNum;
-          return {...p, companyId: rawId, ceNum: newCeNum};
-        });
-      }
+      onChange: e => pickCompany(e.target.value)
     }, /*#__PURE__*/React.createElement("option", {value: "", disabled: true}, "— Select issuing company —"), companies.map(c => /*#__PURE__*/React.createElement("option", {key: c.id, value: c.id}, c.name + (c.sub ? ' — ' + c.sub : ''))))
   ), (() => {
     const selCo = companies.find(c => String(c.id) === String(info.companyId != null ? info.companyId : (companies[0]||{}).id)) || companies[0] || {};

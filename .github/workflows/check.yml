@@ -373,5 +373,7 @@ jobs:
         run: node tools/test-ce-number-reserved.js
       - name: Project Info must be filled before the estimate opens
         run: node tools/test-project-info-gate.js
+      - name: The Project Info start dialog
+        run: node tools/test-project-info-dialog.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

@@ -6,7 +6,7 @@ const fs = require('fs'), path = require('path');
 const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'App.js'), 'utf8');
 let bad = 0;
 const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
-const a = app.indexOf('  const infoMissing = isRequestor'), b = app.indexOf('  const _gated', a);
+const a = app.indexOf('  const infoMissing = isRequestor'), b = app.indexOf('  const pickCompany', a);
 const src = app.slice(a, b);
 const miss = (o) => new Function('isRequestor', 'info', 'ceType', 'companies', src + '\nreturn infoMissing;')(!!o.req, Object.assign({ companyId: 1 }, o.info || {}), o.ceType === undefined ? 'onsite' : o.ceType, [{ id: 1 }]);
 ck('a blank sheet lists the discipline and the description', miss({}).join() === 'Discipline,Project Description');

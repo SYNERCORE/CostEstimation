@@ -3118,9 +3118,24 @@ function App({
     setTimeout(() => { try { if (_live.current) _lastAutoSig.current = _live.current.sig; } catch(_e){logSwallowed('App:L3023',_e);} }, 400);
     showToast('Loaded: ' + (d.info?.ceNum || ''));
   };
+  /* The number just offered is only a guess until it is claimed in the shared list of
+     reservations; if the claim lands on a different number the form takes that one,
+     unless the person has already typed their own. */
+  const claimCeNum = (prefix, guess) => {
+    let shown = guess;
+    const apply = n => {
+      if (!n || n === shown) return;
+      const from = shown; shown = n;
+      setInfo(p => String(p.ceNum || '').toUpperCase() === String(from).toUpperCase() ? { ...p, ceNum: n } : p);
+      showToast('CE Number ' + from + ' was just taken by someone else. This CE is ' + n + '.');
+    };
+    dbReserveCeNumber(prefix, history, ceNums, currentUser?.username, apply).then(apply).catch(_e => logSwallowed('App:claimCeNum', _e));
+  };
   const handleClone = (e) => {
     const d = e.data || e;
-    handleLoad({...d, _newQuote: true, signatures: apvStripSigs(d.approvers, d.signatures), info: {...(d.info || {}), approval: undefined, ceNum: nextCeNum(history, null, ceNums), date: new Date().toISOString().slice(0,10)}});
+    const _guess = nextCeNum(history, null, ceNums);
+    handleLoad({...d, _newQuote: true, signatures: apvStripSigs(d.approvers, d.signatures), info: {...(d.info || {}), approval: undefined, ceNum: _guess, date: new Date().toISOString().slice(0,10)}});
+    claimCeNum(null, _guess);
     showToast('Cloned — assigned new CE number.');
   };
   const handleRevise = (e) => {
@@ -3554,9 +3569,11 @@ function App({
     _ownNum.current = '';
     setCalc(null); setCalcOpen(false);
     setCeType('onsite');
+    const _newGuess = nextCeNum(history, null, ceNums);
+    claimCeNum(null, _newGuess);
     setInfo({
       ...BLANK_INFO,
-      ceNum: nextCeNum(history, null, ceNums),
+      ceNum: _newGuess,
       date: new Date().toISOString().slice(0, 10)
     });
     setMp([]);
@@ -11812,6 +11829,8 @@ tab === 'dashboard' && (() => {
           const newCeNum = isDefault ? nextCeNumForCompany(history, selCo, ceNums) : p.ceNum;
           return {...p, companyId: rawId, ceNum: newCeNum};
         });
+        { const _cur = String(info.ceNum || '').toUpperCase(), _p = ((selCo?.cePrefix || 'SHIC') + '-CE-').toUpperCase();
+          if (!_cur || _cur.startsWith(_p) || /^[A-Z0-9]+-CE-\d{4}-\d+$/i.test(_cur)) claimCeNum(selCo?.cePrefix || 'SHIC', nextCeNumForCompany(history, selCo, ceNums)); }
       }
     }, companies.map(c => /*#__PURE__*/React.createElement("option", {key: c.id, value: c.id}, c.name + (c.sub ? ' — ' + c.sub : ''))))
   ), (() => {

@@ -93,8 +93,8 @@ ck('a saved number is remembered for the rest of the session',
   /setCeNums\(p => p\.indexOf\(ceNum\) < 0 \? \[\.\.\.p, ceNum\] : p\)/.test(app),
   'otherwise the next New CE in the same session is handed the number just used');
 for (const [what, re] of [
-  ['New CE', /ceNum: nextCeNum\(history, null, ceNums\)/],
-  ['Clone', /ceNum: nextCeNum\(history, null, ceNums\), date:/],
+  ['New CE', { test: s => s.indexOf('const _newGuess = nextCeNum(history, null, ceNums);') > 0 }],
+  ['Clone', { test: s => s.indexOf('const _guess = nextCeNum(history, null, ceNums);') > 0 }],
   ['a company change', /nextCeNumForCompany\(history, selCo, ceNums\)/]
 ]) ck(what + ' allocates from the full list', re.test(app));
 

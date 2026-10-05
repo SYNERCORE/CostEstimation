@@ -1323,6 +1323,67 @@ async function dbGetCompanyKey(key){
   }
   try{const s=localStorage.getItem('shic:co_'+key);return s?JSON.parse(s):null;}catch{return null;}
 }
+/* A new CE's number is CLAIMED the moment it is handed out.
+   The next free number used to be worked out on each person's screen from what was
+   already saved, so two estimators who each pressed New CE before either had saved
+   were offered the same one, and both found out only at Save. Now the number is
+   written to a shared list of reservations and the list is read back to make sure
+   the claim stood: if someone else claimed the same number first (the earlier
+   time wins, the user name breaks a tie) this one steps to the next. A number
+   reserved and never used is simply skipped, and the claim lapses after
+   CE_RESERVE_DAYS. Drafts count too, so a number sitting in someone's saved draft
+   is never offered again. Returns the number to use. */
+const CE_RESERVE_KEY='ce_reserved',CE_RESERVE_DAYS=14,CE_RESERVE_RECHECK_MS=2500;
+async function dbReserveCeNumber(prefix,history,known,user,onMoved){
+  const me=String(user||'').toUpperCase(),now=Date.now();
+  const read=async()=>{const v=await dbGetCompanyKey(CE_RESERVE_KEY);
+    return(v&&Array.isArray(v.rows)?v.rows:[]).filter(r=>r&&r.n&&now-new Date(r.at).getTime()<CE_RESERVE_DAYS*864e5);};
+  let taken=[...(known||[])];
+  try{taken=taken.concat(await dbGetCeNumbers()||[]);}catch(_e){logSwallowed('db:dbReserveCeNumber',_e);}
+  try{(await dbGetDrafts()||[]).forEach(x=>{const n=x&&x.info&&x.info.ceNum;if(n)taken.push(n);});}catch(_e){logSwallowed('db:dbReserveCeNumber',_e);}
+  const sameSeq=(a,b)=>{const x=ceSeqOf(a),y=ceSeqOf(b);return !!x&&!!y&&x.seq===y.seq;};
+  for(let i=0;i<8;i++){
+    const rows=await read();
+    const n=nextCeNum(history,prefix,taken.concat(rows.map(r=>r.n)));
+    const mine={n,by:me,at:new Date().toISOString()};
+    const live=new Set(taken.map(t=>String(t).toUpperCase()));
+    const keep=rows.filter(r=>!live.has(String(r.n).toUpperCase()));
+    const saved=await dbSaveCompanyKey(CE_RESERVE_KEY,{rows:[...keep,mine]});
+    if(!saved)return n;
+    const settled=()=>{if(onMoved)setTimeout(()=>_ceReserveRecheck(prefix,history,known,me,mine,onMoved),CE_RESERVE_RECHECK_MS);return n;};
+    /* Read back. Two people writing at once can overwrite each other's row, so a
+       missing row is written again before the claims are compared. */
+    let after=await read();
+    if(!after.some(r=>r.n===n&&r.by===me&&r.at===mine.at)){
+      await dbSaveCompanyKey(CE_RESERVE_KEY,{rows:[...after,mine]});
+      after=await read();
+    }
+    const rival=after.find(r=>r.by!==me&&sameSeq(r.n,n)&&(r.at<mine.at||(r.at===mine.at&&r.by<me)));
+    if(!rival)return settled();
+    await dbSaveCompanyKey(CE_RESERVE_KEY,{rows:after.filter(r=>!(r.n===n&&r.by===me&&r.at===mine.at))});
+    taken.push(rival.n);
+  }
+  return nextCeNum(history,prefix,taken);
+}
+/* A second look a moment later. Two claims written at the same instant can overwrite
+   each other, and the one whose row was lost would otherwise never know. If this
+   claim has lost its row it is put back and the claims are compared again; losing
+   the comparison moves it to a fresh number, reported through onMoved. */
+async function _ceReserveRecheck(prefix,history,known,me,mine,onMoved){
+  try{
+    const now=Date.now();
+    const read=async()=>{const v=await dbGetCompanyKey(CE_RESERVE_KEY);
+      return(v&&Array.isArray(v.rows)?v.rows:[]).filter(r=>r&&r.n&&now-new Date(r.at).getTime()<CE_RESERVE_DAYS*864e5);};
+    let rows=await read();
+    if(!rows.some(r=>r.n===mine.n&&r.by===me&&r.at===mine.at)){await dbSaveCompanyKey(CE_RESERVE_KEY,{rows:[...rows,mine]});rows=await read();}
+    const a=ceSeqOf(mine.n);
+    const rival=rows.find(r=>{const b=ceSeqOf(r.n);return r.by!==me&&a&&b&&a.seq===b.seq&&(r.at<mine.at||(r.at===mine.at&&r.by<me));});
+    if(!rival)return;
+    await dbSaveCompanyKey(CE_RESERVE_KEY,{rows:rows.filter(r=>!(r.n===mine.n&&r.by===me&&r.at===mine.at))});
+    const n2=await dbReserveCeNumber(prefix,history,[...(known||[]),rival.n],me,onMoved);
+    if(n2&&n2!==mine.n)onMoved(n2);
+  }catch(_e){logSwallowed('db:_ceReserveRecheck',_e);}
+}
 async function dbSaveShiftRates(obj){
   try{localStorage.setItem('shic:shift_rates',JSON.stringify(obj));}catch{}
   if(USE_SP||getSiteURL()){

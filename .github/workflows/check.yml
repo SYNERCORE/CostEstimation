@@ -369,5 +369,7 @@ jobs:
         run: node tools/test-request-review.js
       - name: Waiting in maps to Waiting for Information; calculator history merges
         run: node tools/test-waiting-in-and-calc-history.js
+      - name: A new CE reserves its number
+        run: node tools/test-ce-number-reserved.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

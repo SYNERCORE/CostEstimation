@@ -94,6 +94,18 @@ function _apvCols(mon,ceNum){
      submitted -- with nothing to find them by. */
   const n=String(ceNum||'').trim();
   if(n)out.shicCENum=n.slice(0,255);
+  /* The request mirror: where a logged request stands and who must hear of it. shicReqKey changes with every
+     event (new, returned, resubmitted, accepted, declined), which is what lets the flow send one message per
+     event; shicReqNotified is the flow's own memory and is never written here. shicReqTo is a list of names. */
+  const q=(mon&&mon.req)||null;
+  if(q){
+    out.shicReqState=String(q.state||'').slice(0,255);
+    out.shicReqTo=String(q.to||'').slice(0,255);
+    out.shicReqKey=String(q.key||'').slice(0,255);
+    out.shicReqNote=String(q.note||'').slice(0,255);
+    out.shicReqBy=String(q.by||'').slice(0,255);
+    out.shicReqRce=String(q.rce||'').slice(0,255);
+  }
   const a=(mon&&mon.apv)||null;
   if(!a)return out;
   out.shicApvState=String(a.state||'none');
@@ -126,7 +138,7 @@ async function _monWrite(send,payload){
 }
 function _stripApvCols(p){
   const o={...p};
-  ['shicApvState','shicApvWaiting','shicApvKey','shicApvOwner','shicApvNote','shicCENum'].forEach(k=>{delete o[k];});
+  ['shicApvState','shicApvWaiting','shicApvKey','shicApvOwner','shicApvNote','shicCENum','shicReqState','shicReqTo','shicReqKey','shicReqNote','shicReqBy','shicReqRce'].forEach(k=>{delete o[k];});
   return o;
 }
 

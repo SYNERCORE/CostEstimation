@@ -28,11 +28,11 @@ const run = async (mode, p, o) => {
   const c = { toasts: [], patched: null, accepted: null, audit: [], hist: null };
   const e = { id: 7, ceNum: 'RCE-45', info: { request: true, requestNum: 'RCE-45', rce: { inquiryNo: 'Q1', items: {} } } };
   const fn = new Function('rceReview', 'isRequestor', 'showToast', 'reqOwns', 'monData', 'currentUser', 'updateMon', 'setReqBusy', 'acceptRequest', 'dbPatchCEInfo',
-    'setHistory', 'LS', 'logSwallowed', 'auditLog', 'setRceReview', src + NL + 'return saveReview;')(
-    { e, mode }, !!o.requestor, (m, er) => c.toasts.push({ m, er: !!er }), () => o.owns !== false, {}, { name: 'Est One', username: 'est1' }, (id, f, v) => { c.mon = [id, f, v]; }, () => {},
+    'setHistory', 'LS', 'logSwallowed', 'auditLog', 'setRceReview', 'mkReq', src + NL + 'return saveReview;')(
+    { e, mode }, !!o.requestor, (m, er) => c.toasts.push({ m, er: !!er }), () => o.owns !== false, {}, { name: 'Est One', username: 'est1' }, (id, f, v) => { if (f && typeof f === 'object') c.req = f.req; else c.mon = [id, f, v]; }, () => {},
     async (ee, extra) => { c.accepted = extra; return o.acceptOk !== false; },
     async (id, info) => { c.patched = info; return o.patchOk !== false; },
-    f => { c.hist = f([{ id: 7, info: {} }, { id: 8, info: {} }]); }, { get: () => [], set: () => {} }, () => {}, (x, d) => c.audit.push(d), v => { c.closed = v === null; });
+    f => { c.hist = f([{ id: 7, info: {} }, { id: 8, info: {} }]); }, { get: () => [], set: () => {} }, () => {}, (x, d) => c.audit.push(d), v => { c.closed = v === null; }, (state, to, note) => ({ state, to, note }));
   await fn(p);
   return c;
 };

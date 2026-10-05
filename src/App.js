@@ -718,6 +718,10 @@ function App({
      approval (signed, submitted, superseded) failed to reach the site while
      the browser showed it happily. Pass an object to write several fields as
      one change. */
+  /* One request event, stated for the Power Automate flow: what happened (new, returned, resubmitted, accepted,
+     declined), who to tell (display names, comma separated), and a note. The key is new every time. */
+  const mkReq = (state, to, note, rce) => ({ state, to: String(to || '').trim(), note: String(note || '').trim().slice(0, 240), rce: String(rce || ''),
+    by: (currentUser && (currentUser.name || currentUser.username)) || '', key: state + '|' + new Date().toISOString() });
   const updateMon = (ceId, field, val) => setMonData(prev => {
     if (isRequestor && !reqOwns(ceId, prev)) { console.warn('[blocked] a requestor tried to change CE ' + ceId + ', which they did not raise'); return prev; }
     const fields = (field && typeof field === 'object') ? field : { [field]: val };
@@ -5461,7 +5465,11 @@ function App({
       if (mode === 'review' && newEst && newEst !== curEst) { updateMon(e.id, 'ceeName', newEst); auditLog('assign_request', label + ' -> ' + newEst, currentUser?.username); }
       if (mode === 'review' && p.recommendation === 'proceed') {
         const ok = await acceptRequest(e, { rce, reviewStatus: 'accepted', reviewedBy: who, reviewedAt: now, reviewNote: p.note });
-        if (ok) { auditLog('review_request', label + ' proceed', currentUser?.username); setRceReview(null); }
+        if (ok) {
+          auditLog('review_request', label + ' proceed', currentUser?.username); setRceReview(null);
+          const _m = monData[e.id] || {};
+          updateMon(e.id, { req: mkReq('accepted', [_m.receivedBy, newEst || curEst].filter(Boolean).join(', '), p.note, label) });
+        }
         return;
       }
       const st = mode === 'update' ? 'resubmitted' : p.recommendation === 'decline' ? 'declined' : 'returned';
@@ -5477,6 +5485,9 @@ function App({
       if (st === 'declined') updateMon(e.id, 'status', 'No Quote');
       else if (mode === 'review' && ((monData[e.id] || {}).status === 'No Quote')) updateMon(e.id, 'status', 'Draft');
       auditLog('review_request', label + ' ' + st, currentUser?.username);
+      { const _m = monData[e.id] || {};
+        /* Returned and declined go to the requestor; a resubmission goes back to the estimators, or, with none yet, the reviewers. */
+        updateMon(e.id, { req: mkReq(st, st === 'resubmitted' ? (newEst || curEst).replace(/^Unassigned$/, '') : (_m.receivedBy || ''), mode === 'update' ? p.note : (p.recommendation === 'decline' ? p.declineReason : p.note), label) }); }
       setRceReview(null);
       showToast(mode === 'update' ? 'Sent back to Cost Estimation.' : st === 'declined' ? 'Request ' + label + ' declined.' : 'Request ' + label + ' returned to the requestor.');
     } finally { setReqBusy(false); }
@@ -5543,6 +5554,8 @@ function App({
           f.recommendation === 'decline' ? String(f.declineReason || '').trim() : '',
           String(f.remarks || '').trim()].filter(Boolean).join(' — '),
         rceNo: ceNum };
+      /* The assigned estimators are told; unassigned, the flow tells the reviewers. */
+      fields.req = mkReq('new', String(f.assignee || '').trim(), [f.client.trim(), String(f.description || '').trim()].filter(Boolean).join(' - '), ceNum);
       const mres = await dbSaveMonEntry(saved.id, ceNum, fields, Object.keys(fields));
       setMonData(p => ({ ...p, [saved.id]: (mres && mres.fields) || fields }));
       auditLog('log_request', ceNum + ' -> ' + fields.ceeName, currentUser?.username);

@@ -3247,8 +3247,17 @@ function App({
     if (rows.length === 1 && !rows[0].desc && !N(rows[0].cost)) rows = [];
     let added = 0, updated = 0, unpriced = 0;
     lines.forEach(l => {
-      const i = rows.findIndex(r => calcNorm(r.desc) === calcNorm(l.desc)), price = calcPriceFor(l.desc);
-      if (i >= 0) { rows[i] = {...rows[i], qty: l.qty, uom: l.uom}; updated++; }
+      /* A row is the same line whichever system it was worked in, so matching tries both wordings. The
+         Masterlist is priced per metric unit: that price is converted to the unit this line is bought in. */
+      const i = rows.findIndex(r => calcNorm(r.desc) === calcNorm(l.desc) || (l.alt && calcNorm(r.desc) === calcNorm(l.alt)) || calcNorm(r.desc) === calcNorm(l.mdesc));
+      const pm = calcPriceFor(l.mdesc || l.desc), pe = pm == null ? calcPriceFor(l.desc) : null;
+      const price = pm != null ? Math.round(pm / (l.f || 1) * 100) / 100 : pe;
+      if (i >= 0) {
+        /* Worked again in the other system: the quantity and unit change, and so must the price per unit. */
+        const was = rows[i];
+        rows[i] = {...was, desc: l.desc, qty: l.qty, uom: l.uom, cost: was.uom && was.uom !== l.uom ? Math.round(calcCostConv(N(was.cost), was.uom, l.uom) * 100) / 100 : was.cost};
+        updated++;
+      }
       else { rows.push({...mkRes(), desc: l.desc, qty: l.qty, uom: l.uom, cost: price == null ? 0 : price}); added++; if (price == null) unpriced++; }
     });
     setMats(rows);

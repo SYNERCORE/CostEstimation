@@ -31,7 +31,7 @@ const std = X.calcStd(null);
 const st = X.calcKindState('babbitt', std);
 const lines = JSON.stringify(X.calcAggregate('babbitt', st));
 ck('the quantities do not depend on the system: they are worked in metric', JSON.stringify(X.calcAggregate('babbitt', JSON.parse(JSON.stringify(st)))) === lines);
-ck('the lines for Materials stay in metric units', /Babbitt G2 bar, 900 g/.test(lines) && /Tin ingot, 3.8 kg/.test(lines));
+ck('every line carries both systems, and the metric one is unchanged', /Babbitt G2 bar, 900 g/.test(lines) && /Tin ingot, 3.8 kg/.test(lines) && /"de":"Babbitt G2 bar, 31.75 oz"/.test(lines) && /Tin ingot, 8.38 lb/.test(lines));
 ck('the default is metric', X.calcUnitPref() === 'metric');
 
 console.log('the screen:');
@@ -39,5 +39,6 @@ ck('there is a Metric / English switch', code.indexOf("u === 'imperial' ? 'Engli
 ck('the choice is saved with the CE and remembered on this device', code.indexOf("units: u })") > 0 && code.indexOf("localStorage.setItem('shic:calcUnits', u)") > 0);
 ck('the inputs show converted values and store metric', code.indexOf("defaultValue: dv(job.vals[f.id], f.unit)") > 0 && code.indexOf("const v = sv(num(e), f.unit)") > 0);
 ck('the pieces, consumables and layouts are converted too', code.indexOf("dv(p[key], 'mm')") > 0 && code.indexOf("defaultValue: dv(c.dia, 'mm')") > 0 && code.indexOf("dv(job.vals.stock - b.used, 'mm')") > 0);
-ck('a note says the lines go to Materials in metric', code.indexOf('Lines go to Materials in metric') > 0);
+ck('English lines go to Materials in English, priced from the metric wording', code.indexOf('mdesc: l.d, qty: l.qe, uom: l.ue') > 0 && fs.readFileSync('src/App.js', 'utf8').indexOf('pm / (l.f || 1)') > 0);
+ck('a bar layout colours by length and writes the length in', code.indexOf('PAL[lens.indexOf(l) % PAL.length]') > 0);
 process.exit(bad ? 1 : 0);

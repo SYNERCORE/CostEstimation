@@ -90,6 +90,21 @@ function calcUnitLabel(unit, imp) { return imp && CALC_U[unit] ? CALC_U[unit].i 
 /* "350 mm" inside a sentence, shown in inches. */
 function calcTextUnits(s, imp) { return imp ? String(s).replace(/(\d+(?:\.\d+)?) mm\b/g, (m, n) => calcF(Number(n) / 25.4, 2) + ' in') : s; }
 
+/* A line's description in English: lengths in inches, weights in pounds and ounces. */
+function calcDescEn(d) {
+  const t = x => String(Math.round(x * 100) / 100);
+  return String(d)
+    .replace(/(\d+(?:\.\d+)?) mm\b/g, (m, n) => t(Number(n) / 25.4) + ' in')
+    .replace(/(\d+(?:\.\d+)?) kg\b/g, (m, n) => t(Number(n) * CALC_U.kg.f) + ' lb')
+    .replace(/(\d+(?:\.\d+)?) g\b/g, (m, n) => t(Number(n) * CALC_U.g.f) + ' oz');
+}
+/* A unit price moved from one unit to its English (or metric) counterpart, e.g. per L to per gal. */
+function calcCostConv(cost, fromU, toU) {
+  const m = Object.keys(CALC_U).find(x => x === fromU || CALC_U[x].i === fromU);
+  if (!m || (toU !== m && toU !== CALC_U[m].i) || fromU === toU) return cost;
+  return fromU === m ? cost / CALC_U[m].f : cost * CALC_U[m].f;
+}
+
 function calcUp(x) { return isFinite(x) ? Math.ceil(x - 1e-9) : 0; }
 function calcBuy(net, lossPct) { return net / (1 - Math.min(Math.max(lossPct, 0), 95) / 100); }
 function calcMed(a) {
@@ -286,7 +301,11 @@ function calcAggregate(kind, st) {
     agg[l.k].net += l.net; agg[l.k].raw += l.raw;
   }));
   /* A consumable given none of the weld metal buys nothing, so it is not a line. */
-  return order.map(k => ({ ...agg[k], q: calcUp(agg[k].raw) })).filter(l => l.raw > 1e-9);
+  /* Each line in both systems: q/u/d in metric, qe/ue/de in English, rounded up in the unit it is bought in. */
+  return order.map(k => {
+    const a = agg[k], f = CALC_U[a.u] ? CALC_U[a.u].f : 1;
+    return { ...a, q: calcUp(a.raw), fe: f, qe: calcUp(a.raw * f), ue: CALC_U[a.u] ? CALC_U[a.u].i : a.u, de: calcDescEn(a.d) };
+  }).filter(l => l.raw > 1e-9);
 }
 /* Where a value sits against its published range. */
 function calcStatus(def, using) {
@@ -393,7 +412,7 @@ function CalcDrawer(props) {
       h('div', { style: { minWidth: 0 } }, h('div', null, r.l),
         h('details', null, h('summary', null, 'How it is worked out'), h('div', { className: 'calc-how' }, r.how))),
       h('div', { style: { textAlign: 'right' } },
-        h('div', { style: { ...C.mono, fontSize: 17, fontWeight: 700, whiteSpace: 'nowrap' } }, calcF(dv(r.buy, r.u), 2), h('small', { style: { ...C.mute, marginLeft: 3, fontWeight: 400 } }, dl(r.u))),
+        h('div', { style: { ...C.mono, fontSize: 17, fontWeight: 700, whiteSpace: 'nowrap' } }, calcF(dv(r.buy, r.u), (r.u === 'pcs' || r.u === 'sheets') && Number.isInteger(r.buy) ? 0 : 2), h('small', { style: { ...C.mute, marginLeft: 3, fontWeight: 400 } }, dl(r.u))),
         h('div', { style: { ...C.mute, ...C.mono } }, r.extra ? dt(r.extra) : (showNet ? 'net ' + calcF(dv(r.net, r.u), 2) + ' ' + dl(r.u) : ''))));
   });
 
@@ -460,6 +479,7 @@ function CalcDrawer(props) {
     h('p', { className: 'calc-foot' }, 'Quick estimate by a standard packing method, close to the best layout but not guaranteed to be it. Check it against the real cutting before ordering to the last piece.'));
   /* the layout, drawn: each stock length or sheet, with its pieces */
   const PAL = ['#3b82f6', '#10b981', '#f59e0b', '#a855f7', '#ef4444', '#14b8a6', '#eab308', '#ec4899'];
+  const lens = cutOn && out.cut && out.cut.bins ? Array.from(new Set(out.cut.bins.flatMap(b => b.items))).sort((a, b) => b - a) : [];
   const layoutSec = !cutOn || !out.cut || !out.cut.count ? null : h('section', { style: C.sec },
     h('h3', { style: C.h3 }, h('span', null, 'Layout'), h('span', { style: C.mute }, calcF(100 - out.cut.waste * 100, 1) + '% used, ' + out.cut.count + (two ? ' sheet' : ' stock length') + (out.cut.count === 1 ? '' : 's'))),
     h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
@@ -470,7 +490,7 @@ function CalcDrawer(props) {
       : out.cut.bins.slice(0, 24).map((b, bi) => h('div', { key: bi, style: { display: 'flex', alignItems: 'center', gap: 8 } },
         h('span', { style: { ...C.mute, minWidth: 18 } }, bi + 1),
         h('div', { style: { display: 'flex', flex: 1, height: 18, background: 'var(--bg-surface)', border: '1px solid var(--border-strong)', overflow: 'hidden' } },
-          b.items.map((l, li) => h('div', { key: li, title: calcF(dv(l, 'mm'), imp ? 2 : 0) + ' ' + dl('mm'), style: { width: (l / job.vals.stock * 100) + '%', marginRight: (job.vals.kerf / job.vals.stock * 100) + '%', background: PAL[Math.round(l) % PAL.length], opacity: .85, flexShrink: 0 } }))),
+          b.items.map((l, li) => h('div', { key: li, title: calcF(dv(l, 'mm'), imp ? 2 : 0) + ' ' + dl('mm'), style: { width: (l / job.vals.stock * 100) + '%', boxSizing: 'border-box', borderRight: '2px solid var(--bg-surface)', background: PAL[lens.indexOf(l) % PAL.length], flexShrink: 0, display: 'grid', placeItems: 'center', overflow: 'hidden', fontSize: 9, fontWeight: 700, color: '#fff', whiteSpace: 'nowrap' } }, calcF(dv(l, 'mm'), imp ? 1 : 0)))),
         h('span', { style: { ...C.mute, minWidth: 70, textAlign: 'right' } }, calcF(dv(job.vals.stock - b.used, 'mm'), imp ? 1 : 0) + ' ' + dl('mm') + ' left')))),
     (two ? out.cut.sheets.length > 12 : out.cut.bins.length > 24) ? h('p', { className: 'calc-foot' }, 'The first ' + (two ? 12 : 24) + ' are drawn; the count above is for all of them.') : null);
   const rows = CALC_ROWS[kind];
@@ -507,11 +527,11 @@ function CalcDrawer(props) {
   /* lines */
   let total = 0, allow = 0, unpriced = 0;
   const lineRows = lines.map(l => {
-    const p = priceFor ? priceFor(l.d) : null;
-    if (p == null) unpriced++; else { total += l.q * p; allow += (l.raw - l.net) * p; }
+    const p = priceFor ? priceFor(l.d) : null, q = imp ? l.qe : l.q, pu = p == null ? null : (imp ? p / l.fe : p);
+    if (p == null) unpriced++; else { total += q * pu; allow += (l.raw - l.net) * p; }
     return h('tr', { key: l.k },
-      h('td', null, l.d), h('td', { className: 'n' }, l.q), h('td', null, l.u),
-      h('td', { className: 'n' }, p == null ? '-' : calcF(p, 0)), h('td', { className: 'n' }, p == null ? '-' : calcF(l.q * p, 0)));
+      h('td', null, imp ? l.de : l.d), h('td', { className: 'n' }, q), h('td', null, imp ? l.ue : l.u),
+      h('td', { className: 'n' }, pu == null ? '-' : calcF(pu, imp ? 2 : 0)), h('td', { className: 'n' }, pu == null ? '-' : calcF(q * pu, 0)));
   });
   const linesSec = h('section', { style: C.sec },
     h('h3', { style: C.h3 }, 'Lines for Materials'),
@@ -522,7 +542,7 @@ function CalcDrawer(props) {
       unpriced ? unpriced + ' line' + (unpriced === 1 ? ' has' : 's have') + ' no price on the Masterlist yet. Its unit cost is left at 0 for you to fill in. ' : '',
       total ? 'Of which allowance: about ₱' + calcF(allow, 0) + '. ' : '',
       st.jobs.length > 1 ? 'Added across ' + st.jobs.length + ' jobs and rounded up once. ' : '',
-      imp ? 'Lines go to Materials in metric, the units the Masterlist is priced in.' : ''));
+      imp ? 'In English units. The Masterlist price is looked up under the metric wording and converted to the unit shown.' : ''));
 
   /* the jobs strip */
   const kdef = CALC_KINDS.find(k => k.id === kind);
@@ -547,6 +567,8 @@ function CalcDrawer(props) {
         h('b', { style: { display: 'block', fontSize: 15, color: 'var(--brand-accent)', ...C.mono } }, total ? '₱' + calcF(total, 0) : '-')),
       h('button', { className: 'calc-add', disabled: !lines.length || sharesOff,
         title: sharesOff ? 'The consumable shares must add up to 100%' : '',
-        onClick: () => onAdd(lines.map(l => ({ k: l.k, desc: l.d, qty: l.q, uom: l.u })), kind, calcUsed(kind, st)) },
+        onClick: () => onAdd(lines.map(l => imp
+          ? { k: l.k, desc: l.de, mdesc: l.d, qty: l.qe, uom: l.ue, f: l.fe }
+          : { k: l.k, desc: l.d, mdesc: l.d, alt: l.de, qty: l.q, uom: l.u, f: 1 }), kind, calcUsed(kind, st)) },
         'Add ' + lines.length + (lines.length === 1 ? ' line' : ' lines') + ' to Materials')));
 }

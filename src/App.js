@@ -11731,7 +11731,11 @@ tab === 'mywork' && (() => {
   /* Every logged request still waiting for the team, whoever it is assigned to: Review is how it gets accepted. */
   const awaitingReq = rows.filter(x => !x.e._draft && typeof x.e.id === 'number' && _unaccepted(x));
   const forReview = rows.filter(x => !x.e._draft && x.m.status === 'For Approval' && !isMine(x) && !(apv(x).state === 'pending'));
-  const open = mine.filter(x => ceIsOpen(x.m.status) && apv(x).state !== 'pending')
+  /* A request the Cost Estimation team returned is waiting on its requestor: it belongs in Returned to me. */
+  const _retReq = x => { const i = x.e.info || {}; return isRequestor && !x.e._draft && i.request && !i.acceptedCeNum && i.reviewStatus === 'returned' && ((x.m.receivedBy && names.includes(String(x.m.receivedBy).trim().toUpperCase())) || x.e.savedBy === me); };
+  const retReq = rows.filter(_retReq);
+  const returnedAll = [...returned, ...retReq];
+  const open = mine.filter(x => ceIsOpen(x.m.status) && apv(x).state !== 'pending' && !_retReq(x))
     .map(x => ({...x, dl: ceDeadline(x.m.deadline, x.m.dateSubmitted, x.m.status)}))
     .sort((a, b) => (a.dl.days == null) - (b.dl.days == null) || (a.dl.days || 0) - (b.dl.days || 0));
   /* Requests this user raised, wherever they have got to. `mine` stops matching
@@ -11759,7 +11763,9 @@ tab === 'mywork' && (() => {
     /*#__PURE__*/React.createElement("span", {style:{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:MT}}, [(x.e.info && x.e.info.client) || x.m.customer || '', (x.e.info && x.e.info.description) || ''].filter(Boolean).join(' · ')),
     extra, actions);
   const viewBtn = x => typeof x.e.id === 'number' && /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setViewCE({id:x.e.id,ceNum:ceLabel(x.e)})}, "👁 View");
-  const loadBtn = x => _unaccepted(x)
+  const loadBtn = x => (isRequestor && (x.e.info || {}).request && !(x.e.info || {}).acceptedCeNum && typeof x.e.id === 'number')
+    ? /*#__PURE__*/React.createElement("button", {style:btn('info',true),title:'Add what the Cost Estimation team asked for, then send it back',onClick:()=>openReview(x.e, 'update')}, "Update")
+    : _unaccepted(x)
     ? /*#__PURE__*/React.createElement("button", {style:btn('ok',true),title:'Review the checklist and decide: proceed, secure the missing data first, or decline',onClick:()=>openReview(x.e, 'review')}, "Review")
     : /*#__PURE__*/React.createElement("button", {style:btn('acc',true),onClick:()=>handleLoad(x.e.data || x.e)}, "Load");
   const section = (title, list, render, empty) => /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:'12px 14px'}},
@@ -11769,7 +11775,7 @@ tab === 'mywork' && (() => {
   return /*#__PURE__*/React.createElement("div", {style:{display:'flex',flexDirection:'column',gap:12}},
     /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'baseline',gap:10,flexWrap:'wrap'}},
       /*#__PURE__*/React.createElement("div", {style:{fontSize:18,fontWeight:800}}, 'Good ' + (now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening') + ', ' + String(currentUser.name || me).split(' ')[0]),
-      /*#__PURE__*/React.createElement("span", {style:{fontSize:12,color:MT}}, toSign.length + returned.length + overdue ? 'Here is what needs you today.' : 'Nothing urgent — you are all caught up.'),
+      /*#__PURE__*/React.createElement("span", {style:{fontSize:12,color:MT}}, toSign.length + returnedAll.length + overdue ? 'Here is what needs you today.' : 'Nothing urgent — you are all caught up.'),
       /*#__PURE__*/React.createElement("button", isRequestor
         ? {style:{...btn('acc',true),marginLeft:'auto'},onClick:openRequest,title:"Log a request for estimation: CE number, customer, deadline, who it is assigned to, and its documents"}
         : {style:{...btn('acc',true),marginLeft:'auto'},onClick:()=>setTab('info')},
@@ -11777,13 +11783,13 @@ tab === 'mywork' && (() => {
     /*#__PURE__*/React.createElement("div", {style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}},
       kpi('Awaiting my signature', toSign.length, 'approvals routed to you', toSign.length ? 'var(--accent-cyan)' : null),
       kpi('Open CEs assigned', open.length, overdue + ' overdue · ' + dueSoon + ' due ≤3 days', overdue ? ERR : null),
-      kpi('Returned to me', returned.length, 'need changes', returned.length ? ERR : null),
+      kpi('Returned to me', returnedAll.length, 'need changes', returnedAll.length ? ERR : null),
       kpi('Submitted this month', subMonth.length, peso(subMonth.reduce((t, x) => t + N(x.e.grand), 0))),
       kpi('On-time rate', onTime == null ? '—' : onTime + '%', timed.length + ' CEs with a deadline', onTime != null && onTime < 80 ? ERR : '#16a34a'),
       kpi('Won ' + now.getFullYear(), won, lost + ' lost · ' + yr.length + ' CEs this year', '#16a34a')),
     /*#__PURE__*/React.createElement("div", {style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(380px,1fr))',gap:12}},
       section('✍ For my approval', toSign, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT,whiteSpace:'nowrap'}}, apv(x).signed + '/' + apv(x).total + ' signed'), viewBtn(x)), 'No CE is waiting on your signature.'),
-      section('↩ Returned to me', returned, x => line(x, null, loadBtn(x)), 'Nothing returned.'),
+      section('↩ Returned to me', returnedAll, x => line(x, (x.e.info || {}).reviewNote && (x.e.info || {}).request ? /*#__PURE__*/React.createElement("span", {title: x.e.info.reviewNote, style:{fontSize:10,color:ACC,maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, 'Returned: ' + x.e.info.reviewNote) : null, loadBtn(x)), 'Nothing returned.'),
       section('📂 My open CEs', open, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,fontWeight:700,whiteSpace:'nowrap',color:x.dl.late ? ERR : x.dl.days != null && x.dl.days <= 3 ? 'var(--accent-orange, #F07F12)' : MT}}, (x.m.status || 'Draft') + ' · ' + x.dl.label), [viewBtn(x), loadBtn(x)]), 'No open CEs assigned to you.'),
       section('📝 My drafts', drafts, d => /*#__PURE__*/React.createElement("div", {key: d.draftId, style:{display:'flex',alignItems:'center',gap:8,padding:'6px 2px',borderBottom:'1px solid '+alpha(BDR,'44'),fontSize:12}},
         /*#__PURE__*/React.createElement("b", {style:{...MONO,fontSize:11}}, (d.info && d.info.ceNum) || 'Untitled'),
@@ -11799,7 +11805,8 @@ tab === 'mywork' && (() => {
       sent.length ? /*#__PURE__*/React.createElement("table", {style:{width:'100%',borderCollapse:'collapse',fontSize:12}},
         /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['RCE / CE NO.', 'CUSTOMER', 'JOB', 'ASSIGNED TO', 'STATUS', ''].map((h, i) => /*#__PURE__*/React.createElement("th", {key: i, style:{textAlign:'left',padding:'6px 8px',fontSize:10,color:MT,letterSpacing:'.06em',borderBottom:'1px solid '+BDR}}, h)))),
         /*#__PURE__*/React.createElement("tbody", null, sent.map(x => {
-          const st = x.m.status || 'Pending', col = getStatusColor(st), still = !!(x.e.info && x.e.info.request);
+          const _rs = x.e.info && x.e.info.request && !x.e.info.acceptedCeNum ? x.e.info.reviewStatus : '';
+          const st = _rs === 'returned' ? 'Returned to you' : _rs === 'resubmitted' ? 'Sent back to Cost Estimation' : (x.m.status || 'Pending'), col = _rs === 'returned' ? ACC : getStatusColor(st), still = !!(x.e.info && x.e.info.request);
           const td = {padding:'7px 8px',borderBottom:'1px solid '+alpha(BDR,'44'),verticalAlign:'middle'};
           return /*#__PURE__*/React.createElement("tr", {key: x.e.id},
             /*#__PURE__*/React.createElement("td", {style:{...td,...MONO,fontWeight:700,whiteSpace:'nowrap'}}, ceLabel(x.e)),

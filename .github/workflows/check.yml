@@ -393,5 +393,7 @@ jobs:
         run: node tools/test-multiple-estimators.js
       - name: Review decision buttons
         run: node tools/test-review-decision-buttons.js
+      - name: Returned request reaches the requestor
+        run: node tools/test-returned-reaches-requestor.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

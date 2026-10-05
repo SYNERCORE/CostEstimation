@@ -14,6 +14,11 @@ function CeDefaultsPanel() {
   const [loaded, setLoaded] = React.useState(false);
   const [dirty, setDirty] = React.useState(false);
   const [msg, setMsg] = React.useState('');
+  /* Which presets are open. All start folded: a roster of seven signatories makes each preset a screen tall, and
+     several of them are a very long page. A preset that is added or copied opens, since that is what is being edited. */
+  const [openIds, setOpenIds] = React.useState(() => new Set());
+  const keyOf = (p, i) => p.id || ('#' + i);
+  const setOpen = (k, on) => setOpenIds(prev => { const n = new Set(prev); if (on) n.add(k); else n.delete(k); return n; });
 
   React.useEffect(() => {
     (async () => {
@@ -26,8 +31,10 @@ function CeDefaultsPanel() {
   const edit = (i, patch) => { setPresets(p => p.map((x, j) => j === i ? {...x, ...patch} : x)); setDirty(true); };
 
   const addPreset = () => {
+    const nid = 'd' + Date.now() + Math.random().toString(36).slice(2, 6);
+    setOpen(nid, true);
     setPresets(p => [...p, {
-      id: 'd' + Date.now() + Math.random().toString(36).slice(2, 6),
+      id: nid,
       ceType: CE_DEFAULT_ANY,
       discipline: CE_DEFAULT_ANY,
       notes: [],
@@ -71,28 +78,30 @@ function CeDefaultsPanel() {
     style: {...INP, fontSize: 11, padding: '4px 6px'}, value, onChange
   }, opts.map(([v, l]) => React.createElement('option', {key: v, value: v}, l)));
 
-  const row = (i, p) => React.createElement('div', {
-    key: p.id || i,
+  const nameOf = v => v === CE_DEFAULT_ANY ? 'Any' : ({onsite: 'Onsite', shopworks: 'ShopWorks', shopsite: 'Shop + Site', supply: 'Supply'}[v] || v);
+  const row = (i, p) => { const k = keyOf(p, i), open = openIds.has(k); return React.createElement('div', {
+    key: k,
     style: {border: '1px solid ' + BDR, borderRadius: 8, padding: 12, marginBottom: 10, background: SURF}
   },
-    React.createElement('div', {style: {display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 10}},
-      React.createElement('div', {style: {flex: 1}},
-        React.createElement('label', {style: LBL}, 'CE Type'),
-        sel(p.ceType || CE_DEFAULT_ANY, e => edit(i, {ceType: e.target.value}),
-          [[CE_DEFAULT_ANY, 'Any type'], ['onsite', 'Onsite'], ['shopworks', 'ShopWorks'], ['shopsite', 'Shop + Site'], ['supply', 'Supply']])),
-      React.createElement('div', {style: {flex: 1}},
-        React.createElement('label', {style: LBL}, 'Discipline'),
-        sel(p.discipline || CE_DEFAULT_ANY, e => edit(i, {discipline: e.target.value}),
-          [[CE_DEFAULT_ANY, 'Any discipline'], ...CE_DISCIPLINES.map(d => [d, d])])),
-      /* Rosters differ between pairings by a name or two, so the fast way to
-         add the next one is to copy this one and change what differs. A fresh
-         id, or React keys collide and edits land on the wrong card. */
+    /* The folded view: which pairing it is for, and how much is in it, with the buttons that act on the whole preset. */
+    React.createElement('div', {style: {display: 'flex', gap: 8, alignItems: 'center', marginBottom: open ? 10 : 0}},
+      React.createElement('button', {
+        type: 'button', 'aria-expanded': open, title: open ? 'Fold this preset' : 'Open this preset',
+        style: {...btn('def', true), fontSize: 11, padding: '3px 9px', minWidth: 28},
+        onClick: () => setOpen(k, !open)
+      }, open ? '\u25BE' : '\u25B8'),
+      React.createElement('div', {style: {flex: 1, minWidth: 0, cursor: 'pointer'}, onClick: () => setOpen(k, !open)},
+        React.createElement('b', {style: {fontSize: 12}}, nameOf(p.ceType || CE_DEFAULT_ANY) + ' \u00B7 ' + nameOf(p.discipline || CE_DEFAULT_ANY)),
+        React.createElement('span', {style: {color: MT, fontSize: 11, marginLeft: 10}},
+          (n => n + (n === 1 ? ' note' : ' notes'))((p.notes || []).filter(t => String(t || '').trim()).length) + ' \u00B7 ' + (n => n + (n === 1 ? ' signatory' : ' signatories'))((p.approvers || []).length) +
+          ((p.approvers || []).filter(a => a.name).length ? ' \u00B7 ' + (p.approvers || []).filter(a => a.name).map(a => a.name.replace(/^(Mr|Ms|Mrs|Engr|Dr)\.?\s+/i, '')).slice(0, 3).join(', ') + ((p.approvers || []).filter(a => a.name).length > 3 ? '\u2026' : '') : ''))),
       React.createElement('button', {
         style: {...btn('def', true), fontSize: 10, padding: '4px 10px'},
         title: 'Copy this preset, then change the type or discipline',
         onClick: () => {
           const copy = JSON.parse(JSON.stringify(p));
           copy.id = 'd' + Date.now() + Math.random().toString(36).slice(2, 6);
+          setOpen(copy.id, true);
           setPresets(x => [...x.slice(0, i + 1), copy, ...x.slice(i + 1)]);
           setDirty(true);
         }
@@ -102,9 +111,19 @@ function CeDefaultsPanel() {
         onClick: () => { setPresets(x => x.filter((_, j) => j !== i)); setDirty(true); }
       }, 'Remove')
     ),
+    open && React.createElement('div', {style: {display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 10}},
+      React.createElement('div', {style: {flex: 1}},
+        React.createElement('label', {style: LBL}, 'CE Type'),
+        sel(p.ceType || CE_DEFAULT_ANY, e => edit(i, {ceType: e.target.value}),
+          [[CE_DEFAULT_ANY, 'Any type'], ['onsite', 'Onsite'], ['shopworks', 'ShopWorks'], ['shopsite', 'Shop + Site'], ['supply', 'Supply']])),
+      React.createElement('div', {style: {flex: 1}},
+        React.createElement('label', {style: LBL}, 'Discipline'),
+        sel(p.discipline || CE_DEFAULT_ANY, e => edit(i, {discipline: e.target.value}),
+          [[CE_DEFAULT_ANY, 'Any discipline'], ...CE_DISCIPLINES.map(d => [d, d])]))
+    ),
 
-    React.createElement('label', {style: LBL}, 'Notes'),
-    (p.notes || []).map((t, ni) => React.createElement('div', {key: ni, style: {display: 'flex', gap: 6, marginBottom: 4}},
+    open && React.createElement('label', {style: LBL}, 'Notes'),
+    open && (p.notes || []).map((t, ni) => React.createElement('div', {key: ni, style: {display: 'flex', gap: 6, marginBottom: 4}},
       React.createElement('span', {style: {color: MT, fontSize: 11, width: 16, paddingTop: 6}}, (ni + 1) + '.'),
       React.createElement('input', {
         style: {...INP, fontSize: 11, padding: '4px 8px',
@@ -131,15 +150,15 @@ function CeDefaultsPanel() {
         onClick: () => edit(i, {notes: p.notes.filter((_, j) => j !== ni)})
       }, '×')
     )),
-    React.createElement('button', {
+    open && React.createElement('button', {
       style: {...btn('def', true), fontSize: 10, padding: '3px 10px', marginBottom: 10},
       onClick: () => edit(i, {notes: [...(p.notes || []), '']})
     }, '+ Note'),
 
-    React.createElement('label', {style: LBL}, 'Signatories'),
-    React.createElement('div', {style: {display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 28px', gap: 5, marginBottom: 4}},
+    open && React.createElement('label', {style: LBL}, 'Signatories'),
+    open && React.createElement('div', {style: {display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 28px', gap: 5, marginBottom: 4}},
       ['Role', 'Name', 'Title', ''].map(h => React.createElement('span', {key: h, style: {fontSize: 9, color: MT, letterSpacing: .4}}, h.toUpperCase()))),
-    (p.approvers || []).map((a, ai) => React.createElement('div', {
+    open && (p.approvers || []).map((a, ai) => React.createElement('div', {
       key: ai, style: {display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 28px', gap: 5, marginBottom: 4}
     },
       ['role', 'name', 'title'].map(k => React.createElement('input', {
@@ -154,11 +173,11 @@ function CeDefaultsPanel() {
         onClick: () => edit(i, {approvers: p.approvers.filter((_, j) => j !== ai)})
       }, '×')
     )),
-    React.createElement('button', {
+    open && React.createElement('button', {
       style: {...btn('def', true), fontSize: 10, padding: '3px 10px'},
       onClick: () => edit(i, {approvers: [...(p.approvers || []), {role: '', name: '', title: ''}]})
     }, '+ Signatory')
-  );
+  ); };
 
   return React.createElement('div', null,
     React.createElement('div', {style: {fontWeight: 700, marginBottom: 6, fontSize: 13}}, 'CE Defaults'),
@@ -171,6 +190,9 @@ function CeDefaultsPanel() {
     loaded && presets.length === 0 && React.createElement('div', {
       style: {color: MT, fontSize: 11, padding: '14px 0', border: '1px dashed ' + BDR, borderRadius: 6, textAlign: 'center', marginBottom: 10}
     }, 'No presets yet. Add one and every new CE will start with it.'),
+    presets.length > 1 && React.createElement('div', {style: {display: 'flex', gap: 6, marginBottom: 8}},
+      React.createElement('button', {style: {...btn('def', true), fontSize: 10, padding: '3px 10px'}, onClick: () => setOpenIds(new Set(presets.map(keyOf)))}, 'Open all'),
+      React.createElement('button', {style: {...btn('def', true), fontSize: 10, padding: '3px 10px'}, onClick: () => setOpenIds(new Set())}, 'Fold all')),
     presets.map((p, i) => row(i, p)),
 
     React.createElement('div', {style: {display: 'flex', gap: 8, alignItems: 'center', marginTop: 8}},

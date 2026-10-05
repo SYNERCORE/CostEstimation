@@ -399,5 +399,7 @@ jobs:
         run: node tools/test-request-notifications.js
       - name: Request mirror columns
         run: node tools/test-request-mirror-columns.js
+      - name: CE Defaults presets fold
+        run: node tools/test-ce-defaults-fold.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

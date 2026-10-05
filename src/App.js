@@ -11717,7 +11717,7 @@ tab === 'mywork' && (() => {
     extra, actions);
   const viewBtn = x => typeof x.e.id === 'number' && /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setViewCE({id:x.e.id,ceNum:ceLabel(x.e)})}, "👁 View");
   /* A logged request nobody has accepted cannot be loaded (it has no CE number yet); the team reviews it here. */
-  const _unaccepted = x => { const i = x.e.info || {}; return !isRequestor && i.request && !i.acceptedCeNum && typeof x.e.id === 'number'; };
+  const _unaccepted = x => { const i = ((x.e && x.e.data) || x.e || {}).info || x.e.info || {}; return !isRequestor && i.request && !i.acceptedCeNum && String(i.ceNum || '') === String(i.requestNum || '') && typeof x.e.id === 'number'; };
   const loadBtn = x => _unaccepted(x)
     ? /*#__PURE__*/React.createElement("button", {style:btn('ok',true),title:'Review the checklist and decide: proceed, secure the missing data first, or decline',onClick:()=>openReview(x.e, 'review')}, "Review")
     : /*#__PURE__*/React.createElement("button", {style:btn('acc',true),onClick:()=>handleLoad(x.e.data || x.e)}, "Load");

@@ -12,7 +12,7 @@ ck('and my own CEs that came back returned', /apv\(x\)\.state === 'returned' && 
 ck('the badge and the My Work lists are the same rows', /const toSign = myTodo\.sign, returned = myTodo\.returned;/.test(app));
 /* An approval left pending on a replaced revision showed as "CE #2817" with
    nothing to sign: only the latest revision waits on anyone. */
-ck('a stale approval on an older revision is not counted', !app.includes('_orphan: true') && app.includes('return {sign: sign, returned: returned, total: sign.length + returned.length};'));
+ck('a stale approval on an older revision is not counted', !app.includes('_orphan: true') && app.includes('return {sign: sign, returned: returned, reqReturned: reqReturned, reqAwaiting: reqAwaiting, total: sign.length + returned.length + reqReturned.length + reqAwaiting.length};'));
 ck('an approver who is not an admin still receives the CEs routed to them', app.includes("if (apvMonWaitsOn(m, currentUser?.username)) return true;"));
 ck('the My Work tab carries the count', /sowbreak: sowUnassignedCount, mywork: myTodo\.total/.test(app));
 ck('drawn in red, not the dim row-count style', /t\.id === 'mywork' \? ERR :/.test(app));

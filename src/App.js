@@ -5720,7 +5720,7 @@ function App({
      and not the other. Both read this. */
   const myTodo = useMemo(() => {
     const me = currentUser && currentUser.username;
-    if (!me) return {sign: [], returned: [], total: 0};
+    if (!me) return {sign: [], returned: [], reqReturned: [], reqAwaiting: [], total: 0};
     const heads = groupCERevisions(monRows, h => (h.info && h.info.ceNum) || h.ceNum || '')
       .map(g => g.head).filter(e => !e._draft);
     const rows = heads.map(e => ({e: e, m: monData[e.id] || {}}));
@@ -5730,8 +5730,14 @@ function App({
     /* Only the latest revision of a CE is waiting on anyone. An approval left
        pending on an older revision -- replaced by ↻ Revise, or a CE since
        deleted -- is stale: it showed as "CE #2817" with nothing to sign. */
-    return {sign: sign, returned: returned, total: sign.length + returned.length};
-  }, [monRows, monData, currentUser]);
+    /* Requests. A requestor is told when the team sends one back; the team is told when one is waiting for a decision
+       (new, or sent back to them by the requestor). Both are in the count that drives the toast and the window title. */
+    const mine = meNames();
+    const isReq = x => { const i = x.e.info || {}; return i.request && !i.acceptedCeNum; };
+    const reqReturned = isRequestor ? rows.filter(x => isReq(x) && x.e.info.reviewStatus === 'returned' && ((x.m.receivedBy && mine.includes(String(x.m.receivedBy).trim().toUpperCase())) || x.e.savedBy === me)) : [];
+    const reqAwaiting = !isRequestor ? rows.filter(x => isReq(x) && x.e.info.reviewStatus !== 'returned' && x.e.info.reviewStatus !== 'declined' && typeof x.e.id === 'number') : [];
+    return {sign: sign, returned: returned, reqReturned: reqReturned, reqAwaiting: reqAwaiting, total: sign.length + returned.length + reqReturned.length + reqAwaiting.length};
+  }, [monRows, monData, currentUser, isRequestor]);
   /* The row summary can fall behind the CE itself -- a signature saved while
      SharePoint was unreachable, or an older app version that wrote no
      signedBy. Each CE said to be waiting on this person is checked against
@@ -5796,10 +5802,12 @@ function App({
   const _apvToldRef = React.useRef(-1);
   useEffect(() => {
     const n = myTodo.total, was = _apvToldRef.current;
-    if (n > was && was >= 0) setTimeout(() => showToast(
-      (myTodo.sign.length ? '✍ ' + myTodo.sign.length + ' CE' + (myTodo.sign.length === 1 ? '' : 's') + ' waiting for your signature' : '') +
-      (myTodo.sign.length && myTodo.returned.length ? ' · ' : '') +
-      (myTodo.returned.length ? '↩ ' + myTodo.returned.length + ' returned to you' : '') + ' — see My Work.'), 1200);
+    if (n > was && was >= 0) setTimeout(() => showToast([
+      myTodo.sign.length ? '✍ ' + myTodo.sign.length + ' CE' + (myTodo.sign.length === 1 ? '' : 's') + ' waiting for your signature' : '',
+      myTodo.returned.length ? '↩ ' + myTodo.returned.length + ' returned to you' : '',
+      myTodo.reqReturned.length ? '↩ ' + myTodo.reqReturned.length + ' request' + (myTodo.reqReturned.length === 1 ? '' : 's') + ' returned to you by Cost Estimation' : '',
+      myTodo.reqAwaiting.length ? '📥 ' + myTodo.reqAwaiting.length + ' request' + (myTodo.reqAwaiting.length === 1 ? '' : 's') + ' awaiting review' : ''
+    ].filter(Boolean).join(' · ') + ' — see My Work.'), 1200);
     _apvToldRef.current = n;
   }, [myTodo.total]);
   /* And on the window title, so it shows while the app is in another window. */

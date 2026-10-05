@@ -39,7 +39,8 @@ function RceReviewModal({ rce, mode, title, busy, users, assignee, facts, loadFi
   const R = rce || {};
   const [items, setItems] = React.useState(R.items || {});
   const [otherRemarks, setOtherRemarks] = React.useState(R.otherRemarks || '');
-  const [rec, setRec] = React.useState(mode === 'review' ? (R.recommendation || '') : (R.recommendation || ''));
+  const [recState, setRec] = React.useState(R.recommendation || '');
+  const rec = recState;
   const [reason, setReason] = React.useState(R.declineReason || '');
   const [note, setNote] = React.useState('');
   const [est, setEst] = React.useState(assignee || '');
@@ -58,7 +59,9 @@ function RceReviewModal({ rce, mode, title, busy, users, assignee, facts, loadFi
   const blank = RCE_ITEMS.filter(i => !(items[i.n] || {}).v).length;
   const L = (label, el) => React.createElement('label', { style: { display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: MT } }, label, el);
 
-  const submit = () => {
+  const submit = pick => {
+    const rec = pick || recState;
+    if (pick) setRec(pick);
     const bad = [];
     if (review && !rec) bad.push('item 14: choose Proceed, Secure complete reference data first, or Decline');
     if (review && rec === 'proceed' && !String(est).trim()) bad.push('an estimator to assign it to');
@@ -86,6 +89,7 @@ function RceReviewModal({ rce, mode, title, busy, users, assignee, facts, loadFi
         review
           ? 'Check what was sent against items 1-13, then decide item 14. Your answers replace the requestor\'s prefill.'
           : 'This request came back. Fill what was missing, then send it back to Cost Estimation.'),
+      review && React.createElement('div', { style: { marginTop: 8, fontSize: 11, color: MT } }, 'Go through items 1-13, then press Accept, Return to requestor, or Decline at the bottom.'),
       !review && R.reviewNote && React.createElement('div', { style: { marginTop: 10, padding: '8px 10px', borderRadius: 6, border: '1px solid ' + ACC, fontSize: 11.5 } },
         React.createElement('b', null, 'Cost Estimation says: '), R.reviewNote),
 
@@ -153,9 +157,15 @@ function RceReviewModal({ rce, mode, title, busy, users, assignee, facts, loadFi
         L(review ? 'Note to the requestor' + (rec === 'secure' ? ' (what to supply)' : '') : 'Note to Cost Estimation',
           React.createElement('textarea', { style: { ...INP, height: 40, resize: 'vertical' }, value: note, disabled: busy, onChange: e => setNote(e.target.value) }))),
 
-      errs.length > 0 && React.createElement('div', { style: { marginTop: 10, color: ERR, fontSize: 11.5, fontWeight: 600 } }, 'Still needed: ' + errs.join('; ') + '.'),
-      React.createElement('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 } },
+      /* The decision sits in a footer that stays in view however far down the checklist is scrolled. */
+      React.createElement('div', { style: { position: 'sticky', bottom: -18, margin: '14px -18px -18px', padding: '10px 18px', background: 'var(--bg-card, #14232b)', borderTop: '1px solid ' + BDR, display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap', alignItems: 'center' } },
+        errs.length > 0 && React.createElement('div', { style: { flexBasis: '100%', color: ERR, fontSize: 11.5, fontWeight: 600 } }, 'Still needed: ' + errs.join('; ') + '.'),
         React.createElement('button', { style: btn('def'), disabled: busy, onClick: onClose }, 'Cancel'),
-        React.createElement('button', { style: btn(review && rec === 'decline' ? 'danger' : 'acc'), disabled: busy, onClick: submit },
-          busy ? 'Saving…' : review ? (rec === 'proceed' ? 'Accept the request' : rec === 'secure' ? 'Return to requestor' : rec === 'decline' ? 'Decline the request' : 'Save the review') : 'Send back to Cost Estimation'))));
+        review
+          ? [
+            React.createElement('button', { key: 'decline', style: { ...btn('danger'), opacity: rec && rec !== 'decline' ? .55 : 1 }, disabled: busy, title: 'Reject it, with the reason on record', onClick: () => submit('decline') }, busy ? 'Saving…' : 'Decline / No Quote'),
+            React.createElement('button', { key: 'secure', style: { ...btn('def'), borderColor: ACC, color: ACC, opacity: rec && rec !== 'secure' ? .55 : 1 }, disabled: busy, title: 'Send it back to the requestor to fill in what is missing', onClick: () => submit('secure') }, 'Return to requestor'),
+            React.createElement('button', { key: 'proceed', style: { ...btn('ok'), opacity: rec && rec !== 'proceed' ? .55 : 1 }, disabled: busy, title: 'Accept it for cost estimation and give it its CE number', onClick: () => submit('proceed') }, 'Accept the request')
+          ]
+          : React.createElement('button', { style: btn('acc'), disabled: busy, onClick: () => submit() }, busy ? 'Saving…' : 'Send back to Cost Estimation'))));
 }

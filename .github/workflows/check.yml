@@ -391,5 +391,7 @@ jobs:
         run: node tools/test-rce-ce-filter.js
       - name: Multiple estimators
         run: node tools/test-multiple-estimators.js
+      - name: Review decision buttons
+        run: node tools/test-review-decision-buttons.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

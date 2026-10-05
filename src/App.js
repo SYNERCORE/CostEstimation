@@ -1286,7 +1286,7 @@ function App({
        not an admin was told a CE waited on them but never received the CE
        itself, so there was nothing to open. */
     if (apvMonWaitsOn(m, currentUser?.username)) return true;
-    return me.includes(String(m.ceeName || '').trim().toUpperCase()) || me.includes(String(m.receivedBy || '').trim().toUpperCase());
+    return ceeMatches(me, m.ceeName) || me.includes(String(m.receivedBy || '').trim().toUpperCase());
   };
   const loadHist = async () => {
     setHistBusy(true);
@@ -5893,7 +5893,7 @@ function App({
       if (monDiscFilter !== 'all' && monDisc(e, m).trim().toUpperCase() !== monDiscFilter) return false;
       if (monCustFilter !== 'all' && monCust(e, m).trim().toUpperCase() !== monCustFilter) return false;
       if (monApvMine && !apvMonWaitsOn(m, currentUser.username)) return false;
-      if (monMine && !meNames().includes(String(m.ceeName || m.preparedBy || e.savedBy || '').trim().toUpperCase())) return false;
+      if (monMine && !ceeMatches(meNames(), m.ceeName || m.preparedBy || e.savedBy || '')) return false;
       if (!monSearch) return true;
       const q = monSearch.toLowerCase();
       return (e.info?.ceNum || '').toLowerCase().includes(q) || rceOf(e, m).toLowerCase().includes(q) || (e.info?.client || '').toLowerCase().includes(q) || (e.info?.description || '').toLowerCase().includes(q) || (m.customer || '').toLowerCase().includes(q) || (m.receivedBy || '').toLowerCase().includes(q) || (m.rceNo || '').toLowerCase().includes(q) || (m.remarks || '').toLowerCase().includes(q);
@@ -11140,12 +11140,7 @@ assignPanel && /*#__PURE__*/React.createElement("div", {
   /*#__PURE__*/React.createElement("b", {style:{fontSize:14}}, "👤 Assign"),
   /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,margin:'4px 0 12px',...MONO}}, assignPanel.ceNum),
   /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,marginBottom:10}}, "Currently: ", /*#__PURE__*/React.createElement("b", {style:{color:TX}}, assignPanel.from || '—')),
-  /*#__PURE__*/React.createElement("input", {
-    autoFocus: true, list: 'assign-users', style: INP, value: assignPanel.to, placeholder: 'Estimator',
-    onChange: ev => { const v = ev.target.value; setAssignPanel(p => ({...p, to: v})); },
-    onKeyDown: ev => { if (ev.key === 'Enter') saveAssign(); }
-  }),
-  /*#__PURE__*/React.createElement("datalist", {id:'assign-users'}, reqUsers.map(u => /*#__PURE__*/React.createElement("option", {key:u.username, value:u.name || u.username}))),
+  /*#__PURE__*/React.createElement(NamePicker, {value: assignPanel.to, users: reqUsers, listId: 'assign-users', autoFocus: true, onEnter: saveAssign, onChange: v => setAssignPanel(p => ({...p, to: v}))}),
   /*#__PURE__*/React.createElement("div", {style:{fontSize:10,color:MT,marginTop:6}}, "Pick from the list so \"Assigned to me\" finds it for them."),
   /*#__PURE__*/React.createElement("div", {style:{display:'flex',gap:8,justifyContent:'flex-end',marginTop:14}},
     /*#__PURE__*/React.createElement("button", {style:btn('def'), onClick:()=>setAssignPanel(null)}, "Cancel"),
@@ -11313,9 +11308,8 @@ reqForm && (() => {
     /*#__PURE__*/React.createElement("div", {style:{marginTop:10}}, L("Address", inp('address', {placeholder:'Site or office address as the inquiry gives it'}))),
     /*#__PURE__*/React.createElement("div", {style:{marginTop:10}}, L("Project title", /*#__PURE__*/React.createElement("textarea", {style:{...INP,height:46,resize:'vertical'}, value:reqForm.description, placeholder:'What the client is asking for', onChange:e=>set('description', e.target.value)}))),
     /*#__PURE__*/React.createElement("div", {style:{marginTop:10}}, grid(
-      L("Assigned to (optional)", /*#__PURE__*/React.createElement(React.Fragment, null,
-        inp('assignee', {list:'req-users', placeholder:'Leave blank: a reviewer will assign one'}),
-        /*#__PURE__*/React.createElement("datalist", {id:'req-users'}, reqUsers.map(u => /*#__PURE__*/React.createElement("option", {key:u.username, value:u.name || u.username}))))),
+      L("Assigned to (optional, one or more)", /*#__PURE__*/React.createElement(React.Fragment, null,
+        /*#__PURE__*/React.createElement(NamePicker, {value: reqForm.assignee || '', users: reqUsers, listId: 'req-users', placeholder: 'Leave blank: a reviewer will assign one', onChange: v => set('assignee', v)}))),
       L("Inquiry type", /*#__PURE__*/React.createElement("select", {style:INP, value:reqForm.inquiryType || '', onChange:e=>set('inquiryType', e.target.value)},
         /*#__PURE__*/React.createElement("option", {value:''}, '--'),
         RCE_INQUIRY_TYPES.map(k => /*#__PURE__*/React.createElement("option", {key:k, value:k}, k)))),
@@ -11727,7 +11721,7 @@ tab === 'mywork' && (() => {
   const me = currentUser.username, names = meNames();
   const heads = groupCERevisions(monRows, h => (h.info && h.info.ceNum) || h.ceNum || '').map(g => g.head);
   const rows = heads.map(e => ({e, m: monOf(e)}));
-  const isMine = x => names.includes(String(x.m.ceeName || x.m.preparedBy || x.e.savedBy || '').trim().toUpperCase()) || x.e.savedBy === me;
+  const isMine = x => ceeMatches(names, x.m.ceeName || x.m.preparedBy || x.e.savedBy || '') || x.e.savedBy === me;
   const mine = rows.filter(x => !x.e._draft && isMine(x));
   const apv = x => x.m.apv || {};
   const toSign = myTodo.sign, returned = myTodo.returned;

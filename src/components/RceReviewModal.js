@@ -10,6 +10,31 @@
 
    It only collects; the caller writes. onDone receives
    { items, otherRemarks, recommendation, declineReason, note }. */
+/* One or several estimators in one value: "Ana Cruz, Ben Reyes". Stored as that single string, so every
+   place that already reads an Estimator keeps working; ceeMatches is how "Assigned to me" finds a share. */
+function ceeNames(v) { return String(v || '').split(/[,;]/).map(x => x.trim()).filter(Boolean); }
+function ceeMatches(me, v) { const set = ceeNames(v).map(x => x.toUpperCase()); return set.some(x => me.indexOf(x) >= 0); }
+function NamePicker({ value, users, onChange, disabled, placeholder, listId, autoFocus, onEnter }) {
+  const names = ceeNames(value);
+  const [typed, setTyped] = React.useState('');
+  const known = (users || []).map(u => u.name || u.username);
+  const add = raw => {
+    const v = String(raw || '').trim();
+    if (!v || names.some(n => n.toUpperCase() === v.toUpperCase())) { setTyped(''); return; }
+    onChange(names.concat(v).join(', ')); setTyped('');
+  };
+  const drop = n => onChange(names.filter(x => x !== n).join(', '));
+  return React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 5 } },
+    names.length > 0 && React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 5 } },
+      names.map(n => React.createElement('span', { key: n, style: { display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, padding: '2px 4px 2px 9px', borderRadius: 12, background: alpha(ACC, '22'), border: '1px solid ' + alpha(ACC, '55'), color: TX } },
+        n, !disabled && React.createElement('button', { type: 'button', title: 'Remove ' + n, onClick: () => drop(n), style: { border: 'none', background: 'transparent', color: MT, cursor: 'pointer', fontSize: 12, padding: '0 4px' } }, '\u2715')))),
+    React.createElement('input', { style: INP, list: listId, value: typed, disabled, autoFocus, placeholder: names.length ? 'Add another estimator' : (placeholder || 'Estimator'),
+      onChange: e => { const v = e.target.value; if (known.some(k => k === v)) add(v); else setTyped(v); },
+      onKeyDown: e => { if (e.key === 'Enter') { e.preventDefault(); if (typed.trim()) add(typed); else if (onEnter) onEnter(); } },
+      onBlur: () => { if (typed.trim()) add(typed); } }),
+    React.createElement('datalist', { id: listId }, known.filter(k => !names.some(n => n.toUpperCase() === k.toUpperCase())).map(k => React.createElement('option', { key: k, value: k }))));
+}
+
 function RceReviewModal({ rce, mode, title, busy, users, assignee, facts, loadFiles, onClose, onDone }) {
   const R = rce || {};
   const [items, setItems] = React.useState(R.items || {});
@@ -118,9 +143,8 @@ function RceReviewModal({ rce, mode, title, busy, users, assignee, facts, loadFi
           placeholder: 'Why SHIC is not quoting this one', onChange: e => setReason(e.target.value) }))),
 
       review && React.createElement('div', { style: { marginTop: 10 } },
-        L('Assign to estimator' + (rec === 'proceed' ? ' *' : ''), React.createElement(React.Fragment, null,
-          React.createElement('input', { style: INP, list: 'rev-users', value: est, disabled: busy, placeholder: 'Estimator', onChange: e => setEst(e.target.value) }),
-          React.createElement('datalist', { id: 'rev-users' }, (users || []).map(u => React.createElement('option', { key: u.username, value: u.name || u.username })))))),
+        L('Assign to estimator(s)' + (rec === 'proceed' ? ' *' : ''), React.createElement(React.Fragment, null,
+          React.createElement(NamePicker, { value: est, users, disabled: busy, listId: 'rev-users', onChange: setEst })))),
       React.createElement('div', { style: { marginTop: 10 } },
         L('Other remarks', React.createElement('textarea', {
           style: { ...INP, height: 40, resize: 'vertical' }, value: otherRemarks, disabled: busy,

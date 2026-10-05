@@ -46,7 +46,7 @@ ck('estimators are offered from the user list', has(/list:'req-users'/));
 console.log('\nfinding it:');
 ck('the row is badged REQUEST', has(/\}, 'REQUEST'\),/));
 ck('"Assigned to me" filters on the Estimator column',
-  has(/if \(monMine && !meNames\(\)\.includes\(String\(m\.ceeName \|\| m\.preparedBy \|\| e\.savedBy \|\| ''\)/));
+  has(/if \(monMine && !ceeMatches\(meNames\(\), m\.ceeName \|\| m\.preparedBy \|\| e\.savedBy/));
 ck('and the list recomputes when it is toggled', has(/monCustFilter, monMine, (monApvMine, )?monSortCol, monSortDir]\);/));
 
 console.log('\nthe estimator can actually see it:');
@@ -54,12 +54,12 @@ const db = fs.readFileSync('src/db.js', 'utf8');
 ck('a non-admin history keeps CEs assigned to or received by them, not only their own saves',
   /h\.savedBy===username\|\|\(keep&&keep\(h\.id\)\)/.test(db) && has(/dbGetHistory\(currentUser\.username, canSeeAll, canSeeAll \? null : mineToSee\)/));
 ck('mineToSee reads the Estimator and Received By columns',
-  has(/me\.includes\(String\(m\.ceeName \|\| ''\)\.trim\(\)\.toUpperCase\(\)\) \|\| me\.includes\(String\(m\.receivedBy/));
+  has(/ceeMatches\(me, m\.ceeName\) \|\| me\.includes\(String\(m\.receivedBy/));
 ck('history reloads when monitoring reveals an assigned CE it lacks', has(/if \(missing && missing !== _assignedKey\.current\)/));
 
 console.log('\nreassigning from the row:');
 ck('each row has an Assign action', has(/onClick: \(\) => \{ if \(!e\._draft\) openAssign\(e\); \}\n    \}, '👤 Assign'\)/));
-ck('it offers the user list', has(/list: 'assign-users'/));
+ck('it offers the user list', has(/listId: 'assign-users'/));
 ck('it writes the Estimator column through the normal monitoring save', has(/updateMon\(a\.id, 'ceeName', to\);/));
 ck('and the change is audited', has(/auditLog\('reassign_ce'/));
 ck('an unchanged pick writes nothing', has(/if \(to !== String\(a\.from \|\| ''\)\.trim\(\)\) \{/));

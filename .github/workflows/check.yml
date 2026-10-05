@@ -385,5 +385,7 @@ jobs:
         run: node tools/test-mywork-review.js
       - name: CE list carries the request flag
         run: node tools/test-history-carries-request-flag.js
+      - name: Review dialog shows the request
+        run: node tools/test-review-shows-request.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

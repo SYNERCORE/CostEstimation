@@ -10,7 +10,7 @@
 
    It only collects; the caller writes. onDone receives
    { items, otherRemarks, recommendation, declineReason, note }. */
-function RceReviewModal({ rce, mode, title, busy, users, assignee, onClose, onDone }) {
+function RceReviewModal({ rce, mode, title, busy, users, assignee, facts, loadFiles, onClose, onDone }) {
   const R = rce || {};
   const [items, setItems] = React.useState(R.items || {});
   const [otherRemarks, setOtherRemarks] = React.useState(R.otherRemarks || '');
@@ -20,6 +20,14 @@ function RceReviewModal({ rce, mode, title, busy, users, assignee, onClose, onDo
   const [est, setEst] = React.useState(assignee || '');
   const [errs, setErrs] = React.useState([]);
   const review = mode === 'review';
+  /* The papers that came with the request, listed so they can be opened while the checklist is being judged. */
+  const [files, setFiles] = React.useState(null);
+  React.useEffect(() => {
+    let live = true;
+    if (!loadFiles) return undefined;
+    Promise.resolve(loadFiles()).then(f => { if (live) setFiles(f || []); }).catch(e => { if (live) setFiles({ err: (e && e.message) || String(e) }); });
+    return () => { live = false; };
+  }, []);
   const setItem = (n, patch) => setItems(p => ({ ...p, [n]: { ...(p[n] || {}), ...patch } }));
   const noCount = RCE_ITEMS.filter(i => (items[i.n] || {}).v === 'no').length;
   const blank = RCE_ITEMS.filter(i => !(items[i.n] || {}).v).length;
@@ -55,6 +63,18 @@ function RceReviewModal({ rce, mode, title, busy, users, assignee, onClose, onDo
           : 'This request came back. Fill what was missing, then send it back to Cost Estimation.'),
       !review && R.reviewNote && React.createElement('div', { style: { marginTop: 10, padding: '8px 10px', borderRadius: 6, border: '1px solid ' + ACC, fontSize: 11.5 } },
         React.createElement('b', null, 'Cost Estimation says: '), R.reviewNote),
+
+      /* What the request says, before the checklist asks whether it said enough. */
+      facts && facts.length > 0 && React.createElement('div', { style: { marginTop: 12, border: '1px solid ' + BDR, borderRadius: 7, padding: '8px 10px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: '4px 14px' } },
+        facts.map(([k, v]) => React.createElement('div', { key: k, style: { fontSize: 11.5, minWidth: 0 } },
+          React.createElement('span', { style: { color: MT } }, k + ': '), React.createElement('span', { style: { color: TX, wordBreak: 'break-word' } }, v)))),
+      loadFiles && React.createElement('div', { style: { marginTop: 8, border: '1px solid ' + BDR, borderRadius: 7, padding: '8px 10px', fontSize: 11.5 } },
+        React.createElement('b', null, '📎 Attachments'),
+        files === null ? React.createElement('span', { style: { color: MT, marginLeft: 8 } }, 'Loading...')
+          : files.err ? React.createElement('span', { style: { color: ERR, marginLeft: 8 } }, 'Could not read them: ' + files.err)
+          : !files.length ? React.createElement('span', { style: { color: MT, marginLeft: 8 } }, 'None came with this request yet.')
+          : React.createElement('div', { style: { marginTop: 4, display: 'flex', flexDirection: 'column', gap: 3 } },
+              files.map(f => React.createElement('a', { key: f.FileName, href: spAbsUrl(f.ServerRelativeUrl), target: '_blank', rel: 'noopener noreferrer', style: { color: INFO, wordBreak: 'break-all', textDecoration: 'none' } }, f.FileName)))),
 
       sect('COMPLETE?', blank ? blank + ' of ' + RCE_ITEMS.length + ' not answered yet.' : noCount ? noCount + ' marked No.' : 'All answered.'),
       React.createElement('div', { style: { border: '1px solid ' + BDR, borderRadius: 7, overflow: 'hidden' } },

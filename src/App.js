@@ -11231,7 +11231,17 @@ piGate && tab === "info" && !isRequestor && /*#__PURE__*/React.createElement(Pro
 rceReview && /*#__PURE__*/React.createElement(RceReviewModal, {
   key: rceReview.e.id + rceReview.mode, mode: rceReview.mode, rce: (rceReview.e.info || {}).rce || {}, busy: reqBusy,
   title: (rceReview.mode === 'review' ? 'Review request ' : 'Update request ') + (rceReview.e.info?.requestNum || rceReview.e.ceNum),
-  users: reqUsers, assignee: String((monData[rceReview.e.id] || {}).ceeName || '').replace(/^Unassigned$/, ''), onClose: () => setRceReview(null), onDone: saveReview
+  users: reqUsers, assignee: String((monData[rceReview.e.id] || {}).ceeName || '').replace(/^Unassigned$/, ''), onClose: () => setRceReview(null), onDone: saveReview,
+  facts: (() => {
+    const e = rceReview.e, i = e.info || {}, r = i.rce || {}, mo = monData[e.id] || {};
+    return [['RCE No.', i.requestNum || i.ceNum || e.ceNum], ['Company', i.client || mo.customer], ['Project', i.description || mo.jobTitle],
+      ['Project type', i.projType || mo.designation], ['Date received', mo.dateRecv || i.date], ['Deadline', r.deadline || mo.deadline],
+      ['Inquiry No.', r.inquiryNo], ['Inquiry date', r.inquiryDate], ['Completion date', r.completionDate], ['Work location', r.workLocation],
+      ['Address', r.address], ['Assigned sales', r.assignedSales], ['Inquiry type', r.inquiryType], ['Stage', r.stage],
+      ['Requested by', mo.receivedBy || r.preparedBy || e.savedBy], ['Assigned estimator', mo.ceeName], ['Remarks', mo.remarks]
+    ].filter(p => p[1]);
+  })(),
+  loadFiles: async () => { const sp = _monSpIdCache[rceReview.e.id]; return sp ? await spGetAttachments(spList('Monitoring'), sp) : []; }
 }),
 
 /* ── New Request Modal ── */

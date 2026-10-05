@@ -11716,7 +11716,11 @@ tab === 'mywork' && (() => {
     /*#__PURE__*/React.createElement("span", {style:{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:MT}}, [(x.e.info && x.e.info.client) || x.m.customer || '', (x.e.info && x.e.info.description) || ''].filter(Boolean).join(' · ')),
     extra, actions);
   const viewBtn = x => typeof x.e.id === 'number' && /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setViewCE({id:x.e.id,ceNum:ceLabel(x.e)})}, "👁 View");
-  const loadBtn = x => /*#__PURE__*/React.createElement("button", {style:btn('acc',true),onClick:()=>handleLoad(x.e.data || x.e)}, "Load");
+  /* A logged request nobody has accepted cannot be loaded (it has no CE number yet); the team reviews it here. */
+  const _unaccepted = x => { const i = x.e.info || {}; return !isRequestor && i.request && !i.acceptedCeNum && typeof x.e.id === 'number'; };
+  const loadBtn = x => _unaccepted(x)
+    ? /*#__PURE__*/React.createElement("button", {style:btn('ok',true),title:'Review the checklist and decide: proceed, secure the missing data first, or decline',onClick:()=>openReview(x.e, 'review')}, "Review")
+    : /*#__PURE__*/React.createElement("button", {style:btn('acc',true),onClick:()=>handleLoad(x.e.data || x.e)}, "Load");
   const section = (title, list, render, empty) => /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:'12px 14px'}},
     /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:13,marginBottom:6}}, title, /*#__PURE__*/React.createElement("span", {style:{marginLeft:6,fontSize:11,color:MT}}, '(' + list.length + ')')),
     list.length ? list.slice(0, 15).map(render) : /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,padding:'6px 0'}}, empty),

@@ -178,30 +178,54 @@ const ResTab = ({
   const _dlEl = React.useMemo(() => _dlOn ? React.createElement("datalist", { id: _dlId },
     (masterlist[mlType] || []).map(x => React.createElement("option", { key: x.id, value: x.desc }))) : null,
     [_dlOn, masterlist, mlType]);
+  /* Rows are NOT all one height: one with "+ Add to Masterlist" under its description is taller than one already on the Masterlist.
+     Taking the first row's height for every row drifted by hundreds of pixels on a long list, so the drawn window and the two spacers
+     landed away from the screen and the table went blank, with a stray row at the bottom, until the page was nudged. Every drawn row is
+     now measured and remembered by id; the window and the spacers are sums of real heights, and a row never drawn yet counts as the
+     average of those measured. */
   const _rowH = useRef(44);
-  const [_wv, _setWv] = useState({ a: 0, b: _VMIN });
+  const _hMap = useRef({});
+  const _hCount = useRef(0);
+  const _listRef = useRef(_list); _listRef.current = _list;
+  const _kickRef = useRef(null);
+  const [_wv, _setWv] = useState({ a: 0, b: _VMIN, v: 0 });
   const _virt = _list.length > _VMIN;
+  const _hOf = id => _hMap.current[id] || _rowH.current;
   useEffect(() => {
-    if (!_virt) return;
+    if (!_virt) { _kickRef.current = null; return; }
     let raf = 0;
     const calc = () => {
       raf = 0;
       const tb = _tbRef.current; if (!tb) return;
-      const tr = tb.querySelector('tr[data-vr]');
-      if (tr && tr.offsetHeight > 10) _rowH.current = tr.offsetHeight;
-      const h = _rowH.current, top = tb.getBoundingClientRect().top;
-      const vh = window.innerHeight || 800;
-      /* top is where the first row's slot starts; spacer above counts. */
-      const first = Math.max(0, Math.floor(-top / h) - _OVER);
-      const last = Math.min(_list.length, Math.ceil((vh - top) / h) + _OVER);
-      _setWv(p => (p.a === first && p.b === last) ? p : { a: first, b: Math.max(last, first + 1) });
+      let sum = 0, cnt = 0;
+      tb.querySelectorAll('tr[data-vr]').forEach(tr => {
+        const hh = tr.offsetHeight, id = tr.getAttribute('data-rid');
+        if (hh > 10) { if (_hMap.current[id] === undefined) _hCount.current++; _hMap.current[id] = hh; sum += hh; cnt++; }
+      });
+      if (cnt) _rowH.current = sum / cnt;
+      const list = _listRef.current, vh = window.innerHeight || 800;
+      /* tb's top is where the first row of the whole list starts: the top spacer is inside it. */
+      let y = tb.getBoundingClientRect().top, first = -1, last = list.length;
+      for (let i = 0; i < list.length; i++) {
+        const hh = _hOf(list[i].r.id);
+        if (first < 0 && y + hh > 0) first = i;
+        if (y >= vh) { last = i; break; }
+        y += hh;
+      }
+      if (first < 0) first = Math.max(0, list.length - 1);
+      first = Math.max(0, first - _OVER); last = Math.min(list.length, last + _OVER);
+      const v = _hCount.current;
+      _setWv(p => (p.a === first && p.b === last && p.v === v) ? p : { a: first, b: Math.max(last, first + 1), v });
     };
     const kick = () => { if (!raf) raf = requestAnimationFrame(calc); };
+    _kickRef.current = kick;
     calc();
     window.addEventListener('scroll', kick, true);
     window.addEventListener('resize', kick);
-    return () => { window.removeEventListener('scroll', kick, true); window.removeEventListener('resize', kick); if (raf) cancelAnimationFrame(raf); };
+    return () => { _kickRef.current = null; window.removeEventListener('scroll', kick, true); window.removeEventListener('resize', kick); if (raf) cancelAnimationFrame(raf); };
   }, [_virt, _list.length]);
+  /* After every draw, in case a row changed height (the Add to Masterlist line goes once it is added) or the filter changed the list. */
+  useEffect(() => { if (_kickRef.current) _kickRef.current(); });
   let _from = 0, _to = _list.length;
   if (_virt) {
     _from = Math.min(_wv.a, Math.max(0, _list.length - 1)); _to = Math.min(_wv.b, _list.length);
@@ -209,10 +233,11 @@ const ResTab = ({
     const ni = _list.findIndex(x => x.r.id === _rtNewId);
     if (ni >= 0) { if (ni < _from) _from = ni; if (ni >= _to) _to = ni + 1; }
   }
+  const _hSum = (a, b) => { let t = 0; for (let i = a; i < b; i++) t += _hOf(_list[i].r.id); return t; };
   const _vis = {
     items: _list.slice(_from, _to),
-    top: _from > 0 ? React.createElement("tr", { key: '_vt', "aria-hidden": true, style: { height: _from * _rowH.current } }, React.createElement("td", { colSpan: 30, style: { padding: 0, border: 0 } })) : null,
-    bot: _to < _list.length ? React.createElement("tr", { key: '_vb', "aria-hidden": true, style: { height: (_list.length - _to) * _rowH.current } }, React.createElement("td", { colSpan: 30, style: { padding: 0, border: 0 } })) : null
+    top: _from > 0 ? React.createElement("tr", { key: '_vt', "aria-hidden": true, style: { height: _hSum(0, _from) } }, React.createElement("td", { colSpan: 30, style: { padding: 0, border: 0 } })) : null,
+    bot: _to < _list.length ? React.createElement("tr", { key: '_vb', "aria-hidden": true, style: { height: _hSum(_to, _list.length) } }, React.createElement("td", { colSpan: 30, style: { padding: 0, border: 0 } })) : null
   };
   const impRef = useRef(null);
   /* What "Set all" will write. Starts at whatever the rows already agree on,
@@ -582,7 +607,7 @@ q && /*#__PURE__*/React.createElement("span", {
 }, h)))), /*#__PURE__*/React.createElement("tbody", { ref: _tbRef }, _vis.top, _vis.items.map(({ r, _ix }) => {
   const tot = rowTot(r);
   return /*#__PURE__*/React.createElement("tr", {
-    key: r.id, "data-vr": 1
+    key: r.id, "data-vr": 1, "data-rid": r.id
   }, /*#__PURE__*/React.createElement("td", { style: { ...TDS, ...MONO, color: MT, textAlign: 'center', width: 28 } }, _ix + 1), /*#__PURE__*/React.createElement("td", {
     style: TDS
   }, /*#__PURE__*/React.createElement("input", {

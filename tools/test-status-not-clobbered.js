@@ -12,7 +12,7 @@ const start = app.indexOf('        const mapped = DOC_TO_MON[info.status];');
 const stop = app.indexOf('if (Object.keys(_w).length) updateMon(saved.id, _w);', start);
 ck('the seeding rule is where a CE is saved', start > 0 && stop > start);
 const run = new Function('DOC_TO_MON', 'info', '_entry', 'monData', 'saved', 'apvMirror', 'updateMon',
-  'let _out = {};' + app.slice(start, stop) +
+  'let _out = {}; const _revReason = {current: null}, ceNum = "X", ceFamily = () => ({rev: 0});' + app.slice(start, stop) +
   'if (Object.keys(_w).length) updateMon(saved.id, _w); _out = _w; } return _out;');
 
 const D2M = { DRAFT: 'Draft', APPROVED: 'Approved' };

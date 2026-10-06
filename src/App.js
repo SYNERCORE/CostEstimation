@@ -2957,6 +2957,10 @@ function App({
             const _st = String(_m.status || '').trim();
             if (_a.state === 'pending' && !Object.keys(_a.lines || {}).length && (!_st || _st === 'Draft')) _w.status = 'For Approval';
           }
+          if (_revReason.current && _revReason.current.num === String(ceNum).toUpperCase() && !(monData[saved.id] || {}).remarks) {
+            _w.remarks = '\u21BB Revision ' + (ceFamily(ceNum).rev ? 'R' + ceFamily(ceNum).rev : '') + ': ' + _revReason.current.why;
+            _revReason.current = null;
+          }
           if (Object.keys(_w).length) updateMon(saved.id, _w);
         }
       } catch (_e) { console.warn('status seed skipped:', _e.message); }
@@ -2981,12 +2985,29 @@ function App({
       showToast('Save failed: ' + e.message, true);
     }
   });
+  /* A revision needs a reason. It is asked for when the revision starts, kept on the CE (info.revisionReason) and written to the new
+     revision's Monitoring remarks, so the trail says why each R-number exists. Cancel, or an empty answer, stops the revision. */
+  const _revReason = React.useRef(null);
+  const askRevisionReason = (num) => {
+    const t = prompt('Reason for revising ' + num + ' (required) \u2014 e.g. client changed the scope, rates updated, quantity corrected:', '');
+    if (t == null) return null;
+    if (String(t).trim().length < 3) { showToast('A revision needs a reason. Nothing was revised.', true); return null; }
+    return String(t).trim();
+  };
+  const noteRevisionRemark = async (num, reason) => {
+    try {
+      const saved = await dbFindCEByNum(num);
+      if (saved && saved.id != null) updateMon(saved.id, {remarks: '\u21BB Revision ' + (ceFamily(num).rev ? 'R' + ceFamily(num).rev : '') + ': ' + reason});
+    } catch (_e) { console.warn('revision remark skipped:', _e.message); }
+  };
   const handleSaveRevision = guard('revise', async () => {
     const ceNum = (info.ceNum || '').trim();
     if (!ceNum) {
       showToast('Please enter a CE Number before saving a revision.', true);
       return;
     }
+    const _why = askRevisionReason(ceNum);
+    if (!_why) return;
     const allHist = await dbGetHistory(null, true).catch(() => []);
     /* Find the highest revision already on file for this CE.
 
@@ -3023,10 +3044,12 @@ function App({
       return;
     }
     try {
-      await dbSaveHistory(mkEntry(revLabel));
+      const _re = mkEntry(revLabel); _re.info = {..._re.info, revisionReason: _why};
+      await dbSaveHistory(_re);
+      await noteRevisionRemark(_re.info.ceNum, _why);
       setInfo(p => ({
         ...p,
-        ceNum: revCeNum
+        ceNum: revCeNum, revisionReason: _why
       }));
       clearDraft();
       /* The draft was written under the old number; the revision supersedes it. */
@@ -3229,7 +3252,10 @@ function App({
       pad = /R0\d/i.test(tail);
     }
     const newCeNum = base + sep + 'R' + (pad && nextRev < 10 ? '0' + nextRev : String(nextRev));
-    handleLoad({...d, signatures: apvStripSigs(d.approvers, d.signatures), info: {...(d.info || {}), approval: undefined, ceNum: newCeNum, date: new Date().toISOString().slice(0,10)}});
+    const _why = askRevisionReason(raw || newCeNum);
+    if (!_why) return;
+    _revReason.current = {num: newCeNum.toUpperCase(), why: _why};
+    handleLoad({...d, signatures: apvStripSigs(d.approvers, d.signatures), info: {...(d.info || {}), approval: undefined, ceNum: newCeNum, revisionReason: _why, date: new Date().toISOString().slice(0,10)}});
     showToast('Revision ' + newCeNum + ' loaded — review & save when ready.');
   };
   /* ── Approval routing (approval.js) ── */

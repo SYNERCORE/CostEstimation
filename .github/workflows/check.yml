@@ -431,5 +431,7 @@ jobs:
         run: node tools/test-dashboard-show-all.js
       - name: Monitoring filter words
         run: node tools/test-monitoring-filter-words.js
+      - name: Revision needs a reason
+        run: node tools/test-revision-needs-reason.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

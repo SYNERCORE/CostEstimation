@@ -9795,7 +9795,7 @@ function App({
       clearDraft();
       setShowDraftBanner(false);
     }
-  }, "Dismiss")), draftsOpen && /*#__PURE__*/React.createElement("div", {
+  }, "Dismiss")), draftsOpen && !isRequestor && /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'fixed',
       inset: 0,
@@ -10303,8 +10303,9 @@ function App({
     disabled: !!busyOp.save,
     onClick: handleSave,
     title: "Save CE (Ctrl+S)"
-  }, busyOp.save ? "Saving\u2026" : "Save"), /* Resume Work is reachable from any tab here; it used to live only on the Summary step. */
-  /*#__PURE__*/React.createElement("button", {
+  }, busyOp.save ? "Saving\u2026" : "Save"), /* Resume Work is reachable from any tab here; it used to live only on the Summary step.
+     A requestor only logs requests and has no drafts of their own, so it is not offered to them. */
+  !isRequestor && /*#__PURE__*/React.createElement("button", {
     style: { ...btn('def', true), position: 'relative', color: 'var(--accent-violet)', borderColor: '#8B5CF655' },
     onClick: () => { loadSharedDrafts(); setDraftsOpen(true); },
     title: "Open the list of unsaved drafts \u2014 yours and the team's \u2014 to resume one or clear the old ones."
@@ -14660,7 +14661,7 @@ tab === 'dashboard' && (() => {
   /*#__PURE__*/React.createElement("div", {
     title: "Saving and drafts",
     style: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', border: '1px solid ' + BDR, borderRadius: 8, padding: '3px 6px' }
-  }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, fontWeight: 700, letterSpacing: .6, color: MT, textTransform: 'uppercase' } }, "Keep"), /*#__PURE__*/React.createElement("button", {
+  }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, fontWeight: 700, letterSpacing: .6, color: MT, textTransform: 'uppercase' } }, "Keep"), !isRequestor && /*#__PURE__*/React.createElement("button", {
     style: {
       ...btn('def'),
       background: '#8B5CF611',

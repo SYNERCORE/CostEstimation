@@ -413,5 +413,7 @@ jobs:
         run: node tools/test-dashboard-open-details.js
       - name: My Work details
         run: node tools/test-mywork-details.js
+      - name: Monitoring Job Title width
+        run: node tools/test-monitoring-jobtitle-width.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

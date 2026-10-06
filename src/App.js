@@ -11949,7 +11949,7 @@ tab === 'dashboard' && (() => {
             /*#__PURE__*/React.createElement("div",{style:{overflowX:'auto'}},
               /*#__PURE__*/React.createElement("table",{style:{width:'100%',borderCollapse:'collapse',fontSize:11}},
                 /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",null,
-                  ['CE No.','Client','Job Title','Discipline','Estimator','Status','Deadline','Days Left','Total'].map(hd=>/*#__PURE__*/React.createElement("th",{key:hd,style:THS},hd)))),
+                  ['CE No.','RCE No.','Client','Job Title','Discipline','Estimator','Received By','Date Recv.','Status','Deadline','Days Left','Total'].map(hd=>/*#__PURE__*/React.createElement("th",{key:hd,style:THS},hd)))),
                 /*#__PURE__*/React.createElement("tbody",null, openCEs.slice(0,15).map(x=>{
                   const st = x.m.status || 'Draft';
                   const dl = x.m.deadline ? new Date(x.m.deadline+'T00:00:00') : null;
@@ -11957,10 +11957,13 @@ tab === 'dashboard' && (() => {
                   const dCol = days === null ? MT : days < 0 ? ERR : days <= 7 ? 'var(--status-warning)' : OK;
                   return /*#__PURE__*/React.createElement("tr",{key:x.h.id},
                     /*#__PURE__*/React.createElement("td",{style:{...TDS,color:INFO,fontWeight:600}}, x.h.info?.ceNum || x.h.ceNum || "—"),
+                    /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,whiteSpace:'nowrap'}}, x.m.rceNo || x.h.info?.requestNum || x.h.info?.rceNo || '\u2014'),
                     /*#__PURE__*/React.createElement("td",{style:TDS}, x.h.info?.client || x.h.client || 'Unknown'),
                     /*#__PURE__*/React.createElement("td",{style:{...TDS,maxWidth:260,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'},title:x.m.jobTitle || x.h.info?.description || ''}, x.m.jobTitle || x.h.info?.description || '\u2014'),
                     /*#__PURE__*/React.createElement("td",{style:TDS}, x.h.info?.projType || x.m.designation || '\u2014'),
                     /*#__PURE__*/React.createElement("td",{style:{...TDS,whiteSpace:'nowrap'}}, String(x.m.ceeName || '').replace(/^Unassigned$/, '') || x.m.preparedBy || '\u2014'),
+                    /*#__PURE__*/React.createElement("td",{style:{...TDS,whiteSpace:'nowrap'}}, x.m.receivedBy || '\u2014'),
+                    /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,whiteSpace:'nowrap'}}, x.m.dateRecv ? new Date(x.m.dateRecv+'T00:00:00').toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'}) : '\u2014'),
                     /*#__PURE__*/React.createElement("td",{style:TDS}, /*#__PURE__*/React.createElement("span",{style:{background:getStatusColor(st)+'33',color:getStatusColor(st),borderRadius:4,padding:'1px 6px',fontWeight:700,whiteSpace:'nowrap'}}, st)),
                     /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,whiteSpace:'nowrap'}}, dl ? dl.toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'}) : "—"),
                     /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,color:dCol,fontWeight:700,whiteSpace:'nowrap'}}, days === null ? "—" : days < 0 ? Math.abs(days)+'d OD' : days+'d'),

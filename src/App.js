@@ -1078,6 +1078,7 @@ function App({
   /* The Dashboard's lists show the first 15 rows; these hold which of them has been opened to all of its rows. */
   const [dashAll, setDashAll] = useState({});
   const [dashQ, setDashQ] = useState('');
+  const [dashReqQ, setDashReqQ] = useState('');
   useEffect(() => { if (!isRequestor && tab === "info" && infoMissing.length) setPiGate(true); }, [tab]);
   /* Continue is where a new CE gets its number, if it has not claimed one already: a fresh editor
      starts on a placeholder, and a CE that was opened or saved keeps the number it has. */
@@ -11969,6 +11970,13 @@ tab === 'dashboard' && (() => {
     return (d && !isNaN(d) && d < _today) ? {h, m, dl, late: Math.round((_today - d) / 86400000)} : null;
   }).filter(Boolean).sort((a, b) => b.late - a.late);
   const reqOverdueN = reqOverdueRows.length;
+  /* The filter box on the overdue requests: every word typed must be found in some column, in any order. */
+  const _rq = String(dashReqQ || '').toLowerCase().split(/\s+/).filter(Boolean);
+  const reqShown = !_rq.length ? reqOverdueRows : reqOverdueRows.filter(x => {
+    const hay = [x.h.info?.requestNum || x.m.rceNo || x.h.info?.ceNum || x.h.ceNum, x.h.info?.client || x.m.customer, x.m.jobTitle || x.h.info?.description,
+      x.h.info?.projType || x.m.designation, x.m.ceeName, x.m.receivedBy, x.m.preparedBy, x.m.status || 'Pending'].join(' ').toLowerCase();
+    return _rq.every(w => hay.indexOf(w) >= 0);
+  });
   const openCEs = liveRows.filter(h => !isUnacceptedReq(h)).map(h => ({h, m: monOf(h)}))
     .filter(x => ceIsOpen(x.m.status))
     .sort((a, b) => {
@@ -12028,12 +12036,15 @@ tab === 'dashboard' && (() => {
     reqOverdueN > 0 && /*#__PURE__*/React.createElement("div",{style:{...CS,marginBottom:16}},
       /*#__PURE__*/React.createElement("div",{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:10}},
         /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:12,color:ERR}}, "\u26A0 Overdue requests"),
-        /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT}}, reqOverdueN, " waiting on the team, past their deadline")),
+        /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT}}, _rq.length ? reqShown.length + ' of ' + reqOverdueN : reqOverdueN, " waiting on the team, past their deadline")),
+      /*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:8,alignItems:'center',marginBottom:8}},
+        /*#__PURE__*/React.createElement("input",{type:'search',value:dashReqQ,placeholder:'Filter requests: RCE no., customer, job, estimator, received by\u2026','aria-label':'Filter overdue requests',onChange:e=>setDashReqQ(e.target.value),style:{...INP,flex:1,maxWidth:420,fontSize:12,padding:'5px 10px'}}),
+        dashReqQ && /*#__PURE__*/React.createElement("button",{style:btn('def',true),onClick:()=>setDashReqQ('')},'Clear')),
       /*#__PURE__*/React.createElement("div",{style:{overflowX:'auto'}},
         /*#__PURE__*/React.createElement("table",{style:{width:'100%',borderCollapse:'collapse',fontSize:11}},
           /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",null,
             ['RCE No.','Customer','Job Title','Discipline','Estimator','Received By','Date Recv.','Deadline','Days Late'].map(hd=>/*#__PURE__*/React.createElement("th",{key:hd,style:THS},hd)))),
-          /*#__PURE__*/React.createElement("tbody",null, reqOverdueRows.slice(0, dashAll.over ? reqOverdueRows.length : 15).map(x=>/*#__PURE__*/React.createElement("tr",{key:x.h.id},
+          /*#__PURE__*/React.createElement("tbody",null, reqShown.slice(0, dashAll.over ? reqShown.length : 15).map(x=>/*#__PURE__*/React.createElement("tr",{key:x.h.id},
             /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,color:INFO,fontWeight:600,whiteSpace:'nowrap'}}, x.h.info?.requestNum || x.m.rceNo || x.h.info?.ceNum || x.h.ceNum || '\u2014'),
             /*#__PURE__*/React.createElement("td",{style:TDS}, x.h.info?.client || x.m.customer || '\u2014'),
             /*#__PURE__*/React.createElement("td",{style:{...TDS,maxWidth:260,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'},title:x.m.jobTitle || x.h.info?.description || ''}, x.m.jobTitle || x.h.info?.description || '\u2014'),
@@ -12043,8 +12054,9 @@ tab === 'dashboard' && (() => {
             /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,whiteSpace:'nowrap'}}, x.m.dateRecv ? new Date(x.m.dateRecv+'T00:00:00').toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'}) : '\u2014'),
             /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,whiteSpace:'nowrap'}}, new Date(x.dl+'T00:00:00').toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'})),
             /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,color:ERR,fontWeight:700,whiteSpace:'nowrap'}}, x.late + 'd')))))),
-      reqOverdueN > 15 && /*#__PURE__*/React.createElement("div",{style:{fontSize:11,marginTop:8,textAlign:'center'}},
-        /*#__PURE__*/React.createElement("button",{style:btn('def',true),onClick:()=>setDashAll(p=>({...p,over:!p.over}))}, dashAll.over ? 'Show the first 15' : 'Show all ' + reqOverdueN + ' overdue requests'))),
+      reqShown.length === 0 && /*#__PURE__*/React.createElement("div",{style:{fontSize:12,color:MT,textAlign:'center',padding:'12px 0'}}, 'No overdue request matches "' + dashReqQ + '".'),
+      reqShown.length > 15 && /*#__PURE__*/React.createElement("div",{style:{fontSize:11,marginTop:8,textAlign:'center'}},
+        /*#__PURE__*/React.createElement("button",{style:btn('def',true),onClick:()=>setDashAll(p=>({...p,over:!p.over}))}, dashAll.over ? 'Show the first 15' : 'Show all ' + reqShown.length + (_rq.length ? ' matching' : '') + ' overdue requests'))),
     /* Open CEs, soonest deadline first */
     /*#__PURE__*/React.createElement("div",{style:{...CS,marginBottom:16}},
       /*#__PURE__*/React.createElement("div",{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:10,gap:10,flexWrap:'wrap'}},

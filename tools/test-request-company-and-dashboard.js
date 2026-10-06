@@ -33,7 +33,7 @@ ck('the card is on the KPI row and names how many are with their requestors', ap
 
 /* the counting itself */
 const body = d.slice(d.indexOf('const isUnacceptedReq'), d.indexOf('const openCEs'));
-const count = rows => new Function('liveRows', 'monOf', 'reqDeadline', body + '; return {w: reqAwaitingN, r: reqReturnedN};')(rows, () => ({}), () => '');
+const count = rows => new Function('liveRows', 'monOf', 'reqDeadline', 'dashReqQ', body + '; return {w: reqAwaitingN, r: reqReturnedN};')(rows, () => ({}), () => '', '');
 const mk = (id, info, extra) => ({ id, info, ...(extra || {}) });
 const c = count([
   mk(1, { request: true }),                                   // new

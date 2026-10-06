@@ -10,7 +10,13 @@ ck('state holds which list is opened', app.indexOf('const [dashAll, setDashAll] 
 ck('Open CEs: first 15, or all once opened', app.indexOf('openShown.slice(0, dashAll.open ? openShown.length : 15)') > 0);
 ck('a button says how many and toggles', app.indexOf("'Show all ' + openShown.length + (_dq.length ? ' matching' : '') + ' open CEs'") > 0 && app.indexOf('setDashAll(p=>({...p,open:!p.open}))') > 0);
 ck('opened to all, it scrolls inside a box with the header kept in view', app.indexOf("maxHeight:dashAll.open ? 560 : 'none'") > 0 && app.indexOf("position:'sticky',top:0,background:CARD") > 0);
-ck('Overdue requests the same', app.indexOf('reqOverdueRows.slice(0, dashAll.over ? reqOverdueRows.length : 15)') > 0 && app.indexOf("'Show all ' + reqOverdueN + ' overdue requests'") > 0);
+ck('Overdue requests the same', app.indexOf('reqShown.slice(0, dashAll.over ? reqShown.length : 15)') > 0 && app.indexOf("'Show all ' + reqShown.length + (_rq.length ? ' matching' : '') + ' overdue requests'") > 0);
+ck('Overdue requests have the same filter box', app.indexOf("'aria-label':'Filter overdue requests'") > 0 && app.indexOf('_rq.every(w => hay.indexOf(w) >= 0)') > 0 && app.indexOf("onClick:()=>setDashReqQ('')") > 0 && app.indexOf("'No overdue request matches") > 0);
+{ const a2 = app.indexOf('const _rq = '), e2 = app.indexOf('\n  });', app.indexOf('const reqShown', a2)) + 6;
+  const runR = q => new Function('dashReqQ', 'reqOverdueRows', app.slice(a2, e2) + '; return reqShown.map(x => x.h.id);')(q, [
+    { h: { id: 1, info: { requestNum: 'RCE-1', client: 'HEDCOR', description: 'Pump seal' } }, m: { ceeName: 'Ana Cruz', receivedBy: 'Jess' } },
+    { h: { id: 2, info: { requestNum: 'RCE-2', client: 'UPPC', description: 'Boiler tube' } }, m: { ceeName: 'Ben Reyes', receivedBy: 'Jess' } }]);
+  ck('requests: empty shows all, words match in any order, a stranger matches none', runR('').length === 2 && runR('jess ben').join() === '2' && runR('hedcor').join() === '1' && runR('zzz').length === 0); }
 ck('the old "see the CE Monitoring tab" dead end is gone', app.indexOf('more \\u2014 see the CE Monitoring tab') < 0 && app.indexOf('more — see the CE Monitoring tab') < 0);
 
 console.log('\nthe filter box:');

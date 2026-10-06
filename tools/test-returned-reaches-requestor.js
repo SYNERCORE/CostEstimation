@@ -13,7 +13,7 @@ let r = run(true, ['JESS TAN'], rows, [{ e: { id: 9 }, m: {} }], 'jess');
 ck('the requestor gets their own returned request, with the approvals already returned to them', r.retReq.length === 1 && r.retReq[0].e.id === 1 && r.returnedAll.length === 2);
 ck('a pending one, someone else\'s and an accepted one are not returned to them', !r.retReq.some(x => [2, 3, 4].includes(x.e.id)));
 ck('the team does not see them as returned to themselves', run(false, ['JESS TAN'], rows, [], 'jess').retReq.length === 0);
-ck('Returned to me counts, lists and shows the note', app.indexOf("kpi('Returned to me', returnedAll.length") > 0 && app.indexOf("section('↩ Returned to me', returnedAll") > 0 && app.indexOf("'Returned: ' + x.e.info.reviewNote") > 0);
+ck('Returned to me counts, lists and shows the note', app.indexOf("returnedAll.length + ' returned to me'") > 0 && app.indexOf("section('↩ Returned to me', returnedAll") > 0 && app.indexOf("'Returned: ' + x.e.info.reviewNote") > 0);
 ck('the requestor gets Update, not a Load that refuses', app.indexOf("onClick:()=>openReview(x.e, 'update')}, \"Update\")") > 0);
 ck('My requests says Returned to you instead of Pending', app.indexOf("'Returned to you'") > 0 && app.indexOf("'Sent back to Cost Estimation'") > 0);
 ck('a request I filed counts as mine even when the Received By name differs', run(true, ['JESS'], [{ e: { id: 7, savedBy: 'jess', info: { request: true, reviewStatus: 'returned' } }, m: {} }], [], 'jess').retReq.length === 1);

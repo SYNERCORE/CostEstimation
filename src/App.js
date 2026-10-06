@@ -11799,7 +11799,12 @@ tab === 'mywork' && (() => {
   const ceLabel = e => { const i = e.info || {}; return i.request && !i.acceptedCeNum ? 'RCE ' + (i.requestNum || i.ceNum || e.ceNum) : i.ceNum || e.ceNum || '(no number)'; };
   const line = (x, extra, actions) => /*#__PURE__*/React.createElement("div", {key: x.e.id, style:{display:'flex',alignItems:'center',gap:8,padding:'6px 2px',borderBottom:'1px solid '+alpha(BDR,'44'),fontSize:12}},
     /*#__PURE__*/React.createElement("b", {style:{...MONO,fontSize:11,whiteSpace:'nowrap'}}, ceLabel(x.e)),
-    /*#__PURE__*/React.createElement("span", {style:{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:MT}}, [(x.e.info && x.e.info.client) || x.m.customer || '', (x.e.info && x.e.info.description) || ''].filter(Boolean).join(' · ')),
+    /*#__PURE__*/React.createElement("span", {style:{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:MT},
+      title: [(x.e.info && x.e.info.client) || x.m.customer || '', x.m.jobTitle || (x.e.info && x.e.info.description) || ''].filter(Boolean).join(' · ')},
+      [(x.e.info && x.e.info.client) || x.m.customer || '', x.m.jobTitle || (x.e.info && x.e.info.description) || ''].filter(Boolean).join(' · '),
+      /* Which discipline it is and who it is with, so the list can be read without opening each one. */
+      (() => { const d = (x.e.info && x.e.info.projType) || x.m.designation || '', who = String(x.m.ceeName || '').replace(/^Unassigned$/, '') || x.m.preparedBy || '';
+        return (d || who) ? /*#__PURE__*/React.createElement("div", {style:{fontSize:10,opacity:.8}}, [d, who && ('\u270E ' + who)].filter(Boolean).join(' · ')) : null; })()),
     extra, actions);
   const viewBtn = x => typeof x.e.id === 'number' && /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setViewCE({id:x.e.id,ceNum:ceLabel(x.e)})}, "👁 View");
   const loadBtn = x => (isRequestor && (x.e.info || {}).request && !(x.e.info || {}).acceptedCeNum && typeof x.e.id === 'number')
@@ -11842,7 +11847,7 @@ tab === 'mywork' && (() => {
     isRequestor && /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:'12px 14px',overflowX:'auto'}},
       /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:13,marginBottom:8}}, '📤 My requests', /*#__PURE__*/React.createElement("span", {style:{marginLeft:6,fontSize:11,color:MT}}, '(' + sent.length + ')')),
       sent.length ? /*#__PURE__*/React.createElement("table", {style:{width:'100%',borderCollapse:'collapse',fontSize:12}},
-        /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['RCE / CE NO.', 'CUSTOMER', 'JOB', 'ASSIGNED TO', 'STATUS', ''].map((h, i) => /*#__PURE__*/React.createElement("th", {key: i, style:{textAlign:'left',padding:'6px 8px',fontSize:10,color:MT,letterSpacing:'.06em',borderBottom:'1px solid '+BDR}}, h)))),
+        /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['RCE / CE NO.', 'CUSTOMER', 'JOB', 'DISCIPLINE', 'ASSIGNED TO', 'STATUS', ''].map((h, i) => /*#__PURE__*/React.createElement("th", {key: i, style:{textAlign:'left',padding:'6px 8px',fontSize:10,color:MT,letterSpacing:'.06em',borderBottom:'1px solid '+BDR}}, h)))),
         /*#__PURE__*/React.createElement("tbody", null, sent.map(x => {
           const _rs = x.e.info && x.e.info.request && !x.e.info.acceptedCeNum ? x.e.info.reviewStatus : '';
           const st = _rs === 'returned' ? 'Returned to you' : _rs === 'resubmitted' ? 'Sent back to Cost Estimation' : (x.m.status || 'Pending'), col = _rs === 'returned' ? ACC : getStatusColor(st), still = !!(x.e.info && x.e.info.request);
@@ -11851,6 +11856,7 @@ tab === 'mywork' && (() => {
             /*#__PURE__*/React.createElement("td", {style:{...td,...MONO,fontWeight:700,whiteSpace:'nowrap'}}, ceLabel(x.e)),
             /*#__PURE__*/React.createElement("td", {style:td}, (x.e.info && x.e.info.client) || x.m.customer || '—'),
             /*#__PURE__*/React.createElement("td", {style:td}, x.m.jobTitle || (x.e.info && x.e.info.description) || '—'),
+            /*#__PURE__*/React.createElement("td", {style:td}, (x.e.info && x.e.info.projType) || x.m.designation || '—'),
             /*#__PURE__*/React.createElement("td", {style:td}, x.m.ceeName || '—'),
             /*#__PURE__*/React.createElement("td", {style:td}, /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'2px 10px',borderRadius:12,fontSize:11,fontWeight:700,color:col,border:'1px solid '+col,background:alpha(col,'18')}}, st),
               still && x.e.info.reviewStatus && /*#__PURE__*/React.createElement("div", {style:{fontSize:10,marginTop:3,color:x.e.info.reviewStatus === 'declined' ? ERR : MT}},

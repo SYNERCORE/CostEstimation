@@ -39,7 +39,7 @@ ck('delete stays admin-only', /isAdmin \|\| \(e\._draft && e\.savedBy === curren
 
 console.log(NL + 'My Work table:');
 ck('requestors get a table of their requests', app.indexOf("'📤 My requests'") > 0);
-ck('with the five columns', ["'RCE / CE NO.', 'CUSTOMER', 'JOB', 'ASSIGNED TO', 'STATUS'"].every(c => app.indexOf(c) > 0));
+ck('with the six columns', ["'RCE / CE NO.', 'CUSTOMER', 'JOB', 'DISCIPLINE', 'ASSIGNED TO', 'STATUS'"].every(c => app.indexOf(c) > 0));
 ck('REQUEST badge while still a request, View after',
   app.indexOf("still ? /*#__PURE__*/React.createElement(\"span\"") > 0 && app.indexOf(": viewBtn(x)))") > 0);
 ck('the card is no longer shown to requestors', app.indexOf("!isRequestor && sent.length > 0 && section('📤 Requests I sent'") > 0);

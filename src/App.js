@@ -11905,14 +11905,16 @@ tab === 'dashboard' && (() => {
   /* Overdue: still waiting on the team (not accepted, returned or declined) and past its submission deadline. A request with no deadline
      is given the same three days from the inquiry date the form uses. */
   const _today = new Date(); _today.setHours(0, 0, 0, 0);
-  const reqOverdueN = liveRows.filter(h => {
+  /* The overdue ones themselves, most late first, each with how many days past its deadline. */
+  const reqOverdueRows = liveRows.map(h => {
     const i = h.info || {};
-    if (!isUnacceptedReq(h) || h._draft || typeof h.id !== 'number' || i.reviewStatus === 'returned' || i.reviewStatus === 'declined') return false;
+    if (!isUnacceptedReq(h) || h._draft || typeof h.id !== 'number' || i.reviewStatus === 'returned' || i.reviewStatus === 'declined') return null;
     const m = monOf(h), r = i.rce || {};
     const dl = m.deadline || r.deadline || reqDeadline('', r.inquiryDate, m.dateRecv || i.date);
     const d = dl ? new Date(dl + 'T00:00:00') : null;
-    return !!d && !isNaN(d) && d < _today;
-  }).length;
+    return (d && !isNaN(d) && d < _today) ? {h, m, dl, late: Math.round((_today - d) / 86400000)} : null;
+  }).filter(Boolean).sort((a, b) => b.late - a.late);
+  const reqOverdueN = reqOverdueRows.length;
   const openCEs = liveRows.filter(h => !isUnacceptedReq(h)).map(h => ({h, m: monOf(h)}))
     .filter(x => ceIsOpen(x.m.status))
     .sort((a, b) => {
@@ -11961,6 +11963,26 @@ tab === 'dashboard' && (() => {
             /*#__PURE__*/React.createElement("div",{style:{width:'100%',background:ACC+(m.total>0?'cc':'22'),borderRadius:'3px 3px 0 0',height:Math.max(4,pct*60)+'px',transition:'height .3s'}}),
             /*#__PURE__*/React.createElement("div",{style:{fontSize:9,color:MT,whiteSpace:'nowrap'}},m.label));
         }))),
+    /* Overdue requests: which ones, not only how many. */
+    reqOverdueN > 0 && /*#__PURE__*/React.createElement("div",{style:{...CS,marginBottom:16}},
+      /*#__PURE__*/React.createElement("div",{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:10}},
+        /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:12,color:ERR}}, "\u26A0 Overdue requests"),
+        /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT}}, reqOverdueN, " waiting on the team, past their deadline")),
+      /*#__PURE__*/React.createElement("div",{style:{overflowX:'auto'}},
+        /*#__PURE__*/React.createElement("table",{style:{width:'100%',borderCollapse:'collapse',fontSize:11}},
+          /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",null,
+            ['RCE No.','Customer','Job Title','Discipline','Estimator','Received By','Date Recv.','Deadline','Days Late'].map(hd=>/*#__PURE__*/React.createElement("th",{key:hd,style:THS},hd)))),
+          /*#__PURE__*/React.createElement("tbody",null, reqOverdueRows.slice(0,15).map(x=>/*#__PURE__*/React.createElement("tr",{key:x.h.id},
+            /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,color:INFO,fontWeight:600,whiteSpace:'nowrap'}}, x.h.info?.requestNum || x.m.rceNo || x.h.info?.ceNum || x.h.ceNum || '\u2014'),
+            /*#__PURE__*/React.createElement("td",{style:TDS}, x.h.info?.client || x.m.customer || '\u2014'),
+            /*#__PURE__*/React.createElement("td",{style:{...TDS,maxWidth:260,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'},title:x.m.jobTitle || x.h.info?.description || ''}, x.m.jobTitle || x.h.info?.description || '\u2014'),
+            /*#__PURE__*/React.createElement("td",{style:TDS}, x.h.info?.projType || x.m.designation || '\u2014'),
+            /*#__PURE__*/React.createElement("td",{style:{...TDS,whiteSpace:'nowrap'}}, String(x.m.ceeName || '').replace(/^Unassigned$/, '') || '\u2014'),
+            /*#__PURE__*/React.createElement("td",{style:{...TDS,whiteSpace:'nowrap'}}, x.m.receivedBy || '\u2014'),
+            /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,whiteSpace:'nowrap'}}, x.m.dateRecv ? new Date(x.m.dateRecv+'T00:00:00').toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'}) : '\u2014'),
+            /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,whiteSpace:'nowrap'}}, new Date(x.dl+'T00:00:00').toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'})),
+            /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,color:ERR,fontWeight:700,whiteSpace:'nowrap'}}, x.late + 'd')))))),
+      reqOverdueN > 15 && /*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:MT,marginTop:8,textAlign:'center'}}, "+", reqOverdueN-15, " more \u2014 see the CE Monitoring tab")),
     /* Open CEs, soonest deadline first */
     /*#__PURE__*/React.createElement("div",{style:{...CS,marginBottom:16}},
       /*#__PURE__*/React.createElement("div",{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:10,gap:10,flexWrap:'wrap'}},

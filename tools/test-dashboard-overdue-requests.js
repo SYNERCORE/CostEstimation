@@ -5,7 +5,7 @@ const fs = require('fs'), path = require('path');
 const app = fs.readFileSync(path.join(__dirname, '..', 'src/App.js'), 'utf8').replace(/\r\n/g, '\n');
 let bad = 0;
 const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
-const a = app.indexOf('const reqOverdueN = liveRows.filter('), b = app.indexOf('}).length;', a) + '}).length;'.length;
+const a = app.indexOf('const reqOverdueRows = liveRows.map('), b = app.indexOf('const reqOverdueN = reqOverdueRows.length;', a) + 'const reqOverdueN = reqOverdueRows.length;'.length;
 ck('the count is found', a > 0 && b > a);
 const body = app.slice(app.lastIndexOf('const _today', a), b);
 const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
@@ -23,4 +23,6 @@ ck('counts exactly: past deadline, waiting on the team (new 1, resubmitted 8, an
 ck('a deadline today is not overdue', count([mk(3, {})], { 3: { deadline: day(0) } }) === 0);
 ck('returned, declined, accepted, drafts and ordinary CEs are not counted', count([rows[3], rows[4], rows[5], rows[6], rows[10]], mon) === 0);
 ck('the card is on the Dashboard, red when there are any', app.indexOf("kpiCard('Overdue Requests', reqOverdueN, reqOverdueN ? ERR : MT)") > 0);
+ck('the list is on the Dashboard, only when there are any, most late first', app.indexOf('reqOverdueN > 0 && /*#__PURE__*/React.createElement("div",{style:{...CS,marginBottom:16}}') > 0 && app.indexOf('.sort((a, b) => b.late - a.late)') > 0);
+ck('with RCE No., customer, job title, discipline, estimator, received by, date received, deadline and days late', app.indexOf("['RCE No.','Customer','Job Title','Discipline','Estimator','Received By','Date Recv.','Deadline','Days Late']") > 0);
 process.exit(bad ? 1 : 0);

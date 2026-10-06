@@ -41,7 +41,7 @@ console.log('\nthe search box does not grab the caret:');
 ck('no autoFocus on it', !/autoFocus\s*:/.test(panel),
   'autoFocus fires on every mount, so a remounting panel steals focus on every edit');
 ck('the box is still there and still controlled',
-  /placeholder: "Search CE#, client, customer\.\.\.",/.test(panel) && /value: monSearch,/.test(panel),
+  /"aria-label": "Filter CE Monitoring"/.test(panel) && /value: monSearch,/.test(panel),
   'the fix is to stop it stealing focus, not to remove the search');
 
 console.log('\nand the cells it holds survive a re-render:');

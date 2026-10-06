@@ -17,7 +17,7 @@ ck('an imported sheet saying Awarded or Won maps to it', app.includes("'awarded'
 console.log('\nRCE No.:');
 ck('is a Monitoring column', app.includes("['rceNo', 'RCE No.', 100]") && app.includes("className: 'mon-rce'"));
 ck('is edited in the row like the other fields', app.includes("updateMon(e.id, 'rceNo', v)"));
-ck('sorts and searches', app.includes("case 'rceNo':") && app.includes("(m.rceNo || '').toLowerCase().includes(q)"));
+ck('sorts and searches', app.includes("case 'rceNo':") && app.includes('m.rceNo, m.remarks'));
 ck('is asked for on New Request', app.includes('L("RCE No. *", inp(\'rceNo\'') && app.includes('rceNo: ceNum };'));
 ck('is read from an imported sheet', app.includes("rceNo: String(r[iRce]).trim()"));
 ck('without "RCE No." being taken for "CE No."', app.includes("_hn(h)==='ceno'"));

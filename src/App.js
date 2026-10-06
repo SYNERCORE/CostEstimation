@@ -5926,8 +5926,9 @@ function App({
       if (monApvMine && !apvMonWaitsOn(m, currentUser.username)) return false;
       if (monMine && !ceeMatches(meNames(), m.ceeName || m.preparedBy || e.savedBy || '')) return false;
       if (!monSearch) return true;
-      const q = monSearch.toLowerCase();
-      return (e.info?.ceNum || '').toLowerCase().includes(q) || rceOf(e, m).toLowerCase().includes(q) || (e.info?.client || '').toLowerCase().includes(q) || (e.info?.description || '').toLowerCase().includes(q) || (m.customer || '').toLowerCase().includes(q) || (m.receivedBy || '').toLowerCase().includes(q) || (m.rceNo || '').toLowerCase().includes(q) || (m.remarks || '').toLowerCase().includes(q);
+      /* Every word typed must be found in some column of the row, in any order (same as the Dashboard's Open CEs filter). */
+      const hay = [e.info?.ceNum, rceOf(e, m), e.info?.client, e.info?.description, m.jobTitle, m.customer, e.info?.projType, m.designation, m.ceeName, m.preparedBy, e.savedBy, m.receivedBy, m.rceNo, m.remarks, m.status || 'Draft'].join(' ').toLowerCase();
+      return monSearch.toLowerCase().split(/\s+/).filter(Boolean).every(w => hay.indexOf(w) >= 0);
     });
     /* What each column actually SHOWS, so sorting agrees with the eye.
 
@@ -6560,7 +6561,8 @@ function App({
       fontSize: 11,
       marginLeft: 8
     },
-    placeholder: "Search CE#, client, customer...",
+    placeholder: "Filter: CE no., client, job, estimator, status\u2026",
+    "aria-label": "Filter CE Monitoring",
     /* No autoFocus. It fires whenever this input mounts, and the panel around
        it was remounting on every App render -- so every edit to a cell threw
        the caret back up here. It is wrong on its own terms too: a search box

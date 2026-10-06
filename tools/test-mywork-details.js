@@ -12,4 +12,5 @@ ck('discipline shown', line.indexOf('x.e.info.projType) || x.m.designation') > 0
 ck('estimator shown, Unassigned blank', line.indexOf("String(x.m.ceeName || '').replace(/^Unassigned$/, '')") > 0);
 ck('full text on hover', line.indexOf('title: [') > 0);
 ck('requestor table has a Discipline column', app.indexOf("'JOB', 'DISCIPLINE', 'ASSIGNED TO'") > 0);
+ck('RCE No., received by and date received on the line', line.indexOf("'RCE ' + rce") > 0 && line.indexOf("'from ' + x.m.receivedBy") > 0 && line.indexOf("'recv ' + rcv") > 0);
 process.exit(bad ? 1 : 0);

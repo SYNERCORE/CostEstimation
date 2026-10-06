@@ -11805,7 +11805,11 @@ tab === 'mywork' && (() => {
       [(x.e.info && x.e.info.client) || x.m.customer || '', x.m.jobTitle || (x.e.info && x.e.info.description) || ''].filter(Boolean).join(' · '),
       /* Which discipline it is and who it is with, so the list can be read without opening each one. */
       (() => { const d = (x.e.info && x.e.info.projType) || x.m.designation || '', who = String(x.m.ceeName || '').replace(/^Unassigned$/, '') || x.m.preparedBy || '';
-        return (d || who) ? /*#__PURE__*/React.createElement("div", {style:{fontSize:10,opacity:.8}}, [d, who && ('\u270E ' + who)].filter(Boolean).join(' · ')) : null; })()),
+        /* The RCE No. (a request already shows it as its label), who received it and when. */
+        const i = x.e.info || {}, rce = (i.request && !i.acceptedCeNum) ? '' : String(x.m.rceNo || i.requestNum || i.rceNo || '').trim();
+        const rcv = x.m.dateRecv ? new Date(x.m.dateRecv + 'T00:00:00').toLocaleDateString('en-PH', {month:'short', day:'numeric', year:'numeric'}) : '';
+        const bits = [d, who && ('\u270E ' + who), rce && ('RCE ' + rce), x.m.receivedBy && ('from ' + x.m.receivedBy), rcv && ('recv ' + rcv)].filter(Boolean);
+        return bits.length ? /*#__PURE__*/React.createElement("div", {style:{fontSize:10,opacity:.8}}, bits.join(' · ')) : null; })()),
     extra, actions);
   const viewBtn = x => typeof x.e.id === 'number' && /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setViewCE({id:x.e.id,ceNum:ceLabel(x.e)})}, "👁 View");
   const loadBtn = x => (isRequestor && (x.e.info || {}).request && !(x.e.info || {}).acceptedCeNum && typeof x.e.id === 'number')

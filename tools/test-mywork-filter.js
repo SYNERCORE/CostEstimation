@@ -11,8 +11,8 @@ ck('every word must be found, in any order', app.indexOf('_mq.every(w => String(
 ck('every list and the group counts follow the filter; the cards stay totals', app.indexOf('const n = [fToSign.length, fReturned.length, fOpen.length, fDrafts.length, fInApproval.length') > 0 && app.indexOf("section('📂 My open CEs', fOpen,") > 0 && app.indexOf("section('📝 My drafts', fDrafts,") > 0 && app.indexOf("kpi('Open CEs assigned', open.length") > 0);
 ck('a group with no match says so', app.indexOf("'Nothing here matches \"' + mwQ") > 0);
 const a = app.indexOf('const _mq = '), e = app.indexOf('const fDrafts', a);
-const harness = (q, rows) => new Function('mwQ', 'toSign', 'returnedAll', 'open', 'inApproval', 'sent', 'awaitingReq', 'forReview', 'drafts',
-  app.slice(a, e) + "const fDrafts = drafts; return {open: fOpen.map(x => x.e.id), sign: fToSign.length};")(q, rows, [], rows, [], [], [], [], []);
+const harness = (q, rows) => new Function('mwQ', 'mwReqQ', 'toSign', 'returnedAll', 'open', 'inApproval', 'sent', 'awaitingReq', 'forReview', 'drafts',
+  app.slice(a, e) + "const fDrafts = drafts; return {open: fOpen.map(x => x.e.id), sign: fToSign.length};")(q, '', rows, [], rows, [], [], [], [], []);
 const R = [
   { e: { id: 1, info: { ceNum: 'SY3-CE-1', client: 'HEDCOR', description: 'Pump seal' } }, m: { ceeName: 'Ana Cruz', status: 'Ongoing' } },
   { e: { id: 2, info: { ceNum: 'SY3-CE-2', client: 'UPPC', description: 'Boiler tube' } }, m: { ceeName: 'Ben Reyes', status: 'Pending' } }];

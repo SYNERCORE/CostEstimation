@@ -435,5 +435,7 @@ jobs:
         run: node tools/test-revision-needs-reason.js
       - name: My Work filter
         run: node tools/test-mywork-filter.js
+      - name: My requests filter
+        run: node tools/test-mywork-my-requests-filter.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

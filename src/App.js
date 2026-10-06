@@ -1076,6 +1076,7 @@ function App({
   const [piGate, setPiGate] = useState(false);
   const [mwOpen, setMwOpen] = useState({});
   const [mwQ, setMwQ] = useState('');
+  const [mwReqQ, setMwReqQ] = useState('');
   /* The Dashboard's lists show the first 15 rows; these hold which of them has been opened to all of its rows. */
   const [dashAll, setDashAll] = useState({});
   const [dashQ, setDashQ] = useState('');
@@ -11838,6 +11839,9 @@ tab === 'mywork' && (() => {
   const _rowHay = x => { const i = x.e.info || {}; return [i.ceNum || x.e.ceNum, i.requestNum, x.m.rceNo, i.client || x.m.customer, x.m.jobTitle || i.description, i.projType || x.m.designation, x.m.ceeName, x.m.preparedBy, x.m.receivedBy, x.m.status || 'Draft'].join(' '); };
   const mwF = list => !_mq.length ? list : list.filter(x => _mqHit(_rowHay(x)));
   const fToSign = mwF(toSign), fReturned = mwF(returnedAll), fOpen = mwF(open), fInApproval = mwF(inApproval), fSent = mwF(sent), fAwaiting = mwF(awaitingReq), fForReview = mwF(forReview);
+  /* A requestor's own table of requests has its own box: every word typed must be found in the row, in any order. */
+  const _rqw = String(mwReqQ || '').toLowerCase().split(/\s+/).filter(Boolean);
+  const sentShown = !_rqw.length ? sent : sent.filter(x => { const hay = _rowHay(x) + ' ' + ((x.e.info && x.e.info.reviewStatus) || '') + ' ' + ((x.e.info && x.e.info.reviewNote) || ''); return _rqw.every(w => hay.toLowerCase().indexOf(w) >= 0); });
   const fDrafts = !_mq.length ? drafts : drafts.filter(d => _mqHit([d.info && d.info.ceNum, d.info && d.info.client, d.info && d.info.description, d.savedBy].join(' ')));
   const peso = v => '₱' + Math.round(N(v)).toLocaleString();
   const kpi = (label, val, sub, col) => /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:'12px 14px',minWidth:0}},
@@ -11924,10 +11928,13 @@ tab === 'mywork' && (() => {
       !isRequestor && fAwaiting.length > 0 && section('📥 Requests awaiting review', fAwaiting, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,whiteSpace:'nowrap',color:MT}}, (x.m.ceeName || 'Unassigned') + (((x.e.info || {}).reviewStatus) ? ' · ' + (x.e.info || {}).reviewStatus : '')), [viewBtn(x), /*#__PURE__*/React.createElement("button", {key:'rv',style:btn('ok',true),title:'Review the checklist and decide: proceed, secure the missing data first, or decline',onClick:()=>openReview(x.e, 'review')}, "Review")]), ''),
       !isRequestor && fForReview.length > 0 && section('🔎 For review (status For Approval)', fForReview, x => line(x, null, viewBtn(x)), '')]),
     isRequestor && /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:'12px 14px',overflowX:'auto'}},
-      /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:13,marginBottom:8}}, '📤 My requests', /*#__PURE__*/React.createElement("span", {style:{marginLeft:6,fontSize:11,color:MT}}, '(' + sent.length + ')')),
+      /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:13,marginBottom:8}}, '📤 My requests', /*#__PURE__*/React.createElement("span", {style:{marginLeft:6,fontSize:11,color:MT}}, _rqw.length ? '(' + sentShown.length + ' of ' + sent.length + ')' : '(' + sent.length + ')')),
+      sent.length > 0 && /*#__PURE__*/React.createElement("div", {style:{display:'flex',gap:8,alignItems:'center',marginBottom:8}},
+        /*#__PURE__*/React.createElement("input", {type:'search',value:mwReqQ,placeholder:'Filter my requests: RCE no., customer, job, estimator, status\u2026','aria-label':'Filter my requests',onChange:e=>setMwReqQ(e.target.value),style:{...INP,flex:1,maxWidth:420,fontSize:12,padding:'5px 10px'}}),
+        mwReqQ && /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setMwReqQ('')}, 'Clear')),
       sent.length ? /*#__PURE__*/React.createElement("table", {style:{width:'100%',borderCollapse:'collapse',fontSize:12}},
         /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['RCE / CE NO.', 'CUSTOMER', 'JOB', 'DISCIPLINE', 'ASSIGNED TO', 'STATUS', ''].map((h, i) => /*#__PURE__*/React.createElement("th", {key: i, style:{textAlign:'left',padding:'6px 8px',fontSize:10,color:MT,letterSpacing:'.06em',borderBottom:'1px solid '+BDR}}, h)))),
-        /*#__PURE__*/React.createElement("tbody", null, sent.map(x => {
+        /*#__PURE__*/React.createElement("tbody", null, sentShown.map(x => {
           const _rs = x.e.info && x.e.info.request && !x.e.info.acceptedCeNum ? x.e.info.reviewStatus : '';
           const st = _rs === 'returned' ? 'Returned to you' : _rs === 'resubmitted' ? 'Sent back to Cost Estimation' : (x.m.status || 'Pending'), col = _rs === 'returned' ? ACC : getStatusColor(st), still = !!(x.e.info && x.e.info.request);
           const td = {padding:'7px 8px',borderBottom:'1px solid '+alpha(BDR,'44'),verticalAlign:'middle'};
@@ -11941,7 +11948,8 @@ tab === 'mywork' && (() => {
               still && x.e.info.reviewStatus && /*#__PURE__*/React.createElement("div", {style:{fontSize:10,marginTop:3,color:x.e.info.reviewStatus === 'declined' ? ERR : MT}},
                 String(x.e.info.reviewStatus).toUpperCase() + (x.e.info.reviewNote ? ': ' + x.e.info.reviewNote : ''))),
             /*#__PURE__*/React.createElement("td", {style:{...td,textAlign:'right'}}, still && !x.e.info.acceptedCeNum && x.e.info.reviewStatus !== 'declined' && typeof x.e.id === 'number' && /*#__PURE__*/React.createElement("button", {style:{...btn('info',true),marginRight:6},onClick:()=>setRceReview({e:x.e,mode:'update'})}, 'Update'), still ? /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'3px 12px',borderRadius:6,fontSize:11,fontWeight:800,color:'#fff',background:'#16a34a',letterSpacing:'.06em'}}, 'REQUEST') : viewBtn(x)));
-        }))) : /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,padding:'6px 0'}}, 'You have not sent a request yet. Use + New Request in CE Monitoring.')));
+        }))) : /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,padding:'6px 0'}}, 'You have not sent a request yet. Use + New Request in CE Monitoring.'),
+      sent.length > 0 && sentShown.length === 0 && /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:MT,textAlign:'center',padding:'12px 0'}}, 'No request matches "' + mwReqQ + '".')));
 })(),
 
 tab === 'dashboard' && (() => {

@@ -1077,6 +1077,7 @@ function App({
   const [mwOpen, setMwOpen] = useState({});
   /* The Dashboard's lists show the first 15 rows; these hold which of them has been opened to all of its rows. */
   const [dashAll, setDashAll] = useState({});
+  const [dashQ, setDashQ] = useState('');
   useEffect(() => { if (!isRequestor && tab === "info" && infoMissing.length) setPiGate(true); }, [tab]);
   /* Continue is where a new CE gets its number, if it has not claimed one already: a fresh editor
      starts on a placeholder, and a CE that was opened or saved keeps the number it has. */
@@ -11950,6 +11951,13 @@ tab === 'dashboard' && (() => {
       return da < db ? -1 : da > db ? 1 : 0;
     });
   const openValue = openCEs.reduce((t, x) => t + N(x.h.grand || 0), 0);
+  /* The filter box: every word typed must be found in some column of the row, in any order. */
+  const _dq = String(dashQ || '').toLowerCase().split(/\s+/).filter(Boolean);
+  const openShown = !_dq.length ? openCEs : openCEs.filter(x => {
+    const hay = [x.h.info?.ceNum || x.h.ceNum, x.m.rceNo || x.h.info?.requestNum || x.h.info?.rceNo, x.h.info?.client || x.h.client, x.m.jobTitle || x.h.info?.description,
+      x.h.info?.projType || x.m.designation, x.m.ceeName, x.m.preparedBy, x.m.receivedBy, x.m.status || 'Draft'].join(' ').toLowerCase();
+    return _dq.every(w => hay.indexOf(w) >= 0);
+  });
   const statusCount = statuses.reduce((m,s)=>{m[s]=(m[s]||0)+1;return m;},{});
   const clients = {}; liveHist.forEach(h=>{const c=h.info?.client||h.client||'Unknown';clients[c]=(clients[c]||{count:0,total:0});clients[c].count++;clients[c].total+=N(h.grand||0);});
   const top5 = Object.entries(clients).sort((a,b)=>b[1].total-a[1].total).slice(0,5);
@@ -12013,8 +12021,11 @@ tab === 'dashboard' && (() => {
     /*#__PURE__*/React.createElement("div",{style:{...CS,marginBottom:16}},
       /*#__PURE__*/React.createElement("div",{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:10,gap:10,flexWrap:'wrap'}},
         /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:12}}, "⏳ Open CEs — by deadline"),
-        /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT}}, openCEs.length, " open · ",
+        /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT}}, _dq.length ? openShown.length + ' of ' + openCEs.length : openCEs.length, " open · ",
           /*#__PURE__*/React.createElement("span",{style:{...MONO,color:OK}}, "₱"+ph(openValue)))),
+      openCEs.length > 0 && /*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:8,alignItems:'center',marginBottom:8}},
+        /*#__PURE__*/React.createElement("input",{type:'search',value:dashQ,placeholder:'Filter open CEs: CE no., client, job, estimator, status\u2026','aria-label':'Filter open CEs',onChange:e=>setDashQ(e.target.value),style:{...INP,flex:1,maxWidth:420,fontSize:12,padding:'5px 10px'}}),
+        dashQ && /*#__PURE__*/React.createElement("button",{style:btn('def',true),onClick:()=>setDashQ('')},'Clear')),
       openCEs.length === 0
         ? /*#__PURE__*/React.createElement("div",{style:{textAlign:'center',padding:'14px 0',color:MT,fontSize:12,border:'1px dashed '+BDR,borderRadius:6}}, "Nothing open — every CE is Submitted, No Quote or Cancelled.")
         : /*#__PURE__*/React.createElement("div",null,
@@ -12022,7 +12033,7 @@ tab === 'dashboard' && (() => {
               /*#__PURE__*/React.createElement("table",{style:{width:'100%',borderCollapse:'collapse',fontSize:11}},
                 /*#__PURE__*/React.createElement("thead",{style:{position:'sticky',top:0,background:CARD,zIndex:1}},/*#__PURE__*/React.createElement("tr",null,
                   ['CE No.','RCE No.','Client','Job Title','Discipline','Estimator','Received By','Date Recv.','Status','Deadline','Days Left','Total'].map(hd=>/*#__PURE__*/React.createElement("th",{key:hd,style:THS},hd)))),
-                /*#__PURE__*/React.createElement("tbody",null, openCEs.slice(0, dashAll.open ? openCEs.length : 15).map(x=>{
+                /*#__PURE__*/React.createElement("tbody",null, openShown.slice(0, dashAll.open ? openShown.length : 15).map(x=>{
                   const st = x.m.status || 'Draft';
                   const dl = x.m.deadline ? new Date(x.m.deadline+'T00:00:00') : null;
                   const days = dl ? Math.round((dl - new Date())/(1000*60*60*24)) : null;
@@ -12041,8 +12052,9 @@ tab === 'dashboard' && (() => {
                     /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,color:dCol,fontWeight:700,whiteSpace:'nowrap'}}, days === null ? "—" : days < 0 ? Math.abs(days)+'d OD' : days+'d'),
                     /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,textAlign:'right'}}, "₱"+ph(N(x.h.grand||0))));
                 }))),
-            openCEs.length > 15 && /*#__PURE__*/React.createElement("div",{style:{fontSize:11,marginTop:8,textAlign:'center'}},
-              /*#__PURE__*/React.createElement("button",{style:btn('def',true),onClick:()=>setDashAll(p=>({...p,open:!p.open}))}, dashAll.open ? 'Show the first 15' : 'Show all ' + openCEs.length + ' open CEs'))))),
+            openShown.length === 0 && /*#__PURE__*/React.createElement("div",{style:{fontSize:12,color:MT,textAlign:'center',padding:'12px 0'}}, 'No open CE matches "' + dashQ + '".'),
+            openShown.length > 15 && /*#__PURE__*/React.createElement("div",{style:{fontSize:11,marginTop:8,textAlign:'center'}},
+              /*#__PURE__*/React.createElement("button",{style:btn('def',true),onClick:()=>setDashAll(p=>({...p,open:!p.open}))}, dashAll.open ? 'Show the first 15' : 'Show all ' + openShown.length + (_dq.length ? ' matching' : '') + ' open CEs'))))),
     /* Bottom row: by company + by status + top clients */
     /*#__PURE__*/React.createElement("div",{style:{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,flexWrap:'wrap'}},
       /* By company */

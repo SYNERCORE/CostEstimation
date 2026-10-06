@@ -11770,6 +11770,13 @@ tab === 'mywork' && (() => {
   const _unaccepted = x => { const i = ((x.e && x.e.data) || x.e || {}).info || x.e.info || {}; return !isRequestor && i.request && !i.acceptedCeNum && String(i.ceNum || '') === String(i.requestNum || '') && typeof x.e.id === 'number'; };
   /* Every logged request still waiting for the team, whoever it is assigned to: Review is how it gets accepted. */
   const awaitingReq = rows.filter(x => !x.e._draft && typeof x.e.id === 'number' && _unaccepted(x));
+  /* Overdue requests: waiting on the Cost Estimation team and past their submission deadline. The team sees every one; a requestor sees their own. */
+  const _todayMw = new Date(); _todayMw.setHours(0, 0, 0, 0);
+  const _reqLate = x => { const i = x.e.info || {}, r = i.rce || {};
+    if (!i.request || i.acceptedCeNum || i.reviewStatus === 'returned' || i.reviewStatus === 'declined' || x.e._draft || typeof x.e.id !== 'number') return false;
+    const dl = x.m.deadline || r.deadline || reqDeadline('', r.inquiryDate, x.m.dateRecv || i.date), d = dl ? new Date(dl + 'T00:00:00') : null;
+    return !!d && !isNaN(d) && d < _todayMw; };
+  const overdueReq = (isRequestor ? rows.filter(x => x.m.receivedBy && names.includes(String(x.m.receivedBy).trim().toUpperCase()) || x.e.savedBy === me) : awaitingReq).filter(_reqLate);
   const forReview = rows.filter(x => !x.e._draft && x.m.status === 'For Approval' && !isMine(x) && !(apv(x).state === 'pending'));
   /* A request the Cost Estimation team returned is waiting on its requestor: it belongs in Returned to me. */
   const _retReq = x => { const i = x.e.info || {}; return isRequestor && !x.e._draft && i.request && !i.acceptedCeNum && i.reviewStatus === 'returned' && ((x.m.receivedBy && names.includes(String(x.m.receivedBy).trim().toUpperCase())) || x.e.savedBy === me); };
@@ -11833,6 +11840,7 @@ tab === 'mywork' && (() => {
       kpi('Awaiting my signature', toSign.length, 'approvals routed to you', toSign.length ? 'var(--accent-cyan)' : null),
       kpi('Open CEs assigned', open.length, overdue + ' overdue · ' + dueSoon + ' due ≤3 days', overdue ? ERR : null),
       kpi('Returned to me', returnedAll.length, 'need changes', returnedAll.length ? ERR : null),
+      kpi('Overdue requests', overdueReq.length, isRequestor ? 'yours, past deadline' : 'awaiting review, past deadline', overdueReq.length ? ERR : null),
       kpi('Submitted this month', subMonth.length, peso(subMonth.reduce((t, x) => t + N(x.e.grand), 0))),
       kpi('On-time rate', onTime == null ? '—' : onTime + '%', timed.length + ' CEs with a deadline', onTime != null && onTime < 80 ? ERR : '#16a34a'),
       kpi('Won ' + now.getFullYear(), won, lost + ' lost · ' + yr.length + ' CEs this year', '#16a34a')),

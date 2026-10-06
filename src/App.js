@@ -11890,6 +11890,17 @@ tab === 'dashboard' && (() => {
   const isUnacceptedReq = h => { const i = h.info || {}; return !!(i.request && !i.acceptedCeNum); };
   const reqAwaitingN = liveRows.filter(h => isUnacceptedReq(h) && !h._draft && typeof h.id === 'number' && (h.info || {}).reviewStatus !== 'returned' && (h.info || {}).reviewStatus !== 'declined').length;
   const reqReturnedN = liveRows.filter(h => isUnacceptedReq(h) && !h._draft && (h.info || {}).reviewStatus === 'returned').length;
+  /* Overdue: still waiting on the team (not accepted, returned or declined) and past its submission deadline. A request with no deadline
+     is given the same three days from the inquiry date the form uses. */
+  const _today = new Date(); _today.setHours(0, 0, 0, 0);
+  const reqOverdueN = liveRows.filter(h => {
+    const i = h.info || {};
+    if (!isUnacceptedReq(h) || h._draft || typeof h.id !== 'number' || i.reviewStatus === 'returned' || i.reviewStatus === 'declined') return false;
+    const m = monOf(h), r = i.rce || {};
+    const dl = m.deadline || r.deadline || reqDeadline('', r.inquiryDate, m.dateRecv || i.date);
+    const d = dl ? new Date(dl + 'T00:00:00') : null;
+    return !!d && !isNaN(d) && d < _today;
+  }).length;
   const openCEs = liveRows.filter(h => !isUnacceptedReq(h)).map(h => ({h, m: monOf(h)}))
     .filter(x => ceIsOpen(x.m.status))
     .sort((a, b) => {
@@ -11925,7 +11936,8 @@ tab === 'dashboard' && (() => {
       kpiCard('Total CEs', history.length, MT),
       kpiCard('Open CEs', openCEs.length, ERR),
       /* What the Cost Estimation team has to decide on. Returned ones are with their requestors, so they are named but not counted. */
-      kpiCard('Requests Awaiting Review' + (reqReturnedN ? ' (' + reqReturnedN + ' returned)' : ''), reqAwaitingN, reqAwaitingN ? ACC : MT)),
+      kpiCard('Requests Awaiting Review' + (reqReturnedN ? ' (' + reqReturnedN + ' returned)' : ''), reqAwaitingN, reqAwaitingN ? ACC : MT),
+      kpiCard('Overdue Requests', reqOverdueN, reqOverdueN ? ERR : MT)),
     /* Monthly trend */
     /*#__PURE__*/React.createElement("div",{style:{...CS,marginBottom:16}},
       /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,marginBottom:12,fontSize:12}}, "📈 Monthly Trend (Last 6 Months)"),

@@ -185,32 +185,50 @@ function SyncStatusBar() {
 
     /* refresh */
     React.createElement('button', {
-      onClick: async () => {
-        setSyncStatus({sp:'unknown', masterlist:'saving', monitoring:'saving', drafts:'saving'});
-        try {
-          if (window._shicFullRefresh) {
-            await window._shicFullRefresh();
-          } else {
-            /* Fallback if called before app fully initialised */
-            const [ml, mon, drafts] = await Promise.all([dbGetML(), dbGetMon(), dbGetDrafts()]);
-            setSyncStatus({
-              sp: 'connected', lastSyncAt: new Date().toISOString(), dirty: false,
-              masterlist: ml ? 'synced' : 'local',
-              monitoring: (mon && !mon.empty) ? 'synced' : 'local',
-              drafts: drafts && drafts.length >= 0 ? 'synced' : 'local',
-            });
-          }
-          (window._shicToast||console.log)('All data refreshed from SharePoint.');
-        } catch(e) {
-          setSyncStatus({sp:'error', masterlist:'error', monitoring:'error', drafts:'error'});
-          (window._shicToast||console.log)('SharePoint sync failed.', true);
-        }
-      },
+      onClick: shicRefreshAll,
       title: 'Refresh all from SharePoint',
       style:{marginLeft:'auto',background:'none',border:`1px solid ${BDR}`,color:MT,
              borderRadius:6,padding:'2px 8px',cursor:'pointer',fontSize:10,whiteSpace:'nowrap'}
     }, '↻ Refresh')
   );
+}
+/* Refresh everything from SharePoint. Used by the status strip and by the button in the top bar. */
+async function shicRefreshAll() {
+    setSyncStatus({sp:'unknown', masterlist:'saving', monitoring:'saving', drafts:'saving'});
+    try {
+      if (window._shicFullRefresh) {
+        await window._shicFullRefresh();
+      } else {
+        /* Fallback if called before app fully initialised */
+        const [ml, mon, drafts] = await Promise.all([dbGetML(), dbGetMon(), dbGetDrafts()]);
+        setSyncStatus({
+          sp: 'connected', lastSyncAt: new Date().toISOString(), dirty: false,
+          masterlist: ml ? 'synced' : 'local',
+          monitoring: (mon && !mon.empty) ? 'synced' : 'local',
+          drafts: drafts && drafts.length >= 0 ? 'synced' : 'local',
+        });
+      }
+      (window._shicToast||console.log)('All data refreshed from SharePoint.');
+    } catch(e) {
+      setSyncStatus({sp:'error', masterlist:'error', monitoring:'error', drafts:'error'});
+      (window._shicToast||console.log)('SharePoint sync failed.', true);
+    }
+}
+/* The same refresh as a button where it is seen first, in the top bar. It shows what the strip shows, in one colour. */
+function TopRefreshButton() {
+  const [sync, setSync] = React.useState(() => getSyncStatus());
+  React.useEffect(() => { const h = () => setSync({...getSyncStatus()}); window.addEventListener('shic:sync:updated', h); return () => window.removeEventListener('shic:sync:updated', h); }, []);
+  const keys = ['masterlist', 'monitoring', 'sowlib', 'drafts'];
+  const vals = keys.map(k => sync[k] || 'unknown');
+  const busy = vals.indexOf('saving') >= 0, bad = vals.indexOf('error') >= 0 || sync.sp === 'error', local = vals.indexOf('local') >= 0;
+  const c = busy ? 'var(--status-warning)' : bad ? 'var(--status-danger)' : local ? 'var(--status-warning)' : 'var(--status-success)';
+  const label = busy ? 'Syncing\u2026' : bad ? 'Sync failed - retry' : local ? 'This device only - refresh' : 'Refresh';
+  return React.createElement('button', {
+    onClick: shicRefreshAll, disabled: busy,
+    title: 'Refresh everything from SharePoint.  ' + keys.map((k, i) => k + ': ' + vals[i]).join(', '),
+    style: {display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 6, cursor: busy ? 'default' : 'pointer', fontWeight: 700, fontSize: 12,
+            background: 'transparent', color: c, border: '1px solid ' + c, whiteSpace: 'nowrap'}
+  }, React.createElement('span', {style: {display: 'inline-block', animation: busy ? 'spin 1s linear infinite' : 'none'}}, '\u21BB'), label);
 }
 function AuthGate() {
   const [page, setPage] = useState('loading');

@@ -10294,7 +10294,7 @@ function App({
       padding: '0 10px',
       borderRight: `1px solid ${BDR}`
     }
-  }, /*#__PURE__*/React.createElement("button", {
+  }, /*#__PURE__*/React.createElement(TopRefreshButton, null), /*#__PURE__*/React.createElement("button", {
     style: btn('def', true),
     onClick: handleNew,
     title: "New CE (Ctrl+N)"

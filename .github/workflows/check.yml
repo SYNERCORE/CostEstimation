@@ -407,5 +407,7 @@ jobs:
         run: node tools/test-resume-work-in-top-bar.js
       - name: Request company and Dashboard count
         run: node tools/test-request-company-and-dashboard.js
+      - name: Top-bar Refresh button
+        run: node tools/test-top-refresh-button.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

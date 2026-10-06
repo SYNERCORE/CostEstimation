@@ -1074,7 +1074,7 @@ function App({
   };
   /* The four are asked for in front of Project Info, and the dialog stays until Continue. */
   const [piGate, setPiGate] = useState(false);
-  const [mwTab, setMwTab] = useState('');
+  const [mwOpen, setMwOpen] = useState({});
   useEffect(() => { if (!isRequestor && tab === "info" && infoMissing.length) setPiGate(true); }, [tab]);
   /* Continue is where a new CE gets its number, if it has not claimed one already: a fresh editor
      starts on a placeholder, and a CE that was opened or saved keeps the number it has. */
@@ -11829,8 +11829,9 @@ tab === 'mywork' && (() => {
     /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:13,marginBottom:6}}, title, /*#__PURE__*/React.createElement("span", {style:{marginLeft:6,fontSize:11,color:MT}}, '(' + list.length + ')')),
     list.length ? list.slice(0, 15).map(render) : /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,padding:'6px 0'}}, empty),
     list.length > 15 && /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,marginTop:4}}, '+' + (list.length - 15) + ' more in CE Monitoring'));
-  /* One panel with three labelled tabs instead of eight boxes. Each tab carries a count, in red when something there needs the user, so
-     the page is read at a glance and a tab is only opened for the detail. A section with nothing in it is left out. */
+  /* Three labelled, collapsible groups instead of eight boxes, all on one page so nothing is hidden behind a tab. Each header carries a
+     count, in red when something there needs the user. A group with something in it starts open and an empty one starts folded; a
+     click on a header changes that, and the page remembers the choice for the visit. A list with nothing in it is left out. */
   const mwPanel = items => {
     const n = [toSign.length, returnedAll.length, open.length, drafts.length, inApproval.length, isRequestor ? 0 : sent.length, isRequestor ? 0 : awaitingReq.length, isRequestor ? 0 : forReview.length];
     const groups = [
@@ -11838,16 +11839,19 @@ tab === 'mywork' && (() => {
       {id: 'mine', label: '\uD83D\uDCC2 My CEs and drafts', idx: [2, 4, 3]},
       {id: 'req', label: '\uD83D\uDCE4 Requests and reviews', idx: [5, 7]}
     ].map(g => ({...g, count: g.idx.reduce((t, i) => t + n[i], 0)})).filter(g => g.id !== 'req' || !isRequestor);
-    const first = groups.find(g => g.count > 0) || groups[0];
-    const cur = groups.find(g => g.id === mwTab) || first;
-    return /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,overflow:'hidden'}},
-      /*#__PURE__*/React.createElement("div", {role:'tablist', style:{display:'flex',gap:2,flexWrap:'wrap',borderBottom:'1px solid '+BDR,padding:'6px 8px 0'}},
-        groups.map(g => /*#__PURE__*/React.createElement("button", {key:g.id, role:'tab', 'aria-selected': g.id === cur.id, onClick:() => setMwTab(g.id),
-          title: g.id === 'act' ? toSign.length + ' awaiting my signature · ' + returnedAll.length + ' returned to me' + (isRequestor ? '' : ' · ' + awaitingReq.length + ' requests awaiting review') : undefined,
-          style:{background:g.id === cur.id ? SURF : 'transparent',border:'1px solid '+(g.id === cur.id ? BDR : 'transparent'),borderBottom:'none',borderRadius:'8px 8px 0 0',padding:'7px 14px',cursor:'pointer',fontSize:12,fontWeight:700,color:g.id === cur.id ? TX : MT,display:'flex',gap:7,alignItems:'center'}},
-          g.label, /*#__PURE__*/React.createElement("span", {style:{minWidth:18,textAlign:'center',borderRadius:9,padding:'0 6px',fontSize:11,fontWeight:800,background:g.count ? (g.urgent ? ERR : ACC) : alpha(BDR,'66'),color:g.count ? '#fff' : MT}}, g.count)))),
-      /*#__PURE__*/React.createElement("div", {style:{padding:12,display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(380px,1fr))',gap:12}},
-        cur.count ? cur.idx.filter(i => n[i] > 0).map(i => /*#__PURE__*/React.createElement(React.Fragment, {key:i}, items[i])) : /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:MT,padding:'10px 4px'}}, cur.id === 'act' ? 'Nothing needs you right now.' : cur.id === 'mine' ? 'No open CEs, drafts or approvals of yours.' : 'No requests or reviews waiting.')));
+    return /*#__PURE__*/React.createElement("div", {style:{display:'flex',flexDirection:'column',gap:8}},
+      groups.map(g => {
+        const isOpen = mwOpen[g.id] != null ? mwOpen[g.id] : g.count > 0;
+        return /*#__PURE__*/React.createElement("div", {key:g.id, style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,overflow:'hidden'}},
+          /*#__PURE__*/React.createElement("button", {'aria-expanded': isOpen, onClick:() => setMwOpen(p => ({...p, [g.id]: !isOpen})),
+            title: g.id === 'act' ? toSign.length + ' awaiting my signature \u00B7 ' + returnedAll.length + ' returned to me' + (isRequestor ? '' : ' \u00B7 ' + awaitingReq.length + ' requests awaiting review') : undefined,
+            style:{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'10px 14px',background:'transparent',border:'none',cursor:'pointer',color:TX,fontSize:13,fontWeight:700,textAlign:'left'}},
+            /*#__PURE__*/React.createElement("span", {style:{color:MT,fontSize:11,width:12}}, isOpen ? '\u25BE' : '\u25B8'),
+            g.label,
+            /*#__PURE__*/React.createElement("span", {style:{minWidth:18,textAlign:'center',borderRadius:9,padding:'0 6px',fontSize:11,fontWeight:800,background:g.count ? (g.urgent ? ERR : ACC) : alpha(BDR,'66'),color:g.count ? '#fff' : MT}}, g.count)),
+          isOpen && /*#__PURE__*/React.createElement("div", {style:{padding:'0 12px 12px',display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(380px,1fr))',gap:12}},
+            g.count ? g.idx.filter(i => n[i] > 0).map(i => /*#__PURE__*/React.createElement(React.Fragment, {key:i}, items[i])) : /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:MT,padding:'2px 4px'}}, g.id === 'act' ? 'Nothing needs you right now.' : g.id === 'mine' ? 'No open CEs, drafts or approvals of yours.' : 'No requests or reviews waiting.')));
+      }));
   };
   return /*#__PURE__*/React.createElement("div", {style:{display:'flex',flexDirection:'column',gap:12}},
     /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'baseline',gap:10,flexWrap:'wrap'}},

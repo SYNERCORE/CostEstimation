@@ -42,12 +42,12 @@ ck('requestors get a table of their requests', app.indexOf("'📤 My requests'")
 ck('with the six columns', ["'RCE / CE NO.', 'CUSTOMER', 'JOB', 'DISCIPLINE', 'ASSIGNED TO', 'STATUS'"].every(c => app.indexOf(c) > 0));
 ck('REQUEST badge while still a request, View after',
   app.indexOf("still ? /*#__PURE__*/React.createElement(\"span\"") > 0 && app.indexOf(": viewBtn(x)))") > 0);
-ck('the card is no longer shown to requestors', app.indexOf("!isRequestor && sent.length > 0 && section('📤 Requests I sent'") > 0);
+ck('the card is no longer shown to requestors', app.indexOf("!isRequestor && fSent.length > 0 && section('📤 Requests I sent'") > 0);
 
 ck('the My Work button is New Request for a requestor, the CE editor for everyone else',
   app.indexOf('onClick:openRequest,title:"Log a request for estimation') > 0 && app.indexOf('isRequestor ? "➕ New Request" : "➕ Go to the CE editor"') > 0);
 
-ck('the For review card is not shown to a requestor', app.indexOf("!isRequestor && forReview.length > 0 && section('🔎 For review") > 0);
+ck('the For review card is not shown to a requestor', app.indexOf("!isRequestor && fForReview.length > 0 && section('🔎 For review") > 0);
 
 ck('a message raised while a form is open is drawn above it',
   app.slice(app.indexOf("padding: '9px 18px',"), app.indexOf("padding: '9px 18px',") + 800).indexOf('zIndex: 10000,') > 0 && app.indexOf('zIndex: 999,') < 0);

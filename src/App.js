@@ -1075,6 +1075,8 @@ function App({
   /* The four are asked for in front of Project Info, and the dialog stays until Continue. */
   const [piGate, setPiGate] = useState(false);
   const [mwOpen, setMwOpen] = useState({});
+  /* The Dashboard's lists show the first 15 rows; these hold which of them has been opened to all of its rows. */
+  const [dashAll, setDashAll] = useState({});
   useEffect(() => { if (!isRequestor && tab === "info" && infoMissing.length) setPiGate(true); }, [tab]);
   /* Continue is where a new CE gets its number, if it has not claimed one already: a fresh editor
      starts on a placeholder, and a CE that was opened or saved keeps the number it has. */
@@ -11995,7 +11997,7 @@ tab === 'dashboard' && (() => {
         /*#__PURE__*/React.createElement("table",{style:{width:'100%',borderCollapse:'collapse',fontSize:11}},
           /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",null,
             ['RCE No.','Customer','Job Title','Discipline','Estimator','Received By','Date Recv.','Deadline','Days Late'].map(hd=>/*#__PURE__*/React.createElement("th",{key:hd,style:THS},hd)))),
-          /*#__PURE__*/React.createElement("tbody",null, reqOverdueRows.slice(0,15).map(x=>/*#__PURE__*/React.createElement("tr",{key:x.h.id},
+          /*#__PURE__*/React.createElement("tbody",null, reqOverdueRows.slice(0, dashAll.over ? reqOverdueRows.length : 15).map(x=>/*#__PURE__*/React.createElement("tr",{key:x.h.id},
             /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,color:INFO,fontWeight:600,whiteSpace:'nowrap'}}, x.h.info?.requestNum || x.m.rceNo || x.h.info?.ceNum || x.h.ceNum || '\u2014'),
             /*#__PURE__*/React.createElement("td",{style:TDS}, x.h.info?.client || x.m.customer || '\u2014'),
             /*#__PURE__*/React.createElement("td",{style:{...TDS,maxWidth:260,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'},title:x.m.jobTitle || x.h.info?.description || ''}, x.m.jobTitle || x.h.info?.description || '\u2014'),
@@ -12005,7 +12007,8 @@ tab === 'dashboard' && (() => {
             /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,whiteSpace:'nowrap'}}, x.m.dateRecv ? new Date(x.m.dateRecv+'T00:00:00').toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'}) : '\u2014'),
             /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,whiteSpace:'nowrap'}}, new Date(x.dl+'T00:00:00').toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'})),
             /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,color:ERR,fontWeight:700,whiteSpace:'nowrap'}}, x.late + 'd')))))),
-      reqOverdueN > 15 && /*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:MT,marginTop:8,textAlign:'center'}}, "+", reqOverdueN-15, " more \u2014 see the CE Monitoring tab")),
+      reqOverdueN > 15 && /*#__PURE__*/React.createElement("div",{style:{fontSize:11,marginTop:8,textAlign:'center'}},
+        /*#__PURE__*/React.createElement("button",{style:btn('def',true),onClick:()=>setDashAll(p=>({...p,over:!p.over}))}, dashAll.over ? 'Show the first 15' : 'Show all ' + reqOverdueN + ' overdue requests'))),
     /* Open CEs, soonest deadline first */
     /*#__PURE__*/React.createElement("div",{style:{...CS,marginBottom:16}},
       /*#__PURE__*/React.createElement("div",{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:10,gap:10,flexWrap:'wrap'}},
@@ -12015,11 +12018,11 @@ tab === 'dashboard' && (() => {
       openCEs.length === 0
         ? /*#__PURE__*/React.createElement("div",{style:{textAlign:'center',padding:'14px 0',color:MT,fontSize:12,border:'1px dashed '+BDR,borderRadius:6}}, "Nothing open — every CE is Submitted, No Quote or Cancelled.")
         : /*#__PURE__*/React.createElement("div",null,
-            /*#__PURE__*/React.createElement("div",{style:{overflowX:'auto'}},
+            /*#__PURE__*/React.createElement("div",{style:{overflow:'auto',maxHeight:dashAll.open ? 560 : 'none'}},
               /*#__PURE__*/React.createElement("table",{style:{width:'100%',borderCollapse:'collapse',fontSize:11}},
-                /*#__PURE__*/React.createElement("thead",null,/*#__PURE__*/React.createElement("tr",null,
+                /*#__PURE__*/React.createElement("thead",{style:{position:'sticky',top:0,background:CARD,zIndex:1}},/*#__PURE__*/React.createElement("tr",null,
                   ['CE No.','RCE No.','Client','Job Title','Discipline','Estimator','Received By','Date Recv.','Status','Deadline','Days Left','Total'].map(hd=>/*#__PURE__*/React.createElement("th",{key:hd,style:THS},hd)))),
-                /*#__PURE__*/React.createElement("tbody",null, openCEs.slice(0,15).map(x=>{
+                /*#__PURE__*/React.createElement("tbody",null, openCEs.slice(0, dashAll.open ? openCEs.length : 15).map(x=>{
                   const st = x.m.status || 'Draft';
                   const dl = x.m.deadline ? new Date(x.m.deadline+'T00:00:00') : null;
                   const days = dl ? Math.round((dl - new Date())/(1000*60*60*24)) : null;
@@ -12038,7 +12041,8 @@ tab === 'dashboard' && (() => {
                     /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,color:dCol,fontWeight:700,whiteSpace:'nowrap'}}, days === null ? "—" : days < 0 ? Math.abs(days)+'d OD' : days+'d'),
                     /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,textAlign:'right'}}, "₱"+ph(N(x.h.grand||0))));
                 }))),
-            openCEs.length > 15 && /*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:MT,marginTop:8,textAlign:'center'}}, "+", openCEs.length-15, " more — see the CE Monitoring tab")))),
+            openCEs.length > 15 && /*#__PURE__*/React.createElement("div",{style:{fontSize:11,marginTop:8,textAlign:'center'}},
+              /*#__PURE__*/React.createElement("button",{style:btn('def',true),onClick:()=>setDashAll(p=>({...p,open:!p.open}))}, dashAll.open ? 'Show the first 15' : 'Show all ' + openCEs.length + ' open CEs'))))),
     /* Bottom row: by company + by status + top clients */
     /*#__PURE__*/React.createElement("div",{style:{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,flexWrap:'wrap'}},
       /* By company */

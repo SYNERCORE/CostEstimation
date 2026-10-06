@@ -427,5 +427,7 @@ jobs:
         run: node tools/test-dashboard-overdue-requests.js
       - name: My Work tabs
         run: node tools/test-mywork-tabs.js
+      - name: Dashboard show all
+        run: node tools/test-dashboard-show-all.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

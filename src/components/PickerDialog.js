@@ -4,6 +4,20 @@
    makeX(() => ({ ...the names it reads... })) once per render. The names are read when the function is CALLED, not when it is made,
    so a function still sees the same values (and can reach ones declared further down App) exactly as the closure it replaces did. */
 
+/* A long Masterlist (thousands of rows) built every row at once: about a second to open and 19,000 DOM nodes. The list shows PICKER_PAGE rows
+   and a Show more button; it is its own component so the count is its own state, and the key on it (type + search) starts it over from the first
+   page whenever the search changes. Select All still applies to every row that matches, shown or not. */
+const PICKER_PAGE = 100;
+function PickerRows({ items, renderRow }) {
+  const [shown, setShown] = React.useState(PICKER_PAGE);
+  const rest = items.length - shown;
+  return React.createElement(React.Fragment, null,
+    items.slice(0, shown).map(renderRow),
+    rest > 0 && React.createElement('div', { style: { padding: 10, textAlign: 'center', borderBottom: '1px solid ' + alpha(BDR, '22') } },
+      React.createElement('span', { style: { color: MT, fontSize: 11, marginRight: 10 } }, 'Showing ' + shown + ' of ' + items.length + ' - search to narrow, or'),
+      React.createElement('button', { style: btn('def', true), onClick: () => setShown(n => n + PICKER_PAGE) }, 'Show ' + Math.min(PICKER_PAGE, rest) + ' more')));
+}
+
 function makePicker(getCtx) {
   return () => {
     const {
@@ -134,7 +148,10 @@ function makePicker(getCtx) {
         overflowY: 'auto',
         flex: 1
       }
-    }, items.map(item => {
+    }, /*#__PURE__*/React.createElement(PickerRows, {
+      key: picker.type + '|' + q,
+      items,
+      renderRow: item => {
       const name = item.role || item.desc,
         cost = item.rate || item.cost;
       const isSelected = !!sel[item.id];
@@ -205,7 +222,7 @@ function makePicker(getCtx) {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
       })));
-    }), items.length === 0 && /*#__PURE__*/React.createElement("div", {
+    }}), items.length === 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         padding: 28,
         textAlign: 'center',

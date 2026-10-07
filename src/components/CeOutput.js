@@ -509,8 +509,32 @@ function makeHandleGenerateCE(getCtx) {
   };
 }
 
+/* The Excel exports without amounts. Both exporters end in a list of sheets whose cells carry a style, and a money cell is one with a money
+   style, so blanking them is done here once, for both. A total, unit-price or selling-price line is then a label with nothing beside it, so
+   it is dropped -- unless it counts people (a crew sub total), which is not money and stays. */
+const SHEET_MONEY_STYLES = ['tdn', 'valn', 'tdnb', 'tdsubn', 'tot'];
+function stripSheetAmounts(sheets) {
+  sheets.forEach(sh => {
+    sh.rows = (sh.rows || []).filter(row => {
+      if (!row || !row.length) return true;
+      let hadTotal = false, label = '';
+      row.forEach(c => {
+        if (!c || typeof c !== 'object') return;
+        if (c.s === 'tot') hadTotal = true;
+        if (typeof c.v === 'string') label += ' ' + c.v;
+        if (SHEET_MONEY_STYLES.indexOf(c.s) >= 0) c.v = '';
+      });
+      const counts = row.some(c => c && typeof c === 'object' && typeof c.v === 'number');
+      const priceLine = /SELLING PRICE|MARGIN/i.test(label);
+      return !((hadTotal || priceLine) && !counts);
+    });
+  });
+  return sheets;
+}
+
 function makeHandleExportXLSX(getCtx) {
-  return () => {
+  return (opt) => {
+    const noAmt = !!(opt && opt.noAmounts);
     const {
       approvers,
       benefitRows,
@@ -692,9 +716,9 @@ function makeHandleExportXLSX(getCtx) {
       /* The workbook has always headed these; the printed CE and this one
          did not, so two bold figures appeared under TOTAL AMOUNT, in the
          same column, with nothing to say they were already inside it. */
-      if (hlRows.length) a.title('HIGHLIGHTED COSTS (already included above)', 3);
-      hlRows.forEach(r => a.total('', String(hlLabel(r)).toUpperCase() + ':', a.money(hlAmt(r))));
-      if (servicesSummary.on && servicesSummary.ok) {
+      if (hlRows.length && !noAmt) a.title('HIGHLIGHTED COSTS (already included above)', 3);
+      if (!noAmt) hlRows.forEach(r => a.total('', String(hlLabel(r)).toUpperCase() + ':', a.money(hlAmt(r))));
+      if (servicesSummary.on && servicesSummary.ok && !noAmt) {
         a.blank();
         a.title('SERVICES', 3);
         servicesSummary.lines.forEach(l => a.row('', l.label.toUpperCase() + ':', a.money(l.v)));
@@ -835,14 +859,16 @@ function makeHandleExportXLSX(getCtx) {
       });
     });
 
-    SHICXlsx.download((info.ceNum || 'CE') + '_' + (info.client || 'export').replace(/[^a-z0-9]/gi, '_') + '.xlsx', sheets,
+    if (noAmt) stripSheetAmounts(sheets);
+    SHICXlsx.download((info.ceNum || 'CE') + '_' + (info.client || 'export').replace(/[^a-z0-9]/gi, '_') + (noAmt ? '_no-amounts' : '') + '.xlsx', sheets,
       { bar: ceBrand(coI).bar, barText: ceBrand(coI).text, logo: co.logo });
     showToast('Exported to Excel — one sheet per page of the CE.');
   };
 }
 
 function makeHandleExport(getCtx) {
-  return () => {
+  return (opt) => {
+    const noAmt = !!(opt && opt.noAmounts);
     const {
       approvers,
       benefitRows,
@@ -954,12 +980,12 @@ function makeHandleExport(getCtx) {
       sum.push([S('', 'totlbl'), S('MARGIN:', 'totlbl', 4), null, null, null, null, S((margin > 0 ? '+' : '') + margin + '%', 'totlbl')]);
       sum.push([S('', 'totlbl'), S('SELLING PRICE:', 'totlbl', 4), null, null, null, null, S(N(grand * (1 + margin / 100)), 'tot')]);
     }
-    if (hlRows.length) {
+    if (hlRows.length && !noAmt) {
       sum.push([]);
       sum.push([S('HIGHLIGHTED COSTS (already included above)', 'sec')]);
       hlRows.forEach(r => sum.push([S('', 'tdc'), S(hlLabel(r).toUpperCase(), 'td', 4), null, null, null, null, S(N(hlAmt(r)), 'tdn')]));
     }
-    if (servicesSummary.on && servicesSummary.ok) {
+    if (servicesSummary.on && servicesSummary.ok && !noAmt) {
       sum.push([]);
       sum.push([S('SERVICES', 'sec')]);
       servicesSummary.lines.forEach(l => sum.push([S('', 'tdc'), S(l.label.toUpperCase() + ':', 'td', 4), null, null, null, null, S(N(l.v), 'tdn')]));
@@ -1107,7 +1133,8 @@ function makeHandleExport(getCtx) {
     }
 
     const _xb = ceBrand(getCompanies().find(c => String(c.id) === String(info.companyId)) || getCompanies()[0] || {});
-    SHICXlsx.download((info.ceNum || 'CE') + '_' + ceType + '.xlsx', sheets, { bar: _xb.bar, barText: _xb.text });
+    if (noAmt) stripSheetAmounts(sheets);
+    SHICXlsx.download((info.ceNum || 'CE') + '_' + ceType + (noAmt ? '_no-amounts' : '') + '.xlsx', sheets, { bar: _xb.bar, barText: _xb.text });
     showToast('Excel exported — ' + sheets.length + ' sheets.');
   };
 }

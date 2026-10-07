@@ -38,10 +38,16 @@ console.log('\nand it leaves this tab alone:');
 ck('it does not load the CE here', !/handleLoad/.test(opener[0]),
   'that is the whole point -- the open estimate must not move');
 ck('it changes no CE state', !/set(Mp|Tools|Mats|Ppe|Info|Misc)\(/.test(opener[0]));
-ck('the new tab is asked for that CE and that document',
-  /'\?print=' \+ id \+ '&as=' \+ as/.test(opener[0]));
+ck('the hidden frame is asked for that CE and that document',
+  /'\?print=' \+ id \+ '&as=' \+ as \+ \(isFile \? '' : '&relay=1'\)/.test(opener[0]));
 ck('a blocked pop-up is reported', /Allow pop-ups for this site/.test(opener[0]),
   'otherwise nothing happens and there is no way to know why');
+ck('the printed CE is shown in a blank tab, not a copy of the app',
+  /const w = window\.open\('', '_blank'\)/.test(opener[0]) && !/window\.open\(window\.location\.pathname/.test(opener[0]),
+  'a new tab opened a second copy of the app that stayed open behind the document');
+ck('that tab is opened on the click, before the frame loads', opener[0].indexOf("window.open('', '_blank')") < opener[0].indexOf('document.body.appendChild(f);\n    showToast'));
+ck('the document is only taken from the frame this window made', /ev\.origin !== window\.location\.origin \|\| ev\.source !== f\.contentWindow/.test(opener[0]));
+ck('a CE that never arrives is reported and the blank tab closed', /did not load in time/.test(opener[0]) && /w\.close\(\)/.test(opener[0]));
 
 console.log('\nthe opened tab prints the CE it was asked for:');
 ck('it fetches that id', /const full = await dbLoadCE\(_pid\)/.test(app));
@@ -59,11 +65,13 @@ ck('it waits for the CE number to match', /\(info\.ceNum \|\| ''\) !== autoPrint
 ck('it re-checks as the rows land', /\[autoPrint, info\.ceNum, mp, tools, mats, ppe\]/.test(eff[0]));
 ck('it fires once, not on every render', /setAutoPrint\(null\);/.test(eff[0]));
 ck('printable CE and Export Detailed are both reachable',
-  /if \(as === 'detailed'\) \{ handleExportXLSX\(\);[\s\S]{0,300}\} else if \(as === 'view'\) handleGenerateCE\(\{ embed: true \}\); else if \(as === 'noamt'\) handleGenerateCE\(\{ noAmounts: true \}\); else handleGenerateCE\(\)/.test(eff[0]));
+  /if \(\/\^\(detailed\|template\)\/\.test\(as\)\) \{[\s\S]{0,200}handleExportXLSX\(_no\); else handleExport\(_no\);[\s\S]{0,600}\} else if \(autoPrint\.relay && window !== window\.top\) \{[\s\S]{0,700}\} else if \(as === 'view'\) handleGenerateCE\(\{ embed: true \}\); else if \(as === 'noamt'\) handleGenerateCE\(\{ noAmounts: true \}\); else handleGenerateCE\(\)/.test(eff[0]));
+ck('a frame hands the finished CE to the window that asked, then stops',
+  /handleGenerateCE\(\{ htmlOnly: true, noAmounts: as === 'noamt' \}\);\s*window\.parent\.postMessage\(\{ shicCeHtml: _html \|\| '' \}, window\.location\.origin\);/.test(eff[0]));
 
 console.log('\n⬇ xlsx leaves no window behind:');
-ck('the workbook is built in a hidden frame, not a new tab or window',
-  /if \(as === 'detailed'\) \{\s*const f = document\.createElement\('iframe'\);\s*f\.style\.display = 'none';/.test(opener[0]));
+ck('a workbook is built in a hidden frame, not a new tab or window',
+  /const isFile = \/\^\(detailed\|template\)\/\.test\(as\);\s*const f = document\.createElement\('iframe'\);\s*f\.style\.display = 'none';/.test(opener[0]));
 ck('and the frame stops itself once the file is out',
   /if \(window !== window\.top\) setTimeout\(\(\) => \{ document\.open\(\);/.test(eff[0]));
 

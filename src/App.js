@@ -1061,14 +1061,15 @@ function App({
         const _q = new URLSearchParams(window.location.search);
         const _pid = Number(_q.get('print'));
         if (_pid) {
-          const _as = _q.get('as') === 'detailed' ? 'detailed' : _q.get('as') === 'view' ? 'view' : _q.get('as') === 'noamt' ? 'noamt' : 'ce';
+          const _as = ['detailed', 'detailed-noamt', 'template', 'template-noamt', 'view', 'noamt'].includes(_q.get('as')) ? _q.get('as') : 'ce';
+          const _relay = _q.get('relay') === '1';
           window.history.replaceState({}, '', window.location.pathname);
           setTimeout(async () => {
             try {
               const full = await dbLoadCE(_pid);
               if (!full) { console.error('open CE ' + _pid + ': dbLoadCE returned nothing'); showToast('Could not open that CE — it is not in SharePoint or this browser.', true); return; }
               await handleLoad(full);
-              setAutoPrint({as: _as, ceNum: (full.info || {}).ceNum || ''});
+              setAutoPrint({as: _as, relay: _relay, ceNum: (full.info || {}).ceNum || ''});
             } catch (ex) { console.error('open CE ' + _pid + ' failed:', ex); showToast('Could not open that CE: ' + ex.message, true); }
           }, 600);
         }
@@ -2513,23 +2514,44 @@ function App({
      matters: the CE you have open here does not move, and there is nothing to
      restore afterwards. */
   const openForPrint = (id, as) => {
-    /* The workbook is built in a hidden frame: a new tab -- in the installed
-       app, a whole second window -- stayed open on that CE after the file had
-       downloaded. The frame is removed once the file is out. */
-    if (as === 'detailed') {
-      const f = document.createElement('iframe');
-      f.style.display = 'none';
-      f.src = window.location.pathname + '?print=' + id + '&as=detailed';
+    /* Everything is made in a hidden frame, never in a tab of its own: a new tab opened a whole second copy of the app, and it stayed
+       open behind the document after it was printed. A workbook downloads straight from the frame. The printed CE is handed back to this
+       window (relay=1), and shown in a plain tab that holds nothing but the document; that tab is opened here, on the click, because a
+       pop-up opened later -- once the frame has loaded -- can be refused. The frame is removed when it is done. */
+    const isFile = /^(detailed|template)/.test(as);
+    const f = document.createElement('iframe');
+    f.style.display = 'none';
+    f.src = window.location.pathname + '?print=' + id + '&as=' + as + (isFile ? '' : '&relay=1');
+    if (isFile) {
       document.body.appendChild(f);
       setTimeout(() => { try { f.remove(); } catch(_e){logSwallowed('App:L2640',_e);} }, 60000);
       showToast('Preparing the Excel file — it will download in a few seconds...');
       return;
     }
-    const w = window.open(window.location.pathname + '?print=' + id + '&as=' + as, '_blank');
+    const w = window.open('', '_blank');
     if (!w) { showToast('Allow pop-ups for this site to print a CE from here.', true); return; }
-    let _what = 'the printable CE';
-    if (as === 'detailed') _what = 'Export Detailed';
-    showToast('Opening ' + _what + ' in a new tab...');
+    try { w.document.write('<title>Preparing the CE...</title><p style="font:14px sans-serif;padding:24px">Preparing the CE...</p>'); } catch (_e) { logSwallowed('App:printWindow', _e); }
+    let done = false;
+    const finish = () => { done = true; window.removeEventListener('message', onMsg); clearTimeout(giveUp); try { f.remove(); } catch (_e) { logSwallowed('App:printFrame', _e); } };
+    const onMsg = ev => {
+      if (ev.origin !== window.location.origin || ev.source !== f.contentWindow || !ev.data || typeof ev.data.shicCeHtml !== 'string') return;
+      finish();
+      try {
+        w.document.open(); w.document.write(ev.data.shicCeHtml); w.document.close();
+        /* Print once the sheets are laid out, as the print window has always done. */
+        (function _waitThenPrint(n) {
+          try {
+            if (w.closed) return;
+            if ((w.document.body && w.document.body.getAttribute('data-paged')) || n > 40) { w.print(); return; }
+          } catch (_e) { return; }
+          setTimeout(() => _waitThenPrint(n + 1), 150);
+        })(0);
+      } catch (ex) { showToast('Could not show the CE: ' + ex.message, true); }
+    };
+    const giveUp = setTimeout(() => { if (done) return; finish(); try { w.close(); } catch (_e) { logSwallowed('App:printWindow', _e); } showToast('Could not open that CE — it did not load in time.', true); }, 45000);
+    window.addEventListener('message', onMsg);
+    document.body.appendChild(f);
+    showToast('Preparing ' + (as === 'noamt' ? 'the CE (no amounts)' : 'the printable CE') + '...');
   };
   /* Runs only once the loaded CE has been committed to state -- the export
      functions read what is on screen, so firing any earlier would have printed
@@ -2540,10 +2562,17 @@ function App({
     const as = autoPrint.as;
     setAutoPrint(null);
     setTimeout(() => {
-      try { if (as === 'detailed') { handleExportXLSX();
+      try { if (/^(detailed|template)/.test(as)) {
+        const _no = /-noamt$/.test(as) ? { noAmounts: true } : undefined;
+        if (/^detailed/.test(as)) handleExportXLSX(_no); else handleExport(_no);
         /* In the hidden frame: once the file is out, stop this copy of the app
            so nothing in it can autosave. */
         if (window !== window.top) setTimeout(() => { document.open(); document.write('<p>Exported.</p>'); document.close(); }, 3000);
+      } else if (autoPrint.relay && window !== window.top) {
+        /* Hand the finished document to the window that asked, then stop this copy of the app. */
+        const _html = handleGenerateCE({ htmlOnly: true, noAmounts: as === 'noamt' });
+        window.parent.postMessage({ shicCeHtml: _html || '' }, window.location.origin);
+        setTimeout(() => { document.open(); document.write('<p>Done.</p>'); document.close(); }, 500);
       } else if (as === 'view') handleGenerateCE({ embed: true }); else if (as === 'noamt') handleGenerateCE({ noAmounts: true }); else handleGenerateCE(); }
       catch (ex) { showToast('Could not produce the document: ' + ex.message, true); }
     }, 250);

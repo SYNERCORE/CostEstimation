@@ -18,7 +18,7 @@
  * Run: node tools/test-ml-template.js
  */
 const fs=require('fs');
-const src=fs.readFileSync('src/App.js','utf8');
+const src=require('./lib/appsrc').plus(fs.readFileSync('src/App.js','utf8'));
 const norm=eval('('+src.match(/const norm = h => String\(h\)[^;]*;/)[0].replace(/^const norm = /,'').replace(/;$/,'')+')');
 const HEADER_KEY=eval('('+src.match(/const HEADER_KEY = \{[\s\S]*?\n        \};/)[0].replace(/^const HEADER_KEY = /,'').replace(/;$/,'')+')');
 /* TIER_HEADS names the five reference figures once and colL spreads them

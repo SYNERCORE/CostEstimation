@@ -13,7 +13,7 @@
 'use strict';
 const fs = require('fs');
 const vm = require('vm');
-const app = fs.readFileSync('src/App.js', 'utf8');
+const app = require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8'));
 
 let bad = 0;
 const ck = (n, c, x) => { if (c) console.log('  PASS  ' + n); else { console.log('  FAIL  ' + n + (x ? '  -> ' + x : '')); bad++; } };

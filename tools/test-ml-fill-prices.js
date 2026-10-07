@@ -18,7 +18,7 @@
 'use strict';
 const fs = require('fs');
 const vm = require('vm');
-const app = fs.readFileSync('src/App.js', 'utf8');
+const app = require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8'));
 const w = fs.readFileSync('src/widgets.js', 'utf8');
 
 let bad = 0;

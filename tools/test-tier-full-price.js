@@ -24,7 +24,7 @@ const near = (a, b, tol) => Math.abs(a - b) < (tol === undefined ? 0.005 : tol);
 const N = v => parseFloat(v) || 0;
 
 const help = R('src/helpers.js');
-const app = R('src/App.js');
+const app = require('./lib/appsrc').plus(R('src/App.js'));
 const restab = R('src/components/ResTab.js');
 const db = R('src/db.js');
 

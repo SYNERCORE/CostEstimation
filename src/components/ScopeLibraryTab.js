@@ -1055,4 +1055,4 @@ function ScopeLibraryTab(ctx) {
         );
       })
     ));
-  }
+}

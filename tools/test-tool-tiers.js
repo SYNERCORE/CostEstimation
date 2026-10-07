@@ -96,7 +96,7 @@ ck('Tier 3 with no hours costs nothing at all',
 /* The calculator in the masterlist: enter what the tool cost to own, and the
    tiers follow. The four figures are stored on the entry, so Tier 1 and Tier 3
    can be derived later without asking for them again. */
-const app = fs.readFileSync('src/App.js', 'utf8');
+const app = require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8'));
 console.log('\nthe masterlist calculator:');
 ck('it exists, on tools only', /mlTab === 'tools' &&/.test(app));
 ck('its state is NOT declared inside MlEditor',

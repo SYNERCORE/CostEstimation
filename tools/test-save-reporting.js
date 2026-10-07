@@ -18,7 +18,7 @@
 
 const fs = require('fs');
 const db = fs.readFileSync('src/db.js', 'utf8');
-const app = fs.readFileSync('src/App.js', 'utf8');
+const app = require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8'));
 
 let fails = 0;
 const ck = (name, cond, extra) => {

@@ -18,7 +18,7 @@
 'use strict';
 
 const fs = require('fs');
-const app = fs.readFileSync('src/App.js', 'utf8');
+const app = require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8'));
 
 let fails = 0;
 const ck = (name, cond, extra) => {
@@ -26,8 +26,9 @@ const ck = (name, cond, extra) => {
   else { console.log('  FAIL  ' + name + (extra !== undefined ? '  -> ' + extra : '')); fails++; }
 };
 
-/* The editor component: from MlEditor to the masterlist tab render. */
-const ed = (app.match(/const MlEditor = \(\) => \{[\s\S]*?\n  \};/) || [''])[0];
+/* The editor component: from MlEditorTab to the masterlist tab render. */
+/* The editor now lives in MasterlistTab.js as a function whose closing brace is at column 0. */
+const ed = (app.match(/function MlEditorTab\(ctx\) \{[\s\S]*?\n\}\n/) || [''])[0];
 if (!ed) { console.error('MlEditor not found'); process.exit(1); }
 
 console.log('every mutating action persists:');

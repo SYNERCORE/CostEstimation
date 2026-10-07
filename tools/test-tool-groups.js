@@ -20,7 +20,7 @@
 const fs = require('fs');
 const path = require('path');
 const R = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-const app = R('src/App.js');
+const app = require('./lib/appsrc').plus(R('src/App.js'));
 const cfg = R('src/config.js');
 const tab = R('src/components/ResTab.js');
 const db = R('src/db.js');

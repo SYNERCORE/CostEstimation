@@ -10,9 +10,9 @@ const src = app.slice(a, b);
 const monDisc = (e, m) => m.designation || m.discipline || e.info?.discipline || e.info?.projType || '';
 const run = async (rows, mon, answer, ok, admin = true) => {
   const calls = [], toasts = [];
-  await new Function('isAdmin', 'sortedHistory', 'monDisc', 'monOf', 'showToast', 'window', 'CE_DISCIPLINES', 'updateMon', 'auditLog', 'currentUser', 'uiConfirm',
+  await new Function('isAdmin', 'sortedHistory', 'monDisc', 'monOf', 'showToast', 'window', 'CE_DISCIPLINES', 'updateMon', 'auditLog', 'currentUser', 'uiConfirm', 'uiPrompt',
     src + 'return fillBlankDisc();')(admin, rows, monDisc, e => mon[e.id] || {}, (m, err) => toasts.push({ m, err }),
-    { prompt: () => answer, confirm: () => ok }, ['Electrical', 'Mechanical', 'Civil', 'General'], (id, f, v) => calls.push([id, f, v]), () => {}, { username: 'u' }, () => Promise.resolve(ok));
+    { prompt: () => answer, confirm: () => ok }, ['Electrical', 'Mechanical', 'Civil', 'General'], (id, f, v) => calls.push([id, f, v]), () => {}, { username: 'u' }, () => Promise.resolve(ok), () => Promise.resolve(answer));
   return { calls, toasts };
 };
 const ROWS = [{ id: 1, info: {} }, { id: 2, info: { projType: 'Civil' } }, { id: 3, info: {} }, { id: 4, _draft: {}, info: {} }, { id: 'x', info: {} }];

@@ -3020,11 +3020,11 @@ function App({
   /* A revision needs a reason. It is asked for when the revision starts, kept on the CE (info.revisionReason) and written to the new
      revision's Monitoring remarks, so the trail says why each R-number exists. Cancel, or an empty answer, stops the revision. */
   const _revReason = React.useRef(null);
-  const askRevisionReason = (num) => {
-    const t = prompt('Reason for revising ' + num + ' (required) \u2014 e.g. client changed the scope, rates updated, quantity corrected:', '');
-    if (t == null) return null;
-    if (String(t).trim().length < 3) { showToast('A revision needs a reason. Nothing was revised.', true); return null; }
-    return String(t).trim();
+  const askRevisionReason = async (num) => {
+    /* Required, and said so under the box: a reason that is too short keeps the dialog open instead of abandoning the revision. */
+    const t = await uiPrompt('Reason for revising ' + num + String.fromCharCode(10, 10) + 'Required \u2014 e.g. client changed the scope, rates updated, quantity corrected.',
+      {multiline: true, required: true, min: 3, requiredMsg: 'A revision needs a reason.', minMsg: 'A revision needs a reason \u2014 a few words at least.', ok: 'Revise'});
+    return t == null ? null : t;
   };
   const noteRevisionRemark = async (num, reason) => {
     try {
@@ -3038,7 +3038,7 @@ function App({
       showToast('Please enter a CE Number before saving a revision.', true);
       return;
     }
-    const _why = askRevisionReason(ceNum);
+    const _why = await askRevisionReason(ceNum);
     if (!_why) return;
     const allHist = await dbGetHistory(null, true).catch(() => []);
     /* Find the highest revision already on file for this CE.
@@ -3265,7 +3265,7 @@ function App({
     claimCeNum(null, _guess);
     showToast('Cloned — assigned new CE number.');
   };
-  const handleRevise = (e) => {
+  const handleRevise = async (e) => {
     const d = e.data || e;
     /* Same shapes as handleSaveRevision, and for the same reason: matching
        only "-R1" meant revising an R01 CE started a second family instead of
@@ -3285,7 +3285,7 @@ function App({
       pad = /R0\d/i.test(tail);
     }
     const newCeNum = base + sep + 'R' + (pad && nextRev < 10 ? '0' + nextRev : String(nextRev));
-    const _why = askRevisionReason(raw || newCeNum);
+    const _why = await askRevisionReason(raw || newCeNum);
     if (!_why) return;
     _revReason.current = {num: newCeNum.toUpperCase(), why: _why};
     handleLoad({...d, signatures: apvStripSigs(d.approvers, d.signatures), info: {...(d.info || {}), approval: undefined, ceNum: newCeNum, revisionReason: _why, date: new Date().toISOString().slice(0,10)}});
@@ -3513,14 +3513,13 @@ function App({
     if (id == null) return;
     setSigModal({ mode: 'approve', ceId: id, fromEditor, id: '__apv', name: currentUser.name || currentUser.username });
   };
-  const apvStartReturn = (ceId) => {
+  const apvStartReturn = async (ceId) => {
     const fromEditor = ceId == null;
     const id = fromEditor ? _apvEditorId() : ceId;
     if (id == null) return;
-    const c = prompt('Return this CE to the estimator.\n\nWhat needs to change? (required)');
+    const c = await uiPrompt('Return this CE to the estimator.\n\nWhat needs to change? (required)', {multiline: true, required: true, requiredMsg: 'A comment is required to return a CE.', ok: 'Return to estimator'});
     if (c == null) return;
-    if (!c.trim()) { showToast('A comment is required to return a CE.', true); return; }
-    apvAct(id, 'return', { comment: c.trim(), fromEditor });
+    apvAct(id, 'return', { comment: c, fromEditor });
   };
   const apvAct = async (ceId, action, opt = {}) => {
     if (apvBusy) return false;
@@ -5512,9 +5511,10 @@ function App({
     const rce = String(i0.requestNum || i0.ceNum || '').trim();
     const NL = String.fromCharCode(10);
     const co = (companies || []).find(c => i0.companyId != null && i0.companyId !== '' && String(c.id) === String(i0.companyId));
-    const ans = window.prompt('Accept request ' + rce + ' and give it its CE number:' + NL + NL +
+    const ans = await uiPrompt('Accept request ' + rce + ' and give it its CE number' + NL + NL +
       (co ? 'Issuing company: ' + co.name + '. The number follows its prefix (' + (co.cePrefix || 'SHIC') + ').' : 'This request names no company. Change the prefix (SHIC, SY3) if it belongs to the other company.'),
-      co ? nextCeNumForCompany(history, co, ceNums) : nextCeNum(history, null, ceNums));
+      {value: co ? nextCeNumForCompany(history, co, ceNums) : nextCeNum(history, null, ceNums), ok: 'Accept request', required: true,
+       validate: v => /^[A-Z0-9\-_\/\.]{2,30}$/.test(String(v).toUpperCase()) ? '' : 'CE Number must be 2\u201330 characters, letters/numbers/dashes only.'});
     if (ans === null) return false;
     const newNum = String(ans).trim().toUpperCase();
     if (!/^[A-Z0-9\-_\/\.]{2,30}$/.test(newNum)) { showToast('CE Number must be 2–30 characters, letters/numbers/dashes only.', true); return false; }
@@ -5973,8 +5973,8 @@ function App({
     const blanks = sortedHistory.filter(e => !e._draft && typeof e.id === 'number' && !String(monDisc(e, monOf(e)) || '').trim());
     if (!blanks.length) { showToast('Every CE in this view already has a discipline.'); return; }
     const NL = String.fromCharCode(10);
-    const ans = window.prompt(blanks.length + ' CE(s) in this view have no discipline.' + NL + NL +
-      'Type the discipline to give them (' + CE_DISCIPLINES.join(', ') + '):');
+    const ans = await uiPrompt(blanks.length + ' CE(s) in this view have no discipline.' + NL + NL + 'Pick the discipline to give them.',
+      {choices: CE_DISCIPLINES, required: true, requiredMsg: 'Pick a discipline.', ok: 'Continue'});
     if (ans === null) return;
     const pick = CE_DISCIPLINES.find(d => d.toUpperCase() === String(ans).trim().toUpperCase());
     if (!pick) { showToast('"' + ans + '" is not one of: ' + CE_DISCIPLINES.join(', ') + '.', true); return; }
@@ -11259,10 +11259,10 @@ apvAbsent && (() => {
         /*#__PURE__*/React.createElement("button", {
           style:btn('danger'),
           onClick: async () => {
-            const why = prompt('Take ' + (l.name || l.user) + ' out of the routing for this CE?' + String.fromCharCode(10,10) + 'Why? (goes on the record, required)');
+            const why = await uiPrompt('Take ' + (l.name || l.user) + ' out of the routing for this CE?' + String.fromCharCode(10,10) + 'Why? It goes on the record.',
+              {multiline: true, required: true, requiredMsg: 'A reason is required to skip a signatory.', ok: 'Skip this line'});
             if (why == null) return;
-            if (!why.trim()) { showToast('A reason is required to skip a signatory.', true); return; }
-            if (await apvAdminLine('skip', l.id, why.trim())) setApvAbsent(null);
+            if (await apvAdminLine('skip', l.id, why)) setApvAbsent(null);
           }
         }, "Skip this line")))),
     /*#__PURE__*/React.createElement("div", {style:{display:'flex',justifyContent:'flex-end',marginTop:6}},
@@ -12394,9 +12394,9 @@ tab === 'dashboard' && (() => {
       style: { ...INP, width: 100 },
       title: "The unit the Quantity is counted in. Prints after it: 3 PCS, 1 LOT.",
       value: cur,
-      onChange: e => {
+      onChange: async e => {
         let v = e.target.value;
-        if (v === '__other') { v = String(window.prompt('Unit for the quantity (e.g. METERS, ROLLS):', '') || '').trim().toUpperCase(); if (!v) return; }
+        if (v === '__other') { v = String((await uiPrompt('Unit for the quantity (e.g. METERS, ROLLS)', {placeholder: 'e.g. METERS', required: true, ok: 'Use this unit'})) || '').trim().toUpperCase(); if (!v) return; }
         setInfo(p => ({ ...p, qtyUom: v }));
       }
     }, (QTY_UOMS.includes(cur) ? QTY_UOMS : [...QTY_UOMS, cur]).map(u => /*#__PURE__*/React.createElement("option", { key: u, value: u }, u)),
@@ -14979,7 +14979,7 @@ tab === 'dashboard' && (() => {
       try {
         const d = {info, ceType, mp, tools, mats, ppe, misc, notes, approvers, sowItems, mobVehicles, demobVehicles};
         const url = window.location.href.split('?')[0] + '?draft=' + btoa(JSON.stringify(d));
-        navigator.clipboard.writeText(url).then(() => showToast('🔗 Share link copied to clipboard!')).catch(() => { prompt('Copy this link:', url); });
+        navigator.clipboard.writeText(url).then(() => showToast('🔗 Share link copied to clipboard!')).catch(() => { uiPrompt('Copy this link', {value: url, readonly: true, ok: 'Done', cancel: false}); });
       } catch(e) { showToast('Failed to generate share link.', true); }
     },
     title: "Copy a link that opens this CE as it is now in someone else's app. Anyone with the link sees the figures."

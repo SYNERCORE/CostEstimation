@@ -36,14 +36,14 @@ const acc = cut(app, 'const acceptRequest = async (e, extra) => {', 'const submi
 const run = (info, answer, taken, dbRes, role) => {
   const calls = { toasts: [], accepted: null, hist: null, audit: [] };
   const fn = new Function('isRequestor', 'showToast', 'window', 'nextCeNum', 'history', 'ceNums', 'dbFindCEByNum', 'dbFindCESeqClash', 'dbAcceptRequest',
-    'currentUser', 'setHistory', 'LS', 'logSwallowed', 'setCeNums', 'auditLog', 'companies', 'nextCeNumForCompany',
+    'currentUser', 'setHistory', 'LS', 'logSwallowed', 'setCeNums', 'auditLog', 'companies', 'nextCeNumForCompany', 'uiPrompt',
     acc + NL + 'return acceptRequest;')(
     role === 'requestor', (m, e) => calls.toasts.push({ m, e: !!e }),
     { prompt: () => answer }, () => 'SHIC-CE-2026-1190', [], [],
     async () => taken, async () => null,
     async (id, o, n, i) => { calls.accepted = { id, o, n, i }; return dbRes || { ok: true }; },
     { name: 'Est One', username: 'est1' }, f => { calls.hist = f([{ id: 7, ceNum: 'RCE-45', info: { request: true } }, { id: 8, ceNum: 'X', info: {} }]); },
-    { get: () => [{ id: 7 }], set: () => {} }, () => {}, () => {}, (a, d) => calls.audit.push([a, d]), [], () => 'SHIC-CE-2026-1190');
+    { get: () => [{ id: 7 }], set: () => {} }, () => {}, () => {}, (a, d) => calls.audit.push([a, d]), [], () => 'SHIC-CE-2026-1190', () => Promise.resolve(answer));
   return fn({ id: 7, info }).then(() => calls);
 };
 const REQ = { ceNum: 'RCE-45', requestNum: 'RCE-45', request: true };

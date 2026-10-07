@@ -20,10 +20,10 @@ ck('all by hand: nobody routed, both listed', all.routed === 0 && all.byHand.len
 const again = notice(A, { a: { at: 1 } }, {}, U);
 ck('after a Return, a signature that still stands is not asked again, so step 2 is notified now', again.now.length === 2 && again.later.length === 0);
 ck('an admin-skipped line is left out', notice(A, {}, { a: true }, U).now.length === 2);
-ck('submitting asks first and stops on Cancel', app.indexOf('apvRoutingNotice(approvers, _kept,') > 0 && app.indexOf('if (!confirm(msg)) return; }') > 0);
-ck('the confirmation comes before anything is saved', app.indexOf('if (!confirm(msg)) return; }') < app.indexOf('const ok = await apvPersist(apv, _keptN'));
-ck('all by hand gets a warning, not only a toast', app.indexOf("alert('Nobody would be notified.") > 0);
-ck('the message says nobody is notified until OK', app.indexOf('Nobody is notified until you press OK.') > 0);
+ck('submitting asks first and stops on Cancel', app.indexOf('apvRoutingNotice(approvers, _kept,') > 0 && app.indexOf("if (!await uiConfirm(msg, {ok: 'Submit for approval'") > 0);
+ck('the confirmation comes before anything is saved', app.indexOf("if (!await uiConfirm(msg, {ok: 'Submit for approval'") < app.indexOf('const ok = await apvPersist(apv, _keptN'));
+ck('all by hand gets a warning, not only a toast', app.indexOf("uiAlert('Nobody would be notified.") > 0);
+ck('the message says nobody is notified until you submit', app.indexOf('Nobody is notified until you submit.') > 0);
 /* auto-link: a named signatory is linked to the one account with that name */
 const al = new Function(apv.slice(apv.indexOf('function apvAutoLink('), apv.indexOf('/* What submitting will do')) + '; return apvAutoLink;')();
 const U2 = [{ username: 'km', name: 'Kenneth Mendoza' }, { username: 'ju', name: 'Jhuniel Ubana' }, { username: 'd1', name: 'Dan Ong' }, { username: 'd2', name: 'Dan Ong' }, { username: 'est', name: 'Eddie Estimator' }];

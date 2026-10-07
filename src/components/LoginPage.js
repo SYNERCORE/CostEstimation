@@ -273,8 +273,8 @@
   /*#__PURE__*/React.createElement("span", {
     style: { color: MT, margin: '0 7px', fontSize: 11 }
   }, "\u00b7"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => {
-      if (!confirm('Open test mode?\n\nA sandbox for trying the app out. SharePoint is switched off and everything you do stays in this browser, so nothing can reach the site or be seen by anyone else.\n\nIt starts empty -- you will be asked to set up an admin the way a new device is. Your real data is untouched and comes back when you leave.')) return;
+    onClick: async () => {
+      if (!await uiConfirm('Open test mode?\n\nA sandbox for trying the app out. SharePoint is switched off and everything you do stays in this browser, so nothing can reach the site or be seen by anyone else.\n\nIt starts empty -- you will be asked to set up an admin the way a new device is. Your real data is untouched and comes back when you leave.')) return;
       setTestMode(true);
       location.reload();
     },
@@ -327,7 +327,7 @@
       marginTop: 6,
       fontSize: 11
     },
-    onClick: () => {
+    onClick: async () => {
       /* Only account/auth state. The previous filter matched k.startsWith('shic'),
          which also deleted shic:history, shic:masterlist, shic:ce_cache:* and
          drafts — i.e. every locally cached CE. On a browser that had never
@@ -339,13 +339,13 @@
       let ceCount = 0;
       try { ceCount = (JSON.parse(localStorage.getItem('shic:history') || '[]') || []).length; } catch (_e) {}
       const NL = String.fromCharCode(10);
-      if (confirm(
+      if (await uiConfirm(
         'Reset local accounts?' + NL + NL +
         'Removes ' + doomed.length + ' locally stored account/session entr' + (doomed.length === 1 ? 'y' : 'ies') +
         ' and recreates the default admin.' + NL + NL +
         'KEPT: your ' + ceCount + ' cached CE(s), masterlist, scope library and drafts.' + NL +
         'KEPT: SharePoint connection settings.' + NL + NL +
-        'Click OK to confirm.')) {
+        'Nothing on the site is touched.', {ok: 'Reset accounts', danger: true})) {
         doomed.forEach(k => localStorage.removeItem(k));
         sessionStorage.clear();
         location.reload();

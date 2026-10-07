@@ -145,14 +145,14 @@ const row = (spId, id, title) => ({Id: spId, shicData: JSON.stringify({id, title
     'a site merged before this fix holds both libraries; the reader is where that stops showing');
 
   console.log('\nand the duplicates already on the site can be cleared on purpose:');
-  ck('there is an action for it', /const dedupeLib = \(\) => \{/.test(app));
+  ck('there is an action for it', /const dedupeLib = async \(\) => \{/.test(app));
   ck('it is in the Scope Library toolbar', /onClick: dedupeLib/.test(app));
   ck('it says how many before doing anything', /Remove ' \+ dropped \+ ' duplicate/.test(app));
   ck('it keeps the more recently imported one', /\[\.\.\.sowLib\]\.reverse\(\)/.test(app));
   ck('and says so when there is nothing to do', /No duplicates — every service is listed once/.test(app));
 
   console.log('\nand importing one service does not delete the rest:');
-  ck('merge is the default, not replace', /Merge: keep your other/.test(app),
+  ck('merge is the default, not replace', /Merge keeps your other/.test(app),
     'uploading one new service deleted the other sixty-eight');
   ck('it keeps every service not in the file',
     /const merged = sowLib\.map\(s => \{/.test(app) &&

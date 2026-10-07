@@ -24,8 +24,8 @@ const ck = (name, cond, extra) => {
   else { console.log('  FAIL  ' + name + (extra !== undefined ? '  -> ' + extra : '')); fails++; }
 };
 
-const del = grab(/const deleteSowTask = item => \{[\s\S]*?\n  \};/, 'deleteSowTask');
-const clr = grab(/const clearAllSow = \(\) => \{[\s\S]*?\n  \};/, 'clearAllSow');
+const del = grab(/const deleteSowTask = async item => \{[\s\S]*?\n  \};/, 'deleteSowTask');
+const clr = grab(/const clearAllSow = async \(\) => \{[\s\S]*?\n  \};/, 'clearAllSow');
 const snap = grab(/const sowSnapshot = \(\) => \(\{[\s\S]*?\n  \}\);/, 'sowSnapshot');
 const rest = grab(/const sowRestore = snap => \{[\s\S]*?\n  \};/, 'sowRestore');
 const offer = grab(/const sowOfferUndo = \(msg, snap\) => \{[\s\S]*?\n  \};/, 'sowOfferUndo');
@@ -38,7 +38,7 @@ ck('the snapshot is taken before anything is removed',
   del.indexOf('const snap = sowSnapshot();') < del.indexOf('setSowItems(p => p.filter'),
   'a snapshot taken after the delete restores the delete');
 ck('Clear All offers undo too', /sowOfferUndo\(/.test(clr));
-ck('and Clear All still asks first', /!confirm\('Clear all scope items\?/.test(clr));
+ck('and Clear All still asks first', /!await uiConfirm\('Clear all scope items\?/.test(clr));
 ck('the Clear All button goes through it', /onClick: clearAllSow/.test(src),
   'a second copy of the clear logic in the button would drift from this one');
 

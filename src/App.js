@@ -560,7 +560,7 @@ function App({
     showToast(n === entries.length ? 'Restored ' + n + ' item' + (n === 1 ? '' : 's') + '.' : 'Restored ' + n + '; ' + (entries.length - n) + ' already in the list under the same name.');
   };
   const mlPurge = async entries => {
-    if (!confirm('Delete ' + entries.length + ' item' + (entries.length === 1 ? '' : 's') + ' permanently?\n\nThis cannot be undone.')) return;
+    if (!await uiConfirm('Delete ' + entries.length + ' item' + (entries.length === 1 ? '' : 's') + ' permanently?\n\nThis cannot be undone.')) return;
     const r = await dbMLTrashOp({ remove: entries.map(e => e.key) });
     setMlTrash(r.list || []);
     auditLog('masterlist_purge', entries.map(e => e.tab + ':' + mlTrashItemName(e.item)).join(', '), currentUser?.username);
@@ -1404,7 +1404,7 @@ function App({
      added to it from the CE -- description, unit and unit cost, plus a tool's
      tier source figures -- under the next code in that section. The category
      is 'General' until someone files it on the Masterlist. */
-  const addRowsToML = (tab, list) => {
+  const addRowsToML = async (tab, list) => {
     const cur = masterlist[tab] || [];
     const have = new Set(cur.map(m => String(m.desc || '').trim().toUpperCase()));
     const pfx = 'SHIC-' + ({ tools: 'TL', materials: 'MT', ppe: 'PP' }[tab] || 'XX') + '-';
@@ -1419,7 +1419,7 @@ function App({
       add.push({ id: uid(), code: pfx + String(++n).padStart(3, '0'), category: 'General', desc: d, uom: r.uom || 'Lot', cost: N(r.cost), ...(tab === 'tools' ? src : {}) });
     });
     if (!add.length) { showToast('Already on the Masterlist.'); return; }
-    if (!confirm('Add ' + add.length + ' item(s) to the shared Masterlist?\n\n' + add.map(a => a.desc + ' — ' + a.uom + ' @ P' + a.cost).join('\n') + '\n\nEveryone will see them. Set their category on the Masterlist later.')) return;
+    if (!await uiConfirm('Add ' + add.length + ' item(s) to the shared Masterlist?\n\n' + add.map(a => a.desc + ' — ' + a.uom + ' @ P' + a.cost).join('\n') + '\n\nEveryone will see them. Set their category on the Masterlist later.')) return;
     saveML({ ...masterlist, [tab]: [...add, ...cur] });
     auditLog('masterlist_add_from_ce', tab + ': ' + add.map(a => a.desc).join(', '), currentUser?.username);
     showToast(add.length + ' item(s) added to the Masterlist (' + tab + '), category General.');
@@ -2104,11 +2104,11 @@ function App({
     });
   };
   /* Delete a scope task and, with confirmation, the resources assigned to it. */
-  const deleteSowTask = item => {
+  const deleteSowTask = async item => {
     const ids = sowTaskGroup(item);
     const subs = ids.length - 1;
     const n = ids.reduce((s, id) => s + taskResCount(id), 0);
-    if ((n > 0 || subs > 0) && !confirm('Delete this scope task' +
+    if ((n > 0 || subs > 0) && !await uiConfirm('Delete this scope task' +
       (subs > 0 ? ' and its ' + subs + ' sub-task' + (subs === 1 ? '' : 's') : '') +
       (n > 0 ? ', plus the ' + n + ' resource row' + (n === 1 ? '' : 's') + ' assigned to ' + (subs > 0 ? 'them' : 'it') : '') +
       '?' + (n > 0 ? '\n\nThe resources will be removed from the Manpower / Tools / Consumables / PPE / Miscellaneous tabs too, so the totals will change.' : '') +
@@ -2122,8 +2122,8 @@ function App({
   };
   /* Clear All: the scope goes, the resources stay and fall back to Unassigned.
      One click used to take the whole method with it. */
-  const clearAllSow = () => {
-    if (!confirm('Clear all scope items?\n\nResources stay in their tabs and keep their costs, but they will all become Unassigned in the SOW Breakdown.' +
+  const clearAllSow = async () => {
+    if (!await uiConfirm('Clear all scope items?\n\nResources stay in their tabs and keep their costs, but they will all become Unassigned in the SOW Breakdown.' +
       '\n\nYou can undo this for ' + (SOW_UNDO_MS / 1000) + ' seconds.')) return;
     const snap = sowSnapshot();
     const count = sowItems.length;
@@ -2596,7 +2596,7 @@ function App({
     const d = draft || (sharedDrafts || []).find(x => x.draftId === draftId) || {};
     const own = !d.savedBy || d.savedBy === currentUser.username;
     if (!own && !isAdmin) { showToast('Only ' + (d.savedByName || d.savedBy) + ' or an admin can delete this draft.', true); return; }
-    if (!asked && !confirm('Delete this draft' + (d.info && d.info.ceNum ? ' of ' + d.info.ceNum : '') + (own ? '' : ' by ' + (d.savedByName || d.savedBy)) + '?\n\n' +
+    if (!asked && !await uiConfirm('Delete this draft' + (d.info && d.info.ceNum ? ' of ' + d.info.ceNum : '') + (own ? '' : ' by ' + (d.savedByName || d.savedBy)) + '?\n\n' +
       'Changes not yet saved will be lost for good. The saved CE and its CE Monitoring entry are not affected.')) return;
     try {
       await dbDeleteDraft(draftId);
@@ -2637,7 +2637,7 @@ function App({
     const what = which === 'old'
       ? list.length + ' draft(s) nobody has touched in 30 days'
       : list.length + ' draft(s) whose CE has since been saved';
-    if (!confirm('Clear ' + what + '?' + String.fromCharCode(10, 10) +
+    if (!await uiConfirm('Clear ' + what + '?' + String.fromCharCode(10, 10) +
       list.slice(0, 12).map(d => '  \u2022 ' + ((d.info && d.info.ceNum) || '(no CE#)') + ' \u2014 ' + (d.savedByName || d.savedBy || '')).join(String.fromCharCode(10)) +
       (list.length > 12 ? String.fromCharCode(10) + '  \u2026 and ' + (list.length - 12) + ' more' : '') +
       String.fromCharCode(10, 10) + (notMine ? notMine + ' of them belong to somebody else. ' : '') +
@@ -2658,8 +2658,8 @@ function App({
     loadSharedDrafts(true);
   };
   /* \u2500\u2500 Resume a draft \u2500\u2500 */
-  const resumeDraft = d => {
-    if (confirm('Resume draft by ' + d.savedByName + '? This will replace your current unsaved work.')) {
+  const resumeDraft = async d => {
+    if (await uiConfirm('Resume draft by ' + d.savedByName + '? This will replace your current unsaved work.')) {
       applyDraftData(d);
       setDraftsOpen(false);
       const age = Math.round((Date.now() - new Date(d.savedAt).getTime()) / 60000);
@@ -2705,7 +2705,7 @@ function App({
      Nothing is written to history. This changes what is on screen; saving is
      still a separate, deliberate act -- and if the number already belongs to a
      saved CE, saving would overwrite that record, so say so first. */
-  const syncRatesFromML = () => {
+  const syncRatesFromML = async () => {
     const norm = v => String(v || '').trim().toUpperCase();
     const mlMp = new Map((masterlist.manpower || []).filter(m => m.role).map(m => [norm(m.role), m]));
     const byDesc = list => new Map((list || []).filter(x => x.desc).map(x => [norm(x.desc), x]));
@@ -2728,7 +2728,7 @@ function App({
     const money = v => 'P' + v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     const shown = changes.slice(0, 12).map(c => '  ' + c.what + ':  ' + money(c.was) + '  ->  ' + money(c.now)).join('\n');
     const existing = history.some(h => norm(h.info && h.info.ceNum || h.ceNum) === norm(info.ceNum));
-    if (!confirm(
+    if (!await uiConfirm(
       'Re-price ' + changes.length + ' row' + (changes.length === 1 ? '' : 's') + ' from the masterlist?\n\n' +
       shown + (changes.length > 12 ? '\n  ...and ' + (changes.length - 12) + ' more' : '') +
       '\n\nRows with no masterlist match keep the price they have.' +
@@ -2859,7 +2859,7 @@ function App({
         ((badCost.role || badCost.desc || 'the row with no description').slice(0, 40)) + '.', true);
       return;
     }
-    if (!confirmZeroCost('Save anyway?')) return;
+    if (!await confirmZeroCost('Save anyway?')) return;
     const dup = await dbFindCEByNum(ceNum).catch(() => null);
     /* A logged request is built out and saved over under its own number. Only
        that number: renaming the CE to someone else's number is still refused. */
@@ -2916,9 +2916,9 @@ function App({
       const _chg = ceChangedSince(_loadedAt.current, dup, currentUser?.username);
       if (_chg) {
         const _when = new Date(_chg.at).toLocaleString('en-PH', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'});
-        if (!confirm(_chg.by + ' saved ' + ceNum + ' at ' + _when + ', after you opened it.' + String.fromCharCode(10, 10) +
-          'Saving now REPLACES their changes with what is on your screen.' + String.fromCharCode(10, 10) +
-          'OK = replace theirs with mine.' + String.fromCharCode(10) + 'Cancel = do not save; open it again from History to see theirs.')) {
+        if (!await uiConfirm(_chg.by + ' saved ' + ceNum + ' at ' + _when + ', after you opened it.' + String.fromCharCode(10, 10) +
+          'Saving now REPLACES their changes with what is on your screen. To see theirs, do not save: open it again from History.',
+          {ok: 'Replace theirs with mine', cancel: 'Do not save', danger: true})) {
           showToast('Not saved — ' + _chg.by + ' changed ' + ceNum + ' at ' + _when + '. Their version is untouched.', true);
           return;
         }
@@ -2946,7 +2946,7 @@ function App({
             (_lost.total ? 'Routing starts again from the first step, and all ' + _lost.total + ' signatory(ies) sign again.' : '') +
             String.fromCharCode(10, 10) + 'Save and clear them?' + String.fromCharCode(10) +
             'Cancel to keep them — use ↻ Revise to save your changes as a new revision instead.';
-          if (!confirm(_msg)) { showToast('Not saved — the signatures on ' + ceNum + ' are untouched.'); return; }
+          if (!await uiConfirm(_msg, {ok: 'Save and clear them', cancel: 'Keep signatures', danger: true})) { showToast('Not saved — the signatures on ' + ceNum + ' are untouched.'); return; }
         }
       }
       if (_wipes) {
@@ -3115,7 +3115,7 @@ function App({
     { const _ri = ((e && e.data) || e || {}).info || {};
       if (_ri.request && !_ri.acceptedCeNum && String(_ri.ceNum || '') === String(_ri.requestNum || '')) {
         showToast('Review this request first -- it gets its CE number when the Cost Estimation team proceeds with it. Use Review beside its number.', true); return; } }
-    if (hasUnsavedWork() && !confirm('Load this CE? Your current unsaved work will be replaced.\n\nTip: save a draft first (Ctrl+S or the Save Draft button) if you need to keep it.')) return;
+    if (hasUnsavedWork() && !await uiConfirm('Load this CE? Your current unsaved work will be replaced.\n\nTip: save a draft first (Ctrl+S or the Save Draft button) if you need to keep it.')) return;
     let d = e.data || e;
     // SP history items have numeric id but no tools — fetch full CE before applying
     if (d.tools === undefined) {
@@ -3407,9 +3407,9 @@ function App({
         /* Asked first, and only then cleared. And the signed lines go with the
            images: a line marked signed with no signature on it shows an
            approval nobody can see. */
-        if (!confirm('This clears ' + Object.keys(e.signatures).length + ' signature(s) on ' + num + '.' + String.fromCharCode(10, 10) +
+        if (!await uiConfirm('This clears ' + Object.keys(e.signatures).length + ' signature(s) on ' + num + '.' + String.fromCharCode(10, 10) +
           'The wording changed since it was saved, and a signature belongs to the CE it was put to.' + String.fromCharCode(10, 10) +
-          'Go on and clear them?')) { showToast('Nothing was changed — the signatures on ' + num + ' stand.'); return false; }
+          'Go on and clear them?', {ok: 'Clear them', cancel: 'Keep signatures', danger: true})) { showToast('Nothing was changed — the signatures on ' + num + ' stand.'); return false; }
         e.signatures = {}; sigs = {};
         apv = {...apv, lines: {}};
         e.info = {...e.info, approval: apv};
@@ -3451,7 +3451,7 @@ function App({
   const apvSubmit = async () => {
     if (!apvRoute(approvers).length) {
       /* Every signatory is on "Sign by hand": nobody is part of the routing, so nobody would be notified and nothing would wait on anyone. */
-      alert('Nobody would be notified.\n\nEvery signatory on this CE is set to "Sign by hand", so there is no one to route it to. Approvers are told only when the CE is routed to their account.\n\nOn each signatory card below, pick the person from the dropdown (it starts on "Sign by hand"), then Submit again.');
+      uiAlert('Nobody would be notified.\n\nEvery signatory on this CE is set to "Sign by hand", so there is no one to route it to. Approvers are told only when the CE is routed to their account.\n\nOn each signatory card below, pick the person from the dropdown (it starts on "Sign by hand"), then Submit again.');
       showToast('No approver is linked to an account — pick a user on at least one signatory card, then Submit again.', true); return;
     }
     if (!String(info.ceNum || '').trim()) { showToast('Give the CE a number first.', true); return; }
@@ -3475,8 +3475,8 @@ function App({
         ...(nt.later.length ? ['', 'Notified later, as the step before them signs:', ...nt.later.map(x => '  \u2022 ' + x)] : []),
         ...(nt.byHand.length ? ['', '\u26A0 Set to "Sign by hand" \u2014 NOT part of the routing, never notified, and nothing waits for them. Their signature has to be put on by hand:', ...nt.byHand.map(x => '  \u2022 ' + x)] : []),
         ...(nt.noEmail.length ? ['', '\u26A0 No email on their account, so no Teams message can reach them:', ...nt.noEmail.map(x => '  \u2022 ' + x), 'Add it in Admin \u2192 Users, or tell them yourself.'] : []),
-        '', 'Nobody is notified until you press OK.'].join('\n');
-      if (!confirm(msg)) return; }
+        '', 'Nobody is notified until you submit.'].join('\n');
+      if (!await uiConfirm(msg, {ok: 'Submit for approval', danger: false})) return; }
     const apv = { state: 'pending', submittedAt: me.at, submittedBy: me.by, submittedByName: me.byName, figSig: apvFigSig(_e0), contentSig: apvContentSig(_e0), lines: _kept,
       skipped: (info.approval && info.approval.skipped) || {},
       log: [...((info.approval && info.approval.log) || []), {...me, action: 'submitted', kept: _keptN}] };
@@ -3487,8 +3487,8 @@ function App({
     showToast('Submitted for approval — waiting on ' + s0.waiting.map(l => l.name || l.user).join(', ') + '.' +
       (_keptN ? ' ' + _keptN + ' signature(s) from before the return still stand.' : ''));
   };
-  const apvWithdraw = () => {
-    if (!confirm('Withdraw this CE from approval?\n\nSignatures collected so far are cleared.')) return;
+  const apvWithdraw = async () => {
+    if (!await uiConfirm('Withdraw this CE from approval?\n\nSignatures collected so far are cleared.')) return;
     const me = _apvMe(), a = info.approval || {};
     apvPersist({...a, state: 'withdrawn', lines: {}, log: [...(a.log || []), {...me, action: 'withdrawn'}]}, apvStripSigs(approvers, signatures))
       .then(ok => ok && showToast('Withdrawn from approval.'));
@@ -4062,7 +4062,7 @@ function App({
       const p = (masterlist?.ppe || []).find(r => r.desc.toUpperCase() === desc.toUpperCase());
       return p ? p.cost : 0;
     };
-    const applySelected = () => {
+    const applySelected = async () => {
       const selected = sowLib.filter(s => sowSel[s.id]);
       if (!selected.length) {
         showToast('Select at least one service first.', true);
@@ -4079,12 +4079,12 @@ function App({
           return t && (sowItems || []).some(it => it.type === 'main' &&
             String(it.text || '').replace(/^x\d+\s+/i, '').trim().toUpperCase() === t);
         });
-        if (already.length && !confirm(
+        if (already.length && !await uiConfirm(
           (already.length === 1 ? 'This service is' : 'These ' + already.length + ' services are') +
           ' already in this CE:\n\n  ' + already.map(s => s.title).join('\n  ') +
           '\n\nAdding again creates a SECOND set of scope tasks and a second set of ' +
           'resources, so the total will roughly double for them.\n\n' +
-          'To change what is already there, edit it in SOW Breakdown instead.\n\nAdd anyway?')) return;
+          'To change what is already there, edit it in SOW Breakdown instead.\n\nAdd anyway?', {ok: 'Add anyway', danger: true})) return;
       }
 
       /* Build the SOW tasks FIRST, so every resource can be filed against the
@@ -4892,7 +4892,7 @@ function App({
        file analyser lifted out of some spreadsheet is worth showing beside a
        rate for a person to weigh, which the clock does, but it is not worth
        writing into the masterlist unattended. */
-    const fillFromHistory = () => {
+    const fillFromHistory = async () => {
       const kind = ML_HIST_KIND[mlTab];
       const key = (mlTab === 'manpower' || mlTab === 'vehicles') ? 'rate' : 'cost';
       const nk = mlTab === 'manpower' ? 'role' : 'desc';
@@ -4915,7 +4915,7 @@ function App({
       const sample = found.slice(0, 8)
         .map(f => '  ' + f.name.slice(0, 38) + '  P' + f.rate.toLocaleString('en-PH', { minimumFractionDigits: 2 }) + '  (' + f.ce + ')')
         .join('\n');
-      if (!confirm('Price ' + found.length + ' of ' + blank.length + ' unpriced item(s) from the most recent CE each was charged on?\n\n' +
+      if (!await uiConfirm('Price ' + found.length + ' of ' + blank.length + ' unpriced item(s) from the most recent CE each was charged on?\n\n' +
         sample + (found.length > 8 ? '\n  ... and ' + (found.length - 8) + ' more' : '') +
         '\n\nThe other ' + (blank.length - found.length) + ' appear in no saved CE and are left alone.\n' +
         'Rates read out of analysed spreadsheets are not used.')) return;
@@ -5017,7 +5017,7 @@ function App({
     const delML = async id => {
       const it = (masterlist[mlTab] || []).find(r => r.id === id);
       if (!it) return;
-      if (!confirm('Delete "' + mlTrashItemName(it) + '" from the ' + mlTab + ' list?\n\nIt goes to the Trash and can be restored for 30 days.')) return;
+      if (!await uiConfirm('Delete "' + mlTrashItemName(it) + '" from the ' + mlTab + ' list?\n\nIt goes to the Trash and can be restored for 30 days.')) return;
       await mlToTrash(mlTab, [it]);
       saveML({
         ...masterlist,
@@ -5026,12 +5026,12 @@ function App({
       auditLog('masterlist_delete', mlTab + ': ' + mlTrashItemName(it), currentUser?.username);
       showToast('Moved to Trash — restore it from 🗑 Trash within 30 days.');
     };
-    const applyEscalation = () => {
+    const applyEscalation = async () => {
       const pct = parseFloat(escPct);
       if (isNaN(pct) || pct === 0) { showToast('Enter a non-zero %', true); return; }
       const costKey = (mlTab === 'manpower' || mlTab === 'vehicles') ? 'rate' : 'cost';
       const count = (masterlist[mlTab] || []).length;
-      if (!window.confirm('Apply ' + (pct > 0 ? '+' : '') + pct + '% to all ' + count + ' ' + mlTab + ' rates?')) return;
+      if (!await uiConfirm('Apply ' + (pct > 0 ? '+' : '') + pct + '% to all ' + count + ' ' + mlTab + ' rates?')) return;
       saveML({...masterlist, [mlTab]: (masterlist[mlTab] || []).map(r => ({...r, [costKey]: Math.round(N(r[costKey]) * (1 + pct / 100))}))});
       showToast('Applied ' + (pct > 0 ? '+' : '') + pct + '% to ' + count + ' ' + mlTab + ' items.');
       setEscPct('');
@@ -5122,8 +5122,8 @@ function App({
       onClick: () => downloadMLTemplate(mlTab)
     }, "Download Template"), /*#__PURE__*/React.createElement("button", {
       style: btn('danger', true),
-      onClick: () => {
-        if (confirm('Clear all ' + colL[mlTab][2].toLowerCase() + ' items in the ' + mlTab + ' list?\n\nThey go to the Trash and can be restored for 30 days.')) {
+      onClick: async () => {
+        if (await uiConfirm('Clear all ' + colL[mlTab][2].toLowerCase() + ' items in the ' + mlTab + ' list?\n\nThey go to the Trash and can be restored for 30 days.')) {
           mlToTrash(mlTab, masterlist[mlTab] || []);
           saveML({
             ...masterlist,
@@ -5968,7 +5968,7 @@ function App({
      reads blank. Admins can give every blank CE in the current view one:
      only blanks are written, so a CE that already has a discipline is never
      overwritten, and the view's own filters pick which ones. */
-  const fillBlankDisc = () => {
+  const fillBlankDisc = async () => {
     if (!isAdmin) return;
     const blanks = sortedHistory.filter(e => !e._draft && typeof e.id === 'number' && !String(monDisc(e, monOf(e)) || '').trim());
     if (!blanks.length) { showToast('Every CE in this view already has a discipline.'); return; }
@@ -5978,7 +5978,7 @@ function App({
     if (ans === null) return;
     const pick = CE_DISCIPLINES.find(d => d.toUpperCase() === String(ans).trim().toUpperCase());
     if (!pick) { showToast('"' + ans + '" is not one of: ' + CE_DISCIPLINES.join(', ') + '.', true); return; }
-    if (!window.confirm('Set ' + pick + ' on ' + blanks.length + ' CE(s)? Ones that already have a discipline are not touched.')) return;
+    if (!await uiConfirm('Set ' + pick + ' on ' + blanks.length + ' CE(s)? Ones that already have a discipline are not touched.')) return;
     blanks.forEach(e => updateMon(e.id, 'designation', pick));
     auditLog('bulk_discipline', pick + ' x' + blanks.length, currentUser?.username);
     showToast(pick + ' set on ' + blanks.length + ' CE(s).');
@@ -6383,7 +6383,7 @@ function App({
         const effCeNum = ceNum || fallbackCeNum;
         const dupIdx = history.findIndex(h => (h.info?.ceNum || h.ceNum) === effCeNum);
         if (dupIdx >= 0) {
-          const confirmed = window.confirm(`CE ${effCeNum} already exists in history. Overwrite it?`);
+          const confirmed = await uiConfirm(`CE ${effCeNum} already exists in history. Overwrite it?`);
           if (!confirmed) { errors.push(file.name + ': skipped (duplicate)'); setCeImportProgress({done, total:list.length, errors}); continue; }
         }
         const res = await dbSaveHistory(entry);
@@ -6548,7 +6548,7 @@ function App({
         '',
         'Proceed with import?'
       ].filter(Boolean).join('\n');
-      if (!confirm(preview)) return;
+      if (!await uiConfirm(preview)) return;
 
       // Batch insert new CEs — 5 at a time to avoid SP throttling
       const BATCH = 5;
@@ -7767,12 +7767,13 @@ function App({
       setEditDraft(null);
       showToast('Service updated.');
     };
-    const delSvc = id => {
-      if (!confirm('Delete this service?')) return;
+    const delSvc = async id => {
+      if (!await uiConfirm('Delete this service?')) return false;
       /* Named, so SharePoint removes this one and leaves alone anything else it
          has that this browser has not seen yet. */
       saveSowLib(sowLib.filter(s => s.id !== id), {deleted: [id]});
       showToast('Deleted.');
+      return true;
     };
     const addSvc = () => {
       const blank = {
@@ -7799,7 +7800,7 @@ function App({
        Loading now keeps one of each, but the extra rows are still on the site
        until something writes over them -- this is that something, on purpose
        and with a count, rather than as a side effect of editing a service. */
-    const dedupeLib = () => {
+    const dedupeLib = async () => {
       const key = s => String(s.cat || '').toUpperCase().trim() + '|' + String(s.title || '').toUpperCase().trim();
       const seen = {};
       const kept = [];
@@ -7813,13 +7814,13 @@ function App({
       });
       const dropped = droppedIds.length;
       if (!dropped) { showToast('No duplicates — every service is listed once.'); return; }
-      if (!confirm('Remove ' + dropped + ' duplicate service' + (dropped === 1 ? '' : 's') + '?\n\n' +
+      if (!await uiConfirm('Remove ' + dropped + ' duplicate service' + (dropped === 1 ? '' : 's') + '?\n\n' +
         kept.length + ' will remain. Where two services share a category and title, the more recently imported one is kept.')) return;
       saveSowLib(kept, {deleted: droppedIds});
       showToast('Removed ' + dropped + ' duplicate' + (dropped === 1 ? '' : 's') + ' — ' + kept.length + ' services remain.');
     };
-    const resetLib = () => {
-      if (!confirm('Reset to defaults? All custom changes will be lost.')) return;
+    const resetLib = async () => {
+      if (!await uiConfirm('Reset to defaults? All custom changes will be lost.')) return;
       /* This list and nothing else -- the one caller besides Import-replace
          that genuinely means to rewrite the whole library. */
       saveSowLib(window.SOW_LIBRARY, {replace: true});
@@ -8342,9 +8343,9 @@ function App({
         ...btn('danger', true),
         marginLeft: 'auto'
       },
-      onClick: () => {
-        delSvc(editDraft.id);
-        cancelEdit();
+      onClick: async () => {
+        /* The editor closes only once the service is really gone: Cancel on the dialog leaves it open. */
+        if (await delSvc(editDraft.id)) cancelEdit();
       }
     }, "Delete Service")));
     return /*#__PURE__*/React.createElement("div", null, SpWizModal(), /*#__PURE__*/React.createElement("div", {
@@ -8519,17 +8520,17 @@ function App({
           const summary = 'Import ' + parsed.length + ' service' + (parsed.length === 1 ? '' : 's') + '?\n\n' +
             '  ' + fresh + ' new\n' +
             '  ' + upd + ' will update a service you already have\n\n';
-          if (confirm(summary + 'OK  \u2014  Merge: keep your other ' + rest + ' service' + (rest === 1 ? '' : 's') + '.\n' +
-                      'Cancel  \u2014  other options.')) {
+          if (await uiConfirm(summary + 'Merge keeps your other ' + rest + ' service' + (rest === 1 ? '' : 's') + '. "Other options" lets you replace the whole library instead.',
+                      {ok: 'Merge', cancel: 'Other options\u2026', danger: false})) {
             const merged = sowLib.map(s => {
               const hit = parsed.find(p => String(p.id) === String(s.id));
               return hit || s;
             }).concat(parsed.filter(s => !byId[String(s.id)]));
             saveSowLib(merged);
             showToast('Imported ' + parsed.length + ' \u2014 ' + merged.length + ' services in the library.');
-          } else if (rest > 0 && confirm('Replace the ENTIRE library with these ' + parsed.length + ' services?\n\n' +
+          } else if (rest > 0 && await uiConfirm('Replace the ENTIRE library with these ' + parsed.length + ' services?\n\n' +
                      rest + ' service' + (rest === 1 ? '' : 's') + ' not in this file will be DELETED, here and in SharePoint.\n\n' +
-                     'Export a backup first if you are not sure.')) {
+                     'Export a backup first if you are not sure.', {ok: 'Replace the library', cancel: 'Keep my library', danger: true})) {
             saveSowLib(parsed, {replace: true});
             showToast('Library replaced \u2014 ' + parsed.length + ' services.');
           }
@@ -9459,14 +9460,14 @@ function App({
     return out;
   };
   /* Returns false if the user cancels. */
-  const confirmZeroCost = action => {
+  const confirmZeroCost = async action => {
     const z = collectZeroCost();
     if (!z.length) return true;
     const preview = z.slice(0, 10).join('\n') + (z.length > 10 ? '\n... and ' + (z.length - 10) + ' more' : '');
-    return window.confirm(z.length + ' item(s) have ₱0 cost and will not contribute to the total:\n\n' + preview + '\n\n' + action);
+    return await uiConfirm(z.length + ' item(s) have ₱0 cost and will not contribute to the total:\n\n' + preview + '\n\n' + action);
   };
-  const handleGenerateCEWithCheck = () => {
-    if (!confirmZeroCost('Proceed with generating CE?')) return;
+  const handleGenerateCEWithCheck = async () => {
+    if (!await confirmZeroCost('Proceed with generating CE?')) return;
     handleGenerateCE();
   };
   /* Export the CE to Excel as the same document the printer produces: one
@@ -10285,13 +10286,13 @@ function App({
         const selP = apiKeyInput.startsWith('__p__') ? apiKeyInput.split('|')[0].slice(5) : getProvider();
         const newKey = (document.getElementById('newApiKey')?.value || '').trim();
         if (!newKey) {
-          alert('Please enter an API key.');
+          uiAlert('Please enter an API key.');
           return;
         }
         if (selP === 'copilot') {
           const ep = (document.getElementById('azureEndpt')?.value || '').trim();
           if (!ep) {
-            alert('Enter your Azure OpenAI endpoint URL.');
+            uiAlert('Enter your Azure OpenAI endpoint URL.');
             return;
           }
           setAzureEndpoint(ep);
@@ -11311,14 +11312,14 @@ statusPanel && (() => {
   };
   return /*#__PURE__*/React.createElement("div", {
     style:{position:'fixed',inset:0,background:'#000b',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center'},
-    onClick:()=>{ if (!_dirty || confirm('Discard the status change you have not saved?')) _close(); }
+    onClick:async ()=>{ if (!_dirty || await uiConfirm('Discard the status change you have not saved?')) _close(); }
   }, /*#__PURE__*/React.createElement("div", {
     style:{background:CARD,border:`1px solid ${BDR}`,borderRadius:10,padding:24,minWidth:440,maxWidth:560,maxHeight:'82vh',overflowY:'auto'},
     onClick:ev=>ev.stopPropagation()
   },
     /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}},
       /*#__PURE__*/React.createElement("b", {style:{fontSize:14}}, "⚑ Status"),
-      /*#__PURE__*/React.createElement("button", {style:btn('def',true), onClick:()=>{ if (!_dirty || confirm('Discard the status change you have not saved?')) _close(); }}, "✕ Close")),
+      /*#__PURE__*/React.createElement("button", {style:btn('def',true), onClick:async ()=>{ if (!_dirty || await uiConfirm('Discard the status change you have not saved?')) _close(); }}, "✕ Close")),
     /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,marginBottom:16,...MONO}}, (_e?.info?.ceNum || _e?.ceNum || '')),
 
     /*#__PURE__*/React.createElement("div", {style:{fontSize:10,color:MT,letterSpacing:.5,marginBottom:6}}, "CURRENT"),
@@ -11793,7 +11794,7 @@ mySigOpen && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',in
           const rd=new FileReader(); rd.onload=()=>sigFit(rd.result).then(d=>{const c=document.getElementById('mySigCanvas');const x=c.getContext('2d');const im=new Image();im.onload=()=>{x.fillStyle='#fff';x.fillRect(0,0,420,140);x.drawImage(im,0,0);};im.src=d;}).catch(er=>showToast(er.message,true)); rd.readAsDataURL(f);
         }})),
       /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>{const el=document.getElementById('mySigCanvas');const x=el.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,420,140);}}, "🗑 Clear"),
-      mySig && /*#__PURE__*/React.createElement("button", {style:btn('danger',true),onClick:()=>{if(confirm('Remove your saved signature?')){saveMySig('');setMySigOpen(false);}}}, "Remove saved"),
+      mySig && /*#__PURE__*/React.createElement("button", {style:btn('danger',true),onClick:async ()=>{if(await uiConfirm('Remove your saved signature?')){saveMySig('');setMySigOpen(false);}}}, "Remove saved"),
       /*#__PURE__*/React.createElement("button", {style:{...btn('ok'),flex:1},onClick:()=>{saveMySig(document.getElementById('mySigCanvas').toDataURL('image/png'));setMySigOpen(false);}}, "💾 Save to my account")))),
 
 /* ── Masterlist Trash ── */
@@ -13320,7 +13321,7 @@ tab === 'dashboard' && (() => {
     /*#__PURE__*/React.createElement("button", {
       style: btn('info', true),
       title: "Combine rows for the same role into the crew you actually mobilise: the largest PAX any task needs, for the total number of days",
-      onClick: () => {
+      onClick: async () => {
         const key = r => [String(r.role || '').trim().toUpperCase(), N(r.rate)].join('|');
         const rows = mp.filter(r => r.shift === shiftKey && r.role);
         const groups = {};
@@ -13336,7 +13337,7 @@ tab === 'dashboard' && (() => {
         const preview = plan.map(p2 =>
           '  ' + p2.role + ':  ' + p2.g.map(r => N(r.pax) + ' pax x ' + N(r.days) + 'd').join('  +  ') +
           '   ->   ' + p2.pax + ' pax x ' + p2.days + ' days').join('\n');
-        if (!confirm('Consolidate ' + plan.length + ' role' + (plan.length === 1 ? '' : 's') +
+        if (!await uiConfirm('Consolidate ' + plan.length + ' role' + (plan.length === 1 ? '' : 's') +
           ' into the crew you mobilise?\n\n' + preview +
           '\n\nThe largest PAX any task needs, kept for the total number of days. ' +
           'This normally COSTS MORE than the rows added up, because the crew is on site for the whole duration.' +
@@ -15355,8 +15356,8 @@ tab === 'dashboard' && (() => {
     title: 'Replace the notes and signatories with the preset for ' +
       ceTypeLabel(ceType) + ' + ' + (info.projType || 'this discipline') +
       '. Set these up in the Users tab.',
-    onClick: () => {
-      if (!_defaultsUntouched() && !confirm('Replace the current notes and signatories with the preset for this CE type and discipline?\n\nAnything typed here will be lost.')) return;
+    onClick: async () => {
+      if (!_defaultsUntouched() && !await uiConfirm('Replace the current notes and signatories with the preset for this CE type and discipline?\n\nAnything typed here will be lost.')) return;
       showToast(applyCeDefaults(ceType, info.projType, true)
         ? 'Applied the defaults for ' + (info.projType || 'this discipline') + '.'
         : 'No preset matches this CE type and discipline — set one up in the Users tab.', false);

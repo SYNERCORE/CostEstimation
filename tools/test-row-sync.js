@@ -42,17 +42,18 @@ const build = (rows, ml) => {
   /* useMemo outside React is just "call it": what matters here is the lookup
      the component ends up using, not when it is rebuilt. */
   const React = { useMemo: f => f() };
-  const fn = new Function('React', 'masterlist', 'mlType', 'showToast', 'set', 'N', 'window', 'state',
+  const fn = new Function('React', 'masterlist', 'mlType', 'showToast', 'set', 'N', 'window', 'uiConfirm', 'state',
     srcFields + NL + indexSrc + NL + src + NL + 'return syncRow;');
   const api = {
-    call: (r, ans) => {
+    call: async (r, ans) => {
       answer = ans === undefined ? true : ans;
-      fn(
+      await fn(
         React, { tools: ml }, 'tools',
         (m, err) => state.toasts.push({ m: m, err: !!err }),
         upd => { state.rows = upd(state.rows); },
         N,
-        { confirm: m => { state.confirms.push(m); return answer; } },
+        { },
+        m => { state.confirms.push(m); return Promise.resolve(answer); },
         state
       )(r);
     },
@@ -76,8 +77,9 @@ const ROWS = () => [
 ];
 
 console.log('the row that was asked for:');
+(async () => {
 let a = build(ROWS(), ML);
-a.call(a.state.rows[0]);
+await a.call(a.state.rows[0]);
 ck('takes the Masterlist rate', a.state.rows[0].cost === 2750, a.state.rows[0].cost);
 /* A Tier 1 row prices from these, not from the rate, so a sync that left them
    behind would show a new rate and charge the old figure. */
@@ -102,19 +104,19 @@ ck('and it says the rest of the tab is untouched',
   /Nothing else on this tab is touched/.test(a.state.confirms[0]));
 /* Cancel has to mean cancel: the button sits beside the one that deletes. */
 a = build(ROWS(), ML);
-a.call(a.state.rows[0], false);
+await a.call(a.state.rows[0], false);
 ck('saying no leaves the price alone', a.state.rows[0].cost === 2500, a.state.rows[0].cost);
 ck('and writes no toast claiming it worked', a.state.toasts.length === 0);
 
 console.log(NL + 'the cases where there is nothing to do:');
 a = build(ROWS(), ML);
-a.call(a.state.rows[1]);
+await a.call(a.state.rows[1]);
 ck('a row already matching is left alone', a.state.rows[1].cost === 500);
 ck('and is not asked about', a.state.confirms.length === 0);
 ck('but is told so, rather than seeming to do nothing',
   /already matches/.test((a.state.toasts[0] || {}).m || ''), (a.state.toasts[0] || {}).m);
 a = build(ROWS(), ML);
-a.call(a.state.rows[2]);
+await a.call(a.state.rows[2]);
 ck('a row the Masterlist does not have is refused', a.state.rows[2].cost === 4000);
 ck('as an error, saying how to fix it',
   (a.state.toasts[0] || {}).err === true && /not on the Masterlist/.test((a.state.toasts[0] || {}).m || ''),
@@ -122,13 +124,13 @@ ck('as an error, saying how to fix it',
 
 console.log(NL + 'and the grouping is the CE\'s own:');
 a = build(ROWS(), ML);
-a.call(a.state.rows[3]);
+await a.call(a.state.rows[3]);
 ck('the price is taken', a.state.rows[3].cost === 900, a.state.rows[3].cost);
 /* The Masterlist says facility, this CE says common. Re-pricing must not
    quietly move the row to another heading on the printed sheet. */
 ck('but a grouping set on the CE is kept', a.state.rows[3].group === 'common', a.state.rows[3].group);
 a = build([{ id: 'r1', desc: 'Site Office Container', qty: 1, cost: 750 }], ML);
-a.call(a.state.rows[0]);
+await a.call(a.state.rows[0]);
 ck('while a row with none takes the Masterlist one', a.state.rows[0].group === 'facility', a.state.rows[0].group);
 
 console.log(NL + 'and the button itself:');
@@ -140,7 +142,7 @@ ck('it is the cycling arrow, not a word that would widen the row',
 ck('and it is dimmed when there is nothing behind it',
   tab.indexOf('opacity: _mlFind(r) ? 1 : .35') > 0);
 ck('the whole-tab Sync Rates is still there for when that is what is wanted',
-  fs.readFileSync(path.join(__dirname, '..', 'src', 'App.js'), 'utf8').indexOf('const syncRatesFromML = () => {') > 0);
+  fs.readFileSync(path.join(__dirname, '..', 'src', 'App.js'), 'utf8').indexOf('const syncRatesFromML = async () => {') > 0);
 
 console.log(NL + 'and none of it costs a scan per row:');
 /* A long tab re-renders on every keystroke, and each row asked the whole
@@ -157,7 +159,7 @@ ck('it is rebuilt only when the Masterlist or the tab changes',
    duplicated Masterlist row must not change which rate a row is given. */
 a = build(ROWS(), [{ desc: 'Cable Pulling Machine', cost: 2750 },
   { desc: 'Cable Pulling Machine', cost: 9999 }]);
-a.call(a.state.rows[0]);
+await a.call(a.state.rows[0]);
 ck('a duplicated Masterlist entry still gives the first rate',
   a.state.rows[0].cost === 2750, a.state.rows[0].cost);
 /* The suggestion list is identical in every row, so one is enough; a copy
@@ -170,3 +172,4 @@ ck('and the table holds one datalist, not one per row',
 
 console.log(bad ? NL + bad + ' FAILURE(S)' : NL + 'row sync OK');
 process.exit(bad ? 1 : 0);
+})();

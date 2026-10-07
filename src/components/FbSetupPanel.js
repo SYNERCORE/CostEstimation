@@ -112,7 +112,7 @@
   /* One at a time, each one confirmed by name. A bulk "delete all" over a
      heuristic is how the wrong CE goes. */
   const handleDeleteDupRev=async(row)=>{
-    if(!window.confirm('Delete '+row.ceNum+' permanently?'+String.fromCharCode(10,10)+
+    if(!await uiConfirm('Delete '+row.ceNum+' permanently?'+String.fromCharCode(10,10)+
       'Its line items go with it. This cannot be undone.'))return;
     setBusy(true);
     try{

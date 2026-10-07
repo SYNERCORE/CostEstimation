@@ -42,7 +42,7 @@ ck('it warns when the drafts are not yours',
   app.includes("(notMine ? notMine + ' of them belong to somebody else. ' : '')"));
 ck('and that unsaved work goes for good, while saved CEs do not',
   app.includes('Whatever they hold that was never saved is lost for good. The saved CEs and their Monitoring rows are not touched.'));
-ck('nothing happens without an answer', app.includes("if (!confirm('Clear ' + what + '?'"));
+ck('nothing happens without an answer', app.includes("if (!await uiConfirm('Clear ' + what + '?'"));
 ck('only the drafts that really went leave the list',
   app.includes('removed.add(d.draftId);') && app.includes('setSharedDrafts(p => p.filter(x => !removed.has(x.draftId)));'));
 ck('and one that could not be reached is reported, not hidden',

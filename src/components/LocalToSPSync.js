@@ -22,7 +22,7 @@ function MonDupTidy() {
   const tidy = async () => {
     if (!dups || !dups.length) return;
     const extra = dups.reduce((n, x) => n + x.drop.length, 0);
-    if (!window.confirm('Tidy ' + dups.length + ' CE(s)?' + String.fromCharCode(10,10) +
+    if (!await uiConfirm('Tidy ' + dups.length + ' CE(s)?' + String.fromCharCode(10,10) +
       'Everything both copies know is written to the row the table reads, then ' +
       extra + ' older row(s) are deleted. Deleting cannot be undone.')) return;
     setBusy(true); add('Tidying…');
@@ -63,7 +63,7 @@ function LocalToSPSync() {
 
   const handleSync = async () => {
     if (!getSiteURL()) { setLog(['❌ SharePoint not connected. Set Site URL in the SP setup above first.']); return; }
-    if (!window.confirm('Push all local data (users, CE history, masterlist) to SharePoint?\n\nExisting SP records will be updated — nothing is deleted.')) return;
+    if (!await uiConfirm('Push all local data (users, CE history, masterlist) to SharePoint?\n\nExisting SP records will be updated — nothing is deleted.')) return;
     setBusy(true); setDone(false); setLog([]); setCounts(null);
 
     let totalOk = 0, totalFail = 0;

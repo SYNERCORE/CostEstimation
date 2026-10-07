@@ -141,7 +141,7 @@ console.log('Test mode');
   const lp = R('src/components/LoginPage.js');
   ok(lp.indexOf('"Test mode"') > 0, 'the sign-in page has no way into test mode');
   ok(/setTestMode\(true\)/.test(lp), 'the sign-in page does not turn test mode on');
-  ok(/confirm\('Open test mode\?/.test(lp), 'test mode opens without saying what it does');
+  ok(/uiConfirm\('Open test mode\?/.test(lp), 'test mode opens without saying what it does');
 }
 
 if (fails) { console.error('\n' + fails + ' failure(s)'); process.exit(1); }

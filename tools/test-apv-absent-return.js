@@ -32,9 +32,9 @@ ck('counts the ones signed by hand too', app.includes('const _hand = Object.keys
 ck('says what happens to the routing', app.includes("'Routing starts again from the first step, and all '"));
 ck('offers the way to keep them', app.includes('Revise to save your changes as a new revision instead.'));
 ck('and Cancel really does not save',
-  app.includes('if (!confirm(_msg)) { showToast(') && app.includes("are untouched.'); return; }"));
+  app.includes('if (!await uiConfirm(_msg, {ok: ') && app.includes("are untouched.'); return; }"));
 ck('submitting asks the same question rather than clearing quietly',
-  app.includes("'Go on and clear them?'))"));
+  app.includes("'Go on and clear them?', {ok: 'Clear them'"));
 ck('and when it does clear them, the signed lines go with the images',
   app.includes('apv = {...apv, lines: {}};') && app.includes('e.info = {...e.info, approval: apv};'));
 

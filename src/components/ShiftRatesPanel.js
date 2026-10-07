@@ -27,7 +27,7 @@ function ShiftRatesPanel() {
 
   const save = async () => {
     if (!allOk) { setMsg('Every multiplier must be a number above zero.'); return; }
-    if (!window.confirm('Set these as the company standard?\n\nEvery NEW CE will start on them. Saved CEs keep the multipliers they were quoted at.')) return;
+    if (!await uiConfirm('Set these as the company standard?\n\nEvery NEW CE will start on them. Saved CEs keep the multipliers they were quoted at.')) return;
     setBusy(true); setMsg('');
     const shiftMults = {};
     Object.keys(SHIFTS).forEach(k => { shiftMults[k] = parseFloat(vals[k]); });
@@ -75,7 +75,7 @@ function ToolPowerSwitch() {
   React.useEffect(() => { dbGetFeatures().then(() => setOn(toolPowerEnabled())).catch(_e=>logSwallowed('ShiftRatesPanel:ToolPowerSwitch',_e)); }, []);
   const flip = async () => {
     const next = !on;
-    if (!window.confirm(next
+    if (!await uiConfirm(next
       ? 'Turn tool power ON?\n\nThe kW, Run hrs and Power columns come back on ShopWorks tools, and power is added to the totals.'
       : 'Turn tool power OFF?\n\nThe kW columns are hidden and no CE counts power in its totals until it is switched back on. Figures already typed are kept.')) return;
     setBusy(true); setMsg('');

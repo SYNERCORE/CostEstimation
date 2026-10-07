@@ -7,7 +7,7 @@ const app = fs.readFileSync('src/App.js', 'utf8'), db = fs.readFileSync('src/db.
 let bad = 0;
 const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 const del = (app.match(/const delML = async id => \{[\s\S]*?\n    \};/) || [''])[0];
-ck('the red x asks before deleting', /if \(!confirm\(/.test(del));
+ck('the red x asks before deleting', /if \(!await uiConfirm\(/.test(del));
 ck('and moves the item to the Trash first', /await mlToTrash\(mlTab, \[it\]\);[\s\S]*saveML/.test(del));
 ck('Clear List goes to the Trash too', /mlToTrash\(mlTab, masterlist\[mlTab\] \|\| \[\]\);/.test(app));
 ck('the Trash keeps 30 days', /const ML_TRASH_DAYS = 30;/.test(db) && /Date\.now\(\) - ML_TRASH_DAYS \* 864e5/.test(db));

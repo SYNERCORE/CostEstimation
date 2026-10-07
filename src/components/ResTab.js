@@ -101,7 +101,7 @@ const ResTab = ({
      finding the same item would eventually disagree about which item it is. */
   const _mlFind = r => { const d = _mlKey(r); return d ? (_mlIndex.get(d) || null) : null; };
   const _money = v => 'P' + N(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const syncRow = r => {
+  const syncRow = async r => {
     const m = _mlFind(r);
     if (!m) {
       showToast('"' + (String(r.desc || '').trim() || 'This row') + '" is not on the Masterlist, so there is no rate to take. Add it with the + Masterlist button first.', true);
@@ -117,7 +117,7 @@ const ResTab = ({
     /* Confirmed, because this is a price on a CE that may already be quoted,
        and the button sits beside the one that deletes the row. One line, so
        refreshing a handful of rows stays quick. */
-    if (!window.confirm('Re-price "' + r.desc + '" from the Masterlist?' + String.fromCharCode(10, 10) +
+    if (!await uiConfirm('Re-price "' + r.desc + '" from the Masterlist?' + String.fromCharCode(10, 10) +
       '   ' + _money(r.cost) + '   ->   ' + _money(m.cost) + String.fromCharCode(10, 10) +
       'Nothing else on this tab is touched. Nothing is saved until you press Save.')) return;
     set(p => p.map(x => x.id === r.id
@@ -465,7 +465,7 @@ showPower && /*#__PURE__*/React.createElement("label", {
   title: showDays
     ? "Combine repeated items into what you actually mobilise: the largest quantity any task needs, for the total number of days"
     : "Add the quantities together — a consumable used on two tasks is bought once, for the total",
-  onClick: () => {
+  onClick: async () => {
     const NL = String.fromCharCode(10);
     /* Equipment follows the crew rule: one compressor covers both tasks, so you
        hire the largest number any task needs for the whole duration. A
@@ -486,7 +486,7 @@ showPower && /*#__PURE__*/React.createElement("label", {
     const preview = plan.map(p => '  ' + p.g[0].desc + ':  ' +
       p.g.map(r => N(r.qty) + (showDays ? ' x ' + rowDays(r) + 'd' : ' ' + (r.uom || ''))).join('  +  ') +
       '   ->   ' + p.qty + (showDays ? ' x ' + p.days + ' days' : ' ' + (p.g[0].uom || ''))).join(NL);
-    if (!confirm('Combine ' + plan.length + ' item' + (plan.length === 1 ? '' : 's') + '?' + NL + NL + preview +
+    if (!await uiConfirm('Combine ' + plan.length + ' item' + (plan.length === 1 ? '' : 's') + '?' + NL + NL + preview +
       (showDays
         ? NL + NL + 'The largest quantity any task needs, kept for the total number of days — this normally costs MORE than the rows added up, because the equipment is on hire for the whole duration.'
         : NL + NL + 'Quantities are added together. The total is unchanged.') +
@@ -518,7 +518,7 @@ showPower && /*#__PURE__*/React.createElement("label", {
   onChange: e => {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
-    reader.onload = ev => {
+    reader.onload = async ev => {
       try {
         const wb = XLSX.read(new Uint8Array(ev.target.result), {type: 'array'});
         const ws = wb.Sheets[wb.SheetNames[0]];
@@ -557,10 +557,10 @@ showPower && /*#__PURE__*/React.createElement("label", {
         /* Re-importing an edited export is the common case, and appending it
            would silently double the list. Asked rather than assumed: the
            wrong answer either way is a long list to put right by hand. */
-        const replace = rows.length > 0 && window.confirm(
+        const replace = rows.length > 0 && await uiConfirm(
           'Replace the ' + rows.length + ' row(s) on this tab with the ' + imported.length + ' from ' + file.name + '?' +
-          String.fromCharCode(10,10) + 'OK = replace (use this after editing an export)' +
-          String.fromCharCode(10) + 'Cancel = add them to what is already here');
+          String.fromCharCode(10,10) + 'Replace is right after editing an export; Add keeps what is already here and puts these after it.',
+          {ok: 'Replace', cancel: 'Add to existing', danger: false});
         set(p => replace ? imported : [...p, ...imported]);
         showToast(imported.length + ' row(s) ' + (replace ? 'replaced this tab' : 'added') + ' from ' + file.name + '.');
       } catch(ex) { showToast('Excel parse failed: ' + ex.message, true); }

@@ -57,7 +57,7 @@ ck('looking is a separate button from tidying',
 ck('and Tidy only appears once something has been found',
   panel.includes('dups && dups.length > 0 && React.createElement(\'button\''));
 ck('it says what it will delete, and asks first',
-  panel.includes('older row(s) are deleted. Deleting cannot be undone.') && panel.includes('if (!window.confirm('));
+  panel.includes('older row(s) are deleted. Deleting cannot be undone.') && panel.includes('if (!await uiConfirm('));
 ck('every CE it touches is reported', panel.includes("'  ✓ ' + st.title + ': ' + st.dropped + ' row(s) cleared'"));
 ck('a clean list says so rather than offering to tidy nothing',
   panel.includes("'✅ Every CE has one row. Nothing to tidy.'"));

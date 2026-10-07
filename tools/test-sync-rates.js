@@ -26,27 +26,27 @@ const app = fs.readFileSync('src/App.js', 'utf8');
 let bad = 0;
 const ck = (n, c, x) => { if (c) console.log('  PASS  ' + n); else { console.log('  FAIL  ' + n + (x ? '  -> ' + x : '')); bad++; } };
 
-const body = app.match(/const syncRatesFromML = \(\) => \{[\s\S]*?\n  \};/);
+const body = app.match(/const syncRatesFromML = async \(\) => \{[\s\S]*?\n  \};/);
 if (!body) { console.error('syncRatesFromML not found'); process.exit(1); }
 
 const N = v => Number(v) || 0;
-const run = (state, opts) => {
+const run = async (state, opts) => {
   opts = opts || {};
   let prompt = null, toast = null;
   const out = {};
   const set = k => fn => { out[k] = fn(state[k]); };
   const fn = new Function(
     'masterlist', 'mp', 'tools', 'mats', 'ppe', 'info', 'history', 'N',
-    'showToast', 'confirm', 'setMp', 'setTools', 'setMats', 'setPpe',
+    'showToast', 'uiConfirm', 'setMp', 'setTools', 'setMats', 'setPpe',
     'return ' + body[0].replace(/^const syncRatesFromML = /, '').replace(/;$/, '')
   )(
     state.masterlist, state.mp, state.tools, state.mats, state.ppe,
     state.info, state.history || [], N,
     (m) => { toast = m; },
-    (m) => { prompt = m; return opts.cancel ? false : true; },
+    (m) => { prompt = m; return Promise.resolve(opts.cancel ? false : true); },
     set('mp'), set('tools'), set('mats'), set('ppe')
   );
-  fn();
+  await fn();
   return {out, prompt, toast};
 };
 
@@ -70,7 +70,8 @@ const base = () => ({
 });
 
 console.log('it re-prices the whole CE, not one shift:');
-let r = run(base());
+(async () => {
+let r = await run(base());
 ck('manpower', N(r.out.mp[0].rate) === 1100, JSON.stringify(r.out.mp[0]));
 ck('tools', N(r.out.tools[0].cost) === 6000);
 ck('materials', N(r.out.mats[0].cost) === 1900);
@@ -89,13 +90,13 @@ ck('the prompt lists what will change', /Welder/i.test(r.prompt) && /Crane/i.tes
 ck('it counts the rows', /Re-price 5 rows/.test(r.prompt), r.prompt);
 ck('and says untouched rows stay as they are', /keep the price they have/.test(r.prompt));
 
-const c = run(base(), {cancel: true});
+const c = await run(base(), {cancel: true});
 ck('saying no changes nothing', Object.keys(c.out).length === 0,
   'the preview must not be able to half-apply');
 
 console.log('\nand a CE that is already saved is called out:');
 const st = base(); st.history = [{info: {ceNum: 'sy3-ce-2026-0900'}}];
-const w = run(st);
+const w = await run(st);
 ck('saving after this would replace what was quoted', /REPLACES what was quoted/.test(w.prompt), w.prompt);
 ck('with the way out named', /Clone it to a new CE number/.test(w.prompt));
 ck('a CE number not yet in history gets no such warning', !/REPLACES what was quoted/.test(r.prompt));
@@ -118,3 +119,4 @@ ck('loading a CE does not touch the masterlist',
 
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nsync rates OK');
 process.exit(bad ? 1 : 0);
+})();

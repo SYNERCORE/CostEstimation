@@ -123,9 +123,9 @@ ck('a row with no description is dropped',
 console.log('\nreplacing versus adding:');
 /* Appending an edited copy of the list to the list doubles it, and 672 rows
    is not something anyone unpicks by hand. */
-ck('the tab asks before it replaces', /window\.confirm\(/.test(tab));
+ck('the tab asks before it replaces', /await uiConfirm\(/.test(tab));
 ck('and the question counts the tab rows, not the file rows',
-  /const replace = rows\.length > 0 && window\.confirm\(/.test(tab) &&
+  /const replace = rows\.length > 0 && await uiConfirm\(/.test(tab) &&
   tab.indexOf('const sheetRows = XLSX.utils.sheet_to_json') > 0,
   'shadowing `rows` here reported the file count as the tab count');
 ck('OK replaces and Cancel adds',

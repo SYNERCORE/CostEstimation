@@ -50,7 +50,7 @@ ck('drafts are deleted through deleteDraft, not the CE path',
   'it never reaches dbDeleteHistory, so no role is needed');
 ck('someone else\'s draft needs an admin, checked in deleteDraft itself',
   /if \(!own && !isAdmin\) \{ showToast\('Only ' \+/.test(app));
-ck('and Resume Work asks before deleting', /if \(!asked && !confirm\('Delete this draft'/.test(app));
+ck('and Resume Work asks before deleting', /if \(!asked && !await uiConfirm\('Delete this draft'/.test(app));
 
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\ndelete permission OK');
 process.exit(bad ? 1 : 0);

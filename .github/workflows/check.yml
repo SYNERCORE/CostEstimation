@@ -447,5 +447,7 @@ jobs:
         run: node tools/test-local-save-says-so.js
       - name: Save warns when someone else saved the CE since it was opened
         run: node tools/test-save-detects-newer-copy.js
+      - name: No native confirm/alert; in-app dialogs behave
+        run: node tools/test-no-native-dialogs.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

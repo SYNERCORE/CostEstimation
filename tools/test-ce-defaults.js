@@ -67,7 +67,7 @@ ck('"untouched" compares the actual content, not a flag',
 ck('a loaded CE is marked as owning its own', /_defaultsSig\.current = '';[\s\S]{0,120}resumed draft|came from the CE, not from a preset/.test(app));
 ck('so is a resumed draft', /a resumed draft owns its notes and signatories/.test(app));
 ck('and the manual button confirms before discarding edits',
-  /if \(!_defaultsUntouched\(\) && !confirm\(/.test(app));
+  /if \(!_defaultsUntouched\(\) && !await uiConfirm\(/.test(app));
 ck('it says so when no preset matches, rather than blanking the CE',
   /No preset matches this CE type and discipline/.test(app));
 

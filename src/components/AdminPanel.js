@@ -157,7 +157,7 @@
   const enable = u => allow(u, 'status') && setStatus(u, 'approved', 'enable', 'Enabled');
   const del = async u => {
     if (!allow(u, 'delete')) return;
-    if (!confirm('Delete "' + u.username + '"?')) return;
+    if (!await uiConfirm('Delete "' + u.username + '"?')) return;
     await userAction('delete ' + u.username, async () => {
       await dbDeleteUser(u.id);
       auditLog('user_delete', u.username + ' (role: ' + (u.role||'user') + ')', currentUser?.username);
@@ -176,7 +176,7 @@
       requestor: 'a Requestor: raises requests for estimation and reads what comes back. No costing, and no CE of anyone else is theirs to change.',
       admin: 'an Admin: every CE, every account.'
     }[r] || r;
-    if (!confirm(`Make "${u.username}" ${roleName(r)}?
+    if (!await uiConfirm(`Make "${u.username}" ${roleName(r)}?
 
 They become ` + says)) return;
     await userAction('change the role of ' + u.username, async () => {
@@ -190,11 +190,11 @@ They become ` + says)) return;
   const iAmOwner = isOwnerRole(currentUser?.role);
   const transferOwnership = async u => {
     if (!iAmOwner) { toast2('Only the owner can transfer ownership.', true); return; }
-    if (!confirm(
+    if (!await uiConfirm(
       'Make "' + u.username + '" the owner of this app?' + String.fromCharCode(10, 10) +
       'They will be able to manage every account including yours, and to hand ownership on again.' + String.fromCharCode(10, 10) +
       'You will step down to admin. Only ' + u.username + ' will be able to give it back.')) return;
-    if (!confirm('Last check — transfer ownership to "' + u.username + '"? This cannot be undone from your side.')) return;
+    if (!await uiConfirm('Last check — transfer ownership to "' + u.username + '"? This cannot be undone from your side.')) return;
     setOwnerBusy(true);
     await userAction('transfer ownership to ' + u.username, async () => {
       const r = await dbTransferOwnership(currentUser, u);
@@ -205,7 +205,7 @@ They become ` + says)) return;
     setOwnerBusy(false);
   };
   const claimOwnership = async () => {
-    if (!confirm(
+    if (!await uiConfirm(
       'Claim ownership of this app?' + String.fromCharCode(10, 10) +
       'No owner is set yet. The owner cannot be demoted, disabled or deleted by other admins, and is the only account that can appoint a successor.' + String.fromCharCode(10, 10) +
       'Do this once, on the account that should hold it.')) return;
@@ -223,7 +223,7 @@ They become ` + says)) return;
        admin to take the account, so it goes through the same gate. */
     if (!allow(changePwUser, 'password')) { setChangePwUser(null); setNewPw(''); return; }
     if (newPw.length < 6) {
-      alert('Min 6 chars.');
+      uiAlert('Min 6 chars.');
       return;
     }
     const h = await hashPassword(newPw);
@@ -291,7 +291,7 @@ They become ` + says)) return;
   const applyTotals = async () => {
     if (!recalc || !recalc.diffs.length) return;
     const net = recalc.diffs.reduce((s, d) => s + d.delta, 0);
-    if (!window.confirm('Update the stored total of ' + recalc.diffs.length + ' CE' + (recalc.diffs.length === 1 ? '' : 's') +
+    if (!await uiConfirm('Update the stored total of ' + recalc.diffs.length + ' CE' + (recalc.diffs.length === 1 ? '' : 's') +
       '?\n\nNet change: ' + (net >= 0 ? '+' : '') + net.toFixed(2) +
       '\n\nOnly the total is rewritten — line items are untouched. This cannot be undone from here.')) return;
     setRecalcBusy(true);
@@ -310,7 +310,7 @@ They become ` + says)) return;
   const BULK_CHOICES = [[15, '15 minutes'], [60, '1 hour'], [240, '4 hours'],
                         [1440, '1 day'], [4320, '3 days'], [10080, '1 week']];
   const bulkLabel = m => (BULK_CHOICES.find(c => c[0] === m) || [m, m + ' minutes'])[1];
-  const toggleBulk = () => {
+  const toggleBulk = async () => {
     if (bulkOn) {
       bulkMode.disable();
       setBulkOn(false);
@@ -320,7 +320,7 @@ They become ` + says)) return;
     }
     const label = bulkLabel(bulkMins);
     const long = bulkMins >= 1440;
-    if (!window.confirm(
+    if (!await uiConfirm(
       'Turn OFF duplicate CE-number protection for ' + label + '?' + String.fromCharCode(10, 10) +
       'While it is off, saving a CE whose number already exists will OVERWRITE that CE — including one saved by someone else. Every replacement is recorded in the audit log.' + String.fromCharCode(10, 10) +
       /* The old wording promised it ends when the tab closes. That stopped
@@ -864,7 +864,7 @@ They become ` + says)) return;
         }, auditBusy ? 'Loading…' : (auditEntries===null ? '☁ Load from SharePoint' : '↻ Refresh')),
         !spConnected && log.length > 0 && /*#__PURE__*/React.createElement("button", {
           style:{...btn('danger',true),fontSize:11,marginLeft:'auto'},
-          onClick:()=>{ if(confirm('Clear local audit log?')){LS.set('auditlog',[]);setAuditEntries([]);toast2('Local audit log cleared.');} }
+          onClick:async ()=>{ if(await uiConfirm('Clear local audit log?')){LS.set('auditlog',[]);setAuditEntries([]);toast2('Local audit log cleared.');} }
         }, "Clear Local Log")
       ),
       auditListMissing && /*#__PURE__*/React.createElement("div", {style:{color:'var(--status-warning)',fontSize:12,padding:'8px 10px',background:'#F59E0B11',border:'1px solid #F59E0B44',borderRadius:6,marginBottom:8}},

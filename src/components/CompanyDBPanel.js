@@ -28,14 +28,14 @@
     persist([...companies,blank]);
     startEdit(blank);
   };
-  const delCo=id=>{
-    if(companies.length<=1){alert('At least one company is required.');return;}
-    if(!confirm('Delete this company?'))return;
+  const delCo=async id=>{
+    if(companies.length<=1){uiAlert('At least one company is required.');return;}
+    if(!await uiConfirm('Delete this company?'))return;
     persist(companies.filter(c=>c.id!==id));
   };
   const handleLogo=e=>{
     const file=e.target.files[0];if(!file)return;
-    if(file.size>300000){alert('Logo too large. Use an image under 300KB.');return;}
+    if(file.size>300000){uiAlert('Logo too large. Use an image under 300KB.');return;}
     const reader=new FileReader();
     reader.onload=ev=>setDraft(p=>({...p,logo:ev.target.result}));
     reader.readAsDataURL(file);

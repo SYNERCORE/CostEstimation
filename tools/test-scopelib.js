@@ -133,9 +133,9 @@ ck('the warning names the services', /already\.map\(s => s\.title\)\.join/.test(
 ck('it says what to do instead', /edit it in SOW Breakdown instead/.test(src));
 /* The guard has to be WIRED to the finding, not merely present beside it --
    `if (false && !confirm(...))` keeps every other assertion here happy. */
-ck('the warning actually fires on a match', /if \(already\.length && !confirm\(/.test(src),
+ck('the warning actually fires on a match', /if \(already\.length && !await uiConfirm\(/.test(src),
   'a guard that never triggers passes every check that only looks for its parts');
-ck('and returns without applying when declined', /Add anyway\?'\)\) return;/.test(src));
+ck('and returns without applying when declined', /Add anyway\?', \{ok: 'Add anyway', danger: true\}\)\) return;/.test(src));
 ck('it is a confirm, not a block', /Add anyway\?/.test(src),
   'adding a service twice on purpose is legitimate');
 

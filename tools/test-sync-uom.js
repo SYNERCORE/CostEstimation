@@ -16,7 +16,7 @@ ck('and the header adds them all at once', /_newRows\.length > 0 && /.test(src))
 ck('Tools, Materials and PPE are each wired to their own section',
   [['tools', 'addTools'], ['materials', 'addMats'], ['ppe', 'addPpe']].every(([t, w]) => app.includes('addToML: resStable.' + w + ',') && app.includes("_lat.current().addRowsToML('" + t + "', l)")));
 ck('an item already there is never added twice', /if \(!d \|\| have\.has\(k\)\) return;/.test(app));
-ck('it asks first, since everyone shares the list', /confirm\('Add ' \+ add\.length \+ ' item\(s\) to the shared Masterlist\?/.test(app));
+ck('it asks first, since everyone shares the list', /uiConfirm\('Add ' \+ add\.length \+ ' item\(s\) to the shared Masterlist\?/.test(app));
 ck('it goes through the normal Masterlist save and is logged', /saveML\(\{ \.\.\.masterlist, \[tab\]: \[\.\.\.add, \.\.\.cur\] \}\);/.test(app) && /auditLog\('masterlist_add_from_ce'/.test(app));
 
 console.log(bad ?'\n' + bad + ' FAILURE(S)' : '\nsync UOM OK');

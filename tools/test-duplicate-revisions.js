@@ -119,7 +119,7 @@ const at = (h, m, s) => new Date(Date.UTC(2026, 8, 29, h, m, s)).toISOString();
   console.log(NL + 'and the panel around it:');
   const panel = R('src/components/FbSetupPanel.js');
   ck('nothing is deleted without a confirmation naming the CE',
-    panel.indexOf("window.confirm('Delete '+row.ceNum") > 0);
+    panel.indexOf("await uiConfirm('Delete '+row.ceNum") > 0);
   ck('deletion goes through the permission check, not round it',
     panel.indexOf('dbDeleteHistory(row.id,(currentUser||{}).role)') > 0 &&
     db.indexOf('if(!hasAdminPowers(actorRole)) throw new Error') > 0);

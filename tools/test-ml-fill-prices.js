@@ -25,7 +25,7 @@ let bad = 0;
 const ck = (n, c, x) => { if (c) console.log('  PASS  ' + n); else { console.log('  FAIL  ' + n + (x ? '  -> ' + x : '')); bad++; } };
 
 /* ---- run the real fillFromHistory against a fake masterlist -------------- */
-const fn = (app.match(/    const fillFromHistory = \(\) => \{[\s\S]*?\n    \};/) || [''])[0];
+const fn = (app.match(/    const fillFromHistory = async \(\) => \{[\s\S]*?\n    \};/) || [''])[0];
 const kinds = (app.match(/  const ML_HIST_KIND = \{[\s\S]*?\n  \};/) || [''])[0];
 const uses = (w.match(/function shicRateUses\(kind, name, limit\) \{[\s\S]*?\n\}/) || [''])[0];
 if (!fn || !kinds || !uses) { console.error('fillFromHistory / ML_HIST_KIND / shicRateUses not found'); process.exit(1); }
@@ -39,7 +39,7 @@ const HIST = [
   { info: {}, mats: [{ desc: 'BEARING 6311 C3', cost: 9999 }] }
 ];
 
-function run(list, answer) {
+async function run(list, answer) {
   const saved = [];
   const toasts = [];
   const ctx = {
@@ -49,11 +49,11 @@ function run(list, answer) {
     masterlist: { materials: list },
     saveML: ml => saved.push(ml),
     showToast: (m, err) => toasts.push({ m: m, err: !!err }),
-    confirm: m => { toasts.push({ confirm: m }); return answer; },
+    uiConfirm: m => { toasts.push({ confirm: m }); return Promise.resolve(answer); },
     Number, String, Date, isFinite, Math, Object
   };
   vm.createContext(ctx);
-  vm.runInContext(uses + ';' + kinds.trim() + ';' + fn.trim() + ';fillFromHistory();', ctx);
+  await vm.runInContext(uses + ';' + kinds.trim() + ';' + fn.trim() + ';fillFromHistory();', ctx);
   return { saved, toasts };
 }
 
@@ -65,8 +65,9 @@ const LIST = [
   { id: 5, desc: 'ALREADY PRICED', cost: 120 }
 ];
 
+(async () => {
 console.log('it prices what the history can answer for:');
-let r = run(LIST, true);
+let r = await run(LIST, true);
 const out = r.saved[0].materials;
 const by = id => out.find(x => x.id === id);
 ck('an unpriced item gets its most recent rate', by(1).cost === 55, JSON.stringify(by(1)));
@@ -94,11 +95,11 @@ ck('and the CE each price came from', /\(CE-0300\)/.test(q.confirm),
 ck('it says what it will not touch', /appear in no saved CE and are left alone/.test(q.confirm));
 
 console.log('\nand declining changes nothing:');
-ck('cancel writes nothing', run(LIST, false).saved.length === 0);
+ck('cancel writes nothing', (await run(LIST, false)).saved.length === 0);
 
 console.log('\nthe empty cases say something useful:');
-ck('an already-complete tab', /already has a price/.test(run([{ id: 9, desc: 'X', cost: 5 }], true).toasts[0].m));
-const none = run([{ id: 9, desc: 'NOTHING KNOWN', cost: 0 }], true);
+ck('an already-complete tab', /already has a price/.test((await run([{ id: 9, desc: 'X', cost: 5 }], true)).toasts[0].m));
+const none = await run([{ id: 9, desc: 'NOTHING KNOWN', cost: 0 }], true);
 ck('unpriced but unknown is reported, not silently ignored',
   /appear in any saved CE/.test(none.toasts[0].m) && none.toasts[0].err === true);
 
@@ -112,3 +113,4 @@ ck('the button is in the toolbar', /onClick: fillFromHistory/.test(app));
 
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nmasterlist price fill OK');
 process.exit(bad ? 1 : 0);
+})();

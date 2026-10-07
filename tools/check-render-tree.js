@@ -168,7 +168,8 @@ if (rootIndex >= 0) {
   const required = [
     ['SyncStatusBar', 'sync status bar'],
     ['zIndex: 50', 'sticky top header'],
-    ['TABS.map', 'tab bar'],
+    /* The bar is built from TAB_GROUPS. This used to say TABS.map, which only ever matched RES_TABS.map inside the SOW Breakdown block. */
+    ['TAB_GROUPS.find(', 'tab bar'],
   ];
   for (const [needle, label] of required) {
     if (!has(needle)) {

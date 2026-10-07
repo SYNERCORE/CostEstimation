@@ -2,7 +2,7 @@
 /* SOW Breakdown: manpower is shown by shift, and a whole shift can be filed
    to a scope task at once. Run: node tools/test-sb-shifts.js */
 'use strict';
-const app = require('fs').readFileSync('src/App.js', 'utf8');
+const app = require('./lib/appsrc').plus(require('fs').readFileSync('src/App.js', 'utf8'));
 let bad = 0; const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 ck('unassigned manpower is grouped under its shift', app.includes("className: 'sb-shift-group'"));
 ck('a shift can be ticked as one', app.includes("title: 'Tick every '"));

@@ -49,7 +49,7 @@ c2('the suggestion list is built only after an input is focused', t2.indexOf('co
 c2('and is kept, not rebuilt per render', t2.indexOf('[_dlOn, masterlist, mlType]);') > 0);
 if (b2) process.exit(1);
 /* SOW Breakdown: past 150 resources the task cards start closed. */
-const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'App.js'), 'utf8');
+const app = require('./lib/appsrc').plus(fs.readFileSync(path.join(__dirname, '..', 'src', 'App.js'), 'utf8'));
 let b3 = 0;
 const c3 = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) b3++; };
 c3('big CEs open the SOW Breakdown with cards closed', app.indexOf('> 150;') > 0 && app.indexOf('const _sbOpen = id => sbCollapsed[id] === undefined ? !_sbBig : !sbCollapsed[id];') > 0);

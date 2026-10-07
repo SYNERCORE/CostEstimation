@@ -1055,6 +1055,7 @@ function App({
      a request, so none of this applies to them. */
   const infoMissing = isRequestor ? [] : [
     (info.companyId == null || info.companyId === '') ? 'Issuing Company' : '',
+    !String(info.client || '').trim() ? 'Client Name' : '',
     !String(ceType || '').trim() ? 'Project Type' : '',
     !String(info.projType || '').trim() ? 'Discipline' : '',
     !String(info.description || '').trim() ? 'Project Description' : ''
@@ -11358,11 +11359,11 @@ statusPanel && (() => {
   ));
 })(),
 
-/* ── The four things a CE needs before it is estimated ── */
+/* ── The five things a CE needs before it is estimated ── */
 piGate && tab === "info" && !isRequestor && /*#__PURE__*/React.createElement(ProjectInfoGate, {
-  missing: infoMissing, companies, companyId: info.companyId, ceType, projType: info.projType, description: info.description,
+  missing: infoMissing, companies, companyId: info.companyId, client: info.client, ceType, projType: info.projType, description: info.description,
   ceTypes: Object.keys(CE_CFG).map(k => ({ k, label: ceTypeLabel(k) })),
-  onCompany: pickCompany, onType: setCeType, onDiscipline: v => setInfo(p => ({ ...p, projType: v })), onDescription: v => setInfo(p => ({ ...p, description: v })),
+  onCompany: pickCompany, onClient: v => setInfo(p => ({ ...p, client: v })), onType: setCeType, onDiscipline: v => setInfo(p => ({ ...p, projType: v })), onDescription: v => setInfo(p => ({ ...p, description: v })),
   onCancel: () => { setPiGate(false); setTab('mywork'); }, onContinue: continueGate
 }),
 

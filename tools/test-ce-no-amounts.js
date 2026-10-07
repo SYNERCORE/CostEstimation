@@ -3,7 +3,7 @@
  * "Generate CE (no amounts)": the printed CE with every money figure left blank, to share the scope and quantities without the prices.
  * fmt is the one place a peso amount is written, so blanking it blanks them all; dropTotals removes the total, unit-price, margin and
  * highlighted-cost lines that would be labels with nothing beside them. This pins both, runs dropTotals on sample rows, and checks the
- * button, its handler, and that the normal Generate CE is untouched.
+ * button on CE Monitoring, the print URL it opens, and that the normal Generate CE is untouched.
  *
  * Run: node tools/test-ce-no-amounts.js
  */
@@ -36,12 +36,15 @@ if (m) {
   const plain = '<tr><td>1</td><td>Pump</td><td class="r"></td></tr>';
   ck('an ordinary row is untouched', t(plain) === plain);
 }
-
-console.log('\nthe button:');
-ck('App has the handler, calling the generator with noAmounts', /const handleGenerateCENoAmounts = \(\) => handleGenerateCE\(\{ noAmounts: true \}\)/.test(app));
-ck('it is handed to the Summary tab', /handleGenerateCENoAmounts, handleGenerateCEWithCheck/.test(app));
-ck('the Summary tab destructures it and has the button', /handleGenerateCENoAmounts,\n/.test(sum) && /onClick: handleGenerateCENoAmounts/.test(sum) && /Generate CE \(no amounts\)/.test(sum));
+console.log('\nthe button is on CE Monitoring, not the Summary tab:');
+const mon = R('src/components/MonitoringPanel.js');
+ck('each CE row has a "CE (no amounts)" button that opens the CE for print as noamt', /openForPrint\(e\.id,'noamt'\)/.test(mon) && /CE \(no amounts\)/.test(mon));
+ck('it is for saved CEs only, like the other print buttons', /typeof e\.id==='number'&&[^;]{0,60}createElement\("button",\{style:\{gridRow:3,gridColumn:3[\s\S]{0,200}noamt/.test(mon));
+ck('the print URL accepts as=noamt', /_q\.get\('as'\) === 'noamt' \? 'noamt'/.test(app));
+ck('and the opened CE is generated with noAmounts', /as === 'noamt'\) handleGenerateCE\(\{ noAmounts: true \}\)/.test(app));
+ck('the Summary tab no longer has the button', !/no amounts/.test(sum) && !/handleGenerateCENoAmounts/.test(sum) && !/handleGenerateCENoAmounts/.test(app));
 ck('the ordinary Generate CE is still the one with the zero-cost check', /const handleGenerateCEWithCheck = async \(\) => \{\s*if \(!await confirmZeroCost\('Proceed with generating CE\?'\)\) return;\s*handleGenerateCE\(\);/.test(app));
+
 
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nCE without amounts OK');
 process.exit(bad ? 1 : 0);

@@ -59,7 +59,7 @@ ck('it waits for the CE number to match', /\(info\.ceNum \|\| ''\) !== autoPrint
 ck('it re-checks as the rows land', /\[autoPrint, info\.ceNum, mp, tools, mats, ppe\]/.test(eff[0]));
 ck('it fires once, not on every render', /setAutoPrint\(null\);/.test(eff[0]));
 ck('printable CE and Export Detailed are both reachable',
-  /if \(as === 'detailed'\) \{ handleExportXLSX\(\);[\s\S]{0,300}\} else if \(as === 'view'\) handleGenerateCE\(\{ embed: true \}\); else handleGenerateCE\(\)/.test(eff[0]));
+  /if \(as === 'detailed'\) \{ handleExportXLSX\(\);[\s\S]{0,300}\} else if \(as === 'view'\) handleGenerateCE\(\{ embed: true \}\); else if \(as === 'noamt'\) handleGenerateCE\(\{ noAmounts: true \}\); else handleGenerateCE\(\)/.test(eff[0]));
 
 console.log('\n⬇ xlsx leaves no window behind:');
 ck('the workbook is built in a hidden frame, not a new tab or window',

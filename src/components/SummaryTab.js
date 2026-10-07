@@ -27,7 +27,6 @@ function SummaryTab(ctx) {
     handleExport,
     handleExportXLSX,
     handleGenerateCEWithCheck,
-    handleGenerateCENoAmounts,
     handlePrintPreview,
     handleSave,
     handleSaveRevision,
@@ -802,10 +801,6 @@ function SummaryTab(ctx) {
     style: btn('info'),
     onClick: handleGenerateCEWithCheck
   }, "🖨 Generate CE"), /*#__PURE__*/React.createElement("button", {
-    title: "The same printed CE with every amount left blank (no prices, totals or margin), to share the scope and quantities without the cost.",
-    style: btn('def'),
-    onClick: handleGenerateCENoAmounts
-  }, "🖨 Generate CE (no amounts)"), /*#__PURE__*/React.createElement("button", {
     style: btn('ok'),
     onClick: handleExportXLSX,
     title: "Excel copy of the printed CE, page for page, with every column: OT hours, AOT, each benefit separately."

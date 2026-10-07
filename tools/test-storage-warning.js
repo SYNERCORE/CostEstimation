@@ -57,6 +57,13 @@ ck('the total is measured', u.total > 3 * 1024 * 1024);
 ck('and broken down by what is holding it', !!u.groups['cached CEs'] && !!u.groups['the CE list']);
 ck('the biggest holder is named', u.top.name === 'cached CEs' && u.top.bytes > 0);
 ck('a signature is never counted as a cache', u.groups['signatures'] > 0);
+/* Drafts are saved as shic_draft_<id>. They were once counted as 'other settings', so a browser full of them could not say so. */
+{
+  const st = makeLS({ 'shic_draft_a': JSON.stringify({ x: 'y'.repeat(40000) }), 'shic_draft_b': JSON.stringify({ x: 'y'.repeat(40000) }), 'shic:theme': 'dark' });
+  const d = load(st).LS.usage();
+  ck('a shic_draft_ key is counted as an unsaved draft', d.groups['unsaved drafts'] > 150000 && !d.groups['other settings'] || (d.groups['other settings'] || 0) < 100, JSON.stringify(d.groups));
+  ck('and is the biggest holder, named as such', d.top.name === 'unsaved drafts');
+}
 ck('the size reads as a size', /^[\d,]+ KB$/.test(LS.kb(4200000)));
 
 /* ---- crossing the line clears what can be cleared, and says so ---- */

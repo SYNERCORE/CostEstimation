@@ -552,7 +552,12 @@ const LS = {
         const n = ((localStorage.getItem(k) || '').length + k.length) * 2;
         total += n;
         const name = k.indexOf('shic:ce_cache:') === 0 ? 'cached CEs'
-          : k.indexOf('shic:draft') === 0 ? 'unsaved drafts'
+          /* Drafts are kept as shic_draft_<id> (underscore, no colon: see saveDraft), which the old test for 'shic:draft' never matched, so
+             every draft -- about 40 KB each -- was counted as 'other settings' and the warning could not say what was filling the browser. */
+          : (k.indexOf('shic_draft_') === 0 || k.indexOf('shic:draft') === 0) ? 'unsaved drafts'
+          : k === 'sy3:sowlib' ? 'the scope library'
+          : k === 'shic:monitoring' ? 'monitoring data'
+          : k === 'shic:wallpaper' ? 'the wallpaper'
           : k.indexOf('shic:my_sig') === 0 ? 'signatures'
           : k.indexOf('shic:refdata:') === 0 ? 'reference data'
           : k === 'shic:history' || k === 'shic:local_history' || k === 'shic:od_history' ? 'the CE list'

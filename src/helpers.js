@@ -11,6 +11,20 @@ function logSwallowed(tag, err) {
     if (n <= 2) console.warn('[swallowed] ' + tag + ': ' + m.slice(0, 200));
   } catch (_) { /* never throw from the logger */ }
 }
+/* Did someone else save this CE after it was opened here?
+
+   Save writes the whole CE over the site's copy, so two people with the same CE open meant the second Save silently replaced the first
+   person's changes. `base` is {at} -- when the copy open here was saved (or when this browser last saved it); `site` is what the site holds
+   now ({savedAt, savedBy}); `me` is the username saving. Returns {by, at} when somebody ELSE saved it later, else null. A little slack is
+   allowed for clocks and for the local copy being stamped just after the site's. The same person's own later save (an approval submit, a
+   second tab) is not a conflict -- it is theirs to replace. */
+function ceChangedSince(base, site, me) {
+  if (!base || !base.at || !site || !site.savedAt) return null;
+  const b = Date.parse(base.at), t = Date.parse(site.savedAt);
+  if (!Number.isFinite(b) || !Number.isFinite(t) || t <= b + 2000) return null;
+  if (site.savedBy && me && site.savedBy === me) return null;
+  return { by: site.savedBy || 'someone else', at: site.savedAt };
+}
 /* Anything that is not a finite number is zero. parseFloat lets Infinity
    through -- '1e999' pasted into a rate, or a stored value that arrived that
    way -- and one Infinity in a CE turns its total into NaN, which reaches

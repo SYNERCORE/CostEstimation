@@ -1018,6 +1018,8 @@ function App({
      saved to, history -- the only CE a Save may replace. A number that merely
      matches someone else's CE is still refused. */
   const _ownNum = useRef('');
+  /* When the copy of the CE open here was saved -- on the site, or by this browser -- so a Save can tell that somebody else saved it since. */
+  const _loadedAt = useRef({ num: '', at: '' });
   /* The sequence part of the number this editor has claimed for its new CE, so Continue does not claim a second. */
   const _claimedSeq = useRef('');
   /* The owner holds every admin power on top of being unmanageable by them. */
@@ -2908,6 +2910,20 @@ function App({
       _overwrote = new Date(dup.savedAt).toLocaleDateString();
       auditLog('bulk_overwrite', ceNum + ' (was saved ' + _overwrote + ')', currentUser?.username);
     }
+    /* Somebody else saved this CE after it was opened here: saving now would replace their changes with this copy. Say who and when, and
+       let the person decide -- reopening it from History shows theirs. */
+    if (_own && _loadedAt.current.num === ceNum && !(isAdmin && bulkMode.on(currentUser?.username))) {
+      const _chg = ceChangedSince(_loadedAt.current, dup, currentUser?.username);
+      if (_chg) {
+        const _when = new Date(_chg.at).toLocaleString('en-PH', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'});
+        if (!confirm(_chg.by + ' saved ' + ceNum + ' at ' + _when + ', after you opened it.' + String.fromCharCode(10, 10) +
+          'Saving now REPLACES their changes with what is on your screen.' + String.fromCharCode(10, 10) +
+          'OK = replace theirs with mine.' + String.fromCharCode(10) + 'Cancel = do not save; open it again from History to see theirs.')) {
+          showToast('Not saved — ' + _chg.by + ' changed ' + ceNum + ' at ' + _when + '. Their version is untouched.', true);
+          return;
+        }
+      }
+    }
     try {
       const _entry = mkEntry();
       /* A signature belongs to the figures it approved. If they changed, every
@@ -2945,6 +2961,7 @@ function App({
       }
       if (_fromRequest) { _entry.info = {..._entry.info, request: false}; setInfo(p => ({...p, request: false})); }
       const _res = await spWithRetry(() => dbSaveHistory(_entry));
+      _loadedAt.current = { num: ceNum, at: new Date().toISOString() };
       auditLog('save_ce', ceNum, currentUser?.username);
       _ownNum.current = ceNum;
       /* Without this the next New CE in the same session is handed the
@@ -3148,6 +3165,7 @@ function App({
       return;
     }
     _ownNum.current = String((d.info && d.info.ceNum) || d.ceNum || '').trim().toUpperCase();
+    _loadedAt.current = { num: _ownNum.current, at: d.savedAt || '' };
     setCeType(d.ceType || 'onsite');
     setInfo({
       ...BLANK_INFO,

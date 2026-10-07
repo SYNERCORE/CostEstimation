@@ -445,5 +445,7 @@ jobs:
         run: node tools/test-scopelib-keeps-uom.js
       - name: Failed device saves are reported; apostrophe in username
         run: node tools/test-local-save-says-so.js
+      - name: Save warns when someone else saved the CE since it was opened
+        run: node tools/test-save-detects-newer-copy.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

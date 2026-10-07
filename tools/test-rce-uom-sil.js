@@ -3,7 +3,7 @@
    are two columns, adding up to what the one column said.
    Run: node tools/test-rce-uom-sil.js */
 'use strict';
-const app = require('fs').readFileSync('src/App.js', 'utf8');
+const app = require('./lib/appsrc').plus(require('fs').readFileSync('src/App.js', 'utf8'));
 let bad = 0; const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 ck('RCE No. is read from the CE, then Monitoring', app.includes("const rceNo = String(info.rceNo || (openCeId != null ? (monData[openCeId] || {}).rceNo : '') || '').trim();"));
 ck('and printed beside the CE No. when there is one', app.includes("${rceNo ? '<b>RCE No.:</b>&nbsp;' + esc(rceNo)"));

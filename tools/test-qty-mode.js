@@ -24,7 +24,7 @@
 const fs = require('fs');
 const path = require('path');
 const R = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-const app = R('src/App.js');
+const app = require('./lib/appsrc').plus(R('src/App.js'));
 const helpers = R('src/helpers.js');
 
 let bad = 0;

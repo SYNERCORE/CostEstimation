@@ -2,7 +2,7 @@
    Run: node tools/test-request-company-and-dashboard.js */
 'use strict';
 const fs = require('fs'), path = require('path');
-const app = fs.readFileSync(path.join(__dirname, '..', 'src/App.js'), 'utf8').replace(/\r\n/g, '\n');
+const app = require('./lib/appsrc').plus(fs.readFileSync(path.join(__dirname, '..', 'src/App.js'), 'utf8')).replace(/\r\n/g, '\n');
 let bad = 0;
 const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 
@@ -26,7 +26,7 @@ ck('the prompt names the company', acc.indexOf("'Issuing company: ' + co.name") 
 ck('an older request with no company still gets the old prompt', acc.indexOf("This request names no company.") > 0 && acc.indexOf('nextCeNum(history, null, ceNums)') > 0);
 
 console.log('\nthe Dashboard:');
-const d = app.slice(app.indexOf("tab === 'dashboard' && (() => {"), app.indexOf("const kpiCard"));
+const d = app.slice(app.indexOf('function DashboardTab(ctx)'), app.indexOf("const kpiCard"));
 ck('requests awaiting review are counted: not accepted, not returned, not declined', d.indexOf("reviewStatus !== 'returned'") > 0 && d.indexOf("reviewStatus !== 'declined'") > 0 && d.indexOf('isUnacceptedReq(h)') > 0);
 ck('a request is not also counted as an open CE', d.indexOf('liveRows.filter(h => !isUnacceptedReq(h)).map(h => ({h, m: monOf(h)}))') > 0);
 ck('the card is on the KPI row and names how many are with their requestors', app.indexOf("kpiCard('Requests Awaiting Review'") > 0 && app.indexOf("' returned)'") > 0);

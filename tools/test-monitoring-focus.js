@@ -18,7 +18,7 @@
  */
 'use strict';
 const fs = require('fs');
-const raw = fs.readFileSync('src/App.js', 'utf8');
+const raw = require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8'));
 const guard = fs.readFileSync('tools/check-remounting-editors.js', 'utf8');
 
 /* Comments explaining these rules mention the very strings being searched for.
@@ -28,8 +28,9 @@ const src = raw.replace(/\/\*[\s\S]*?\*\//g, '');
 let bad = 0;
 const ck = (n, c, x) => { if (c) console.log('  PASS  ' + n); else { console.log('  FAIL  ' + n + (x ? '  -> ' + x : '')); bad++; } };
 
-const i = src.indexOf('const HistPanel = () =>');
-const panel = i < 0 ? '' : src.slice(i, src.indexOf('\n  const ', i + 20));
+/* The panel's body now lives in MonitoringPanel.js, the last file appended; HistPanel in App is the call to it. */
+const i = src.indexOf('function MonitoringPanel(ctx)');
+const panel = i < 0 ? '' : src.slice(i);
 ck('HistPanel found', panel.length > 1000, String(panel.length));
 
 console.log('\nthe panel is not remounted on every App render:');

@@ -3,7 +3,7 @@
 'use strict';
 const fs = require('fs'), path = require('path');
 const R = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-const app = R('src/App.js'), m = R('src/components/RceReviewModal.js');
+const app = require('./lib/appsrc').plus(R('src/App.js')), m = R('src/components/RceReviewModal.js');
 let bad = 0;
 const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 ck('the dialog takes the facts and a way to list the files', m.indexOf('facts, loadFiles, onClose, onDone') > 0);

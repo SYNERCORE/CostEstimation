@@ -9,7 +9,7 @@
    Run: node tools/test-request-rce-first.js */
 'use strict';
 const fs = require('fs'), path = require('path');
-const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'App.js'), 'utf8');
+const app = require('./lib/appsrc').plus(fs.readFileSync(path.join(__dirname, '..', 'src', 'App.js'), 'utf8'));
 const db = fs.readFileSync(path.join(__dirname, '..', 'src', 'db.js'), 'utf8');
 let bad = 0;
 const ck = (n, c, x) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n + (!c && x ? '  -> ' + x : '')); if (!c) bad++; };

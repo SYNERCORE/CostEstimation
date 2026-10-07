@@ -1,0 +1,7 @@
+/* App.js is being split by tab; the source-text tests that look for a string in "the app" must look in the pieces too.
+   plus(text) appends the files that used to be part of App.js. */
+'use strict';
+const fs = require('fs'), path = require('path');
+const SPLIT = ['src/components/DashboardTab.js', 'src/components/MonitoringPanel.js'];
+exports.SPLIT = SPLIT;
+exports.plus = text => text + '\n' + SPLIT.map(f => fs.readFileSync(path.join(__dirname, '..', '..', f), 'utf8').replace(/\r\n/g, '\n')).join('\n');

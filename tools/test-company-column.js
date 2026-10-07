@@ -17,7 +17,7 @@
 const fs = require('fs');
 const vm = require('vm');
 const help = fs.readFileSync('src/helpers.js', 'utf8');
-const raw = fs.readFileSync('src/App.js', 'utf8');
+const raw = require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8'));
 /* Comments here quote the very strings under test. */
 const app = raw.replace(/\/\*[\s\S]*?\*\//g, '');
 

@@ -18,7 +18,7 @@
  */
 'use strict';
 const fs = require('fs');
-const app = fs.readFileSync('src/App.js', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+const app = require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '');
 const db = fs.readFileSync('src/db.js', 'utf8');
 
 let bad = 0;

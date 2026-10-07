@@ -2,7 +2,7 @@
    Run: node tools/test-bulk-discipline.js */
 'use strict';
 const fs = require('fs'), path = require('path');
-const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'App.js'), 'utf8');
+const app = require('./lib/appsrc').plus(fs.readFileSync(path.join(__dirname, '..', 'src', 'App.js'), 'utf8'));
 let bad = 0;
 const ck = (n, c, x) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n + (!c && x ? '  -> ' + x : '')); if (!c) bad++; };
 const a = app.indexOf('const fillBlankDisc = async () => {'), b = app.indexOf('const custOptions', a);

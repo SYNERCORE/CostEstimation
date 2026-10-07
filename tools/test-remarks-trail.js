@@ -3,7 +3,7 @@
    Run: node tools/test-remarks-trail.js */
 'use strict';
 const fs = require('fs');
-const app = fs.readFileSync('src/App.js', 'utf8'), db = fs.readFileSync('src/db.js', 'utf8');
+const app = require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8')), db = fs.readFileSync('src/db.js', 'utf8');
 let bad = 0;
 const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 const merge = new Function(db.match(/function _monMergeLog\(theirs,mine\)\{[\s\S]*?\n\}/)[0] + ';return _monMergeLog;')();

@@ -3,7 +3,7 @@
    as a toast that scrolls past.
    Run: node tools/test-mywork-badge.js */
 'use strict';
-const app = require('fs').readFileSync('src/App.js', 'utf8');
+const app = require('./lib/appsrc').plus(require('fs').readFileSync('src/App.js', 'utf8'));
 let bad = 0; const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 ck('it counts CEs routed to me for signature', app.includes('const sign = rows.filter(x => apvMonWaitsOn(x.m, me));'));
 ck('and my own CEs that came back returned', /apv\(x\)\.state === 'returned' && apv\(x\)\.submittedBy === me/.test(app));

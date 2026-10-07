@@ -2,7 +2,7 @@
    Run: node tools/test-dashboard-open-details.js */
 'use strict';
 const fs = require('fs'), path = require('path');
-const app = fs.readFileSync(path.join(__dirname, '..', 'src/App.js'), 'utf8').replace(/\r\n/g, '\n');
+const app = require('./lib/appsrc').plus(fs.readFileSync(path.join(__dirname, '..', 'src/App.js'), 'utf8')).replace(/\r\n/g, '\n');
 let bad = 0;
 const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 ck('headers', app.indexOf("['CE No.','RCE No.','Client','Job Title','Discipline','Estimator','Received By','Date Recv.','Status','Deadline','Days Left','Total']") > 0);

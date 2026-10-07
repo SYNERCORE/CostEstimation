@@ -20,7 +20,7 @@
  * Run: node tools/test-status-cell.js
  */
 const fs=require('fs');
-const src=fs.readFileSync('src/App.js','utf8');
+const src=require('./lib/appsrc').plus(fs.readFileSync('src/App.js','utf8'));
 
 const cell = src.match(/\}, \/\*#__PURE__\*\/React\.createElement\(React\.Fragment, null, \/\*#__PURE__\*\/React\.createElement\("select", \{[\s\S]*?statusChangedAt', ev\.target\.value/);
 let bad=0;

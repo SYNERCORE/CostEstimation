@@ -3,7 +3,7 @@
 'use strict';
 const fs = require('fs'), path = require('path');
 const R = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-const app = R('src/App.js'), mod = R('src/components/RceReviewModal.js');
+const app = require('./lib/appsrc').plus(R('src/App.js')), mod = R('src/components/RceReviewModal.js');
 let bad = 0;
 const ck = (n, c, x) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n + (!c && x ? '  -> ' + x : '')); if (!c) bad++; };
 const NL = String.fromCharCode(10);

@@ -20,7 +20,7 @@
 'use strict';
 const fs = require('fs');
 const vm = require('vm');
-const app = fs.readFileSync('src/App.js', 'utf8');
+const app = require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8'));
 const cfg = fs.readFileSync('src/config.js', 'utf8');
 const live = app.replace(/\/\*[\s\S]*?\*\//g, '');
 
@@ -70,7 +70,7 @@ ck('a collapsed bar is tighter than an open card', /padding: collapsed \? '10px 
 console.log('\nevery tint on the bar survives the theme:');
 for (const [name, file] of [['shiftColor', 'src/App.js'], ['statusColor', 'src/App.js'],
   ['spColor', 'src/widgets.js']]) {
-  const body = fs.readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const body = (file === 'src/App.js' ? require('./lib/appsrc').plus(fs.readFileSync(file, 'utf8')) : fs.readFileSync(file, 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '');
   ck(name + ' is not concatenated',
     !new RegExp('\\b' + name + "\\s*\\+\\s*'[0-9A-Fa-f]{2}'").test(body),
     'var(--x)22 is not a colour, and the browser says nothing');

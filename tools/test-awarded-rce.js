@@ -5,7 +5,7 @@
    Run: node tools/test-awarded-rce.js */
 'use strict';
 const fs = require('fs');
-const app = fs.readFileSync('src/App.js', 'utf8'), cfg = fs.readFileSync('src/config.js', 'utf8');
+const app = require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8')), cfg = fs.readFileSync('src/config.js', 'utf8');
 let bad = 0; const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 console.log('Awarded:');
 ck('is a status', /const DEFAULT_STATUS_OPTIONS = \[[^\]]*'Awarded'[^\]]*\];/.test(cfg));

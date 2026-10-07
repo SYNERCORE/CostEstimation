@@ -36,6 +36,26 @@ function apvRoute(approvers) {
   })).filter(l => l.id && l.user);
 }
 
+/* What submitting will do, in words, for the confirmation shown before a CE is routed.
+
+   Nobody is told anything until the CE is routed, and only the signatories linked to a user account are part of the routing: a line left
+   on "Sign by hand" is never notified and nothing waits for it. Of those linked, only the open step is notified at once; each later
+   step is notified when the step before it has signed. A linked user with no email on their account cannot be sent the Teams message at all.
+   kept = signatures that still stand (a CE submitted again after a Return), skipped = lines an admin skipped, users = the user accounts. */
+function apvRoutingNotice(approvers, kept, skipped, users) {
+  const list = Array.isArray(approvers) ? approvers : [];
+  const k = kept || {}, sk = skipped || {}, us = Array.isArray(users) ? users : [];
+  const nameOf = l => { const u = us.find(x => x.username === l.user); return (u && u.name) || l.name || l.user; };
+  const lines = apvRoute(list).filter(l => !k[l.id] && !sk[l.id]);
+  const first = lines.length ? Math.min.apply(null, lines.map(l => l.step)) : null;
+  const lab = l => nameOf(l) + (l.title || l.role ? ' (' + (l.title || l.role) + ')' : '');
+  const now = lines.filter(l => l.step === first).map(lab);
+  const later = lines.filter(l => l.step !== first).sort((a, b) => a.step - b.step).map(l => 'Step ' + l.step + ': ' + lab(l));
+  const byHand = list.filter(a => a && !a.user && (a.name || a.title || a.role)).map(a => (a.name || '(no name)') + (a.title || a.role ? ' (' + (a.title || a.role) + ')' : ''));
+  const noEmail = lines.filter(l => { const u = us.find(x => x.username === l.user); return !(u && String(u.email || '').trim()); }).map(nameOf);
+  return { routed: lines.length, now, later, byHand, noEmail };
+}
+
 /* Where the routing stands: who has signed, which step is open, who it waits on. */
 function apvStatus(approvers, apv) {
   const lines = apvRoute(approvers);

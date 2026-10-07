@@ -3410,7 +3410,11 @@ function App({
     return best ? best.num : '';
   };
   const apvSubmit = async () => {
-    if (!apvRoute(approvers).length) { showToast('Pick a user in the dropdown on at least one signatory card below (it starts on ✍ Sign by hand), then Submit again.', true); return; }
+    if (!apvRoute(approvers).length) {
+      /* Every signatory is on "Sign by hand": nobody is part of the routing, so nobody would be notified and nothing would wait on anyone. */
+      alert('Nobody would be notified.\n\nEvery signatory on this CE is set to "Sign by hand", so there is no one to route it to. Approvers are told only when the CE is routed to their account.\n\nOn each signatory card below, pick the person from the dropdown (it starts on "Sign by hand"), then Submit again.');
+      showToast('No approver is linked to an account — pick a user on at least one signatory card, then Submit again.', true); return;
+    }
     if (!String(info.ceNum || '').trim()) { showToast('Give the CE a number first.', true); return; }
     /* Only the latest revision can be routed. An older one submitted again was
        closed as superseded the next time anyone opened the list, so approvers
@@ -3424,6 +3428,16 @@ function App({
     const _e0 = mkEntry();
     const _kept = apvResume(_e0, info.approval);
     const _keptN = Object.keys(_kept).length;
+    /* Say who will be told, and who will not, before anything is sent. */
+    { const nt = apvRoutingNotice(approvers, _kept, (info.approval && info.approval.skipped) || {}, apvUsers);
+      const msg = ['Submit ' + info.ceNum + ' for approval?', '',
+        nt.routed ? 'Notified in Teams once it is routed:' : 'Everyone linked has already signed; nobody new is notified.',
+        ...nt.now.map(x => '  \u2022 ' + x),
+        ...(nt.later.length ? ['', 'Notified later, as the step before them signs:', ...nt.later.map(x => '  \u2022 ' + x)] : []),
+        ...(nt.byHand.length ? ['', '\u26A0 Set to "Sign by hand" \u2014 NOT part of the routing, never notified, and nothing waits for them. Their signature has to be put on by hand:', ...nt.byHand.map(x => '  \u2022 ' + x)] : []),
+        ...(nt.noEmail.length ? ['', '\u26A0 No email on their account, so no Teams message can reach them:', ...nt.noEmail.map(x => '  \u2022 ' + x), 'Add it in Admin \u2192 Users, or tell them yourself.'] : []),
+        '', 'Nobody is notified until you press OK.'].join('\n');
+      if (!confirm(msg)) return; }
     const apv = { state: 'pending', submittedAt: me.at, submittedBy: me.by, submittedByName: me.byName, figSig: apvFigSig(_e0), contentSig: apvContentSig(_e0), lines: _kept,
       skipped: (info.approval && info.approval.skipped) || {},
       log: [...((info.approval && info.approval.log) || []), {...me, action: 'submitted', kept: _keptN}] };

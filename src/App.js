@@ -3336,6 +3336,15 @@ function App({
      while that line is signed in the approval on the CE right now. */
   const visSigs = useMemo(() => apvVisibleSigs(approvers, info.approval, signatures), [approvers, info.approval, signatures]);
   const apvLocked = apvState === 'pending' || apvState === 'approved';
+  /* Once the accounts are known, link each named signatory to theirs, so the estimator is not left picking five people from a small
+     dropdown on every CE. Not while the CE is out for approval, and never a line set back to "Sign by hand" on purpose. */
+  useEffect(() => {
+    if (apvLocked || !apvUsers.length) return;
+    const r = apvAutoLink(approvers, apvUsers);
+    if (!r.linked.length) return;
+    setApprovers(r.approvers);
+    showToast('Linked to their accounts: ' + r.linked.map(l => l.name).join(', ') + '. Change any of them in its dropdown.');
+  }, [apvUsers, approvers, apvLocked]);
   const _apvMe = () => ({ by: currentUser.username, byName: currentUser.name || currentUser.username, at: new Date().toISOString() });
   /* Store an approval change. Save refuses a CE number that is already saved
      (so a finished CE cannot be overwritten by accident) -- which meant Submit
@@ -3629,7 +3638,7 @@ function App({
     const lbl = {none: 'Not submitted for approval', withdrawn: 'Withdrawn from approval', returned: '↩ Returned',
       superseded: '⊘ Superseded' + (_apvMon && _apvMon.supersededBy ? ' by ' + _apvMon.supersededBy : '') + ' — route the latest revision instead',
       approved: '✅ Approved · ' + s.signedN + '/' + s.total + ' signed',
-      pending: '⏳ Step ' + s.step + ' · ' + s.signedN + '/' + s.total + ' signed · waiting on ' + s.waiting.map(l => l.name || l.user).join(', ')}[apvState];
+      pending: '⏳ Step ' + (Array.from(new Set(s.lines.map(l => l.step))).sort((x, y) => x - y).indexOf(s.step) + 1) + ' of ' + new Set(s.lines.map(l => l.step)).size + ' · ' + s.signedN + '/' + s.total + ' signed · waiting on ' + s.waiting.map(l => l.name || l.user).join(', ')}[apvState];
     const ret = a && (a.log || []).filter(l => l.action === 'returned').slice(-1)[0];
     const b = (t, title, on, kind) => /*#__PURE__*/React.createElement("button", {style: {...btn(kind || 'def', true), fontSize: 10, padding: '3px 8px', textTransform: 'none', letterSpacing: 0}, title, onClick: on}, t);
     return /*#__PURE__*/React.createElement("div", {style: {display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, margin: '0 0 10px', padding: '8px 10px', borderRadius: 6, border: '1px solid ' + alpha(BDR, '88'), background: SURF}},
@@ -15394,7 +15403,7 @@ tab === 'dashboard' && (() => {
     disabled: apvLocked, value: a.user || '',
     title: 'Link this line to a user so they approve and sign it in the app',
     onChange: e => { const u = e.target.value, usr = apvUsers.find(x => x.username === u);
-      setApprovers(p => p.map((x, j) => j === i ? {...x, user: u, id: x.id || uid(), name: (!x.name && usr) ? (usr.name || usr.username) : x.name} : x)); }
+      setApprovers(p => p.map((x, j) => j === i ? {...x, user: u, byHand: !u, id: x.id || uid(), name: (!x.name && usr) ? (usr.name || usr.username) : x.name} : x)); }
   }, /*#__PURE__*/React.createElement("option", {value: ''}, '✍ Sign by hand'),
     a.user && !apvUsers.some(x => x.username === a.user) && /*#__PURE__*/React.createElement("option", {value: a.user}, a.user),
     apvUsers.map(x => /*#__PURE__*/React.createElement("option", {key: x.username, value: x.username}, '👤 ' + (x.name || x.username)))),

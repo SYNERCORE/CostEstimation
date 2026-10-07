@@ -36,6 +36,27 @@ function apvRoute(approvers) {
   })).filter(l => l.id && l.user);
 }
 
+/* Link each signatory to the user account that carries their name.
+
+   The presets (and the built-in defaults) hold a role, a name and a title, never an account, so every new CE started with every line on
+   "Sign by hand" and the estimator had to find each person in a small dropdown, CE after CE -- or submit with nobody routed. A line with
+   a name and no account is linked when exactly one active account has that name (case, titles such as Mr./Engr. and spacing ignored).
+   Left alone: the Prepared By line (the estimator signs that one by hand), a line already linked, a line someone deliberately put
+   back on "Sign by hand" (byHand), and a name that matches no account or more than one. */
+function apvAutoLink(approvers, users) {
+  const norm = t => String(t || '').toLowerCase().replace(/\b(mr|mrs|ms|miss|engr|eng|dr|atty|sir)\b\.?/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+  const us = (Array.isArray(users) ? users : []).filter(u => u && u.username && norm(u.name));
+  const linked = [];
+  const out = (Array.isArray(approvers) ? approvers : []).map(a => {
+    if (!a || a.user || a.byHand || /prepared/i.test(a.role || '') || !norm(a.name)) return a;
+    const hit = us.filter(u => norm(u.name) === norm(a.name));
+    if (hit.length !== 1) return a;
+    linked.push({ name: a.name, user: hit[0].username });
+    return { ...a, user: hit[0].username, id: a.id || ('a' + Math.random().toString(36).slice(2, 10)) };
+  });
+  return { approvers: linked.length ? out : approvers, linked };
+}
+
 /* What submitting will do, in words, for the confirmation shown before a CE is routed.
 
    Nobody is told anything until the CE is routed, and only the signatories linked to a user account are part of the routing: a line left
@@ -50,8 +71,10 @@ function apvRoutingNotice(approvers, kept, skipped, users) {
   const first = lines.length ? Math.min.apply(null, lines.map(l => l.step)) : null;
   const lab = l => nameOf(l) + (l.title || l.role ? ' (' + (l.title || l.role) + ')' : '');
   const now = lines.filter(l => l.step === first).map(lab);
-  const later = lines.filter(l => l.step !== first).sort((a, b) => a.step - b.step).map(l => 'Step ' + l.step + ': ' + lab(l));
-  const byHand = list.filter(a => a && !a.user && (a.name || a.title || a.role)).map(a => (a.name || '(no name)') + (a.title || a.role ? ' (' + (a.title || a.role) + ')' : ''));
+  /* Steps are numbered by where the card sits, so with the Prepared By card unlinked they read 2, 3, 5. Said in order instead: 2nd, 3rd... */
+  const order = Array.from(new Set(lines.map(l => l.step))).sort((a, b) => a - b);
+  const later = lines.filter(l => l.step !== first).sort((a, b) => a.step - b.step).map(l => 'Step ' + (order.indexOf(l.step) + 1) + ': ' + lab(l));
+  const byHand = list.filter(a => a && !a.user && (a.name || a.title || a.role) && !(/prepared/i.test(a.role || '') && !String(a.name || '').trim())).map(a => (a.name || '(no name)') + (a.title || a.role ? ' (' + (a.title || a.role) + ')' : ''));
   const noEmail = lines.filter(l => { const u = us.find(x => x.username === l.user); return !(u && String(u.email || '').trim()); }).map(nameOf);
   return { routed: lines.length, now, later, byHand, noEmail };
 }

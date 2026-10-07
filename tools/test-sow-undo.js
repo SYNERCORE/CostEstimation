@@ -15,7 +15,7 @@
  */
 'use strict';
 const fs = require('fs');
-const src = fs.readFileSync(process.argv[2] || 'src/App.js', 'utf8');
+const src = require('./lib/appsrc').plus(fs.readFileSync(process.argv[2] || 'src/App.js', 'utf8'));
 const grab = (re, what) => { const m = src.match(re); if (!m) { console.error('not found in source: ' + what); process.exit(1); } return m[0]; };
 
 let fails = 0;

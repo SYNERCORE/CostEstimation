@@ -7653,6 +7653,8 @@ function App({
     });
 
     /* Normalise a resource list: accept string[] or {code,cat,name,cost,uom}[] */
+    /* A row with no unit of its own: a person is counted in days, PPE in pieces, everything else by the lot. */
+    const dfltUom = type => type === 'mp' ? 'Day' : type === 'ppe' ? 'Pcs' : 'Lot';
     const normalise = (arr, type) => {
       const a = Array.isArray(arr) ? arr : arr || [];
       return a.map(r => {
@@ -7666,7 +7668,7 @@ function App({
             name: r,
             qty: 1,
             cost: match ? match.rate || match.cost || 0 : 0,
-            uom: match ? match.uom || 'Lot' : 'Lot'
+            uom: match ? match.uom || dfltUom(type) : dfltUom(type)
           };
         }
         return {
@@ -7676,7 +7678,7 @@ function App({
           name: r.name || r.role || r.desc || '',
           qty: r.qty || 1,
           cost: r.cost || r.rate || 0,
-          uom: r.uom || 'Lot',
+          uom: r.uom || dfltUom(type),
           /* Blank means "on site for the whole project", which is what every
              service written before this did -- apply stamped the project's day
              count onto every row. A number means this role is only needed for
@@ -7692,6 +7694,9 @@ function App({
     };
     const serialise = (rows, isMisc) => rows.map(r => r.name ? (
       {name: r.name, qty: r.qty || 1, step: Number.isFinite(r.step) ? r.step : 0,
+       /* The unit, cost, code and category picked in the editor are kept: they used to be dropped here, so every row came back as Lot at 0. */
+       ...(r.uom ? {uom: r.uom} : {}), ...(Number(r.cost) > 0 ? {cost: Number(r.cost)} : {}),
+       ...(r.code ? {code: r.code} : {}), ...(r.cat && r.cat !== 'General' && !isMisc ? {cat: r.cat} : {}),
        ...(Number(r.days) > 0 ? {days: Number(r.days)} : {}),
        ...(isMisc ? {miscCat: r.miscCat || 'requirements'} : {})}
     ) : null).filter(Boolean);

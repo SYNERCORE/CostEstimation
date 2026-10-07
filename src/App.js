@@ -5016,6 +5016,9 @@ function App({
     const preview = z.slice(0, 10).join('\n') + (z.length > 10 ? '\n... and ' + (z.length - 10) + ' more' : '');
     return await uiConfirm(z.length + ' item(s) have ₱0 cost and will not contribute to the total:\n\n' + preview + '\n\n' + action);
   };
+  /* The printed CE with every amount left blank, to share the scope and quantities without the prices. No zero-cost check: it is about
+     prices, and this copy shows none. */
+  const handleGenerateCENoAmounts = () => handleGenerateCE({ noAmounts: true });
   const handleGenerateCEWithCheck = async () => {
     if (!await confirmZeroCost('Proceed with generating CE?')) return;
     handleGenerateCE();
@@ -5767,7 +5770,7 @@ tab === 'dashboard' && DashboardTab({ dashAll, dashQ, dashReqQ, getStatusColor, 
        was never handed the reader. */
     readFile: resStable.readFile,
     masterlist, showToast: resStable.showToast, setPicker
-  }), tab === 'misc' && /*#__PURE__*/MiscTab({ ceType, masterlist, misc, miscT, mp, setMisc, setPicker, showToast, syncMealRates, syncMealRows }), tab === 'summary' && /*#__PURE__*/SummaryTab({ _defaultsUntouched, _mobTabs, addlCosts, aiSuggest, applyCeDefaults, approvers, apvBar, apvLocked, apvState, apvUsers, busyBtn, busyOp, ceDefaults, ceLayoutKey, ceType, cfg, collectZeroCost, demobVehicles, docFile, grand, handleExport, handleExportXLSX, handleGenerateCEWithCheck, handlePrintPreview, handleSave, handleSaveRevision, history, hlAmt, hlKeys, hlLabel, hlMissing, hlPick, hlPickQ, hlSources, info, isRequestor, loadSharedDrafts, margin, mats, misc, mkNote, mobVehicles, mp, notes, perJob, perJobNames, perJobT, ppe, qtyMulOn, qtyN, saveDraft, servicesSummary, setAddlCosts, setAiSuggest, setApprovers, setCeType, setDraftsOpen, setHlPick, setHlPickQ, setInfo, setMargin, setNotes, setSigModal, setTab, setVerifyNotes, sharedDrafts, showToast, showUnitP, sowItems, sowLabels, sowUnassignedCount, summaryDot, summaryRows, syncRatesFromML, tools, unitP, verifyNotes, visSigs })), /* Live Totals describe the CE being built, so they show on its estimating
+  }), tab === 'misc' && /*#__PURE__*/MiscTab({ ceType, masterlist, misc, miscT, mp, setMisc, setPicker, showToast, syncMealRates, syncMealRows }), tab === 'summary' && /*#__PURE__*/SummaryTab({ _defaultsUntouched, _mobTabs, addlCosts, aiSuggest, applyCeDefaults, approvers, apvBar, apvLocked, apvState, apvUsers, busyBtn, busyOp, ceDefaults, ceLayoutKey, ceType, cfg, collectZeroCost, demobVehicles, docFile, grand, handleExport, handleExportXLSX, handleGenerateCENoAmounts, handleGenerateCEWithCheck, handlePrintPreview, handleSave, handleSaveRevision, history, hlAmt, hlKeys, hlLabel, hlMissing, hlPick, hlPickQ, hlSources, info, isRequestor, loadSharedDrafts, margin, mats, misc, mkNote, mobVehicles, mp, notes, perJob, perJobNames, perJobT, ppe, qtyMulOn, qtyN, saveDraft, servicesSummary, setAddlCosts, setAiSuggest, setApprovers, setCeType, setDraftsOpen, setHlPick, setHlPickQ, setInfo, setMargin, setNotes, setSigModal, setTab, setVerifyNotes, sharedDrafts, showToast, showUnitP, sowItems, sowLabels, sowUnassignedCount, summaryDot, summaryRows, syncRatesFromML, tools, unitP, verifyNotes, visSigs })), /* Live Totals describe the CE being built, so they show on its estimating
      screens only -- on My Work, Monitoring, the Dashboard and the libraries they
      read ₱0.00 or another CE's figures and take a quarter of the width. */
   LiveTotalsSidebar({ TAB_GROUPS, cfg, demobSubT, grand, history, masterlist, matsT, miscT, mobSubT, mpTot, ppeT, provInfo, railSlim, rr, setApiKeyInput, setShowApiKey, setTab, tab, toggleRail, toolsT, unitP })));

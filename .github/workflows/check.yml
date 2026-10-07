@@ -455,5 +455,7 @@ jobs:
         run: node tools/test-picker-pages.js
       - name: Form controls have accessible names
         run: node tools/test-a11y-labels.js
+      - name: Generate CE without amounts
+        run: node tools/test-ce-no-amounts.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

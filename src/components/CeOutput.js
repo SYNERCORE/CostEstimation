@@ -55,7 +55,16 @@ function makeHandleGenerateCE(getCtx) {
       unitLbl,
       unitP
     } = getCtx();
-    const fmt = (n, d = 2) => 'P' + N(n).toLocaleString('en-PH', {
+    /* Generate CE without the amounts: the same document -- scope, quantities, days, rates' columns -- with every money figure left blank, for
+       a copy that goes to someone who should see what is being done but not what it costs. fmt is the one place a peso amount is written, so
+       blanking it blanks them all; dropTotals then removes the total, unit-price, margin and highlighted-cost lines, which would be labels with
+       nothing beside them (a sub total that counts people stays, it holds no money). */
+    const noAmt = !!(opt && opt.noAmounts);
+    const dropTotals = html => !noAmt ? html : html.replace(/<tr class="tot"[^>]*>[\s\S]*?<\/tr>|<div class="tot"[^>]*>[\s\S]*?<\/div>/g, m => {
+      const t = m.replace(/<[^>]*>/g, ' ').replace(/&[a-z]+;/g, ' ').replace(/\([^)]*\)/g, ' ');
+      return (!/\d/.test(t) || /SELLING PRICE|margin/i.test(t)) ? '' : m;
+    });
+    const fmt = (n, d = 2) => noAmt ? '' : 'P' + N(n).toLocaleString('en-PH', {
       minimumFractionDigits: d,
       maximumFractionDigits: d
     });
@@ -200,8 +209,8 @@ function makeHandleGenerateCE(getCtx) {
       ${showUnitP ? `<tr class="tot"><td colspan="2" class="b r">${esc(unitLbl)}</td><td class="r b">${fmt(unitP)}</td></tr>` : ''}
       ${showUnitP && perJobT ? `<tr class="tot"><td colspan="2" class="b r">${esc(perJobLbl)}</td><td class="r b">${fmt(perJobT)}</td></tr>` : ''}
       ${margin !== 0 ? `<tr class="tot" style="background:#e8f5e9"><td colspan="2" class="b r">SELLING PRICE (${margin > 0 ? '+' : ''}${margin}% margin):</td><td class="r b">${fmt(grand*(1+margin/100))}</td></tr>` : ''}
-      ${hlRows.length ? `<tr><td colspan="3" class="c b" style="background:#ddd;font-size:7.5pt">HIGHLIGHTED COSTS (already included above)</td></tr>` + hlRows.map(r=>`<tr class="tot"><td colspan="2" class="b r">${esc(hlLabel(r).toUpperCase())}:</td><td class="r b">${fmt(hlAmt(r))}</td></tr>`).join('') : ''}
-      ${servicesSummary.on && servicesSummary.ok ? `<tr><td colspan="3" class="c b" style="background:#ddd">SERVICES</td></tr>
+      ${hlRows.length && !noAmt ? `<tr><td colspan="3" class="c b" style="background:#ddd;font-size:7.5pt">HIGHLIGHTED COSTS (already included above)</td></tr>` + hlRows.map(r=>`<tr class="tot"><td colspan="2" class="b r">${esc(hlLabel(r).toUpperCase())}:</td><td class="r b">${fmt(hlAmt(r))}</td></tr>`).join('') : ''}
+      ${servicesSummary.on && servicesSummary.ok && !noAmt ? `<tr><td colspan="3" class="c b" style="background:#ddd">SERVICES</td></tr>
       ${servicesSummary.lines.map(l=>`<tr><td colspan="2" class="b r">${esc(l.label.toUpperCase())}:</td><td class="r">${fmt(l.v)}</td></tr>`).join('')}
       ${Math.abs(servicesSummary.other) >= 0.005 ? `<tr><td colspan="2" class="b r">OTHER MISC. TO THE PROJECT:</td><td class="r">${fmt(servicesSummary.other)}</td></tr>` : ''}
       <tr class="tot"><td colspan="2" class="b r" style="font-size:9pt">SERVICES TOTAL AMOUNT:</td><td class="r b" style="font-size:9pt">${fmt(servicesSummary.total)}</td></tr>` : ''}
@@ -328,7 +337,7 @@ function makeHandleGenerateCE(getCtx) {
       <div class="sec">MOBILIZATION / DEMOBILIZATION</div>
       ${mobTable('MOBILIZATION',_mobR,mobVehiclesT)}${mobTable('DEMOBILIZATION',_demobR,demobVehiclesT)}
       <div class="tot" style="text-align:right;padding:3px 4px;font-weight:bold">MOBILIZATION / DEMOBILIZATION TOTAL: ${fmt(mobVehiclesT+demobVehiclesT)}</div></div>`:'';
-    const bills=[mobPage,mpPage,benPage,toolsPage,matsPage,ppePage,miscPage].filter(Boolean).join('');
+    const bills=dropTotals([mobPage,mpPage,benPage,toolsPage,matsPage,ppePage,miscPage].filter(Boolean).join(''));
     const billsPage=bills?`<div class="page page-break">${docHdr('BILL OF QUANTITIES')}${bills}</div>`:'';
 
     const sowPage=sowItems.length?`<div class="page page-break">${docHdr('SCOPE OF WORK')}<div style="font-size:8pt;line-height:1.6">${(()=>{let mc=0,sc=0;return sowItems.map(it=>{if(it.type==='main'){mc++;sc=0;return`<div style="margin-top:4px"><b>${mc}. ${esc(it.text)}</b></div>`;}else{sc++;return`<div style="margin-left:14px">${mc}.${sc} ${esc(it.text)}</div>`;}}).join('');})()}</div></div>`:'';
@@ -465,7 +474,7 @@ function makeHandleGenerateCE(getCtx) {
       <div class="page">
         ${docHdr('COST ESTIMATE SUMMARY')}
         ${infoTable}
-        ${costTable}
+        ${dropTotals(costTable)}
         ${notesList}
         ${sigBlock}
       </div>

@@ -30,7 +30,7 @@
 const fs = require('fs');
 const vm = require('vm');
 
-const app = fs.readFileSync('src/App.js', 'utf8');
+const app = require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8'));
 const cfgSrc = fs.readFileSync('src/config.js', 'utf8');
 const helpSrc = fs.readFileSync('src/helpers.js', 'utf8');
 

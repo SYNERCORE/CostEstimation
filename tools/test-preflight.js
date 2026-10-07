@@ -4,7 +4,7 @@
  * is clean when it is not, or flagging a complete CE. Both are tested here.
  */
 const fs = require('fs');
-const src = fs.readFileSync(process.argv[2], 'utf8');
+const src = require('./lib/appsrc').plus(fs.readFileSync(process.argv[2], 'utf8'));
 
 /* Grab the rule block: everything between the issue list and the severity tally. */
 const m = src.match(/const issues = \[\];[\s\S]*?const clean = issues\.length === 0;/);

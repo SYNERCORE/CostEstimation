@@ -28,9 +28,11 @@ const src = raw.replace(/\/\*[\s\S]*?\*\//g, '');
 let bad = 0;
 const ck = (n, c, x) => { if (c) console.log('  PASS  ' + n); else { console.log('  FAIL  ' + n + (x ? '  -> ' + x : '')); bad++; } };
 
-/* The panel's body now lives in MonitoringPanel.js, the last file appended; HistPanel in App is the call to it. */
+/* The panel's body now lives in MonitoringPanel.js; HistPanel in App is the call to it. */
 const i = src.indexOf('function MonitoringPanel(ctx)');
-const panel = i < 0 ? '' : src.slice(i);
+/* The panel is one top-level function; the split files appended after it are not part of it. */
+const panelEnd = i < 0 ? -1 : src.indexOf('\nfunction ', i + 10);
+const panel = i < 0 ? '' : src.slice(i, panelEnd < 0 ? undefined : panelEnd);
 ck('HistPanel found', panel.length > 1000, String(panel.length));
 
 console.log('\nthe panel is not remounted on every App render:');

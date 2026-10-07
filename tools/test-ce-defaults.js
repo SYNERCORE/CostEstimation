@@ -16,7 +16,7 @@
 
 const fs = require('fs');
 const cfgSrc = fs.readFileSync('src/config.js', 'utf8');
-const app = fs.readFileSync('src/App.js', 'utf8');
+const app = require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8'));
 const db = fs.readFileSync('src/db.js', 'utf8');
 const panel = fs.readFileSync('src/components/CeDefaultsPanel.js', 'utf8');
 

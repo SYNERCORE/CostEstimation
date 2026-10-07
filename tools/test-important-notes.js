@@ -22,7 +22,7 @@ const ck = (what, cond, got) => {
   if (!cond) bad++;
 };
 
-const app = R('src/App.js');
+const app = require('./lib/appsrc').plus(R('src/App.js'));
 const help = R('src/helpers.js');
 const xl = R('src/xlsx-styled.js');
 const panel = R('src/components/CeDefaultsPanel.js');

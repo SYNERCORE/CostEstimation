@@ -19,7 +19,7 @@ const R = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 let bad = 0;
 const ck = (what, cond) => { console.log((cond ? '  PASS  ' : '  FAIL  ') + what); if (!cond) bad++; };
 
-const app = R('src/App.js');
+const app = require('./lib/appsrc').plus(R('src/App.js'));
 const cfg = R('src/config.js');
 const help = R('src/helpers.js');
 

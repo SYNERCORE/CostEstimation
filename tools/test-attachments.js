@@ -27,7 +27,7 @@
 const fs = require('fs');
 const vm = require('vm');
 const sp = fs.readFileSync('src/sp.js', 'utf8');
-const raw = fs.readFileSync('src/App.js', 'utf8');
+const raw = require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8'));
 const app = raw.replace(/\/\*[\s\S]*?\*\//g, '');
 const db = fs.readFileSync('src/db.js', 'utf8');
 const reg = fs.readFileSync('src/components/RegisterPage.js', 'utf8');

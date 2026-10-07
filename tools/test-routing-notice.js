@@ -3,7 +3,7 @@
 'use strict';
 const fs = require('fs'), path = require('path');
 const apv = fs.readFileSync(path.join(__dirname, '..', 'src/approval.js'), 'utf8').replace(/\r\n/g, '\n');
-const app = fs.readFileSync(path.join(__dirname, '..', 'src/App.js'), 'utf8').replace(/\r\n/g, '\n');
+const app = require('./lib/appsrc').plus(fs.readFileSync(path.join(__dirname, '..', 'src/App.js'), 'utf8')).replace(/\r\n/g, '\n');
 let bad = 0;
 const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 const a = apv.indexOf('function apvRoute('), b = apv.indexOf('/* Where the routing stands');

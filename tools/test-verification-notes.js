@@ -16,7 +16,7 @@
  */
 'use strict';
 const fs = require('fs');
-const raw = fs.readFileSync('src/App.js', 'utf8');
+const raw = require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8'));
 const app = raw.replace(/\/\*[\s\S]*?\*\//g, '');
 const db = fs.readFileSync('src/db.js', 'utf8');
 const lock = JSON.parse(fs.readFileSync('tools/logic.lock.json', 'utf8'));

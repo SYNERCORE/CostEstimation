@@ -22,7 +22,7 @@ const path = require('path');
 const vm = require('vm');
 const ROOT = path.join(__dirname, '..');
 const rd = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
-const constants = rd('src/constants.js'), app = rd('src/App.js'), res = rd('src/components/ResTab.js');
+const constants = rd('src/constants.js'), app = require('./lib/appsrc').plus(rd('src/App.js')), res = rd('src/components/ResTab.js');
 
 let fails = 0;
 const ck = (name, cond, extra) => {

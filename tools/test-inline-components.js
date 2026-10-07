@@ -17,7 +17,7 @@
  */
 'use strict';
 const fs = require('fs');
-const src = fs.readFileSync(process.argv[2] || 'src/App.js', 'utf8');
+const src = require('./lib/appsrc').plus(fs.readFileSync(process.argv[2] || 'src/App.js', 'utf8'));
 
 let fails = 0;
 const ck = (name, cond, extra) => {

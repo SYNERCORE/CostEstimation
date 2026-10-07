@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const rd = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
-const app = rd('src/App.js'), db = rd('src/db.js'), sw = rd('sw.js'), idb = rd('src/idb.js'), html = rd('index.html');
+const app = require('./lib/appsrc').plus(rd('src/App.js')), db = rd('src/db.js'), sw = rd('sw.js'), idb = rd('src/idb.js'), html = rd('index.html');
 
 let fails = 0;
 const ck = (name, cond, extra) => {

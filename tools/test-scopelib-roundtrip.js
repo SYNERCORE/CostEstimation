@@ -17,7 +17,7 @@
  */
 'use strict';
 const fs = require('fs');
-const app = fs.readFileSync('src/App.js', 'utf8');
+const app = require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8'));
 
 let bad = 0;
 const ck = (n, c, x) => { if (c) console.log('  PASS  ' + n); else { console.log('  FAIL  ' + n + (x ? '  -> ' + x : '')); bad++; } };
@@ -108,7 +108,7 @@ ck('a tool genuinely named with a trailing letter-number keeps its name',
 /* A step could only ever be appended. Remembering one you left out of the
    middle of a method meant adding it at the end and clicking Move up until it
    arrived -- once per position, on both screens. */
-const app2 = fs.readFileSync('src/App.js', 'utf8');
+const app2 = require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8'));
 console.log('\na step can be put where it belongs:');
 ck('the Scope of Work tab can insert a main item',
   app2.indexOf('title: "Insert a main item below this one"') > 0);

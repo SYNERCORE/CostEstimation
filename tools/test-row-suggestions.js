@@ -24,7 +24,7 @@ let bad = 0;
 const ck = (n, c, x) => { if (c) console.log('  PASS  ' + n); else { console.log('  FAIL  ' + n + (x !== undefined ? '  -> ' + x : '')); bad++; } };
 const NL = String.fromCharCode(10);
 
-const FILES = ['src/App.js', 'src/components/ResTab.js'];
+const FILES = ['src/App.js', 'src/components/ResTab.js', 'src/components/ScopeLibraryTab.js'];
 
 console.log('no suggestion list is built per row:');
 FILES.forEach(f => {
@@ -42,7 +42,7 @@ FILES.forEach(f => {
 });
 
 console.log(NL + 'and where a list still sits inside the row loop, only one is made:');
-const app = R('src/App.js');
+const app = require('./lib/appsrc').plus(R('src/App.js'));
 /* These three tables render their datalist from within the row map, so they
    are gated on the first row instead of being hoisted out of it. */
 ck('the ML selector rows build one',

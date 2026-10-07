@@ -106,7 +106,7 @@ ck('index.html loads no remote <script>', !/<script src="https?:/.test(html), 'a
 ck('pdf.js worker points at the local copy', /workerSrc = '\.\/vendor\/pdf\.worker\.min\.js'/.test(app));
 ck('msal tries the local copy first', /'\.\/vendor\/msal-browser\.min\.js',/.test(rd('src/sp.js')));
 ck('vendored libs are precached', /'\.\/vendor\/react\.production\.min\.js/.test(sw));
-ck('runtime-loaded libs are precached too', /const EXTRA=\['\.\/vendor\/pdf\.worker\.min\.js','\.\/vendor\/msal-browser\.min\.js'\]/.test(sw));
+ck('runtime-loaded libs are precached too', /const EXTRA=\['\.\/vendor\/pdf\.worker\.min\.js','\.\/vendor\/msal-browser\.min\.js','\.\/vendor\/xlsx\.full\.min\.js','\.\/vendor\/pdf\.min\.js','\.\/vendor\/mammoth\.browser\.min\.js'\]/.test(sw));
 ck('vendor is served cache-first', /\(src\|vendor\)/.test(sw));
 /* Strip comments first -- sw.js explains the addAll hazard in prose, and a
    naive search would match that explanation rather than the code. */

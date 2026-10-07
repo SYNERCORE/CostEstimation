@@ -449,5 +449,7 @@ jobs:
         run: node tools/test-save-detects-newer-copy.js
       - name: No native confirm/alert; in-app dialogs behave
         run: node tools/test-no-native-dialogs.js
+      - name: The spreadsheet, PDF and Word libraries load on first use, stay cached for offline, and recover from a failed fetch
+        run: node tools/test-lazy-libs.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

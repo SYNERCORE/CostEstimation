@@ -1,4 +1,4 @@
-const CACHE='shic-ce-v408';
+const CACHE='shic-ce-v409';
 /* The libraries now ship in ./vendor and are precached as part of APP, so the
    app no longer needs the public internet at all after its first load. Only
    MSAL is still fetched remotely, and only as a fallback behind the local copy
@@ -7,68 +7,66 @@ const CDN=[
   'https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js'
 ];
 const SHELL=['./','./index.html','./manifest.json','./icon.svg'];
-/* Vendored libraries that are NOT <script> tags in index.html, so the precache
+/* Vendored libraries that are NOT <script> tags in index.html (xlsx, pdf.js and mammoth are loaded on first use by src/lazylib.js), so the precache
    generator cannot see them: pdf.js loads its worker at runtime, and msal is
    injected on demand. Both must be cached or the feature dies offline. */
-const EXTRA=['./vendor/pdf.worker.min.js','./vendor/msal-browser.min.js'];
+const EXTRA=['./vendor/pdf.worker.min.js','./vendor/msal-browser.min.js','./vendor/xlsx.full.min.js','./vendor/pdf.min.js','./vendor/mammoth.browser.min.js'];
 /* Every application script index.html loads, with the same ?v= query it uses.
    These were NOT precached before, so offline the shell loaded but none of the
    app did. Kept in step with index.html by tools/check-sw-precache.js.
    APP_START */
 const APP=[
-  './vendor/react.production.min.js?v=408',
-  './vendor/react-dom.production.min.js?v=408',
-  './vendor/xlsx.full.min.js?v=408',
-  './vendor/pdf.min.js?v=408',
-  './vendor/mammoth.browser.min.js?v=408',
-  './src/constants.js?v=408',
-  './src/helpers.js?v=408',
-  './src/dialogs.js?v=408',
-  './src/approval.js?v=408',
-  './src/xlsx-styled.js?v=408',
-  './src/ai.js?v=408',
-  './src/ai_models.js?v=408',
-  './src/config.js?v=408',
-  './src/update.js?v=408',
-  './src/qr.js?v=408',
-  './src/sp.js?v=408',
-  './src/idb.js?v=408',
-  './src/db.js?v=408',
-  './src/auth.js?v=408',
-  './src/components/LoginPage.js?v=408',
-  './src/components/RegisterPage.js?v=408',
-  './src/components/CompanyDBPanel.js?v=408',
-  './src/components/CeDefaultsPanel.js?v=408',
-  './src/components/ShiftRatesPanel.js?v=408',
-  './src/components/FbSetupPanel.js?v=408',
-  './src/components/LocalToSPSync.js?v=408',
-  './src/components/ChangePasswordModal.js?v=408',
-  './src/components/UpdatePublisher.js?v=408',
-  './src/components/AdminPanel.js?v=408',
-  './src/components/RceChecklistCard.js?v=408',
-  './src/components/RceReviewModal.js?v=408',
-  './src/components/ProjectInfoGate.js?v=408',
-  './src/components/DashboardTab.js?v=408',
-  './src/components/MonitoringPanel.js?v=408',
-  './src/components/MyWorkTab.js?v=408',
-  './src/components/ScopeLibraryTab.js?v=408',
-  './src/components/MasterlistTab.js?v=408',
-  './src/components/ManpowerTab.js?v=408',
-  './src/components/SowBreakdownTab.js?v=408',
-  './src/components/SummaryTab.js?v=408',
-  './src/components/MiscTab.js?v=408',
-  './src/components/SowTab.js?v=408',
-  './src/components/InfoTab.js?v=408',
-  './src/components/AppChrome.js?v=408',
-  './src/components/AppImports.js?v=408',
-  './src/components/PickerDialog.js?v=408',
-  './src/components/CeOutput.js?v=408',
-  './src/components/ResTab.js?v=408',
-  './src/components/Calculators.js?v=408',
-  './src/App.js?v=408',
-  './src/widgets.js?v=408',
-  './src/tests.js?v=408',
-  './src/ml_utils.js?v=408'
+  './vendor/react.production.min.js?v=409',
+  './vendor/react-dom.production.min.js?v=409',
+  './src/lazylib.js?v=409',
+  './src/constants.js?v=409',
+  './src/helpers.js?v=409',
+  './src/dialogs.js?v=409',
+  './src/approval.js?v=409',
+  './src/xlsx-styled.js?v=409',
+  './src/ai.js?v=409',
+  './src/ai_models.js?v=409',
+  './src/config.js?v=409',
+  './src/update.js?v=409',
+  './src/qr.js?v=409',
+  './src/sp.js?v=409',
+  './src/idb.js?v=409',
+  './src/db.js?v=409',
+  './src/auth.js?v=409',
+  './src/components/LoginPage.js?v=409',
+  './src/components/RegisterPage.js?v=409',
+  './src/components/CompanyDBPanel.js?v=409',
+  './src/components/CeDefaultsPanel.js?v=409',
+  './src/components/ShiftRatesPanel.js?v=409',
+  './src/components/FbSetupPanel.js?v=409',
+  './src/components/LocalToSPSync.js?v=409',
+  './src/components/ChangePasswordModal.js?v=409',
+  './src/components/UpdatePublisher.js?v=409',
+  './src/components/AdminPanel.js?v=409',
+  './src/components/RceChecklistCard.js?v=409',
+  './src/components/RceReviewModal.js?v=409',
+  './src/components/ProjectInfoGate.js?v=409',
+  './src/components/DashboardTab.js?v=409',
+  './src/components/MonitoringPanel.js?v=409',
+  './src/components/MyWorkTab.js?v=409',
+  './src/components/ScopeLibraryTab.js?v=409',
+  './src/components/MasterlistTab.js?v=409',
+  './src/components/ManpowerTab.js?v=409',
+  './src/components/SowBreakdownTab.js?v=409',
+  './src/components/SummaryTab.js?v=409',
+  './src/components/MiscTab.js?v=409',
+  './src/components/SowTab.js?v=409',
+  './src/components/InfoTab.js?v=409',
+  './src/components/AppChrome.js?v=409',
+  './src/components/AppImports.js?v=409',
+  './src/components/PickerDialog.js?v=409',
+  './src/components/CeOutput.js?v=409',
+  './src/components/ResTab.js?v=409',
+  './src/components/Calculators.js?v=409',
+  './src/App.js?v=409',
+  './src/widgets.js?v=409',
+  './src/tests.js?v=409',
+  './src/ml_utils.js?v=409'
 ];
 /* APP_END */
 self.addEventListener('install',e=>{

@@ -19,7 +19,7 @@ const R = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 let bad = 0;
 const ck = (what, cond) => { console.log((cond ? '  PASS  ' : '  FAIL  ') + what); if (!cond) bad++; };
 
-const app = R('src/App.js');
+const app = require('./lib/appsrc').plus(R('src/App.js'));
 const xl = R('src/xlsx-styled.js');
 
 console.log('CE SUMMARY columns');
@@ -27,7 +27,8 @@ console.log('CE SUMMARY columns');
 /* ---- run the shipped loop ---- */
 const TOTAL_COL = 6;
 const START = 'ceSections.filter(x => x.v > 0).forEach(x => {';
-const at = app.indexOf(START);
+/* The same loop also builds the workbook and the printed CE; this one is the text summary inside makeHandleExport. */
+const at = app.indexOf(START, app.indexOf('function makeHandleExport('));
 ck('the summary loop is where it was', at > 0);
 
 /* Take the loop verbatim, up to the line that writes TOTAL AMOUNT. */

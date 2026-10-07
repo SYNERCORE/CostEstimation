@@ -143,7 +143,7 @@ const build = async opts => {
     j['[Content_Types].xml'].toString().indexOf('<Default Extension="jpeg" ContentType="image/jpeg"/>') > 0);
 
   console.log('\nand the header text gets out of its way:');
-  const app = fs.readFileSync('src/App.js', 'utf8');
+  const app = require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8'));
   /* Drawn OVER A1, so the name underneath would show through it. */
   ck('the company name is not written under the logo',
     /co\.logo \? '' : \[co\.name, co\.sub\]\.filter\(Boolean\)\.join/.test(app));

@@ -83,7 +83,8 @@ ck('and everything paid on top of it in C.7 (' + his.benefits.toFixed(2) + ')',
 
 /* ---- the shipped loop, run under both layouts ---- */
 const START = 'ceSections.filter(x => x.v > 0).forEach(x => {';
-const at = app.indexOf(START);
+/* The same loop also builds the workbook and the printed CE; this one is the text summary inside makeHandleExport. */
+const at = app.indexOf(START, app.indexOf('function makeHandleExport('));
 const endAt = app.indexOf("sum.push([S('', 'totlbl'), S('TOTAL AMOUNT:'", at);
 const loop = app.slice(at, app.lastIndexOf('});', endAt) + 3);
 ck('the summary loop is where it was', at > 0 && loop.length > 100);

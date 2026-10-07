@@ -18,7 +18,7 @@
 'use strict';
 
 const fs = require('fs');
-const src = fs.readFileSync(process.argv[2] || 'src/App.js', 'utf8');
+const src = require('./lib/appsrc').plus(fs.readFileSync(process.argv[2] || 'src/App.js', 'utf8'));
 const grab = (re, what) => { const m = src.match(re); if (!m) { console.error('not found in source: ' + what); process.exit(1); } return m[0]; };
 
 let fails = 0;
@@ -27,7 +27,8 @@ const ck = (name, cond, extra) => {
   else { console.log('  FAIL  ' + name + (extra !== undefined ? '  -> ' + extra : '')); fails++; }
 };
 
-const exp = grab(/const handleExportXLSX = \(\) => \{[\s\S]*?showToast\('Exported to Excel[^\n]*\n  \};/, 'handleExportXLSX');
+/* handleExportXLSX now lives in CeOutput.js as makeHandleExportXLSX: the same body, one level in, ending at the maker's closing brace. */
+const exp = grab(/function makeHandleExportXLSX\(getCtx\) \{[\s\S]*?\n\}\n/, 'handleExportXLSX');
 
 console.log('One worksheet per page of the printed CE:');
 for (const [sheet, why] of [
@@ -85,7 +86,7 @@ ck('and the one breakdown, not its own', /ceBreakdown\[x\.printLabel\]/.test(exp
 ck('selling price only when there is a margin', /margin !== 0\) a\.total/.test(exp));
 ck('highlighted costs are carried over', /hlRows\.forEach/.test(exp));
 ck('the unit price divides by the CE quantity', /a\.total\('', unitLbl, a\.money\(unitP\)\)/.test(exp) &&
-  fs.readFileSync('src/App.js', 'utf8').indexOf('const unitP = (grand - perJobT) / qtyN;') > 0);
+  require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8')).indexOf('const unitP = (grand - perJobT) / qtyN;') > 0);
 ck('and per-job costs are charged once, on their own line', /if \(showUnitP && perJobT\) a\.total\('', perJobLbl, a\.money\(perJobT\)\)/.test(exp));
 
 console.log('\nNumbers are numbers, so the recipient can total a column:');
@@ -126,7 +127,7 @@ ck('one shared benefitRows for the print and both exports',
   (src.match(/benefitRows/g) || []).length >= 4,
   'three copies of this table drifted apart once already');
 ck('Export Detailed uses it', /benefitRows\.forEach/.test(exp));
-ck('the top-bar export uses it too', /benefitRows\.forEach/.test(src.slice(src.indexOf('const handleExport = ()'))));
+ck('the top-bar export uses it too', /benefitRows\.forEach/.test(src.slice(src.indexOf('function makeHandleExport('))));
 ck('one line per role, not one per shift', /String\(r\.role\)\.trim\(\)\.toUpperCase\(\)/.test(src),
   'the same name twice reads as two hires; the Manpower tab merges them');
 ck('the incentive is part of the benefits total', /'thirteenth', 'sss', 'hdmf', 'sil', (?:'ecc', )?'perdiem', 'total'/.test(src),
@@ -147,7 +148,7 @@ ck('empty sections are skipped, as the print skips empty pages', /if \(!rows\.le
  * cost estimate that must never be guessed at.
  */
 console.log('\nThe top-bar export names nobody the CE does not name:');
-const exp1 = grab(/const handleExport = \(\) => \{[\s\S]*?showToast\('Excel exported[^\n]*\n  \};/, 'handleExport');
+const exp1 = grab(/function makeHandleExport\(getCtx\) \{[\s\S]*?\n\}\n/, 'handleExport');
 /* The same names appear in the DEFAULT approvers state, which is correct --
    that is the roster the estimator starts from and can edit. What must not
    happen is the export reaching past that list to a copy of its own. */

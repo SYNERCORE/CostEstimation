@@ -14,7 +14,7 @@
    Run: node tools/test-print-nothing-lost.js */
 'use strict';
 const fs = require('fs');
-const app = fs.readFileSync('src/App.js', 'utf8');
+const app = require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8'));
 let bad = 0; const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 
 /* ---- a DOM just big enough for the paginator ---- */

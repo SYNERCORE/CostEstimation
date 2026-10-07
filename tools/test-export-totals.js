@@ -2,7 +2,7 @@
 /* Export Detailed: every total sits under its table's last column, label beside it,
    as the printed CE lays it out. Run: node tools/test-export-totals.js */
 'use strict';
-const app = require('fs').readFileSync('src/App.js', 'utf8');
+const app = require('./lib/appsrc').plus(require('fs').readFileSync('src/App.js', 'utf8'));
 let bad = 0;
 const ck = (n, c, x) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n + (c || !x ? '' : '  -> ' + x)); if (!c) bad++; };
 const src = (app.match(/        total: \(\.\.\.cells\) => \{[\s\S]*?\n        \},/) || [''])[0];

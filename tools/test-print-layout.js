@@ -3,7 +3,7 @@
    which CE and which document it belongs to.
    Run: node tools/test-print-layout.js */
 'use strict';
-const app = require('fs').readFileSync('src/App.js', 'utf8');
+const app = require('./lib/appsrc').plus(require('fs').readFileSync('src/App.js', 'utf8'));
 let bad = 0; const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 ck('at most four signatories to a row', /const SIG_PER_ROW = 4;/.test(app) && /approvers\.slice\(i, i \+ SIG_PER_ROW\)/.test(app));
 ck('a short last row keeps the same cell width', /fill\('<td style="border:none"><\/td>'\)/.test(app));

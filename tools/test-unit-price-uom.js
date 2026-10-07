@@ -3,7 +3,7 @@
    "UNIT PRICE PER PCS" -- on the summary, the printed CE and both exports.
    Run: node tools/test-unit-price-uom.js */
 'use strict';
-const app = require('fs').readFileSync('src/App.js', 'utf8');
+const app = require('./lib/appsrc').plus(require('fs').readFileSync('src/App.js', 'utf8'));
 let bad = 0; const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 
 ck('the label names the unit, not the count',

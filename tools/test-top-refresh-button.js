@@ -3,7 +3,7 @@
 'use strict';
 const fs = require('fs'), path = require('path');
 const rd = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8').replace(/\r\n/g, '\n');
-const w = rd('src/widgets.js'), app = rd('src/App.js');
+const w = rd('src/widgets.js'), app = require('./lib/appsrc').plus(rd('src/App.js'));
 let bad = 0;
 const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 ck('widgets.js parses', (() => { try { new Function(w); return true; } catch (e) { console.log(e.message); return false; } })());

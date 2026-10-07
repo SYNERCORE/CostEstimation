@@ -90,7 +90,7 @@ ck('there is an ON_ACC', /const ON_ACC = "var\(--on-accent\)"/.test(con));
 ck('both themes define it', /--on-accent: #000000/.test(darkBlock) && /--on-accent: #ffffff/.test(lightBlock),
   'light-mode amber is dark enough that black on it fails contrast');
 ck('the accent button uses it', /color: v === "acc" \? ON_ACC/.test(con));
-ck('and no on-accent text is hardcoded black', !/background: ACC,\n\s+color: '#000'/.test(fs.readFileSync('src/App.js', 'utf8')));
+ck('and no on-accent text is hardcoded black', !/background: ACC,\n\s+color: '#000'/.test(require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8'))));
 
 console.log('\nthe switcher (DESIGN.md §5.1):');
 ck('it exists', /function ThemeSwitch\(\)/.test(w));
@@ -101,7 +101,7 @@ ck('every colour theme has its CSS block', [...w.matchAll(/\{ id: '([a-z]+)', ba
 ck('the palette is applied before first paint too', /localStorage\.getItem\("shic:palette"\)/.test(html));
 ck('a wallpaper keeps the cards solid, only the canvas turns see-through',
   /html\[data-wp\] body\{background:/.test(html) && !/html\[data-wp\][^{]*\{[^}]*--bg-surface/.test(html));
-ck('the app root does not paint over the wallpaper', /html\[data-wp\][^{]*\.shic-app-root\{background:transparent/.test(html) && /className: "shic-app-root"/.test(fs.readFileSync('src/App.js', 'utf8')));
+ck('the app root does not paint over the wallpaper', /html\[data-wp\][^{]*\.shic-app-root\{background:transparent/.test(html) && /className: "shic-app-root"/.test(require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8'))));
 ck('it writes the attribute the CSS keys off', /setAttribute\('data-theme', t\)/.test(w));
 ck('it remembers the choice', /localStorage\.setItem\('shic:theme', t\)/.test(w));
 ck('it moves the browser chrome too', /meta\[name="theme-color"\]/.test(w));
@@ -112,7 +112,7 @@ ck('with a literal colour, not a variable',
   /setAttribute\('content', pal && p \? p\.sw\[0\] : \(t === 'light' \? '#dfe4eb' : '#060e20'\)\)/.test(w));
 ck('and the static default matches the dark canvas',
   /<meta name="theme-color" content="#060e20">/.test(html));
-ck('and it is in the header', /React\.createElement\(ThemeSwitch, null\)/.test(fs.readFileSync('src/App.js', 'utf8')));
+ck('and it is in the header', /React\.createElement\(ThemeSwitch, null\)/.test(require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8'))));
 
 console.log('\nand the choice is applied before the first paint:');
 ck('index.html reads it inline', /localStorage\.getItem\("shic:theme"\)/.test(html));

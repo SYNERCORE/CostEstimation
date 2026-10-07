@@ -17,7 +17,7 @@
 'use strict';
 const fs = require('fs');
 const html = fs.readFileSync('index.html', 'utf8');
-const app = fs.readFileSync('src/App.js', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+const app = require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8')).replace(/\/\*[\s\S]*?\*\//g, '');
 
 let bad = 0;
 const ck = (n, c, x) => { if (c) console.log('  PASS  ' + n); else { console.log('  FAIL  ' + n + (x ? '  -> ' + x : '')); bad++; } };
@@ -53,7 +53,7 @@ ck('ringed in the accent', /border: `1px solid \$\{alpha\(ACC, '44'\)\}`/.test(a
 ck('with the amber total', /fontWeight: 800,[\s\S]{0,120}color: ACC/.test(app));
 ck('at the §3 display size', /fontSize: 'clamp\(18px, 2\.2vw, 28px\)'/.test(app),
   '28px flat overflows a nine-figure total in a 260px rail');
-ck('and the unit rate under it', /"Unit rate: \\u20b1"|"Unit rate: ₱"/.test(fs.readFileSync('src/App.js', 'utf8')));
+ck('and the unit rate under it', /"Unit rate: \\u20b1"|"Unit rate: ₱"/.test(require('./lib/appsrc').plus(fs.readFileSync('src/App.js', 'utf8'))));
 
 console.log('\nquick rates are two across, with their full names:');
 ck('a grid, not a stacked list', /gridTemplateColumns: 'repeat\(auto-fit, minmax\(108px, 1fr\)\)'/.test(app));

@@ -88,7 +88,7 @@ bulkMode.enable(1440, 'a'); ck('days + hours', bulkMode.timeLeftText() === '1d 0
 bulkMode.disable(); ck('expired reads as expired', bulkMode.timeLeftText() === 'expired');
 
 console.log('\nthe save gate still re-checks the role and the account:');
-const app = fs.readFileSync(require('path').join(__dirname, '..', 'src', 'App.js'), 'utf8');
+const app = require('./lib/appsrc').plus(fs.readFileSync(require('path').join(__dirname, '..', 'src', 'App.js'), 'utf8'));
 ck('save path checks isAdmin AND the username',
   /isAdmin && bulkMode\.on\(currentUser\?\.username\)/.test(app),
   'a demoted admin, or a different account, would keep the bypass');

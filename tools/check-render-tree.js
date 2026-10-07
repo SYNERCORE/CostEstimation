@@ -108,7 +108,34 @@ for (const f of jsFiles()) {
 
 /* ---------- 2. structural checks on App.js ---------- */
 const appPath = path.join(ROOT, 'src', 'App.js');
-const src = fs.readFileSync(appPath, 'utf8');
+/* The header, notices, API-key dialog and Live Totals sidebar now live in components/AppChrome.js and are CALLED from App's render.
+   The rules below are about the shape of the whole tree, so read it as it was before the move: put each call's returned elements back
+   in place of the call. (A function that returns several siblings wraps them in a Fragment; that wrapper is stripped here.) */
+function expandChrome(text) {
+  const chrome = fs.readFileSync(path.join(ROOT, 'src', 'components', 'AppChrome.js'), 'utf8').replace(/\r\n/g, '\n');
+  for (const name of ['AppBanners', 'ApiKeyModal', 'AppHeader', 'LiveTotalsSidebar']) {
+    const at = text.indexOf(name + '({');
+    if (at < 0) { fail('render tree: App no longer calls ' + name + '(...), which carries part of the page'); continue; }
+    let d = 0, end = -1;
+    for (let i = at + name.length; i < text.length; i++) {
+      if (text[i] === '(') d++;
+      else if (text[i] === ')') { d--; if (d === 0) { end = i; break; } }
+    }
+    const f = chrome.indexOf('function ' + name + '(ctx) {');
+    if (f < 0 || end < 0) { fail('render tree: could not read ' + name + ' from AppChrome.js'); continue; }
+    /* A function ends at a closing brace in column 0; a comment for the next one may follow it. */
+    const stop = chrome.indexOf('\n}\n', f);
+    const fn = chrome.slice(f, stop < 0 ? undefined : stop + 2);
+    const m = fn.match(/\n  return ([\s\S]*);\s*\n\}\s*$/);
+    if (!m) { fail('render tree: ' + name + ' in AppChrome.js has no single return expression'); continue; }
+    let body = m[1];
+    const FR = 'React.createElement(React.Fragment, null, ';
+    if (body.startsWith(FR)) body = body.slice(FR.length, -1);
+    text = text.slice(0, at) + body + text.slice(end + 1);
+  }
+  return text;
+}
+const src = expandChrome(fs.readFileSync(appPath, 'utf8'));
 
 /* Locate the root render: the last top-level `return React.createElement("div"` in function App. */
 const appStart = src.indexOf('function App(');

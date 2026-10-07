@@ -90,11 +90,11 @@ function runSpGet(opts) {
   ck('a user-initiated sign-in exists', /async function spSignIn\(\)/.test(spCode));
   ck('a successful token clears the flag', /_spNeedsSignIn=false/.test(spCode));
   ck('the banner offers it in-app', /function SignInBanner/.test(rd('src/widgets.js')));
-  ck('the banner is rendered', /React\.createElement\(SignInBanner, null\)/.test(rd('src/App.js') + rd('src/components/ScopeLibraryTab.js')));
+  ck('the banner is rendered', /React\.createElement\(SignInBanner, null\)/.test(require('./lib/appsrc').plus(rd('src/App.js')) + rd('src/components/ScopeLibraryTab.js')));
   /* In the sticky top bar, straight after Export CE and outside the account
      menu -- above it, it scrolled away; inside the menu, nobody would see it. */
   ck('and it sits in the top bar, where scrolling cannot hide it',
-    /"Export CE"\), \/\*#__PURE__\*\/React\.createElement\(SignInBanner, null\)\)/.test(rd('src/App.js')));
+    /"Export CE"\), \/\*#__PURE__\*\/React\.createElement\(SignInBanner, null\)\)/.test(require('./lib/appsrc').plus(rd('src/App.js'))));
   ck('the login screen offers it too', /spSignIn\(\)/.test(login));
   ck('login blames the connection, not the account, when the list was unread',
     /userListIsStale\(\)/.test(login) && /_userListStale=true/.test(db),
@@ -112,7 +112,7 @@ function runSpGet(opts) {
   console.log('\nOnly a button the user just pressed may sign in interactively:');
   ck('Connect & Test opts in', /getSPToken\(\{interactive:true\}\)/.test(rd('src/components/FbSetupPanel.js')));
   ck('auto-setup opts in', /getSPToken\(\{interactive:true\}\)/.test(rd('src/components/RegisterPage.js')));
-  ck('the list-creation button opts in', /getSPToken\(\{ interactive: true \}\)/.test(rd('src/App.js') + rd('src/components/ScopeLibraryTab.js')));
+  ck('the list-creation button opts in', /getSPToken\(\{ interactive: true \}\)/.test(require('./lib/appsrc').plus(rd('src/App.js')) + rd('src/components/ScopeLibraryTab.js')));
   /* Everything else -- spGet, spDigest, attachments -- must stay silent. A
      redirect mid-save would discard the CE being edited. */
   ck('spDigest stays silent', /const tok=await getSPToken\(\);/.test((sp.match(/async function spDigest[\s\S]*?\n}/) || [''])[0]));

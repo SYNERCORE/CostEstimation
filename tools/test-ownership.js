@@ -23,7 +23,7 @@ const path = require('path');
 const vm = require('vm');
 const ROOT = path.join(__dirname, '..');
 const rd = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
-const db = rd('src/db.js'), ap = rd('src/components/AdminPanel.js'), app = rd('src/App.js');
+const db = rd('src/db.js'), ap = rd('src/components/AdminPanel.js'), app = require('./lib/appsrc').plus(rd('src/App.js'));
 
 let fails = 0;
 const ck = (name, cond, extra) => {

@@ -23,7 +23,7 @@ const fs = require('fs');
 const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const db = fs.readFileSync(path.join(ROOT, 'src', 'db.js'), 'utf8');
-const app = fs.readFileSync(path.join(ROOT, 'src', 'App.js'), 'utf8');
+const app = require('./lib/appsrc').plus(fs.readFileSync(path.join(ROOT, 'src', 'App.js'), 'utf8'));
 
 let fails = 0;
 const ck = (name, cond, extra) => {
@@ -38,7 +38,7 @@ ck('a genuinely empty list is marked definitive', /empty:true,definitive:true/.t
 ck('itemCount is reported so the message can be specific', /itemCount:r\.length/.test(db));
 
 console.log('\nloadMonData never deletes the cached table:');
-const monBody = (app.match(/const loadMonData = async[\s\S]*?\n  \};/) || [''])[0];
+const monBody = (app.match(/function makeLoadMonData\(getCtx\) \{[\s\S]*?\n\}\n/) || [''])[0];
 ck('loadMonData found in source', monBody.length > 0);
 ck('no removeItem(MON_KEY) anywhere in it', !/removeItem\(MON_KEY\)/.test(monBody), 'still purges the cache');
 ck('no setMonData({}) blanking', !/setMonData\(\{\}\)/.test(monBody), 'still blanks the table');
@@ -49,7 +49,7 @@ ck('parseFailed reports error rather than synced',
   !/parseFailed[\s\S]{0,800}monitoring:\s*'synced'/.test(monBody));
 
 console.log('\nloadHist never writes an empty history over the cache:');
-const histBody = (app.match(/const loadHist = async[\s\S]*?\n  \};/) || [''])[0];
+const histBody = (app.match(/function makeLoadHist\(getCtx\) \{[\s\S]*?\n\}\n/) || [''])[0];
 ck('loadHist found in source', histBody.length > 0);
 ck("no LS.set('history', []) purge", !/LS\.set\('history',\s*\[\]\)/.test(histBody), 'still purges');
 ck('only caches a non-empty result', /h\.length > 0[\s\S]{0,160}LS\.set\('history', h\)/.test(histBody));

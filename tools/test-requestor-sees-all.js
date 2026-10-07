@@ -32,7 +32,7 @@ ck('someone else\'s is not', own(2) === false);
 ck('one whose monitoring row has not arrived is theirs by savedBy', own(3) === true);
 ck('an unknown CE is not', own(99) === false);
 ck('the guard runs before updateMon changes anything',
-  app.indexOf("const updateMon = (ceId, field, val) => setMonData(prev => {" + NL + "    if (isRequestor && !reqOwns(ceId, prev))") > 0);
+  app.indexOf("return setMonData(prev => {" + NL + "    if (isRequestor && !reqOwns(ceId, prev))") > 0);
 ck('Status, Remarks, Assign and Edit are disabled on rows that are not theirs',
   app.split('disabled: !!e._draft || (isRequestor && !reqOwns(e.id)),').length - 1 === 4);
 ck('delete stays admin-only', /isAdmin \|\| \(e\._draft && e\.savedBy === currentUser\.username\)\) && /.test(app));

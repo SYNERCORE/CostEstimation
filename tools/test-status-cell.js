@@ -50,7 +50,8 @@ ck2('a CE tracked before the log existed still shows its last change',
   /_legacy: true/.test(src),
   'claiming nothing ever happened would be worse than showing one entry');
 
-const upd = src.match(/const updateMon = \(ceId, field, val\) => setMonData\(prev => \{[\s\S]*?return n;/)[0];
+/* updateMon now lives in AppImports.js as makeUpdateMon; the body of the edit is unchanged. */
+const upd = src.match(/function makeUpdateMon\(getCtx\) \{[\s\S]*?\n\}\n/)[0];
 console.log('\nthe stamp:');
 ck('fires on every status change, not a hand-picked list', /if \(_has\('status'\) && fields\.status\) \{/.test(upd),
   'Ongoing and For site insp. recorded nothing');

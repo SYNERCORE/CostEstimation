@@ -3,7 +3,7 @@
 'use strict';
 const fs = require('fs'), path = require('path');
 const db = fs.readFileSync(path.join(__dirname, '..', 'src/db.js'), 'utf8').replace(/\r\n/g, '\n');
-const app = fs.readFileSync(path.join(__dirname, '..', 'src/App.js'), 'utf8').replace(/\r\n/g, '\n');
+const app = require('./lib/appsrc').plus(fs.readFileSync(path.join(__dirname, '..', 'src/App.js'), 'utf8')).replace(/\r\n/g, '\n');
 let bad = 0;
 const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 ck('db.js parses', (() => { try { new Function(db); return true; } catch (e) { console.log(e.message); return false; } })());

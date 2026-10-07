@@ -1,7 +1,7 @@
 /* A cached history is one key for the whole browser, so a non-admin must never
    be shown it unfiltered. Run: node tools/test-history-cache-scope.js */
 'use strict';
-const app = require('fs').readFileSync(require('path').join(__dirname, '..', 'src', 'App.js'), 'utf8');
+const app = require('./lib/appsrc').plus(require('fs').readFileSync(require('path').join(__dirname, '..', 'src', 'App.js'), 'utf8'));
 let bad = 0;
 const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 const i = app.indexOf('} else if (spAvail && h && h.length === 0) {');

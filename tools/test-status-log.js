@@ -20,8 +20,9 @@
  * Run: node tools/test-status-log.js
  */
 const fs=require('fs');
-const src=fs.readFileSync('src/App.js','utf8');
-const body=src.match(/const updateMon = \(ceId, field, val\) => setMonData\(prev => \{[\s\S]*?return n;\s*\}\);/)[0];
+const src=require('./lib/appsrc').plus(fs.readFileSync('src/App.js','utf8'));
+/* updateMon now lives in AppImports.js as makeUpdateMon(getCtx), which returns the edit function. */
+const body=src.match(/function makeUpdateMon\(getCtx\) \{[\s\S]*?\n\}\n/)[0];
 const currentUser={name:'Jhuniel Ubana'};
 let saved=null;
 const dbSaveMonEntry=(a,b,c)=>{saved=c;return{then:()=>({catch:()=>{}})};};
@@ -33,9 +34,9 @@ const setSyncStatus=()=>{};
 const _monWroteAt={current:{}};
 let state={};
 const setMonData=fn=>{state=fn(state);};
-const upd=new Function('setMonData','currentUser','dbSaveMonEntry','localStorage','MON_KEY','history','setSyncStatus','_monWroteAt','isRequestor','lsPut','logSwallowed',
-  'return '+body.replace(/^const updateMon = /,'').replace(/;$/,''))
-  (setMonData,currentUser,dbSaveMonEntry,localStorage,MON_KEY,history,setSyncStatus,_monWroteAt,false,()=>true,()=>{});
+const upd=new Function('dbSaveMonEntry','localStorage','setSyncStatus','lsPut','logSwallowed',
+  body+'\nreturn makeUpdateMon;')
+  (dbSaveMonEntry,localStorage,setSyncStatus,()=>true,()=>{})(()=>({setMonData,currentUser,MON_KEY,history,_monWroteAt,isRequestor:false,reqOwns:()=>true,showToast:()=>{}}));
 
 let bad=0; const ck=(n,c,x)=>{ if(c)console.log('  PASS  '+n); else {console.log('  FAIL  '+n+(x?'  -> '+x:''));bad++;} };
 upd(7,'status','Pending');

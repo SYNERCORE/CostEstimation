@@ -2,7 +2,7 @@
    Run: node tools/test-returned-reaches-requestor.js */
 'use strict';
 const fs = require('fs'), path = require('path');
-const app = fs.readFileSync(path.join(__dirname, '..', 'src/App.js'), 'utf8');
+const app = require('./lib/appsrc').plus(fs.readFileSync(path.join(__dirname, '..', 'src/App.js'), 'utf8'));
 let bad = 0;
 const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 const a = app.indexOf('const _retReq = '), b = app.indexOf('const open = mine.filter', a);

@@ -3,7 +3,7 @@
    section must key on receivedBy, which is stamped once and never changes.
    Run: node tools/test-requests-sent.js */
 'use strict';
-const app = require('fs').readFileSync(require('path').join(__dirname, '..', 'src', 'App.js'), 'utf8');
+const app = require('./lib/appsrc').plus(require('fs').readFileSync(require('path').join(__dirname, '..', 'src', 'App.js'), 'utf8'));
 let bad = 0;
 const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 const i = app.indexOf('const sent = rows.filter(');

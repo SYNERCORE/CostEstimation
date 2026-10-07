@@ -24,7 +24,8 @@ let bad = 0;
 const ck = (n, c, x) => { if (c) console.log('  PASS  ' + n); else { console.log('  FAIL  ' + n + (x !== undefined ? '  -> ' + x : '')); bad++; } };
 const NL = String.fromCharCode(10);
 
-const FILES = ['src/App.js', 'src/components/ResTab.js', 'src/components/ScopeLibraryTab.js'];
+/* Each of these declares at least one list; App.js itself no longer does (the Misc tab moved to MiscTab.js). */
+const FILES = ['src/components/ResTab.js', 'src/components/ScopeLibraryTab.js', 'src/components/MiscTab.js'];
 
 console.log('no suggestion list is built per row:');
 FILES.forEach(f => {

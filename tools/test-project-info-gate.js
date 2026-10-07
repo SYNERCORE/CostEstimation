@@ -3,7 +3,7 @@
    Run: node tools/test-project-info-gate.js */
 'use strict';
 const fs = require('fs'), path = require('path');
-const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'App.js'), 'utf8');
+const app = require('./lib/appsrc').plus(fs.readFileSync(path.join(__dirname, '..', 'src', 'App.js'), 'utf8'));
 let bad = 0;
 const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 const a = app.indexOf('  const infoMissing = isRequestor'), b = app.indexOf('  const pickCompany', a);

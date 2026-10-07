@@ -12,7 +12,7 @@
    has no material. */
 const fs = require('fs');
 const path = require('path');
-const app = fs.readFileSync(path.join(__dirname, '..', 'src', 'App.js'), 'utf8');
+const app = require('./lib/appsrc').plus(fs.readFileSync(path.join(__dirname, '..', 'src', 'App.js'), 'utf8'));
 
 let bad = 0;
 const ck = (what, cond) => { console.log((cond ? '  PASS  ' : '  FAIL  ') + what); if (!cond) bad++; };

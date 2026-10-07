@@ -10,7 +10,7 @@ let bad = 0;
 const ck = (what, cond) => { console.log((cond ? '  PASS  ' : '  FAIL  ') + what); if (!cond) bad++; };
 
 const consts = R('src/constants.js');
-const app = R('src/App.js');
+const app = require('./lib/appsrc').plus(R('src/App.js'));
 const card = R('src/components/RceChecklistCard.js');
 
 console.log('RCE checklist');

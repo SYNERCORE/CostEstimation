@@ -3,7 +3,7 @@
    can be submitted for approval.
    Run: node tools/test-client-docs.js */
 'use strict';
-const app = require('fs').readFileSync('src/App.js', 'utf8');
+const app = require('./lib/appsrc').plus(require('fs').readFileSync('src/App.js', 'utf8'));
 let bad = 0; const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 
 console.log('client documents:');

@@ -439,5 +439,7 @@ jobs:
         run: node tools/test-mywork-my-requests-filter.js
       - name: Routing notice
         run: node tools/test-routing-notice.js
+      - name: Resume Work filter
+        run: node tools/test-resume-work-filter.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

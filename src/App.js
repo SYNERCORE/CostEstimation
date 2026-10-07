@@ -2373,6 +2373,19 @@ function App({
   };
   const [sharedDrafts, setSharedDrafts] = React.useState([]);
   const [draftsOpen, setDraftsOpen] = React.useState(false);
+  /* Resume Work's search box and its estimator filter. Every word typed must be found in some column of the draft, in any order. */
+  const [drftQ, setDrftQ] = React.useState('');
+  const [drftBy, setDrftBy] = React.useState('');
+  const _drftWords = String(drftQ || '').toLowerCase().split(/\s+/).filter(Boolean);
+  const draftsShown = (sharedDrafts || []).filter(d => {
+    if (drftBy && d.savedBy !== drftBy) return false;
+    if (!_drftWords.length) return true;
+    const hay = [d.info && d.info.ceNum, d.info && d.info.client, d.info && d.info.description, d.info && d.info.projType, d.ceType, d.savedByName, d.savedBy].join(' ').toLowerCase();
+    return _drftWords.every(w => hay.indexOf(w) >= 0);
+  });
+  /* Who has drafts, with how many, for the estimator filter. */
+  const draftOwners = (() => { const m = {}; (sharedDrafts || []).forEach(d => { const k = d.savedBy || ''; if (!k) return; m[k] = m[k] || {user: k, name: d.savedByName || k, n: 0}; m[k].n++; });
+    return Object.values(m).sort((a, b) => String(a.name).localeCompare(String(b.name))); })();
 
   /* \u2500\u2500 apply a draft data object into CE state \u2500\u2500 */
   const applyDraftData = d => {
@@ -9929,13 +9942,20 @@ function App({
       flex: 1,
       padding: 12
     }
-  }, sharedDrafts.length === 0 && /*#__PURE__*/React.createElement("div", {
+  }, sharedDrafts.length > 0 && /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap'}},
+    /*#__PURE__*/React.createElement("input", {type: 'search', value: drftQ, placeholder: 'Search drafts: CE no., client, job, estimator\u2026', 'aria-label': 'Search Resume Work', onChange: e => setDrftQ(e.target.value), style: {...INP, flex: 1, minWidth: 180, fontSize: 12, padding: '5px 10px'}}),
+    /*#__PURE__*/React.createElement("select", {value: drftBy, 'aria-label': 'Filter by estimator', onChange: e => setDrftBy(e.target.value), style: {...INP, fontSize: 12, padding: '5px 8px', maxWidth: 200}},
+      /*#__PURE__*/React.createElement("option", {value: ''}, 'All estimators (' + sharedDrafts.length + ')'),
+      draftOwners.map(o => /*#__PURE__*/React.createElement("option", {key: o.user, value: o.user}, (o.user === currentUser.username ? 'Me \u2014 ' : '') + o.name + ' (' + o.n + ')'))),
+    (drftQ || drftBy) && /*#__PURE__*/React.createElement("button", {style: btn('def', true), onClick: () => { setDrftQ(''); setDrftBy(''); }}, 'Clear'),
+    (drftQ || drftBy) && /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: MT}}, draftsShown.length + ' of ' + sharedDrafts.length)),
+  sharedDrafts.length === 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: 20,
       textAlign: 'center',
       color: MT
     }
-  }, "Nothing in progress — every CE has been saved."), sharedDrafts.map(d => {
+  }, "Nothing in progress — every CE has been saved."), sharedDrafts.length > 0 && draftsShown.length === 0 && /*#__PURE__*/React.createElement("div", {style: {padding: 20, textAlign: 'center', color: MT}}, 'No draft matches' + (drftQ ? ' "' + drftQ + '"' : '') + (drftBy ? ' for that estimator' : '') + '.'), draftsShown.map(d => {
     const age = Math.round((Date.now() - new Date(d.savedAt).getTime()) / 60000);
     const ageStr = age < 60 ? age + 'm ago' : age < 1440 ? Math.round(age / 60) + 'h ago' : Math.round(age / 1440) + 'd ago';
     const isOwn = d.savedBy === currentUser.username;

@@ -40,7 +40,7 @@ console.log('\nEvery collection has a loader that caches what it fetched:');
 for (const fn of ['loadML', 'loadSowLib']) ck(fn + ' exists', new RegExp('const ' + fn + ' = async').test(app));
 ck('loadML mirrors to localStorage', /loadML = async[\s\S]{0,600}LS\.set\('masterlist', ml\)/.test(app));
 ck('scope library has one cache writer', /const cacheSowLib = lib =>/.test(app));
-ck('cacheSowLib uses the raw key App.js reads', /cacheSowLib[\s\S]{0,300}localStorage\.setItem\('sy3:sowlib'/.test(app));
+ck('cacheSowLib uses the raw key App.js reads', /cacheSowLib[\s\S]{0,300}lsPut\('sy3:sowlib'/.test(app));
 ck('spPull caches what it pulled', /spPull[\s\S]{0,400}cacheSowLib\(lib\)/.test(app));
 
 console.log('\ndbSaveML mirrors locally on BOTH branches:');
@@ -52,7 +52,7 @@ ck('caches before the USE_SP branch',
   saveML.indexOf("LS.set('masterlist',data)") < saveML.indexOf('if(USE_SP'), 'mirror is still behind the SP return');
 
 console.log('\ndbSaveSowLib writes the key App.js actually reads:');
-ck('uses raw sy3:sowlib, not LS.set', /localStorage\.setItem\('sy3:sowlib'/.test(db));
+ck('uses raw sy3:sowlib, not LS.set', /lsPut\('sy3:sowlib'/.test(db));
 ck("no LS.set('sy3:sowlib') dead write", !/LS\.set\('sy3:sowlib'/.test(db), "writes shic:sy3:sowlib, which nothing reads");
 
 console.log('\nA corrupt cache must not white-screen the app:');

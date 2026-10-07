@@ -153,7 +153,7 @@ async function dbSaveDraft(d){
       return true;
     }catch(e){console.warn('dbSaveDraft:',e.message);}
   }
-  try{localStorage.setItem('shic_draft_'+d.draftId,JSON.stringify(d));}catch{}
+  lsPut('shic_draft_'+d.draftId,d,'this draft');
   return false;
 }
 async function dbGetDrafts(){
@@ -457,6 +457,30 @@ function resetLockTimer(fn){clearTimeout(_lockTimer);if(fn)_lockTimer=setTimeout
 const _lsK=()=>{try{const k=localStorage.getItem('shic:_sk');return k||'shic2026';}catch{return'shic2026';}};
 const _d=(s)=>{try{const k=_lsK(),b=atob(s);return Array.from(b,(c,i)=>String.fromCharCode(c.charCodeAt(0)^k.charCodeAt(i%k.length))).join('');}catch{return s;}};
 
+/* Write to this device and SAY SO when it fails.
+   Several saves were `try { localStorage.setItem(..) } catch {}`: when the browser's storage was full or blocked, the draft or the
+   Scope Library edit was simply not kept on the device and nothing said so -- the person carried on believing it was. This tries the
+   write, frees cached CEs once if the cause is space, and otherwise tells the person (once per kind of data per session), because the
+   device copy is what they would be relying on if SharePoint is out of reach. Returns true when the value was kept. `what` is a
+   phrase for the message: 'this draft', 'the Scope Library'. */
+const _isQuotaErr = e => !!e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22 || e.code === 1014);
+const _lsPutTold = {};
+function lsPut(fullKey, value, what) {
+  let err = null;
+  try { localStorage.setItem(fullKey, JSON.stringify(value)); return true; } catch (e) { err = e; }
+  if (_isQuotaErr(err)) {
+    try { if (LS.pruneCeCache(20)) { localStorage.setItem(fullKey, JSON.stringify(value)); return true; } } catch (e2) { err = e2; }
+  }
+  logSwallowed('db:lsPut:' + fullKey, err);
+  const w = what || 'this change';
+  if (!_lsPutTold[w]) {
+    _lsPutTold[w] = true;
+    setTimeout(() => (window._shicToast || console.warn)('Could not keep ' + w + ' on this device (' + (_isQuotaErr(err) ? 'its storage is full' : 'the browser blocked it') +
+      '). Do not rely on this device for it: save to SharePoint or export a backup.', true), 100);
+  }
+  return false;
+}
+
 /* &#9472;&#9472; localStorage helper &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472; */
 const LS = {
   get: k => {
@@ -502,7 +526,7 @@ const LS = {
         } catch(_e){logSwallowed('db:resetLockTimer',_e);}
       }
     } catch (e) {
-      if (e && e.name === 'QuotaExceededError') {
+      if (_isQuotaErr(e)) {
         /* Free the most expendable thing we hold — per-CE caches — and retry
            once, so a full disk degrades instead of losing the write outright. */
         const freed = LS.pruneCeCache(20);
@@ -510,6 +534,9 @@ const LS = {
           try { localStorage.setItem('shic:' + k, JSON.stringify(v)); return; } catch (_e2) {}
         }
         if (!window._lsFullShown) { window._lsFullShown = true; setTimeout(() => (window._shicToast||console.error)('Storage full! Export a backup or connect SharePoint to free space.', true), 100); }
+      } else {
+        logSwallowed('db:LS.set:' + k, e);
+        if (!window._lsBlockedShown) { window._lsBlockedShown = true; setTimeout(() => (window._shicToast||console.error)('This browser is blocking saves on this device. Work is not being kept locally: save to SharePoint or export a backup.', true), 100); }
       }
     }
   },
@@ -769,7 +796,7 @@ async function dbFindCEByNum(ceNum){
   return null;
 }
 /* keep(id): a CE someone else saved that is still this user's to see -- a request assigned to them or received by them. Without it a non-admin only ever got their own saves, so an assigned request never reached the estimator. */
-async function dbGetHistory(username,isAdmin,keep){if(USE_SP||getSiteURL()){try{const f=(isAdmin||keep)?"":`shicSavedBy eq '${username}'`;/* shicInfo rides along: it says whether a row is a logged request, whether it has been accepted and how its review stands, which the list needs to offer Review. Only a request keeps it: the rest of the list stays as small as it was, since this list is cached on the device. Tolerant, because the column is optional on older sites. */const r=await _spGetTolerant(spList('CEs'),f,'Id,Title,shicType,shicClient,shicDesc,shicTotal,shicSavedBy,shicSavedAt,shicInfo');return r.map(h=>{let pi={};try{pi=h.shicInfo?JSON.parse(h.shicInfo)||{}:{};}catch(_){pi={};}return{id:h.Id,ceNum:h.Title,ceType:h.shicType,client:h.shicClient||'',grand:h.shicTotal||0,savedBy:h.shicSavedBy||'',savedAt:h.shicSavedAt||h.Created,info:{...(pi.request?pi:{}),ceNum:h.Title,client:h.shicClient||pi.client||'',description:h.shicDesc||pi.description||''}};}).filter(h=>isAdmin||h.savedBy===username||(keep&&keep(h.id)));}catch(e){console.warn('dbGetHistory:',e.message);}}const all=LS.get('history')||[];return isAdmin?all:all.filter(h=>h.savedBy===username||(keep&&keep(h.id)));}
+async function dbGetHistory(username,isAdmin,keep){if(USE_SP||getSiteURL()){try{const f=(isAdmin||keep)?"":`shicSavedBy eq '${String(username||'').replace(/'/g,"''")}'`;/* shicInfo rides along: it says whether a row is a logged request, whether it has been accepted and how its review stands, which the list needs to offer Review. Only a request keeps it: the rest of the list stays as small as it was, since this list is cached on the device. Tolerant, because the column is optional on older sites. */const r=await _spGetTolerant(spList('CEs'),f,'Id,Title,shicType,shicClient,shicDesc,shicTotal,shicSavedBy,shicSavedAt,shicInfo');return r.map(h=>{let pi={};try{pi=h.shicInfo?JSON.parse(h.shicInfo)||{}:{};}catch(_){pi={};}return{id:h.Id,ceNum:h.Title,ceType:h.shicType,client:h.shicClient||'',grand:h.shicTotal||0,savedBy:h.shicSavedBy||'',savedAt:h.shicSavedAt||h.Created,info:{...(pi.request?pi:{}),ceNum:h.Title,client:h.shicClient||pi.client||'',description:h.shicDesc||pi.description||''}};}).filter(h=>isAdmin||h.savedBy===username||(keep&&keep(h.id)));}catch(e){console.warn('dbGetHistory:',e.message);}}const all=LS.get('history')||[];return isAdmin?all:all.filter(h=>h.savedBy===username||(keep&&keep(h.id)));}
 /* A consolidated crew row carries `shares` -- what each scope task originally
    asked for -- so the SOW Breakdown can split the merged cost back across the
    tasks the crew actually serves. Every other row field has its own column, but
@@ -1607,12 +1634,12 @@ async function dbSaveSowLib(lib,opts){
       /* Reported, not swallowed. A save that failed used to return false into
          a .catch(_e=>logSwallowed('db:dbSaveSowLib',_e)) while the sidebar kept its tick, so a library edited
          all afternoon could exist in one browser and nowhere else. */
-      try{localStorage.setItem('sy3:sowlib',JSON.stringify(lib));}catch(_e){}
+      lsPut('sy3:sowlib',lib,'the Scope Library');
       return {sp:false,adopted:[],reason:e.message};}
   }
   /* Raw key, no shic: prefix — App.js reads localStorage['sy3:sowlib'] directly.
      LS.set would write 'shic:sy3:sowlib', which nothing ever read. */
-  try{localStorage.setItem('sy3:sowlib',JSON.stringify(lib));}catch(e){console.warn('sowlib not cached locally:',e&&e.message);}
+  lsPut('sy3:sowlib',lib,'the Scope Library');
   return {sp:false,adopted:[],reason:'SharePoint is not configured'};
 }
 async function dbGetSowLib(){

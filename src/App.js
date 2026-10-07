@@ -792,7 +792,7 @@ function App({
     };
     try {
       _monWroteAt.current[ceId] = { at: Date.now(), row: n[ceId] };
-      localStorage.setItem(MON_KEY, JSON.stringify(n));
+      lsPut(MON_KEY, n, 'this Monitoring change');
       /* Save only the one changed CE entry, not the whole blob -- and within
          that entry, only the fields this edit touched, so a colleague's
          deadline is not written back as it stood when this page was opened. */
@@ -856,7 +856,7 @@ function App({
      branch wrote LS 'sy3:sowlib', which lands at 'shic:sy3:sowlib' — a key
      nothing ever read. */
   const cacheSowLib = lib => {
-    try { localStorage.setItem('sy3:sowlib', JSON.stringify(lib)); } catch (e) { console.warn('scope library not cached locally:', e && e.message); }
+    lsPut('sy3:sowlib', lib, 'the Scope Library');
     try { refPut('sowlib', lib, (USE_SP || getSiteURL()) ? 'sharepoint' : 'local'); } catch(_e){logSwallowed('App:App',_e);}
   };
   const loadSowLib = async () => {
@@ -2555,9 +2555,7 @@ function App({
       savedByName: currentUser.name || currentUser.username,
       savedAt: new Date().toISOString()
     };
-    try {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
-    } catch(e){logSwallowed('App:L2416',e);}
+    lsPut(DRAFT_KEY, d, 'this draft');
     setSyncStatus({dirty: true});
     try {
       const ok = await dbSaveDraft(d);

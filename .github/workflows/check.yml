@@ -453,5 +453,7 @@ jobs:
         run: node tools/test-lazy-libs.js
       - name: Masterlist picker is paged
         run: node tools/test-picker-pages.js
+      - name: Form controls have accessible names
+        run: node tools/test-a11y-labels.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

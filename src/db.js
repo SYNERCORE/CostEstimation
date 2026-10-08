@@ -520,7 +520,7 @@ const LS = {
               window._lsWarnShown = true;
               setTimeout(() => (window._shicToast||console.warn)('Storage almost full (' + LS.kb(after.total) + ' of about 5,000 KB). ' +
                 (freed ? freed + ' cached CE(s) cleared and it is still full. ' : '') +
-                'Most of it is ' + after.top.name + ' (' + LS.kb(after.top.bytes) + '). Sync to SharePoint or export a backup.', true), 500);
+                'Most of it is ' + after.top.name + ' (' + LS.kb(after.top.bytes) + (after.top.note ? ': ' + after.top.note : '') + '). Sync to SharePoint or export a backup.', true), 500);
             }
           }
         } catch(_e){logSwallowed('db:resetLockTimer',_e);}
@@ -561,14 +561,29 @@ const LS = {
           : k.indexOf('shic:my_sig') === 0 ? 'signatures'
           : k.indexOf('shic:refdata:') === 0 ? 'reference data'
           : k === 'shic:history' || k === 'shic:local_history' || k === 'shic:od_history' ? 'the CE list'
-          : k === 'shic:masterlist' || k === 'shic:ml_trash' ? 'the masterlist'
+          : k === 'shic:masterlist' ? 'the masterlist'
+          : k === 'shic:ml_trash' ? 'the masterlist trash'
           : k === 'shic:auditlog' ? 'the audit log'
           : 'other settings';
         groups[name] = (groups[name] || 0) + n;
       }
     } catch(_e){logSwallowed('db:resetLockTimer',_e);}
     const top = Object.keys(groups).sort((a, b) => groups[b] - groups[a])[0] || 'other settings';
-    return { total, groups, top: { name: top, bytes: groups[top] || 0 } };
+    /* For the two that are lists, say how many rows: "1,360 KB" does not say whether that is a few thousand ordinary items or a few
+       hundred carrying something large, which is the first thing to know. Only the top group is counted, and only when it is asked for. */
+    let note = '';
+    try {
+      const key = top === 'the masterlist' ? 'shic:masterlist' : top === 'the masterlist trash' ? 'shic:ml_trash' : '';
+      if (key) {
+        const v = JSON.parse(localStorage.getItem(key) || 'null');
+        if (Array.isArray(v)) note = v.length.toLocaleString('en-US') + ' deleted items';
+        else if (v && typeof v === 'object') {
+          const secs = Object.keys(v).filter(x => Array.isArray(v[x]));
+          note = secs.reduce((n, x) => n + v[x].length, 0).toLocaleString('en-US') + ' items (' + secs.map(x => x + ' ' + v[x].length).join(', ') + ')';
+        }
+      }
+    } catch(_e){logSwallowed('db:usageNote',_e);}
+    return { total, groups, top: { name: top, bytes: groups[top] || 0, note } };
   },
   /* ce_cache: holds one full CE per saved estimate. Only a cache -- every entry
      is refetched from SharePoint on demand -- so it is bounded two ways:

@@ -64,6 +64,21 @@ ck('a signature is never counted as a cache', u.groups['signatures'] > 0);
   ck('a shic_draft_ key is counted as an unsaved draft', d.groups['unsaved drafts'] > 150000 && !d.groups['other settings'] || (d.groups['other settings'] || 0) < 100, JSON.stringify(d.groups));
   ck('and is the biggest holder, named as such', d.top.name === 'unsaved drafts');
 }
+/* The masterlist and its trash used to be one group, so "the masterlist (1,360 KB)" could not say which. */
+{
+  const sec = n => Array.from({ length: n }, (_, i) => ({ id: 'i' + i, code: 'C' + i, desc: 'item ' + i + ' '.padEnd(200, 'x'), cost: i, uom: 'Day' }));
+  const ml = { manpower: sec(300), tools: sec(1200), materials: sec(500) };
+  const trash = Array.from({ length: 40 }, (_, i) => ({ key: 'k' + i, tab: 'tools', item: { id: 'x' + i }, at: new Date().toISOString() }));
+  const d = load(makeLS({ 'shic:masterlist': JSON.stringify(ml), 'shic:ml_trash': JSON.stringify(trash) })).LS.usage();
+  ck('the live masterlist and its trash are counted apart', !!d.groups['the masterlist'] && !!d.groups['the masterlist trash'] && d.groups['the masterlist'] > d.groups['the masterlist trash']);
+  ck('the biggest is named as the live list', d.top.name === 'the masterlist');
+  ck('and says how many items, by section', /^2,000 items \(manpower 300, tools 1200, materials 500\)$/.test(d.top.note), d.top.note);
+  const t = load(makeLS({ 'shic:ml_trash': JSON.stringify(trash) })).LS.usage();
+  ck('a trash on its own says how many deleted items it holds', t.top.name === 'the masterlist trash' && t.top.note === '40 deleted items', t.top.note);
+  ck('another kind of holder has no note', !load(makeLS({ 'shic:theme': 'dark' })).LS.usage().top.note);
+}
+ck('the warning toast carries the note', /\(after\.top\.note \? ': ' \+ after\.top\.note : ''\)/.test(app_src_for_note()));
+function app_src_for_note() { return require('fs').readFileSync('src/db.js', 'utf8'); }
 ck('the size reads as a size', /^[\d,]+ KB$/.test(LS.kb(4200000)));
 
 /* ---- crossing the line clears what can be cleared, and says so ---- */

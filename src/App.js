@@ -865,6 +865,10 @@ function App({
   const _claimedSeq = useRef('');
   /* The owner holds every admin power on top of being unmanageable by them. */
   const isAdmin = hasAdminPowers(currentUser.role);
+  /* An admin hears once a day if a SharePoint list is near its 5,000-item limit. */
+  useEffect(() => {
+    if (isAdmin && (USE_SP || getSiteURL())) dbWarnSpListSizes().catch(_e => logSwallowed('App:spSizes', _e));
+  }, [isAdmin]);
   /* A requestor raises a request and hands it over. The costing tabs are not
      theirs -- there is nothing on them they are allowed to change -- but a CE
      that comes back is theirs to read in full, which is what View is for. */
@@ -2729,7 +2733,15 @@ function App({
         if (_had || Object.keys(signatures || {}).length) setTimeout(() => showToast('The CE changed — every signature was cleared; routing restarts from the first step.', true), 1500);
       }
       if (_fromRequest) { _entry.info = {..._entry.info, request: false}; setInfo(p => ({...p, request: false})); }
-      const _res = await spWithRetry(() => dbSaveHistory(_entry));
+      /* baseAt: the copy this save was checked against (read above, before any question was asked). If somebody saves in the meantime
+         -- while a question is on screen, or while the lines are written -- dbSaveHistory writes nothing and says so. */
+      const _base = (dup && dup.savedAt) || (_loadedAt.current.num === ceNum ? _loadedAt.current.at : '');
+      const _res = await spWithRetry(() => dbSaveHistory(_entry, { baseAt: _base, me: currentUser?.username }));
+      if (_res && _res.conflict) {
+        const _w = new Date(_res.conflict.at).toLocaleString('en-PH', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'});
+        showToast('Not saved — ' + _res.conflict.by + ' saved ' + ceNum + ' at ' + _w + ', while you were saving. Their version is untouched; open it again from History to see it.', true);
+        return;
+      }
       _loadedAt.current = { num: ceNum, at: new Date().toISOString() };
       auditLog('save_ce', ceNum, currentUser?.username);
       _ownNum.current = ceNum;

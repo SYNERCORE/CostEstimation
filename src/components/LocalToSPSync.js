@@ -54,6 +54,27 @@ function MonDupTidy() {
            : (l.startsWith('✅') || l.startsWith('  ✓') || l.startsWith('🎉')) ? OK : MT
     }}, l))));
 }
+/* How full each SharePoint list is, against the 5,000-item limit. The same check runs once a day for an admin and warns from 4,000. */
+function SpListSizes() {
+  const [busy, setBusy] = React.useState(false);
+  const [rows, setRows] = React.useState(null);
+  const look = async () => {
+    setBusy(true);
+    try { setRows(await dbSpListSizes()); } catch (e) { setRows([{ key: 'error', name: '', count: null, level: 'unknown', error: e.message }]); }
+    setBusy(false);
+  };
+  const colour = l => l === 'over' ? ERR : l === 'near' ? 'var(--status-warning)' : l === 'ok' ? OK : MT;
+  const connected = !!getSiteURL();
+  return React.createElement('div', {style:{marginTop:18,paddingTop:14,borderTop:'1px solid '+BDR}},
+    React.createElement('div', {style:{fontWeight:700,fontSize:13,marginBottom:4}}, '🗄 SharePoint list sizes'),
+    React.createElement('div', {style:{fontSize:11,color:MT,marginBottom:10,lineHeight:1.6}},
+      'Past 5,000 items SharePoint refuses a filter on any column that is not indexed. The CE lists grow with every CE saved. You are warned once a day from 4,000.'),
+    React.createElement('button', {style:{...btn('def'), opacity: connected ? 1 : 0.5}, disabled: busy || !connected, onClick: look}, busy ? 'Counting…' : '🔍 Check list sizes'),
+    rows && React.createElement('div', {style:{marginTop:10,background:SURF,border:'1px solid '+BDR,borderRadius:6,padding:'8px 10px'}},
+      rows.map(r => React.createElement('div', {key:r.key, style:{display:'flex',justifyContent:'space-between',gap:12,fontSize:11,fontFamily:"'JetBrains Mono',monospace",marginBottom:2,color:colour(r.level)}},
+        React.createElement('span', null, r.key),
+        React.createElement('span', null, r.count == null ? ('unavailable' + (r.error ? ' — ' + String(r.error).slice(0, 60) : '')) : r.count.toLocaleString() + ' / 5,000 (' + Math.round(r.count / 50) + '%)')))));
+}
 function LocalToSPSync() {
   const [busy, setBusy] = React.useState(false);
   const [log, setLog] = React.useState([]);
@@ -244,6 +265,7 @@ function LocalToSPSync() {
       ? `✅ All ${counts.ok} item(s) pushed successfully. Other users can now refresh and log in.`
       : `⚠ ${counts.ok} pushed, ${counts.fail} had issues. Items marked ✗/⚠ above were NOT synced.`
     ),
-    React.createElement(MonDupTidy, null)
+    React.createElement(MonDupTidy, null),
+    React.createElement(SpListSizes, null)
   );
 }

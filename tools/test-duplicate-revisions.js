@@ -27,7 +27,7 @@ const NL = String.fromCharCode(10);
 
 /* The real ceFamily, and the real finder. */
 const famSrc = app.slice(app.indexOf('const CE_REV_RE = '), app.indexOf('/* Collapse a list of CEs'));
-const findSrc = db.slice(db.indexOf('const _DUP_REV_WINDOW_MS'), db.indexOf('async function dbSaveHistory(e){'));
+const findSrc = db.slice(db.indexOf('const _DUP_REV_WINDOW_MS'), db.indexOf('async function dbSaveHistory(e'));
 
 /* A stand-in SharePoint: the selects the finder makes, and nothing else. */
 const mk = (heads, mp, res) => {

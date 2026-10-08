@@ -361,6 +361,15 @@ async function spGet(l,f='',sel=''){
   }
   return results;
 }
+/* How many items a list holds, without reading them: the list's own ItemCount. */
+async function spItemCount(l){
+  const su=getSiteURL();if(!su)return null;
+  const tok=await getSPToken();if(!tok)throw new Error('SP '+l+': not signed in (offline or session expired)');
+  const r=await spFetch(`${su}/_api/web/lists/getbytitle('${l}')?$select=ItemCount`,{credentials:'omit',headers:{'Accept':'application/json;odata=nometadata','Authorization':'Bearer '+tok}},'get',l);
+  if(!r.ok){let body='';try{body=await r.text();}catch(_){logSwallowed('sp:spItemCount',_);}throw spErr('get',l,r.status,body,r.headers&&r.headers.get('Retry-After'));}
+  const j=await r.json();
+  return typeof j.ItemCount==='number'?j.ItemCount:null;
+}
 async function spPost(l,data){const su=getSiteURL();if(!su)throw new Error('SP not configured');const{digest,token}=await spDigest();if(!token)throw new Error('SP: No auth token. Please sign in via Connect & Test first.');const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'Authorization':'Bearer '+token};const r=await spFetch(`${su}/_api/web/lists/getbytitle('${l}')/items`,{method:'POST',credentials:'omit',headers:h,body:JSON.stringify(data)},'post',l);if(!r.ok){const t=await r.text();throw spErr('post',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}return r.json();}
 async function spPatch(l,id,data){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*','X-HTTP-Method':'MERGE',...(token?{'Authorization':'Bearer '+token}:{})};const r=await spFetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'PATCH',credentials:'omit',headers:h,body:JSON.stringify(data)},'patch',l);if(!r.ok){let t='';try{t=await r.text();}catch(_){logSwallowed('sp:spPatch',_);}throw spErr('patch',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}}
 async function spDelete(l,id){const su=getSiteURL();const{digest,token}=await spDigest();const h={'Accept':'application/json;odata=nometadata','Content-Type':'application/json;odata=nometadata','X-RequestDigest':digest,'IF-MATCH':'*',...(token?{'Authorization':'Bearer '+token}:{})};const r=await spFetch(`${su}/_api/web/lists/getbytitle('${l}')/items(${id})`,{method:'DELETE',credentials:'omit',headers:h},'delete',l);if(!r.ok){let t='';try{t=await r.text();}catch(_){logSwallowed('sp:spDelete',_);}throw spErr('delete',l,r.status,t,r.headers&&r.headers.get('Retry-After'));}}

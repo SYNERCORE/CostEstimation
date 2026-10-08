@@ -463,5 +463,7 @@ jobs:
         run: node tools/test-ml-import-plan.js
       - name: Masterlist remove duplicates
         run: node tools/test-ml-dedupe.js
+      - name: Data safety guards
+        run: node tools/test-data-safety.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

@@ -1485,10 +1485,38 @@ function _mlKey(it){
    op.remove  keys to take out (restored, or deleted forever)
    Anything older than 30 days is dropped on every read and write. */
 const ML_TRASH_DAYS = 30;
+/* The Trash is also held in this browser, whose storage is about 5 MB for everything, so age alone is not a bound: deleting a long list
+   (or Clear List) puts every row in it for 30 days. It is capped by count and by size as well, keeping the NEWEST entries and letting the
+   oldest go first. A single delete of more rows than the cap keeps the cap's worth of that batch. */
+const ML_TRASH_MAX = 1000;
+const ML_TRASH_MAX_BYTES = 500 * 1024;
+function _mlTrashCap(list){
+  const l = Array.isArray(list) ? list : [];
+  const sizes = l.map(e => JSON.stringify(e).length);
+  if (l.length <= ML_TRASH_MAX && sizes.reduce((a, b) => a + b, 0) <= ML_TRASH_MAX_BYTES) return l;
+  const order = l.map((e, i) => i).sort((a, b) => (new Date(l[b].at).getTime() || 0) - (new Date(l[a].at).getTime() || 0));
+  const keep = new Set();
+  let bytes = 0;
+  for (const i of order) {
+    if (keep.size >= ML_TRASH_MAX || bytes + sizes[i] > ML_TRASH_MAX_BYTES) break;
+    keep.add(i); bytes += sizes[i];
+  }
+  return l.filter((e, i) => keep.has(i));
+}
 function _mlTrashFresh(list){
   const cut = Date.now() - ML_TRASH_DAYS * 864e5;
-  return (Array.isArray(list) ? list : []).filter(e => e && e.key && new Date(e.at).getTime() > cut);
+  return _mlTrashCap((Array.isArray(list) ? list : []).filter(e => e && e.key && new Date(e.at).getTime() > cut));
 }
+/* On every start: the copy kept in this browser is cleaned up now, not the next time someone happens to open or change the Trash --
+   an expired entry used to sit in storage until then. */
+(function pruneMlTrashOnLoad(){
+  try {
+    const l = LS.get('ml_trash');
+    if (!Array.isArray(l)) return;
+    const f = _mlTrashFresh(l);
+    if (f.length !== l.length) LS.set('ml_trash', f);
+  } catch (e) { logSwallowed('db:pruneMlTrashOnLoad', e); }
+})();
 /* A user's saved signature, used to pre-fill Approve & Sign. One row per
    user ('sig:<username>') in the Masterlist list, beside 'config' and 'trash'.
    Mirrored locally so it is there offline. */
@@ -1525,7 +1553,7 @@ async function dbMLTrashOp(op){
   const o=op||{};const rm=new Set((o.remove||[]).map(String));
   const apply=list=>{const have=new Set();const out=[];
     for(const e of [...(o.add||[]),..._mlTrashFresh(list)]){if(!e||rm.has(String(e.key))||have.has(e.key))continue;have.add(e.key);out.push(e);}
-    return out;};
+    return _mlTrashCap(out);};
   let local=apply(LS.get('ml_trash'));LS.set('ml_trash',local);
   if(USE_SP||getSiteURL()){
     try{const r=await spGet(spList('Masterlist'),"Title eq 'trash'",'Id,shicData');

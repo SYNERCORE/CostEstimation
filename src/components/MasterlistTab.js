@@ -43,6 +43,24 @@ function planMLImport(existing, newItems, nameField, costField, tab) {
   return { toAdd, updated, unchanged, dupInFile, existingDupes, keptPrice, merged };
 }
 
+/* Repeated names in one list: one copy of each is kept, the rest are returned in `removed`. The copy kept is the most complete one -- a
+   price, then a real code (not one the importer made up), then the most filled-in fields -- and the earliest of equals. The list keeps its
+   order. */
+function planMLDedupe(list, nameField, costField) {
+  const nm = x => String(x[nameField] || '').toUpperCase().trim();
+  const score = x => (Number(x[costField]) > 0 ? 1000 : 0) + (x.code && !/^SHIC-[A-Z]{2}-9\d\d$/.test(String(x.code)) ? 100 : 0) +
+    Object.keys(x).filter(k => x[k] !== '' && x[k] !== null && x[k] !== undefined).length;
+  const best = new Map();
+  list.forEach((x, i) => { const k = nm(x); if (!k) return; const b = best.get(k); if (!b || score(x) > score(list[b.i])) best.set(k, { i }); });
+  const kept = [], removed = [], names = new Map();
+  list.forEach((x, i) => {
+    const k = nm(x), b = best.get(k);
+    if (!k || b.i === i) { kept.push(x); return; }
+    removed.push(x); names.set(k, (names.get(k) || 0) + 1);
+  });
+  return { kept, removed, groups: [...names.entries()].map(([k, n]) => ({ name: nm(list[best.get(k).i]) ? String(list[best.get(k).i][nameField]).trim() : k, extra: n })) };
+}
+
 function MlCalcModalTab(ctx) {
   const {
     masterlist,
@@ -557,6 +575,19 @@ function MlEditorTab(ctx) {
       auditLog('masterlist_delete', mlTab + ': ' + mlTrashItemName(it), currentUser?.username);
       showToast('Moved to Trash — restore it from 🗑 Trash within 30 days.');
     };
+    /* Items that share a name: the most complete copy stays, the others go to the Trash (30 days) like any other delete. */
+    const removeMLDuplicates = async () => {
+      const nf = mlTab === 'manpower' ? 'role' : 'desc';
+      const cf = (mlTab === 'manpower' || mlTab === 'vehicles') ? 'rate' : 'cost';
+      const p = planMLDedupe(masterlist[mlTab] || [], nf, cf);
+      if (!p.removed.length) { showToast('No repeated names in ' + mlTab + '.'); return; }
+      const sample = p.groups.slice(0, 10).map(g => g.name + ' (' + g.extra + ' extra)').join('\n') + (p.groups.length > 10 ? '\n... and ' + (p.groups.length - 10) + ' more' : '');
+      if (!await uiConfirm('Remove ' + p.removed.length + ' repeated item(s) from ' + mlTab + '?\n\n' + sample + '\n\nThe most complete copy of each is kept. The rest go to the Trash and can be restored for 30 days.')) return;
+      await mlToTrash(mlTab, p.removed);
+      saveML({...masterlist, [mlTab]: p.kept}, {deleted: {[mlTab]: p.removed.map(r => r.id).filter(i => i != null)}});
+      auditLog('masterlist_dedupe', mlTab + ': removed ' + p.removed.length + ' repeated', currentUser?.username);
+      showToast('Removed ' + p.removed.length + ' repeated item(s) from ' + mlTab + ' — restore from 🗑 Trash within 30 days.');
+    };
     const applyEscalation = async () => {
       const pct = parseFloat(escPct);
       if (isNaN(pct) || pct === 0) { showToast('Enter a non-zero %', true); return; }
@@ -664,6 +695,10 @@ function MlEditorTab(ctx) {
         }
       }
     }, "Clear List"), /*#__PURE__*/React.createElement("button", {
+      style: btn('def', true),
+      title: "Find items in this tab that share a name, keep the most complete copy of each and move the rest to the Trash",
+      onClick: removeMLDuplicates
+    }, "Remove duplicates"), /*#__PURE__*/React.createElement("button", {
       style: btn('def', true),
       title: "Deleted items stay here for 30 days and can be restored",
       onClick: openMlTrash

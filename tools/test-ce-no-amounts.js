@@ -40,7 +40,7 @@ console.log('\nthe button is on CE Monitoring, not the Summary tab:');
 const mon = R('src/components/MonitoringPanel.js');
 ck('each CE row has a "CE (no amounts)" button that opens the CE for print as noamt', /openForPrint\(e\.id,'noamt'\)/.test(mon) && /CE \(no amounts\)/.test(mon));
 ck('it is for saved CEs only, like the other print buttons', /typeof e\.id==='number'&&[^;]{0,60}createElement\("button",\{style:\{gridRow:3,gridColumn:3[\s\S]{0,200}noamt/.test(mon));
-ck('the print URL accepts as=noamt, and the Excel kinds', /\['detailed', 'detailed-noamt', 'template', 'template-noamt', 'view', 'noamt'\]\.includes\(_q\.get\('as'\)\)/.test(app));
+ck('the print URL accepts as=noamt, and the Excel kinds', /\['detailed', 'detailed-noamt', 'template', 'template-noamt', 'planning', 'view', 'noamt'\]\.includes\(_q\.get\('as'\)\)/.test(app));
 ck('and the opened CE is generated with noAmounts', /as === 'noamt'\) handleGenerateCE\(\{ noAmounts: true \}\)/.test(app));
 ck('the Summary tab no longer has the button', !/no amounts/.test(sum) && !/handleGenerateCENoAmounts/.test(sum) && !/handleGenerateCENoAmounts/.test(app));
 ck('the ordinary Generate CE is still the one with the zero-cost check', /const handleGenerateCEWithCheck = async \(\) => \{\s*if \(!await confirmZeroCost\('Proceed with generating CE\?'\)\) return;\s*handleGenerateCE\(\);/.test(app));

@@ -32,7 +32,7 @@ ck('and an Export Detailed action', /onClick:\(\)=>openForPrint\(e\.id,'detailed
 ck('both only on a row with a real CE id', /typeof e\.id==='number'&&[\s\S]{0,160}openForPrint/.test(app),
   'a draft row has no numeric id and nothing saved to fetch');
 
-const opener = app.match(/const openForPrint = \(id, as\) => \{[\s\S]*?\n  \};/);
+const opener = app.match(/const openForPrint = \(id, as, projectId\) => \{[\s\S]*?\n  \};/);
 if (!opener) { console.error('openForPrint not found'); process.exit(1); }
 console.log('\nand it leaves this tab alone:');
 ck('it does not load the CE here', !/handleLoad/.test(opener[0]),
@@ -65,13 +65,13 @@ ck('it waits for the CE number to match', /\(info\.ceNum \|\| ''\) !== autoPrint
 ck('it re-checks as the rows land', /\[autoPrint, info\.ceNum, mp, tools, mats, ppe\]/.test(eff[0]));
 ck('it fires once, not on every render', /setAutoPrint\(null\);/.test(eff[0]));
 ck('printable CE and Export Detailed are both reachable',
-  /if \(\/\^\(detailed\|template\)\/\.test\(as\)\) \{[\s\S]{0,200}handleExportXLSX\(_no\); else handleExport\(_no\);[\s\S]{0,600}\} else if \(autoPrint\.relay && window !== window\.top\) \{[\s\S]{0,700}\} else if \(as === 'view'\) handleGenerateCE\(\{ embed: true \}\); else if \(as === 'noamt'\) handleGenerateCE\(\{ noAmounts: true \}\); else handleGenerateCE\(\)/.test(eff[0]));
+  /if \(\/\^\(detailed\|template\|planning\)\/\.test\(as\)\) \{[\s\S]{0,300}handleExportXLSX\(_no\); else handleExport\(_no\);[\s\S]{0,600}\} else if \(autoPrint\.relay && window !== window\.top\) \{[\s\S]{0,700}\} else if \(as === 'view'\) handleGenerateCE\(\{ embed: true \}\); else if \(as === 'noamt'\) handleGenerateCE\(\{ noAmounts: true \}\); else handleGenerateCE\(\)/.test(eff[0]));
 ck('a frame hands the finished CE to the window that asked, then stops',
   /handleGenerateCE\(\{ htmlOnly: true, noAmounts: as === 'noamt' \}\);\s*window\.parent\.postMessage\(\{ shicCeHtml: _html \|\| '' \}, window\.location\.origin\);/.test(eff[0]));
 
 console.log('\n⬇ xlsx leaves no window behind:');
 ck('a workbook is built in a hidden frame, not a new tab or window',
-  /const isFile = \/\^\(detailed\|template\)\/\.test\(as\);\s*const f = document\.createElement\('iframe'\);\s*f\.style\.display = 'none';/.test(opener[0]));
+  /const isFile = \/\^\(detailed\|template\|planning\)\/\.test\(as\);\s*const f = document\.createElement\('iframe'\);\s*f\.style\.display = 'none';/.test(opener[0]));
 ck('and the frame stops itself once the file is out',
   /if \(window !== window\.top\) setTimeout\(\(\) => \{ document\.open\(\);/.test(eff[0]));
 

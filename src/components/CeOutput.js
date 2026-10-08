@@ -532,6 +532,56 @@ function stripSheetAmounts(sheets) {
   return sheets;
 }
 
+/* The allocation sheet the Planning app imports, one row per resource, from the CE on screen.
+
+   Columns and values follow the Planning app's own export (ID, ProjectID, ResourceID, ResourceName, ResourceType, Unit, Role,
+   AllocatedQty, PlannedCost, ActualCost, Status, ...):
+     Manpower    one row per role, all shifts together. Qty is the headcount, PlannedCost the role's wages plus its benefits (what the CE
+                 charges for that role), ResourceID TRADE-<ROLE>.
+     Consumable  every Materials and PPE line: Qty as entered, PlannedCost = qty x cost, Unit as entered. ResourceID is left blank
+                 unless the line carries a warehouse code (WHSE-...).
+   Tools and equipment, vehicles and miscellaneous are not allocated resources and are not exported. ActualCost, dates and the issued /
+   returned / net columns are blank; Remaining starts equal to Qty; Status is active. */
+const PLANNING_HEADERS = ['ID', 'ProjectID', 'ResourceID', 'ResourceName', 'ResourceType', 'Unit', 'Role', 'AllocatedQty', 'PlannedCost', 'ActualCost', 'Status', 'StartDate', 'EndDate', 'Notes', 'Issued', 'Returned', 'NetUsed', 'Remaining'];
+function buildPlanningRows(ctx, projectId) {
+  const { mp, mats, ppe, mpWageParts, benefitRows } = ctx;
+  const money = v => Math.round(N(v) * 100) / 100;
+  const roleKey = s => String(s || '').trim().toUpperCase();
+  const out = [];
+  const add = (resId, name, type, unit, qty, planned) => out.push([
+    'RA-' + String(out.length + 1).padStart(4, '0'), projectId, resId, name, type, unit, '', qty, money(planned), '', 'active', '', '', '', '', '', '', qty]);
+  const roles = new Map();
+  (mp || []).filter(r => r.role && (N(r.rate) > 0 || N(r.pax) > 0)).forEach(r => {
+    const k = roleKey(r.role);
+    const g = roles.get(k) || { name: String(r.role).trim(), pax: 0, wage: 0 };
+    g.pax = Math.max(g.pax, N(r.pax) || 1);
+    g.wage += mpWageParts(r).total;
+    roles.set(k, g);
+  });
+  roles.forEach((g, k) => {
+    const b = (benefitRows || []).find(x => roleKey(x.role) === k);
+    add('TRADE-' + k.replace(/\s+/g, '-'), g.name, 'Manpower', 'pax', b && N(b.pax) ? N(b.pax) : g.pax, g.wage + (b ? N(b.total) : 0));
+  });
+  [...(mats || []), ...(ppe || [])].filter(r => r.desc && String(r.desc).trim()).forEach(r => {
+    add(/^WHSE-/i.test(String(r.code || '')) ? String(r.code).trim() : '', String(r.desc).trim(), 'Consumable', r.uom || 'Lot', N(r.qty), N(r.qty) * N(r.cost));
+  });
+  return out;
+}
+function makeHandleExportPlanning(getCtx) {
+  return (opt) => {
+    const ctx = getCtx();
+    const info = ctx.info || {};
+    const pid = String((opt && opt.projectId) || '').trim() || info.ceNum || '';
+    const rows = buildPlanningRows(ctx, pid);
+    if (!rows.length) { ctx.showToast('Nothing to export — this CE has no manpower, materials or PPE.', true); return; }
+    const th = PLANNING_HEADERS.map(h => ({ v: h, s: 'th' }));
+    const body = rows.map(r => r.map((v, i) => ({ v, s: (i === 7 || i === 17) ? 'tdc' : i === 8 ? 'tdn' : 'td' })));
+    SHICXlsx.download('allocation_' + String(pid).replace(/[^a-z0-9._-]/gi, '_') + '.xlsx',
+      [{ name: 'Allocation', cols: [10, 24, 30, 46, 14, 9, 8, 13, 14, 12, 9, 11, 11, 10, 9, 10, 9, 11], rows: [th, ...body] }]);
+    ctx.showToast('Planning workbook exported — ' + rows.length + ' resource(s) for ' + pid + '.');
+  };
+}
+
 function makeHandleExportXLSX(getCtx) {
   return (opt) => {
     const noAmt = !!(opt && opt.noAmounts);

@@ -1065,15 +1065,16 @@ function App({
         const _q = new URLSearchParams(window.location.search);
         const _pid = Number(_q.get('print'));
         if (_pid) {
-          const _as = ['detailed', 'detailed-noamt', 'template', 'template-noamt', 'view', 'noamt'].includes(_q.get('as')) ? _q.get('as') : 'ce';
+          const _as = ['detailed', 'detailed-noamt', 'template', 'template-noamt', 'planning', 'view', 'noamt'].includes(_q.get('as')) ? _q.get('as') : 'ce';
           const _relay = _q.get('relay') === '1';
+          const _projId = String(_q.get('pid') || '').slice(0, 80);
           window.history.replaceState({}, '', window.location.pathname);
           setTimeout(async () => {
             try {
               const full = await dbLoadCE(_pid);
               if (!full) { console.error('open CE ' + _pid + ': dbLoadCE returned nothing'); showToast('Could not open that CE — it is not in SharePoint or this browser.', true); return; }
               await handleLoad(full);
-              setAutoPrint({as: _as, relay: _relay, ceNum: (full.info || {}).ceNum || ''});
+              setAutoPrint({as: _as, relay: _relay, pid: _projId, ceNum: (full.info || {}).ceNum || ''});
             } catch (ex) { console.error('open CE ' + _pid + ' failed:', ex); showToast('Could not open that CE: ' + ex.message, true); }
           }, 600);
         }
@@ -2517,15 +2518,15 @@ function App({
      to be on screen somewhere. It opens in its own tab, which is the part that
      matters: the CE you have open here does not move, and there is nothing to
      restore afterwards. */
-  const openForPrint = (id, as) => {
+  const openForPrint = (id, as, projectId) => {
     /* Everything is made in a hidden frame, never in a tab of its own: a new tab opened a whole second copy of the app, and it stayed
        open behind the document after it was printed. A workbook downloads straight from the frame. The printed CE is handed back to this
        window (relay=1), and shown in a plain tab that holds nothing but the document; that tab is opened here, on the click, because a
        pop-up opened later -- once the frame has loaded -- can be refused. The frame is removed when it is done. */
-    const isFile = /^(detailed|template)/.test(as);
+    const isFile = /^(detailed|template|planning)/.test(as);
     const f = document.createElement('iframe');
     f.style.display = 'none';
-    f.src = window.location.pathname + '?print=' + id + '&as=' + as + (isFile ? '' : '&relay=1');
+    f.src = window.location.pathname + '?print=' + id + '&as=' + as + (isFile ? '' : '&relay=1') + (projectId ? '&pid=' + encodeURIComponent(projectId) : '');
     if (isFile) {
       document.body.appendChild(f);
       setTimeout(() => { try { f.remove(); } catch(_e){logSwallowed('App:L2640',_e);} }, 60000);
@@ -2566,9 +2567,10 @@ function App({
     const as = autoPrint.as;
     setAutoPrint(null);
     setTimeout(() => {
-      try { if (/^(detailed|template)/.test(as)) {
+      try { if (/^(detailed|template|planning)/.test(as)) {
         const _no = /-noamt$/.test(as) ? { noAmounts: true } : undefined;
-        if (/^detailed/.test(as)) handleExportXLSX(_no); else handleExport(_no);
+        if (as === 'planning') handleExportPlanning({ projectId: autoPrint.pid });
+        else if (/^detailed/.test(as)) handleExportXLSX(_no); else handleExport(_no);
         /* In the hidden frame: once the file is out, stop this copy of the app
            so nothing in it can autosave. */
         if (window !== window.top) setTimeout(() => { document.open(); document.write('<p>Exported.</p>'); document.close(); }, 3000);
@@ -5074,6 +5076,7 @@ function App({
      cell styling on write. Layout, merges, column widths and number formats
      survive; bold text, the black header bars and cell borders do not. */
   const handleExportXLSX = makeHandleExportXLSX(() => ({ approvers, benefitRows, benefitsT, ceBreakdown, ceLayout, ceSections, ceType, cfg, demobVehicles, demobVehiclesT, docStatus, grand, hlAmt, hlLabel, hlRows, incOn, info, kwhRate, margin, mats, matsT, misc, miscT, mobVehicles, mobVehiclesT, mp, mpTot, mpWageParts, notes, perJobLbl, perJobT, powerOn, ppe, ppeT, pwrFrac, qtyUom, rr, servicesSummary, showToast, showUnitP, sowItems, sowLabels, toolBasis, tools, toolsT, unitLbl, unitP }));
+  const handleExportPlanning = makeHandleExportPlanning(() => ({ benefitRows, info, mats, mp, mpWageParts, ppe, showToast }));
   const [showDraftBanner, setShowDraftBanner] = React.useState(() => hasDraft());
   /* Refreshed on every render so the auto-save timer never works from a
      stale closure. */

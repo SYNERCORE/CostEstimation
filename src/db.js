@@ -1225,7 +1225,7 @@ async function _ceDeleteById(id){
     if(hit)await ceDelete(hit.ceNum);
   }catch(_){logSwallowed('db:_ceDeleteById',_);}
 }
-async function dbGetML(){if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Masterlist'),"Title eq 'config'",'Id,shicData');if(r.length&&r[0].shicData)return JSON.parse(r[0].shicData);}catch(e){console.warn('dbGetML:',e.message);}}return LS.get('masterlist');}
+async function dbGetML(){if(USE_SP||getSiteURL()){try{const p=await _mlReadSP();if(p.data)return p.data;}catch(e){console.warn('dbGetML:',e.message);}}return LS.get('masterlist');}
 /* Merges anything still waiting to upload into the SharePoint view. Showing the
    remote list alone would hide entries made during an outage — precisely the
    ones an admin needs to know exist. Pending entries are flagged so nobody
@@ -1581,16 +1581,72 @@ async function dbMLTrashOp(op){
   }
   return{sp:false,list:local};
 }
+/* How the Masterlist sits on SharePoint.
+
+   It was ONE JSON blob in ONE row ('config'): every save rewrote all of it, and the row's size was a ceiling on the whole list. It is now
+   split into parts of ML_CHUNK items, one row each ('ml:<section>:<n>'), plus an index row ('ml:index') that says how many parts each
+   section has. A save writes only the parts that changed. The old 'config' row is left exactly as it was: it is the fallback for a
+   site that has not been saved by this version yet, and it stays as a snapshot of the last list in the old form (a browser still running
+   an older build keeps reading and writing it, and will not see changes made from here). */
+const ML_CHUNK=400;
+async function _mlReadSP(){
+  const L=spList('Masterlist');
+  const ix=await spGet(L,"Title eq 'ml:index'",'Id,Modified,shicData');
+  if(ix.length&&ix[0].shicData){
+    let idx=null;try{idx=JSON.parse(ix[0].shicData);}catch(_e){logSwallowed('db:_mlReadSP',_e);}
+    if(idx&&idx.v===2&&idx.counts){
+      const rows=await spGet(L,"startswith(Title,'ml:')",'Id,Title,shicData');
+      const byTitle={};rows.forEach(r=>{if(r.Title!=='ml:index')byTitle[r.Title]=r;});
+      const data={...(idx.extra||{})};
+      for(const sec of ML_SECS){
+        const n=idx.counts[sec]||0;let list=[];
+        for(let i=0;i<n;i++){
+          const r=byTitle['ml:'+sec+':'+i];
+          if(!r||!r.shicData)throw new Error('the masterlist is incomplete on SharePoint ('+sec+' part '+(i+1)+' of '+n+' is missing)');
+          list=list.concat(JSON.parse(r.shicData));
+        }
+        data[sec]=list;
+      }
+      return{data,rows:byTitle,index:ix[0],modified:ix[0].Modified};
+    }
+  }
+  const r=await spGet(L,"Title eq 'config'",'Id,Modified,shicData');
+  let data=null;
+  if(r.length&&r[0].shicData){try{data=JSON.parse(r[0].shicData);}catch(_e){logSwallowed('db:_mlReadSP',_e);}}
+  return{data,rows:{},index:null,modified:r.length?r[0].Modified:null};
+}
+async function _mlWriteSP(merged,prior){
+  const L=spList('Masterlist');const rows=prior.rows||{};const counts={},extra={};
+  for(const k of Object.keys(merged))if(ML_SECS.indexOf(k)<0)extra[k]=merged[k];
+  for(const sec of ML_SECS){
+    const list=Array.isArray(merged[sec])?merged[sec]:[];
+    const n=Math.ceil(list.length/ML_CHUNK);counts[sec]=n;
+    for(let i=0;i<n;i++){
+      const body=JSON.stringify(list.slice(i*ML_CHUNK,(i+1)*ML_CHUNK));const t='ml:'+sec+':'+i;const ex=rows[t];
+      if(ex){if(ex.shicData!==body)await spWithRetry(()=>spPatch(L,ex.Id,{shicData:body}));}
+      else await spWithRetry(()=>spPost(L,{Title:t,shicData:body}));
+    }
+  }
+  /* The index goes last: a reader that finds it finds every part it lists. */
+  const ixBody=JSON.stringify({v:2,counts,extra,at:new Date().toISOString()});
+  if(prior.index)await spWithRetry(()=>spPatch(L,prior.index.Id,{shicData:ixBody}));
+  else await spWithRetry(()=>spPost(L,{Title:'ml:index',shicData:ixBody}));
+  /* Parts past the new end (a list that shrank, or was cleared) are removed once the index no longer names them. */
+  for(const t of Object.keys(rows)){
+    const m=/^ml:([a-z]+):(\d+)$/.exec(t);
+    if(m&&!(counts[m[1]]>Number(m[2]))){try{await spDelete(L,rows[t].Id);}catch(e){console.warn('dbSaveML: could not remove old part '+t+':',e.message);}}
+  }
+}
 async function dbSaveML(data,opts){
 /* Mirror locally FIRST, on both branches. The SharePoint branch used to
    `return` before ever reaching the LS.set below, so saving the masterlist
    while online left the offline cache stale forever. */
 LS.set('masterlist',data);LS.set('masterlist_savedAt',new Date().toISOString());
 const o=opts||{};const _del=o.deleted||{};const _repl=new Set(o.replaceTabs||[]);
-if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Masterlist'),"Title eq 'config'",'Id,Modified,shicData');
+if(USE_SP||getSiteURL()){try{const prior=await _mlReadSP();
   let merged=data,adopted={},adoptedN=0;
-  if(r.length&&r[0].shicData){
-    let theirs=null;try{theirs=JSON.parse(r[0].shicData);}catch(_e){logSwallowed('db:dbSaveML',_e);}
+  {
+    const theirs=prior.data;
     if(theirs&&typeof theirs==='object'){
       merged={...data};
       for(const sec of ML_SECS){
@@ -1611,7 +1667,8 @@ if(USE_SP||getSiteURL()){try{const r=await spGet(spList('Masterlist'),"Title eq 
     }
   }
   if(adoptedN){LS.set('masterlist',merged);}
-  if(r.length){/* Conflict guard: if SP was updated more recently than our local copy, warn before overwriting */const spModified=new Date(r[0].Modified||0).getTime();const localSavedAt=new Date(LS.get('masterlist_savedAt')||0).getTime();if(spModified>localSavedAt+5000)console.warn('dbSaveML: SP masterlist was modified by another user at',r[0].Modified,'— merged',adoptedN,'item(s) back in');await spPatch(spList('Masterlist'),r[0].Id,{shicData:JSON.stringify(merged)});}else await spPost(spList('Masterlist'),{Title:'config',shicData:JSON.stringify(merged)});return{sp:true,adopted,merged};}catch(e){
+  if(prior.modified){/* Conflict guard: if SP was updated more recently than our local copy, warn before overwriting */const spModified=new Date(prior.modified||0).getTime();const localSavedAt=new Date(LS.get('masterlist_savedAt')||0).getTime();if(spModified>localSavedAt+5000)console.warn('dbSaveML: SP masterlist was modified by another user at',prior.modified,'— merged',adoptedN,'item(s) back in');}
+  await _mlWriteSP(merged,prior);return{sp:true,adopted,merged};}catch(e){
 /* Reported, not swallowed. This caught the SharePoint failure and returned as
    if it had worked, so saveML marked the masterlist "synced" and the sidebar
    showed a tick while every rate change sat in one browser. The same silence

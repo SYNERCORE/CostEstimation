@@ -166,10 +166,10 @@ ck('under the headings a shop sheet actually uses', /powerkw: 'kw', kw: 'kw'/.te
 console.log('\nthe registry keeps it per tool, with no schema change:');
 /* `merged`, not `data`: a save now folds in whatever another user added
    before writing. Still one blob, which is the point of this assertion. */
-ck('the masterlist is one JSON blob',
-  /shicData:JSON\.stringify\(merged\)/.test(db),
-  'a per-tool field rides in it, so no site has to be repaired to store kW');
-ck('and is read back whole', /JSON\.parse\(r\[0\]\.shicData\)/.test(db));
+ck('the masterlist is stored as JSON in the existing shicData column, in whole items',
+  /JSON\.stringify\(list\.slice\(i\*ML_CHUNK,\(i\+1\)\*ML_CHUNK\)\)/.test(db),
+  'a per-tool field rides in the item, so no site has to be repaired to store kW');
+ck('and is read back whole', /list=list\.concat\(JSON\.parse\(r\.shicData\)\)/.test(db));
 ck('the tier calculator does not wipe it',
   /tools: \(masterlist\.tools \|\| \[\]\)\.map\(r => r\.id === mlCalc\.id \? \{\s*\.\.\.r,/.test(app),
   'rebuilding the item instead of spreading it would drop every field the dialog does not know about');

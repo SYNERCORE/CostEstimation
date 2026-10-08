@@ -3,6 +3,46 @@
    Moved out of App.js unchanged. Both are invoked from the render of App, never as elements: they hold no hooks, and everything they
    read comes in through ctx. */
 
+/* Working out what an imported sheet does to a list, before anything is written.
+
+   The sheet is matched to the list by name. Repeated names inside the sheet used to each be added (the match was only against what was
+   already in the list), and an update wrote the defaults the importer fills in -- a made-up code, 'General', 'Day', a price of 0 -- over
+   real values. Now: repeated rows count once (the last wins), a blank code/category/unit or a missing price keeps what the item has,
+   a made-up code is never reused, and a row identical to its item is not rewritten. */
+const ML_IMPORT_MAX_ROWS = 5000;
+function planMLImport(existing, newItems, nameField, costField, tab) {
+  const nm = x => String(x[nameField] || '').toUpperCase().trim();
+  const byName = new Map();
+  newItems.forEach(x => byName.set(nm(x), x));
+  const incoming = [...byName.values()];
+  const dupInFile = newItems.length - incoming.length;
+  const have = new Map();
+  existing.forEach(x => { const k = nm(x); if (!have.has(k)) have.set(k, x); });
+  const existingDupes = existing.length - new Set(existing.map(nm)).size;
+  const used = new Set(existing.map(x => String(x.code || '').toUpperCase()));
+  const prefix = 'SHIC-' + String(tab || '').toUpperCase().slice(0, 2) + '-';
+  let seq = 900;
+  const nextCode = () => { let c; do { c = prefix + String(seq++).padStart(3, '0'); } while (used.has(c)); used.add(c); return c; };
+  const strip = it => { const o = {...it}; delete o._blank; return o; };
+  let updated = 0, unchanged = 0, keptPrice = 0;
+  const upd = new Map();
+  const toAdd = [];
+  incoming.forEach(it => {
+    const k = nm(it), cur = have.get(k);
+    if (!cur) { const o = strip(it); if (!o.code) o.code = nextCode(); else used.add(o.code.toUpperCase()); toAdd.push(o); return; }
+    const blank = new Set(it._blank || []);
+    const o = strip(it);
+    delete o.id;
+    blank.forEach(f => { delete o[f]; });
+    if (!(Number(o[costField]) > 0) && Number(cur[costField]) > 0) { delete o[costField]; keptPrice++; }
+    const next = {...cur, ...o, id: cur.id};
+    if (JSON.stringify(next) === JSON.stringify(cur)) { unchanged++; return; }
+    updated++; upd.set(k, next);
+  });
+  const merged = existing.map(x => upd.get(nm(x)) && have.get(nm(x)) === x ? upd.get(nm(x)) : x).concat(toAdd);
+  return { toAdd, updated, unchanged, dupInFile, existingDupes, keptPrice, merged };
+}
+
 function MlCalcModalTab(ctx) {
   const {
     masterlist,
@@ -266,14 +306,19 @@ function MlEditorTab(ctx) {
         };
         const newItems = rows.map((r0, i) => {
           const rk = rekey(r0), r = r0;
+          const _code = String(rk.code || r.code || r.Code || '').trim();
+          const _cat = String(rk.category || r.category || r.Category || '').trim();
+          const _uom = String(rk.uom || r.uom || r.UOM || '').trim();
           const item = {
             id: uid(),
-            code: String(rk.code || r.code || r.Code || '').trim() || 'SHIC-' + tab.toUpperCase().slice(0, 2) + '-' + (900 + i).toString().padStart(3, '0'),
-            category: String(rk.category || r.category || r.Category || 'General').trim(),
+            code: _code,
+            category: _cat || 'General',
             [fm.name]: String(rk[fm.name] || r[fm.name] || r.role || r.desc || r.description || '').trim(),
             [fm.cost]: parseFloat(rk[fm.cost] !== undefined && rk[fm.cost] !== '' ? rk[fm.cost] : (r[fm.cost] || r.rate || r.cost || 0)) || 0,
-            uom: String(rk.uom || r.uom || r.UOM || 'Day').trim()
+            uom: _uom || 'Day'
           };
+          /* What the sheet left blank, so an update does not write the defaults over a real value. */
+          item._blank = [!_code && 'code', !_cat && 'category', !_uom && 'uom'].filter(Boolean);
           /* Manpower-specific: read the incentive column. It was labelled "Per Diem"
              until the rename, so those headers are still accepted -- every
              masterlist workbook already in circulation carries the old one. */
@@ -334,19 +379,29 @@ function MlEditorTab(ctx) {
            EMPTY list to SharePoint and kept the upload nowhere, so the list
            came back empty. saveML mirrors locally, writes to SharePoint, and
            now reports if SharePoint refuses. */
-        const existing = masterlist[tab] || [];
-        const key = x => (x[fm.name] || '').toUpperCase().trim();
-        const existingNames = new Set(existing.map(key));
-        const toAdd = newItems.filter(x => !existingNames.has(key(x)));
-        const toUpdate = newItems.filter(x => existingNames.has(key(x)));
-        const merged = existing.map(x => {
-          const match = toUpdate.find(u => key(u) === key(x));
-          return match ? {...x, ...match, id: x.id} : x;
-        });
-        await saveML({...masterlist, [tab]: [...merged, ...toAdd]});
+        if (rows.length > ML_IMPORT_MAX_ROWS) {
+          showToast('That file has ' + rows.length.toLocaleString() + ' rows; import at most ' + ML_IMPORT_MAX_ROWS.toLocaleString() + ' at a time.', true);
+          return;
+        }
+        const plan = planMLImport(masterlist[tab] || [], newItems, fm.name, fm.cost, tab);
+        /* Said before anything is written, not after: a sheet imported twice, or with repeated rows, used to add them all. */
+        const lines = [
+          plan.toAdd.length + ' new, ' + plan.updated + ' updated' + (plan.unchanged ? ' (' + plan.unchanged + ' already identical)' : '') + ' in ' + tab + '.',
+          rows.length - newItems.length ? (rows.length - newItems.length) + ' row(s) with no name are skipped.' : '',
+          plan.dupInFile ? plan.dupInFile + ' repeated row(s) in the file are counted once (the last one is used).' : '',
+          plan.keptPrice ? plan.keptPrice + ' item(s) have no price in the file, so their current price is kept.' : '',
+          plan.existingDupes ? 'The list already has ' + plan.existingDupes + ' repeated name(s).' : '',
+          'The list will hold ' + plan.merged.length.toLocaleString() + ' items.'
+        ].filter(Boolean);
+        if (!plan.toAdd.length && !plan.updated) {
+          showToast('Nothing to import: every row in the file is already in ' + tab + ' as it is.');
+          return;
+        }
+        if (!await uiConfirm('Import ' + file.name + '?\n\n' + lines.join('\n'))) return;
+        await saveML({...masterlist, [tab]: plan.merged});
         /* Out of the state updater: React may invoke that twice, and a toast
            fired from inside it reports the import happening twice. */
-        showToast(toAdd.length + ' added, ' + toUpdate.length + ' updated in ' + tab + '.');
+        showToast(plan.toAdd.length + ' added, ' + plan.updated + ' updated in ' + tab + (plan.dupInFile ? ' (' + plan.dupInFile + ' repeated row(s) skipped)' : '') + '.');
       } catch (err) {
         showToast('Import failed: ' + err.message, true);
       }

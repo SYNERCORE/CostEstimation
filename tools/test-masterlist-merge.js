@@ -29,25 +29,49 @@ const grab = (re, what) => { const m = db.match(re); if (!m) { console.error('no
 const src =
   grab(/const ML_SECS=\[[^\]]*\];/, 'ML_SECS') + '\n' +
   grab(/function _mlKey\(it\)\{[\s\S]*?\n\}/, '_mlKey') + '\n' +
+  grab(/const ML_CHUNK=\d+;/, 'ML_CHUNK') + '\n' +
+  grab(/async function _mlReadSP\(\)\{[\s\S]*?\nasync function _mlWriteSP[\s\S]*?\n\}\n(?=async function dbSaveML)/, 'the SharePoint reader and writer') + '\n' +
   grab(/async function dbSaveML\(data,opts\)\{[\s\S]*?\nreturn\{sp:false,reason:'SharePoint is not configured'\};\}/, 'dbSaveML');
 
-/* Runs the real dbSaveML against a fake SharePoint holding `theirs`. */
+/* A fake Masterlist list: rows by Title. It understands the two filters the code uses. */
+function fakeSP(list) {
+  let id = 100;
+  return {
+    list,
+    spGet: async (l, f) => {
+      let m;
+      if ((m = /^Title eq '(.*)'$/.exec(f))) return list.filter(r => r.Title === m[1]);
+      if ((m = /^startswith\(Title,'(.*)'\)$/.exec(f))) return list.filter(r => r.Title.indexOf(m[1]) === 0);
+      throw new Error('unexpected filter ' + f);
+    },
+    spPost: async (l, d) => { list.push({Id: ++id, Modified: new Date().toISOString(), ...d}); },
+    spPatch: async (l, i, d) => { Object.assign(list.find(r => r.Id === i), d); },
+    spDelete: async (l, i) => { list.splice(list.findIndex(r => r.Id === i), 1); }
+  };
+}
+/* What a reader of the site sees: the index and its parts put back together, or the old single row. */
+function assembled(list) {
+  const ix = list.find(r => r.Title === 'ml:index');
+  if (!ix) { const c = list.find(r => r.Title === 'config'); return c ? JSON.parse(c.shicData) : null; }
+  const idx = JSON.parse(ix.shicData), out = {...(idx.extra || {})};
+  for (const s of Object.keys(idx.counts)) {
+    out[s] = [];
+    for (let i = 0; i < idx.counts[s]; i++) out[s] = out[s].concat(JSON.parse(list.find(r => r.Title === 'ml:' + s + ':' + i).shicData));
+  }
+  return out;
+}
+const mk = (sp, store) => new Function(
+  'spGet', 'spPost', 'spPatch', 'spDelete', 'spList', 'spWithRetry', 'logSwallowed', 'USE_SP', 'getSiteURL', 'LS', 'console',
+  src + '; return dbSaveML;'
+)(sp.spGet, sp.spPost, sp.spPatch, sp.spDelete, n => n, fn => fn(), () => {}, true, () => 'https://x',
+  {get: k => store[k], set: (k, v) => { store[k] = v; }}, {warn() {}});
+
+/* Runs the real dbSaveML against a fake SharePoint holding `theirs` in the old single row. */
 function run(mine, theirs, opts) {
-  let written = null;
   const store = {};
-  const save = new Function(
-    'spGet', 'spPost', 'spPatch', 'spDelete', 'spList', 'USE_SP', 'getSiteURL', 'LS', 'console',
-    src + '; return dbSaveML;'
-  )(
-    async () => theirs === null ? [] : [{Id: 7, Modified: new Date().toISOString(), shicData: JSON.stringify(theirs)}],
-    async (l, d) => { written = JSON.parse(d.shicData); },
-    async (l, id, d) => { written = JSON.parse(d.shicData); },
-    async () => {},
-    n => n, true, () => 'https://x',
-    {get: k => store[k], set: (k, v) => { store[k] = v; }},
-    {warn() {}}
-  );
-  return save(mine, opts).then(res => ({res, written, store}));
+  const sp = fakeSP([]);
+  if (theirs !== null) sp.list.push({Id: 7, Title: 'config', Modified: new Date().toISOString(), shicData: JSON.stringify(theirs)});
+  return mk(sp, store)(mine, opts).then(res => ({res, written: assembled(sp.list), store, sp}));
 }
 
 const role = (id, r, rate) => ({id, role: r, rate, cat: 'Technical'});
@@ -118,17 +142,50 @@ const role = (id, r, rate) => ({id, role: r, rate, cat: 'Technical'});
     'otherwise the next save offers to delete it all over again');
 
   console.log('\na save that fails still says so:');
-  const failing = new Function(
-    'spGet', 'spPost', 'spPatch', 'spDelete', 'spList', 'USE_SP', 'getSiteURL', 'LS', 'console',
-    src + '; return dbSaveML;'
-  )(
-    async () => { throw new Error('403 Forbidden'); },
-    async () => {}, async () => {}, async () => {},
-    n => n, true, () => 'https://x', {get: () => null, set: () => {}}, {warn() {}}
-  );
+  const failing = mk({spGet: async () => { throw new Error('403 Forbidden'); }, spPost: async () => {}, spPatch: async () => {}, spDelete: async () => {}}, {});
   const f = await failing({manpower: []});
   ck('sp is false', f.sp === false);
   ck('with the reason', /403/.test(f.reason || ''));
+
+  console.log('\nsplit into parts, so no one row limits the list:');
+  const many = n => Array.from({length: n}, (_, i) => ({id: 'i' + i, desc: 'ITEM ' + i, cost: i, cat: 'General'}));
+  r = await run({tools: many(1000), manpower: [role(1, 'WELDER', 900)]}, null);
+  const titles = r.sp.list.map(x => x.Title).sort();
+  ck('1,000 tools become 3 parts, not one row', titles.filter(t => /^ml:tools:/.test(t)).length === 3, titles.join());
+  ck('with an index row naming them', titles.includes('ml:index'));
+  ck('and no row holds more than a part', Math.max(...r.sp.list.map(x => x.shicData.length)) < 400 * 200);
+  ck('read back whole and in order', r.written.tools.length === 1000 && r.written.tools[999].id === 'i999' && r.written.manpower.length === 1);
+  ck('the old single row is not touched by a save', !r.sp.list.some(x => x.Title === 'config'));
+  console.log('\nmigrating from the old single row:');
+  r = await run({tools: many(10)}, {tools: [{id: 'z', desc: 'FROM OLD ROW', cost: 1}]});
+  ck('the old row is merged in and written as parts', r.written.tools.length === 11 && r.sp.list.some(x => x.Title === 'ml:index'));
+  ck('and left as it was', JSON.parse(r.sp.list.find(x => x.Title === 'config').shicData).tools.length === 1);
+  console.log('\nonly the parts that changed are written:');
+  {
+    const store = {}, sp = fakeSP([]);
+    let writes = 0;
+    const p = sp.spPatch; sp.spPatch = async (...a) => { writes++; return p(...a); };
+    const save = mk(sp, store);
+    await save({tools: many(1000)});
+    writes = 0;
+    const edited = many(1000); edited[500].cost = 99999;
+    await save({tools: edited});
+    ck('one edit rewrites its part and the index, not all three', writes === 2, 'patches: ' + writes);
+    ck('and the edit is there', assembled(sp.list).tools[500].cost === 99999);
+    await save({tools: many(100)}, {replaceTabs: ['tools']});
+    ck('a list that shrank leaves no stale parts', sp.list.filter(x => /^ml:tools:/.test(x.Title)).length === 1 && assembled(sp.list).tools.length === 100);
+    await save({tools: []}, {replaceTabs: ['tools']});
+    ck('Clear List leaves none', !sp.list.some(x => /^ml:tools:/.test(x.Title)) && assembled(sp.list).tools.length === 0);
+  }
+  console.log('\nan incomplete list on the site is refused, not read as a short one:');
+  {
+    const sp = fakeSP([]);
+    const store = {};
+    await mk(sp, store)({tools: many(900)});
+    sp.list.splice(sp.list.findIndex(x => x.Title === 'ml:tools:1'), 1);
+    const f2 = await mk(sp, store)({tools: many(5)});
+    ck('the save fails with a reason rather than overwriting', f2.sp === false && /incomplete/.test(f2.reason || ''), JSON.stringify(f2));
+  }
 
   console.log('\nThe app asks for removal by name, and shows what it kept:');
   ck('deleting one row names it', /\{deleted: \{\[mlTab\]: \[id\]\}\}/.test(app));

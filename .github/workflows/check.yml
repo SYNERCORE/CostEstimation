@@ -459,5 +459,7 @@ jobs:
         run: node tools/test-ce-no-amounts.js
       - name: Masterlist Trash is pruned on load and capped
         run: node tools/test-ml-trash-cap.js
+      - name: Masterlist import plan
+        run: node tools/test-ml-import-plan.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

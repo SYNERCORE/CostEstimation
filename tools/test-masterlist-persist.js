@@ -32,7 +32,7 @@ const ed = (app.match(/function MlEditorTab\(ctx\) \{[\s\S]*?\n\}\n/) || [''])[0
 if (!ed) { console.error('MlEditor not found'); process.exit(1); }
 
 console.log('every mutating action persists:');
-ck('the Excel upload saves', /await saveML\(\{\.\.\.masterlist, \[tab\]: \[\.\.\.merged, \.\.\.toAdd\]\}\)/.test(ed),
+ck('the Excel upload saves', /await saveML\(\{\.\.\.masterlist, \[tab\]: plan\.merged\}\)/.test(ed),
   'setMasterlist alone leaves the upload in memory only');
 ck('Clear List saves', /saveML\(\{\s*\.\.\.masterlist,\s*\[mlTab\]: \[\]/.test(ed));
 ck('Reset Defaults saves', /saveML\(\{\s*\.\.\.masterlist,\s*\[mlTab\]: DEFAULT_ML\[mlTab\]/.test(ed));

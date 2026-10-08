@@ -843,6 +843,7 @@ function MonitoringPanel(ctx) {
         borderLeft: `1px solid ${BDR}`
       }
     }, /*#__PURE__*/React.createElement("div", {
+      className: 'mon-actions',
       style: {
         /* Three across rather than one tall column: thirteen stacked buttons
            made every row as tall as the list of actions. */
@@ -854,17 +855,17 @@ function MonitoringPanel(ctx) {
         gap: 3,
         whiteSpace: 'nowrap'
       }
-    }, /*#__PURE__*/React.createElement("button", {
+    }, /*#__PURE__*/React.createElement("button",{className:'mon-pri',style:{gridRow:3,gridColumn:'1 / span 2',...btn('def',true),fontSize:10,padding:'2px 8px'},title:"Assign, Edit, attachments, print and export, Clone, Revise and Delete",onClick:ev=>{const b=ev.currentTarget,g=b.closest('.mon-actions');if(g){const o=g.classList.toggle('open');b.textContent=o?'\u25B4 Less':'\u22EF More';}}},'\u22EF More'), /*#__PURE__*/React.createElement("button", {
       /* Status changes constantly and everything else in the row does not, so
          it gets its own action rather than sharing Edit with the reference
          fields. It opens a panel: pick the new status, and read the trail. */
       disabled: !!e._draft || (isRequestor && !reqOwns(e.id)),
-      style: {gridRow: 1, gridColumn: 1, ...btn(statusPanel === e.id ? 'acc' : 'def', true), fontSize: 10, padding: '2px 8px', opacity: e._draft ? .4 : 1, cursor: e._draft ? 'not-allowed' : 'pointer'},
+      className: 'mon-pri', style: {gridRow: 1, gridColumn: 1, ...btn(statusPanel === e.id ? 'acc' : 'def', true), fontSize: 10, padding: '2px 8px', opacity: e._draft ? .4 : 1, cursor: e._draft ? 'not-allowed' : 'pointer'},
       title: e._draft ? 'A draft is always Draft — save the CE to start tracking it' : 'Update status and view its history',
       onClick: () => { if (!e._draft) setStatusPanel(statusPanel === e.id ? null : e.id); }
     }, '⚑ Status'), /*#__PURE__*/React.createElement("button", {
       disabled: !!e._draft || (isRequestor && !reqOwns(e.id)),
-      style: {gridRow: 1, gridColumn: 2, ...btn('def', true), fontSize: 10, padding: '2px 8px', opacity: e._draft ? .4 : 1, cursor: e._draft ? 'not-allowed' : 'pointer'},
+      className: 'mon-pri', style: {gridRow: 1, gridColumn: 2, ...btn('def', true), fontSize: 10, padding: '2px 8px', opacity: e._draft ? .4 : 1, cursor: e._draft ? 'not-allowed' : 'pointer'},
       title: e._draft ? 'Save the CE to start its remarks' : 'Add a remark and read every earlier one',
       onClick: () => { if (!e._draft) { setRemarkDraft(''); setRemarksPanel({ id: e.id, ceNum: e.info?.ceNum || e.ceNum || '' }); } }
     }, '💬 Remarks' + (((monData[e.id] || {}).remarksLog || []).length > 1 ? ' (' + monData[e.id].remarksLog.length + ')' : '')), /*#__PURE__*/React.createElement("button", {
@@ -883,7 +884,7 @@ function MonitoringPanel(ctx) {
       title: e._draft ? 'Save the CE first — attachments need a saved record' : "Attachments (Drawings, TOR, etc.)",
       onClick: () => { if (e._draft) return; if (attachPanel === e.id) { setAttachPanel(null); } else { openAttachPanel(e.id); } }
     }, '📎', monSpIds.has(String(e.id)) && attachList.length > 0 && attachPanel === e.id ? ` ${attachList.length}` : ''), (e.data || e.info) && /*#__PURE__*/React.createElement("button", {
-      style: {
+      className: 'mon-pri', style: {
         gridRow: 2, gridColumn: 2, ...btn('acc', true),
         fontSize: 10,
         padding: '2px 8px'
@@ -891,7 +892,7 @@ function MonitoringPanel(ctx) {
       onClick: () => e._draft ? resumeDraft(e._draft) : handleLoad(e.data || e)
     }, "Load"), (isAdmin || (e._draft && e.savedBy === currentUser.username)) && /*#__PURE__*/React.createElement("button", {
       style: {
-        gridRow: 5, gridColumn: 3, ...btn('danger', true),
+        gridRow: 7, gridColumn: 3, ...btn('danger', true),
         fontSize: 10,
         padding: '2px 8px'
       },
@@ -927,13 +928,13 @@ function MonitoringPanel(ctx) {
           }
         });
       }
-    }, confirmDel === e.id ? 'Sure?' : 'Del'), e._draft&&typeof e.id!=='number'&&/*#__PURE__*/React.createElement("button",{style:{gridRow:2,gridColumn:1,...btn('info',true),fontSize:10,padding:'2px 8px'},onClick:()=>{
+    }, confirmDel === e.id ? 'Sure?' : 'Del'), e._draft&&typeof e.id!=='number'&&/*#__PURE__*/React.createElement("button",{className: 'mon-pri', style:{gridRow: 2, gridColumn: 1,...btn('info',true),fontSize:10,padding:'2px 8px'},onClick:()=>{
       const k='shic:viewDraft:'+Date.now();
       try { localStorage.setItem(k, JSON.stringify(e._draft)); } catch (ex) { showToast('This draft is too large to view here — use Load.', true); return; }
       setViewCE({draftKey:k,ceNum:(e._draft.info&&e._draft.info.ceNum)||e.info?.ceNum||'',draft:true});
-    },title:"View this draft here without loading it — your open work is left as it is"},"👁 View"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{gridRow:2,gridColumn:1,...btn('info',true),fontSize:10,padding:'2px 8px'},onClick:()=>setViewCE({id:e.id,ceNum:e.info?.ceNum||e.ceNum||''}),title:"View the CE here without loading it — your open work is left as it is"},"👁 View"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{gridRow:3,gridColumn:1,...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:()=>openForPrint(e.id,'ce'),title:"Generate the printable CE in its own tab — this one is left as it is"},"\uD83D\uDDA8 CE"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{gridRow:3,gridColumn:2,...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:()=>openForPrint(e.id,'detailed'),title:"Export Detailed in its own tab — this one is left as it is"},"\u2B07 xlsx"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{gridRow:3,gridColumn:3,...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:()=>openForPrint(e.id,'noamt'),title:"Generate CE (no amounts): the printable CE with every amount left blank, in its own tab \u2014 this one is left as it is"},"\uD83D\uDDA8 CE (no amounts)"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{gridRow:5,gridColumn:1,...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:()=>openForPrint(e.id,'detailed-noamt'),title:"Export Detailed with every amount left blank, in its own download \u2014 this one is left as it is"},"\u2B07 xlsx (no amounts)"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{gridRow:5,gridColumn:2,...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:()=>openForPrint(e.id,'template-noamt'),title:"Export CE Template (the SY3 master CE workbook) with every amount left blank \u2014 this one is left as it is"},"\u2B07 template (no amounts)"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{gridRow:6,gridColumn:1,...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:async()=>{const _num=String((e.info&&e.info.ceNum)||e.ceNum||'');const _p=await uiPrompt('Project ID in the Planning app for '+_num+'?\n\nIt is written into every row of the workbook (ProjectID), e.g. JO-039-F-CEDC-26-0076.',{title:'xlsx (Planning)',value:LS.get('planning_pid:'+e.id)||_num,required:true,ok:'Export'});if(!_p)return;LS.set('planning_pid:'+e.id,_p);openForPrint(e.id,'planning',_p);},title:"Export this CE's manpower, materials and PPE as the allocation sheet the Planning app imports"},"\u2B07 xlsx (Planning)"), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{gridRow:4,gridColumn:1,...btn('ok',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleClone(e.data||e),title:"Clone with new CE number"},"Clone"), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{gridRow:4,gridColumn:2,...btn('info',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleRevise(e.data||e),title:"Revision copy (-R1, -R2...)"},"Revise"),
+    },title:"View this draft here without loading it — your open work is left as it is"},"👁 View"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{className: 'mon-pri', style:{gridRow: 2, gridColumn: 1,...btn('info',true),fontSize:10,padding:'2px 8px'},onClick:()=>setViewCE({id:e.id,ceNum:e.info?.ceNum||e.ceNum||''}),title:"View the CE here without loading it — your open work is left as it is"},"👁 View"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{gridRow: 4, gridColumn: 1,...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:()=>openForPrint(e.id,'ce'),title:"Generate the printable CE in its own tab — this one is left as it is"},"\uD83D\uDDA8 CE"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{gridRow: 4, gridColumn: 2,...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:()=>openForPrint(e.id,'detailed'),title:"Export Detailed in its own tab — this one is left as it is"},"\u2B07 xlsx"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{gridRow: 4, gridColumn: 3,...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:()=>openForPrint(e.id,'noamt'),title:"Generate CE (no amounts): the printable CE with every amount left blank, in its own tab \u2014 this one is left as it is"},"\uD83D\uDDA8 CE (no amounts)"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{gridRow: 5, gridColumn: 1,...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:()=>openForPrint(e.id,'detailed-noamt'),title:"Export Detailed with every amount left blank, in its own download \u2014 this one is left as it is"},"\u2B07 xlsx (no amounts)"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{gridRow: 5, gridColumn: 2,...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:()=>openForPrint(e.id,'template-noamt'),title:"Export CE Template (the SY3 master CE workbook) with every amount left blank \u2014 this one is left as it is"},"\u2B07 template (no amounts)"), typeof e.id==='number'&&/*#__PURE__*/React.createElement("button",{style:{gridRow: 5, gridColumn: 3,...btn('def',true),fontSize:10,padding:'2px 8px'},onClick:async()=>{const _num=String((e.info&&e.info.ceNum)||e.ceNum||'');const _p=await uiPrompt('Project ID in the Planning app for '+_num+'?\n\nIt is written into every row of the workbook (ProjectID), e.g. JO-039-F-CEDC-26-0076.',{title:'xlsx (Planning)',value:LS.get('planning_pid:'+e.id)||_num,required:true,ok:'Export'});if(!_p)return;LS.set('planning_pid:'+e.id,_p);openForPrint(e.id,'planning',_p);},title:"Export this CE's manpower, materials and PPE as the allocation sheet the Planning app imports"},"\u2B07 xlsx (Planning)"), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{gridRow: 6, gridColumn: 1,...btn('ok',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleClone(e.data||e),title:"Clone with new CE number"},"Clone"), (e.data||e.info)&&/*#__PURE__*/React.createElement("button",{style:{gridRow: 6, gridColumn: 2,...btn('info',true),fontSize:10,padding:'2px 8px'},onClick:()=>handleRevise(e.data||e),title:"Revision copy (-R1, -R2...)"},"Revise"),
     /* Feature 3: Compare button for revisions */
-    (()=>{const cn=(e.info?.ceNum||e.ceNum||'');const isRev=/-R\d+$/i.test(cn);if(!isRev)return null;return/*#__PURE__*/React.createElement("button",{style:{gridRow:4,gridColumn:3,...btn('def',true),fontSize:10,padding:'2px 8px'},title:"Compare with base CE",onClick:()=>{const base=cn.replace(/-R\d+$/i,'').toUpperCase();const baseEntry=history.find(h=>(h.info?.ceNum||h.ceNum||'').toUpperCase()===base);setDiffModal({base:baseEntry||null,rev:e.data||e});}},"⚖ Diff");})()
+    (()=>{const cn=(e.info?.ceNum||e.ceNum||'');const isRev=/-R\d+$/i.test(cn);if(!isRev)return null;return/*#__PURE__*/React.createElement("button",{style:{gridRow: 6, gridColumn: 3,...btn('def',true),fontSize:10,padding:'2px 8px'},title:"Compare with base CE",onClick:()=>{const base=cn.replace(/-R\d+$/i,'').toUpperCase();const baseEntry=history.find(h=>(h.info?.ceNum||h.ceNum||'').toUpperCase()===base);setDiffModal({base:baseEntry||null,rev:e.data||e});}},"⚖ Diff");})()
     )));
   }))))),
   /* Pagination bar */

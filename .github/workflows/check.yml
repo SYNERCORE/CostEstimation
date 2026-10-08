@@ -467,5 +467,7 @@ jobs:
         run: node tools/test-data-safety.js
       - name: Planning export
         run: node tools/test-planning-export.js
+      - name: Monitoring compact actions
+        run: node tools/test-monitoring-actions.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

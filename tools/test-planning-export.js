@@ -58,7 +58,7 @@ ck('the print URL accepts as=planning and carries the project id', /'template-no
 ck('the hidden frame is asked for it, with the id', /\(projectId \? '&pid=' \+ encodeURIComponent\(projectId\) : ''\)/.test(app));
 ck('the opened CE runs the export with that id', /if \(as === 'planning'\) handleExportPlanning\(\{ projectId: autoPrint\.pid \}\)/.test(app));
 ck('the handler reads what is on screen', /makeHandleExportPlanning\(\(\) => \(\{ benefitRows, info, mats, mp, mpWageParts, ppe, showToast \}\)\)/.test(app));
-ck('CE Monitoring has the button, only for a saved CE', /typeof e\.id==='number'&&[^;]{0,60}createElement\("button",\{style:\{gridRow:6[\s\S]{0,900}"\\u2B07 xlsx \(Planning\)"/.test(mon));
+ck('CE Monitoring has the button, only for a saved CE', /typeof e\.id==='number'&&[^;]{0,60}createElement\("button",\{style:\{gridRow: 5[\s\S]{0,900}"\\u2B07 xlsx \(Planning\)"/.test(mon));
 ck('it asks for the Planning project id first, remembering the last one', /uiPrompt\('Project ID in the Planning app/.test(mon) && /LS\.get\('planning_pid:'\+e\.id\)/.test(mon) && /openForPrint\(e\.id,'planning',_p\)/.test(mon));
 
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nplanning export OK');

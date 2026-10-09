@@ -477,6 +477,11 @@ function App({
   const [sbShow, setSbShow] = useState({});      /* {taskId|tabKey: rows drawn} */
   const [sbSel, setSbSel] = useState({});             /* bulk-assign selection, {selKey:descriptor} */
   const [sbSearch, setSbSearch] = useState('');
+  /* Split = task list beside one task; List = every task as a stacked card. The choice is remembered on this device. */
+  const [sbView, _setSbView] = useState(() => LS.get('sb_view') === 'list' ? 'list' : 'split'); /* LS never throws */
+  const setSbView = v => { _setSbView(v); LS.set('sb_view', v); };
+  const [sbPick, setSbPick] = useState('');   /* the task shown in Split view, or '__un' for Unassigned */
+  const [sbType, setSbType] = useState('mp'); /* the resource type shown for it */
   const [addMode, setAddMode] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null); /* true=add to existing CE, false=replace */
   const DRAFT_KEY = 'shic_draft';
@@ -5112,7 +5117,7 @@ function App({
   }), tab === 'sow' && /*#__PURE__*/SowTab({ clearAllSow, deleteSowTask, setSowItems, sowItems }),
 
 /* ── SOW Breakdown: assign resources per scope task ── */
-tab === 'sowbreak' && SowBreakdownTab({ RES_TABS, ceType, delRow, masterlist, mats, miscAdd, miscCats, miscDel, miscFlat, miscUpd, mp, ppe, rowCost, rowCostForTask, rowServesTask, rowShares, sbCollapsed, sbDlOn, sbSearch, sbSel, sbShow, setMisc, setMp, setPicker, setSbCollapsed, setSbDlOn, setSbSearch, setSbSel, setSbShow, setSowItems, setTab, showToast, sowItems, sowLabels, sowTaskGroup, sowUnassignedCount, taskCost, taskCostRollup, taskResCount, taskResCountRollup, tools, updRow }),
+tab === 'sowbreak' && SowBreakdownTab({ RES_TABS, sbPick, sbType, sbView, setSbPick, setSbType, setSbView, ceType, delRow, masterlist, mats, miscAdd, miscCats, miscDel, miscFlat, miscUpd, mp, ppe, rowCost, rowCostForTask, rowServesTask, rowShares, sbCollapsed, sbDlOn, sbSearch, sbSel, sbShow, setMisc, setMp, setPicker, setSbCollapsed, setSbDlOn, setSbSearch, setSbSel, setSbShow, setSowItems, setTab, showToast, sowItems, sowLabels, sowTaskGroup, sowUnassignedCount, taskCost, taskCostRollup, taskResCount, taskResCountRollup, tools, updRow }),
 tab === 'scopelib' && ScopeLibraryEditor(),
 tab === 'calculators' && /*#__PURE__*/React.createElement(CalcDrawer, {
   page: true, open: true, onClose: () => setTab('materials'), calc, setCalc, std: calcStdNow, hist: calcHist,

@@ -471,5 +471,7 @@ jobs:
         run: node tools/test-monitoring-actions.js
       - name: Template workbook bars and wrapping
         run: node tools/test-template-xlsx-bars.js
+      - name: SOW Breakdown split view
+        run: node tools/test-sow-breakdown-split.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

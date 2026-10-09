@@ -103,7 +103,7 @@ ck('printed as a subordinate line, not as an item', /font-style:italic/.test(pri
    printed bold in the total column immediately under it. The workbook has
    always headed them; the printed CE and the text summary never did. */
 const HL = 'HIGHLIGHTED COSTS (already included above)';
-ck('the workbook heads the highlighted costs', app.indexOf("S('" + HL + "', 'sec')") > 0);
+ck('the workbook heads the highlighted costs', app.indexOf("S('" + HL + "', 'secbar', 6)") > 0);
 ck('the printed CE heads them too', app.indexOf('>' + HL + '</td>') > 0);
 ck('and so does the text summary', app.indexOf("a.title('" + HL + "', CS_W)") > 0);
 

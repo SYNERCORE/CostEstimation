@@ -1043,12 +1043,12 @@ function makeHandleExport(getCtx) {
     }
     if (hlRows.length && !noAmt) {
       sum.push([]);
-      sum.push([S('HIGHLIGHTED COSTS (already included above)', 'sec')]);
+      sum.push([S('HIGHLIGHTED COSTS (already included above)', 'secbar', 6)]);
       hlRows.forEach(r => sum.push([S('', 'tdc'), S(hlLabel(r).toUpperCase(), 'td', 4), null, null, null, null, S(N(hlAmt(r)), 'tdn')]));
     }
     if (servicesSummary.on && servicesSummary.ok && !noAmt) {
       sum.push([]);
-      sum.push([S('SERVICES', 'sec')]);
+      sum.push([S('SERVICES', 'secbar', 6)]);
       servicesSummary.lines.forEach(l => sum.push([S('', 'tdc'), S(l.label.toUpperCase() + ':', 'td', 4), null, null, null, null, S(N(l.v), 'tdn')]));
       if (Math.abs(servicesSummary.other) >= 0.005) sum.push([S('', 'tdc'), S('OTHER MISC. TO THE PROJECT:', 'td', 4), null, null, null, null, S(N(servicesSummary.other), 'tdn')]);
       sum.push([S('', 'totlbl'), S('SERVICES TOTAL AMOUNT:', 'totlbl', 4), null, null, null, null, S(N(servicesSummary.total), 'tot')]);
@@ -1061,12 +1061,13 @@ function makeHandleExport(getCtx) {
                       .filter(n => n.t.trim());
     if (noteLines.length) {
       sum.push([]);
-      sum.push([S('NOTE:', 'sec')]);
+      sum.push([S('NOTE', 'secbar', 6)]);
       noteLines.forEach((n, i) => sum.push([null, S((i + 1) + '. ' + n.t, n.imp ? 'noteimp' : 'note', 5, wrapHt((i + 1) + '. ' + n.t, TPL_LINE))]));
     }
     const aps = (approvers || []).filter(a => a.role || a.name || a.title);
     if (aps.length) {
-      sum.push([], []);
+      sum.push([]);
+      sum.push([S('SIGNATORIES', 'secbar', 6)]);
       /* One line per signatory, label in A, name in B, title across C to G: the old four-across layout put
          each name in a 9-wide column and cut it off. */
       aps.forEach(a => sum.push([S((a.role || '') + ':', 'label'), S(a.name || '', 'label'), S(a.title || a.role || '', 'val', 4)]));
@@ -1095,7 +1096,7 @@ function makeHandleExport(getCtx) {
         const list = _mobList(all);
         if (!list.length) return;
         const crew = list.filter(r => r.kind === 'mp'), exp = list.filter(r => r.kind !== 'mp');
-        s.push([S(lbl, 'sec')]);
+        s.push([S(lbl, 'secbar', 6)]);
         if (crew.length) {
           s.push(['ITEM', 'MANPOWER LOADING', 'QTY', 'DAYS', 'OT HRS/DAY', 'RATE/DAY', 'TOTAL'].map(h => S(h, 'th')));
           crew.forEach((r, i) => s.push([S(i + 1, 'tdc'), S(r.desc || '', 'td'), S(N(r.qty), 'tdc'), S(N(r.days) || 1, 'tdc'), S(N(r.otHours), 'tdc'), S(N(r.rate), 'tdn'), S(mobRowCost(r, rr), 'tdnb')]));
@@ -1121,7 +1122,7 @@ function makeHandleExport(getCtx) {
         if (!rows.length) return;
         const sh = SHIFTS[sk], mult = ceShiftMult(rr, sk);
         const sub = rows.reduce((s, r) => s + mpWage(r), 0);
-        bol.push([S(sh?.label || sk.toUpperCase(), 'sec')]);
+        bol.push([S(sh?.label || sk.toUpperCase(), 'secbar', 6)]);
         bol.push(['ITEM', 'MANPOWER LOADING', 'QTY', 'UOM', 'DAYS', 'RATE/DAY', 'TOTAL'].map(h => S(h, 'th')));
         rows.forEach((r, i) => bol.push([
           S(i + 1, 'tdc'), S(r.role || '', 'td'), S(N(r.pax) || 1, 'tdc'), S('pax', 'tdc'), S(N(r.days) || 1, 'tdc'),
@@ -1132,7 +1133,7 @@ function makeHandleExport(getCtx) {
         bol.push([]);
       });
       if (benefitRows.length) {
-        bol.push([S('BENEFITS AND OTHERS', 'sec')]);
+        bol.push([S('BENEFITS AND OTHERS', 'secbar', 6)]);
         bol.push(['ITEM', 'MANPOWER LOADING', 'QTY', '13TH PAY', 'SSS', 'HDMF, PHIC, SIL & ECC', 'TOTAL'].map(h => S(h, 'th')));
         benefitRows.forEach((r, i) => bol.push([
           S(i + 1, 'tdc'), S(r.role, 'td'), S(r.pax, 'tdc'),
@@ -1177,7 +1178,7 @@ function makeHandleExport(getCtx) {
     if (cats.length) {
       const s = head('MISCELLANEOUS');
       cats.forEach(cat => {
-        s.push([S(cat.letter + '  ' + cat.label, 'sec')]);
+        s.push([S(cat.letter + '  ' + cat.label, 'secbar', 6)]);
         s.push(['ITEM', 'DESCRIPTION', 'QTY', 'UOM', 'NO. OF DAYS', 'UNIT PRICE', 'TOTAL'].map(h => S(h, 'th')));
         cat.rows.forEach((r, i) => {
           s.push([

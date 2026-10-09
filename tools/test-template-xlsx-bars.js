@@ -41,5 +41,7 @@ ck('details, notes and scope items wrap and are sized', (tp.match(/wrapHt\(/g) |
 ck('a main scope item wraps in bold', /'notebold', 5, wrapHt/.test(tp) && /'notebold'/.test(xl) && /cellXfs count="20"/.test(xl));
 ck('each signatory is one line: role, name, title across', /aps\.forEach\(a => sum\.push\(\[S\(\(a\.role/.test(tp));
 
+ck('every section heading is a full-width bar, and the signatories have one', !/, 'sec'\)/.test(tp) && (tp.match(/'secbar', 6\)/g) || []).length >= 8 && /S\('SIGNATORIES', 'secbar', 6\)/.test(tp));
+
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\ntemplate workbook bars OK');
 process.exit(bad ? 1 : 0);

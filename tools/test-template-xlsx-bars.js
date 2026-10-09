@@ -29,5 +29,9 @@ ck('a long note is given a taller row', wrapIn('x'.repeat(250), 5, 105).ht === 4
 ck('the writer puts a cell\'s ht on its row', /rowHt/.test(xl) && /customHeight="1"/.test(xl));
 ck('a merged bar or note widens the sheet to the column it reaches', /c\.span > 0 \? Math\.max\(e, i \+ c\.span \+ 1\)/.test(out));
 
+const sw = out.slice(out.indexOf("sheet('Scope of Work'"), out.indexOf('if (noAmt) stripSheetAmounts(sheets);'));
+ck('Scope of Work has a full-width bar and wraps each item inside it', /docHead\(a, 'SCOPE OF WORK', CS_W\)/.test(sw) && (sw.match(/wrapIn\(/g) || []).length === 2 && /\}, CS_COLS\);/.test(sw));
+ck('the benefits bar is as wide as its table, with or without the incentive column', /a\.title\('BENEFITS AND OTHERS', incOn \? 12 : 11\)/.test(out));
+
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\ntemplate workbook bars OK');
 process.exit(bad ? 1 : 0);

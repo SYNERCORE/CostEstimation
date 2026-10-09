@@ -850,7 +850,7 @@ function makeHandleExportXLSX(getCtx) {
       });
       /* Benefits table, matching section C.7 on the printed form. */
       if (benefitRows.length) {
-        a.title('BENEFITS AND OTHERS', 12);
+        a.title('BENEFITS AND OTHERS', incOn ? 12 : 11);
         const _inc = incOn ? ['INCENTIVE'] : [];
         a.head('ITEM', 'MANPOWER LOADING', 'QTY', 'UOM', 'TOTAL DAYS', 'MONTHLY RATE', '13TH PAY', 'SSS', 'HDMF & PHIC', 'SIL', 'ECC', ..._inc, 'TOTAL');
         benefitRows.forEach((r, i) => a.row(i + 1, r.role, r.pax, 'pax', r.days, a.money(r.monthlyRate),
@@ -908,13 +908,13 @@ function makeHandleExportXLSX(getCtx) {
 
     /* ── Scope of work, numbered as the CE prints it ── */
     if ((sowItems || []).length) sheet('Scope of Work', a => {
-      docHead(a, 'SCOPE OF WORK', 3);
+      docHead(a, 'SCOPE OF WORK', CS_W);
       let mc = 0, sc = 0;
       sowItems.forEach(it => {
-        if (it.type === 'main') { mc++; sc = 0; a.row(mc + '.', it.text || ''); }
-        else { sc++; a.row(mc + '.' + sc, '   ' + (it.text || '')); }
+        if (it.type === 'main') { mc++; sc = 0; a.row(mc + '.', wrapIn(it.text, 5, 105)); }
+        else { sc++; a.row(mc + '.' + sc, wrapIn('   ' + (it.text || ''), 5, 105)); }
       });
-    });
+    }, CS_COLS);
 
     if (noAmt) stripSheetAmounts(sheets);
     SHICXlsx.download((info.ceNum || 'CE') + '_' + (info.client || 'export').replace(/[^a-z0-9]/gi, '_') + (noAmt ? '_no-amounts' : '') + '.xlsx', sheets,

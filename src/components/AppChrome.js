@@ -703,23 +703,28 @@ function AppHeader(ctx) {
       padding: '0 10px',
       borderRight: `1px solid ${BDR}`
     }
-  }, /*#__PURE__*/React.createElement(TopRefreshButton, null), /*#__PURE__*/React.createElement("button", {
-    style: btn('def', true),
+  }, /*#__PURE__*/React.createElement(TopRefreshButton, null), /* The three work buttons share one height, radius and weight. Save is the one filled button (the main
+     action); New is outlined; Resume carries the violet of drafts. */
+  /*#__PURE__*/React.createElement("button", {
+    className: "tb-btn",
+    style: { ...btn('def', true), padding: '5px 12px', fontSize: 12, fontWeight: 700, borderRadius: 7, color: 'var(--text-primary)', borderColor: 'var(--border-strong)' },
     onClick: handleNew,
     title: "New CE (Ctrl+N)"
-  }, "+ New"), /*#__PURE__*/React.createElement("button", {
-    style: busyBtn('save', btn('def', true)),
+  }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 15, lineHeight: 1, marginTop: -1 } }, "+"), "New"), /*#__PURE__*/React.createElement("button", {
+    className: "tb-btn",
+    style: busyBtn('save', { ...btn('acc', true), padding: '5px 14px', fontSize: 12, fontWeight: 700, borderRadius: 7 }),
     disabled: !!busyOp.save,
     onClick: handleSave,
     title: "Save CE (Ctrl+S)"
-  }, busyOp.save ? "Saving\u2026" : "Save"), /* Resume Work is reachable from any tab here; it used to live only on the Summary step.
+  }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, lineHeight: 1 } }, "\ud83d\udcbe"), busyOp.save ? "Saving\u2026" : "Save"), /* Resume Work is reachable from any tab here; it used to live only on the Summary step.
      A requestor only logs requests and has no drafts of their own, so it is not offered to them. */
   !isRequestor && /*#__PURE__*/React.createElement("button", {
-    style: { ...btn('def', true), position: 'relative', color: 'var(--accent-violet)', borderColor: '#8B5CF655' },
+    className: "tb-btn",
+    style: { ...btn('def', true), position: 'relative', padding: '5px 12px', fontSize: 12, fontWeight: 700, borderRadius: 7, color: 'var(--accent-violet)', borderColor: '#8B5CF666', background: '#8B5CF61A' },
     onClick: () => { loadSharedDrafts(); setDraftsOpen(true); },
     title: "Open the list of unsaved drafts \u2014 yours and the team's \u2014 to resume one or clear the old ones."
   }, "\ud83d\udccb Resume", sharedDrafts.length > 0 && /*#__PURE__*/React.createElement("span", {
-    style: { marginLeft: 5, background: 'var(--accent-violet)', color: '#fff', borderRadius: 8, padding: '0 5px', fontSize: 9, fontWeight: 700 }
+    style: { marginLeft: 5, background: 'var(--accent-violet)', color: '#fff', borderRadius: 9, padding: '1px 6px', fontSize: 10, fontWeight: 700, lineHeight: 1.2 }
   }, sharedDrafts.length)), /*#__PURE__*/React.createElement("span", {
     className: "shic-hide-narrow",
     title: "Keyboard shortcuts: Ctrl+S = Save  •  Ctrl+N = New CE",

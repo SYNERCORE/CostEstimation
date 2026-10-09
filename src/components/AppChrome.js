@@ -724,11 +724,7 @@ function AppHeader(ctx) {
     className: "shic-hide-narrow",
     title: "Keyboard shortcuts: Ctrl+S = Save  •  Ctrl+N = New CE",
     style: {fontSize:9, color:BDR, cursor:'default', userSelect:'none', letterSpacing:.3}
-  }, "Ctrl+S / Ctrl+N"), /*#__PURE__*/React.createElement("button", {
-    style: btn('acc', true),
-    onClick: handleExport,
-    title: "CE template — the standard SY3 Cost Estimate Summary layout"
-  }, "Export CE"), /*#__PURE__*/React.createElement(SignInBanner, null)), /*#__PURE__*/React.createElement("div", {
+  }, "Ctrl+S / Ctrl+N"), /*#__PURE__*/React.createElement(SignInBanner, null)), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',

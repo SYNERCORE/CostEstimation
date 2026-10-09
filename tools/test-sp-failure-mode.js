@@ -94,7 +94,7 @@ function runSpGet(opts) {
   /* In the sticky top bar, straight after Export CE and outside the account
      menu -- above it, it scrolled away; inside the menu, nobody would see it. */
   ck('and it sits in the top bar, where scrolling cannot hide it',
-    /"Export CE"\), \/\*#__PURE__\*\/React\.createElement\(SignInBanner, null\)\)/.test(require('./lib/appsrc').plus(rd('src/App.js'))));
+    /"Ctrl\+S \/ Ctrl\+N"\), \/\*#__PURE__\*\/React\.createElement\(SignInBanner, null\)\)/.test(require('./lib/appsrc').plus(rd('src/App.js'))));
   ck('the login screen offers it too', /spSignIn\(\)/.test(login));
   ck('login blames the connection, not the account, when the list was unread',
     /userListIsStale\(\)/.test(login) && /_userListStale=true/.test(db),

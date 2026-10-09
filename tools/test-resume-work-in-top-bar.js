@@ -6,10 +6,10 @@ const app = require('./lib/appsrc').plus(fs.readFileSync(path.join(__dirname, '.
 let bad = 0;
 const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 
-const save = app.indexOf('title: "Save CE (Ctrl+S)"'), exp = app.indexOf('"Export CE"', save);
+const save = app.indexOf('title: "Save CE (Ctrl+S)"'), exp = app.indexOf('React.createElement(SignInBanner, null)', save);
 ck('the top bar is found', save > 0 && exp > save);
 const bar = app.slice(save, exp);
-ck('a Resume button sits between Save and Export CE', /\\ud83d\\udccb Resume"/i.test(bar));
+ck('a Resume button sits after Save, and the top-bar Export CE button is gone', app.indexOf('"Export CE"', save) < 0 && /\\ud83d\\udccb Resume"/i.test(bar));
 ck('it loads the drafts and opens the panel', bar.indexOf('loadSharedDrafts(); setDraftsOpen(true);') > 0);
 ck('it shows how many drafts there are', bar.indexOf('sharedDrafts.length > 0') > 0);
 

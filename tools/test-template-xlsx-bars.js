@@ -33,5 +33,13 @@ const sw = out.slice(out.indexOf("sheet('Scope of Work'"), out.indexOf('if (noAm
 ck('Scope of Work has a full-width bar and wraps each item inside it', /docHead\(a, 'SCOPE OF WORK', CS_W\)/.test(sw) && (sw.match(/wrapIn\(/g) || []).length === 2 && /\}, CS_COLS\);/.test(sw));
 ck('the benefits bar is as wide as its table, with or without the incentive column', /a\.title\('BENEFITS AND OTHERS', incOn \? 12 : 11\)/.test(out));
 
+console.log('\nExport CE Template workbook:');
+const tp = out.slice(out.indexOf('function makeHandleExport(getCtx)'));
+ck('column A is wide enough for its labels', +tp.match(/const COLS = \[(\d+),/)[1] >= 18);
+ck('the row height is carried from the cell', /const S = \(v, s, span, ht\) => \(\{v: v, s: s, span: span, ht: ht\}\)/.test(tp));
+ck('details, notes and scope items wrap and are sized', (tp.match(/wrapHt\(/g) || []).length >= 4);
+ck('a main scope item wraps in bold', /'notebold', 5, wrapHt/.test(tp) && /'notebold'/.test(xl) && /cellXfs count="20"/.test(xl));
+ck('each signatory is one line: role, name, title across', /aps\.forEach\(a => sum\.push\(\[S\(\(a\.role/.test(tp));
+
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\ntemplate workbook bars OK');
 process.exit(bad ? 1 : 0);

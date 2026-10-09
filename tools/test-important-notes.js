@@ -62,13 +62,13 @@ ck('which is bold dark red too, the same colour',
 /* The workbook is hand-written OOXML: a count that disagrees with the list
    makes Excel call the file corrupt, so these two are load-bearing. */
 ck('the font count was raised with it', /'<fonts count="8">'/.test(xl));
-ck('and the cellXfs count too', /'<cellXfs count="19">'/.test(xl));
+ck('and the cellXfs count too', /'<cellXfs count="20">'/.test(xl));
 const xfs = (xl.match(/'<xf xfId="0"/g) || []).length;
-ck('the declared count matches the styles actually written (' + xfs + ')', xfs === 19);
+ck('the declared count matches the styles actually written (' + xfs + ')', xfs === 20);
 const names = xl.slice(xl.indexOf('var STYLES = ['), xl.indexOf('var SID')).match(/'[a-z]+'/g) || [];
-ck('and the style names are in step with them (' + names.length + ')', names.length === 19);
-ck('noteimp is the last of them, matching the last cellXf',
-  names[names.length - 1] === "'noteimp'");
+ck('and the style names are in step with them (' + names.length + ')', names.length === 20);
+ck('noteimp is followed only by notebold, the last cellXf',
+  names[names.length - 2] === "'noteimp'" && names[names.length - 1] === "'notebold'");
 
 ck('the workbook picks it per line', /n\.imp \? 'noteimp' : 'note'/.test(app));
 /* The CE notes and the scope-breakdown notes are merged and THEN numbered, so

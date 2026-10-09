@@ -30,7 +30,9 @@
                 'tdsub', 'tdsubn',
                 /* A note the sales team must not read past: bold, dark red.
                    Same weight and colour the printed CE gives it. */
-                'noteimp'];
+                'noteimp',
+                /* A bold line that wraps, for a main scope item. */
+                'notebold'];
   var SID = {};
   STYLES.forEach(function (n, i) { SID[n] = i; });
 
@@ -64,7 +66,7 @@
       '<top style="thin"><color rgb="FF808080"/></top><bottom style="thin"><color rgb="FF808080"/></bottom><diagonal/></border>' +
     '</borders>' +
     '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-    '<cellXfs count="19">' +
+    '<cellXfs count="20">' +
       '<xf xfId="0" numFmtId="0" fontId="0" fillId="0" borderId="0"/>' +
       '<xf xfId="0" numFmtId="0" fontId="2" fillId="0" borderId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' +
       '<xf xfId="0" numFmtId="0" fontId="1" fillId="0" borderId="0" applyFont="1"/>' +
@@ -88,6 +90,7 @@
       '<xf xfId="0" numFmtId="164" fontId="6" fillId="0" borderId="1" applyNumberFormat="1" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>' +
       /* noteimp: wraps and tops like `note`, but bold red. */
       '<xf xfId="0" numFmtId="0" fontId="7" fillId="0" borderId="0" applyFont="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>' +
+      '<xf xfId="0" numFmtId="0" fontId="1" fillId="0" borderId="0" applyFont="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>' +
     '</cellXfs>' +
     '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
     '</styleSheet>';

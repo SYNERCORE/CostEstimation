@@ -975,8 +975,12 @@ function makeHandleExport(getCtx) {
       unitP
     } = getCtx();
     const cl = ceType === 'shopworks' ? 'Shopwork' : ceTypeLabel(ceType);
-    const S = (v, s, span) => ({v: v, s: s, span: span});
-    const COLS = [7, 46, 9, 9, 10, 15, 17];
+    /* ht: the row's height in points, for a wrapped cell in a merged range (Excel will not size those itself). */
+    const S = (v, s, span, ht) => ({v: v, s: s, span: span, ht: ht});
+    /* Column A holds the labels (PROJECT DESCRIPTION:, Prepared by:), so it is wide; B to G, merged, are about 106 wide. */
+    const COLS = [22, 46, 9, 9, 10, 15, 17];
+    const wrapHt = (t, perLine) => { const n = Math.max(1, Math.ceil(String(t || '').length / perLine)); return n > 1 ? Math.round(n * 14.4 * 10) / 10 : undefined; };
+    const TPL_LINE = 95;
 
     /* Every sheet opens with the same four rows: document control on the
        right, then a black title bar and the CE identifiers -- the same header
@@ -1009,7 +1013,7 @@ function makeHandleExport(getCtx) {
      ['NO. OF DAYS:', info.days],
      ['STATUS:', docStatus]].forEach(([k, v]) => {
       if (v === '' || v === null || v === undefined) return;
-      sum.push([S(k, 'label'), S(String(v), 'val', 5)]);
+      sum.push([S(k, 'label'), S(String(v), 'note', 5, wrapHt(v, TPL_LINE))]);
     });
     sum.push([]);
     sum.push([S('ITEM', 'th'), S('DESCRIPTION', 'th', 4), null, null, null, null, S('TOTAL COST', 'th')]);
@@ -1058,15 +1062,14 @@ function makeHandleExport(getCtx) {
     if (noteLines.length) {
       sum.push([]);
       sum.push([S('NOTE:', 'sec')]);
-      noteLines.forEach((n, i) => sum.push([null, S((i + 1) + '. ' + n.t, n.imp ? 'noteimp' : 'note', 5)]));
+      noteLines.forEach((n, i) => sum.push([null, S((i + 1) + '. ' + n.t, n.imp ? 'noteimp' : 'note', 5, wrapHt((i + 1) + '. ' + n.t, TPL_LINE))]));
     }
     const aps = (approvers || []).filter(a => a.role || a.name || a.title);
     if (aps.length) {
       sum.push([], []);
-      sum.push(aps.map(a => S((a.role || '') + ':', 'label')));
-      sum.push([], []);
-      sum.push(aps.map(a => S(a.name || '', 'label')));
-      sum.push(aps.map(a => S(a.title || a.role || '', 'val')));
+      /* One line per signatory, label in A, name in B, title across C to G: the old four-across layout put
+         each name in a 9-wide column and cut it off. */
+      aps.forEach(a => sum.push([S((a.role || '') + ':', 'label'), S(a.name || '', 'label'), S(a.title || a.role || '', 'val', 4)]));
     }
     sheets.push({name: 'CE SUMMARY', cols: COLS, rows: sum});
 
@@ -1075,8 +1078,8 @@ function makeHandleExport(getCtx) {
       const sow = head('SCOPE OF WORK');
       let mc = 0, sc = 0;
       sowItems.forEach(it => {
-        if (it.type === 'main') { mc++; sc = 0; sow.push([S(mc + '.', 'label'), S(it.text || '', 'label', 5)]); }
-        else { sc++; sow.push([null, S(mc + '.' + sc + '  ' + (it.text || ''), 'note', 5)]); }
+        if (it.type === 'main') { mc++; sc = 0; sow.push([S(mc + '.', 'label'), S(it.text || '', 'notebold', 5, wrapHt(it.text, TPL_LINE))]); }
+        else { sc++; sow.push([null, S(mc + '.' + sc + '  ' + (it.text || ''), 'note', 5, wrapHt(mc + '.' + sc + '  ' + (it.text || ''), TPL_LINE))]); }
       });
       sheets.push({name: 'SCOPE', cols: COLS, rows: sow});
     }

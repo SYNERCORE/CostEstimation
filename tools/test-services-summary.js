@@ -57,7 +57,7 @@ ck('and the block is refused', s.ok === false);
 console.log('\nit reaches every copy of the CE:');
 ck('the printed CE', /servicesSummary\.on && servicesSummary\.ok && !noAmt \? `<tr><td colspan="3" class="c b"/.test(app));
 ck('the styled workbook', /sum\.push\(\[S\('SERVICES', 'sec'\)\]\);/.test(app));
-ck('the plain workbook', /a\.title\('SERVICES', 3\);/.test(app));
+ck('the plain workbook', /a\.title\('SERVICES', CS_W\);/.test(app));
 ck('each prints the services total', (app.match(/SERVICES TOTAL AMOUNT:/g) || []).length >= 3);
 ck('the group is typed on the main scope item', /it\.type === 'main' && \/\*#__PURE__\*\/React\.createElement\("input", \{\s*list: 'svc-groups'/.test(app));
 ck('the toggle is stored on the CE info', /setInfo\(p=>\(\{\.\.\.p, showServices:v\}\)\)/.test(app));

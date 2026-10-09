@@ -105,7 +105,7 @@ ck('printed as a subordinate line, not as an item', /font-style:italic/.test(pri
 const HL = 'HIGHLIGHTED COSTS (already included above)';
 ck('the workbook heads the highlighted costs', app.indexOf("S('" + HL + "', 'sec')") > 0);
 ck('the printed CE heads them too', app.indexOf('>' + HL + '</td>') > 0);
-ck('and so does the text summary', app.indexOf("a.title('" + HL + "', 3)") > 0);
+ck('and so does the text summary', app.indexOf("a.title('" + HL + "', CS_W)") > 0);
 
 /* ---- the workbook must still open ---- */
 const dec = n => Number((xl.match(new RegExp('<' + n + ' count="(\\d+)"')) || [])[1]);

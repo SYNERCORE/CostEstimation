@@ -117,13 +117,16 @@
 
     rows.forEach(function (row, r) {
       if (!row || !row.length) return;
-      var cells = [];
+      var cells = [], rowHt = 0;
       row.forEach(function (cell, c) {
         if (cell === null || cell === undefined || cell === '') return;
         var v = cell, s = 0;
         if (typeof cell === 'object') {
           v = cell.v;
           s = SID[cell.s] || 0;
+          /* ht: the row is this tall (points). A wrapped cell in a merged range does not
+             size its own row in Excel, so the caller says how tall the text needs. */
+          if (cell.ht > rowHt) rowHt = cell.ht;
           if (cell.span > 0) merges.push(cellRef(r, c) + ':' + cellRef(r, c + cell.span));
         }
         if (v === null || v === undefined || v === '') {
@@ -140,7 +143,7 @@
       });
       if (cells.length) {
         if (r === 0) firstRow = true;
-        out.push('<row r="' + (r + 1) + '"' + (hasLogo && r === 0 ? LOGO_ROW_ATTR : '') + '>' + cells.join('') + '</row>');
+        out.push('<row r="' + (r + 1) + '"' + (hasLogo && r === 0 ? LOGO_ROW_ATTR : (rowHt ? ' ht="' + rowHt + '" customHeight="1"' : '')) + '>' + cells.join('') + '</row>');
       }
     });
     /* A sheet whose first row is empty -- which is what a sheet with a logo

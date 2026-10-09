@@ -85,7 +85,7 @@ ck('and the match ignores case, so a stored "MECHANICAL" still ticks',
   /String\(chosen \|\| ''\)\.toLowerCase\(\) === String\(o\.k\)\.toLowerCase\(\)/.test(boxes));
 
 const txt = app.slice(app.indexOf("a.row('PROJECT DESCRIPTION:'"), app.indexOf("a.row('DISCIPLINE:'"));
-ck('the text summary prints it', /a\.row\('MATERIAL:', info\.material\)/.test(txt));
+ck('the text summary prints it', /a\.row\('MATERIAL:', wrapIn\(info\.material, 5, 105\)\)/.test(txt));
 ck('and only when there is one', /if \(info\.material\) a\.row\('MATERIAL:'/.test(txt));
 ck('in the same place there too -- straight under the description',
   txt.indexOf('PROJECT DESCRIPTION:') < txt.indexOf("'MATERIAL:'") &&

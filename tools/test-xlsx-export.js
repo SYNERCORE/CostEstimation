@@ -105,7 +105,7 @@ console.log('\nFormatted, because an unformatted dump is what sales could not us
 ck('written through the styled writer', /SHICXlsx\.download/.test(exp),
   'XLSX.writeFile cannot write cell styles');
 ck('and nothing in the export still goes through SheetJS', !/XLSX\.(utils|writeFile)/.test(exp));
-ck('column widths', /cols: Array\.from/.test(exp));
+ck('column widths', /cols: [^\n]*Array\.from/.test(exp));
 ck('section titles are full-width bars', /s: 'secbar'/.test(exp));
 ck('table headers are shaded', /s: 'th'/.test(exp));
 ck('totals are set apart from the rows they total', /s: 'tot'/.test(exp) && /s: 'totlbl'/.test(exp));

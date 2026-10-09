@@ -659,11 +659,13 @@ function makeHandleExportXLSX(getCtx) {
        table, `total` and `blank` close it, and every `row` in between is a
        body row. That is the shape every bill on the printed form already has,
        so no call site has to describe its own formatting twice. */
-    const sheet = (name, build) => {
+    const sheet = (name, build, colWidths) => {
       const rows = [], merges = [];
       let inTable = false, width = 0;
       const cell = (c, bodyStyle) => {
         if (c === undefined || c === null) return null;
+        /* {text, span, ht}: wrapped text across `span` more columns, the row `ht` points tall. */
+        if (typeof c === 'object' && c.wrapText) return { v: c.wrapText, s: 'note', span: c.span, ht: c.ht };
         if (typeof c === 'object' && 'v' in c) return { v: c.v, s: c.n ? (bodyStyle ? 'tdn' : 'valn') : bodyStyle || 'val' };
         if (!bodyStyle) return { v: c, s: 'val' };
         if (bodyStyle === 'label') return { v: c, s: 'label' };
@@ -715,10 +717,12 @@ function makeHandleExportXLSX(getCtx) {
         money: v => ({ v: Math.round(N(v) * 100) / 100, n: true })
       };
       build(api);
-      const widest = rows.reduce((m, r) => Math.max(m, r.length), 0);
+      /* A merged bar or note reaches past the last cell written, and that column needs a width too. */
+      const widest = rows.reduce((m, r) => Math.max(m, r.length, r.reduce((e, c, i) => c && c.span > 0 ? Math.max(e, i + c.span + 1) : e, 0)), 0);
       sheets.push({
         name: name,
-        cols: Array.from({ length: widest }, (_, i) => i === 1 ? 42 : i === 0 ? 7 : 13),
+        cols: colWidths ? Array.from({ length: Math.max(widest, colWidths.length) }, (_, i) => colWidths[i] || 13)
+          : Array.from({ length: widest }, (_, i) => i === 1 ? 42 : i === 0 ? 7 : 13),
         merges: merges,
         rows: rows
       });
@@ -738,14 +742,17 @@ function makeHandleExportXLSX(getCtx) {
     };
 
     /* ── Page 1: cost estimate summary ── */
+    /* Every bar on this sheet is the header's width (A to G), and long text wraps inside it. */
+    const CS_W = 7, CS_COLS = [20, 42, 14, 20, 16, 16, 16];
+    const wrapIn = (text, span, perLine) => { const t = String(text || ''); const n = Math.max(1, Math.ceil(t.length / perLine)); return { wrapText: t, span, ht: n > 1 ? Math.round(n * 14.4 * 10) / 10 : undefined }; };
     sheet('CE Summary', a => {
-      docHead(a, 'COST ESTIMATE SUMMARY', 7);
-      a.row('PROJECT DESCRIPTION:', info.description || '');
+      docHead(a, 'COST ESTIMATE SUMMARY', CS_W);
+      a.row('PROJECT DESCRIPTION:', wrapIn(info.description, 5, 105));
       /* A material spec runs to a line of its own -- "A217 Gr. C12A with
          Co-Cr-Mo-Ni & ASTM A335 P91" does not sit in half a row -- and it
          belongs next to the description it qualifies. */
-      if (info.material) a.row('MATERIAL:', info.material);
-      a.row('CLIENT NAME:', info.client || '', '', 'CLIENT LOCATION:', info.location || '');
+      if (info.material) a.row('MATERIAL:', wrapIn(info.material, 5, 105));
+      a.row('CLIENT NAME:', info.client || '', '', 'CLIENT LOCATION:', wrapIn(info.location, 2, 42));
       a.row('ATTENTION:', info.attention || 'SALES DEPARTMENT', '', 'QUANTITY:', (info.qty || 1) + ' ' + qtyUom);
       a.row('END USER:', info.endUser || 'C/O SALES', '', 'NO. OF DAYS:', (info.days || '') + ' DAYS');
       a.row('DISCIPLINE:', info.projType || '', '', 'STATUS:', docStatus);
@@ -766,11 +773,11 @@ function makeHandleExportXLSX(getCtx) {
       /* The workbook has always headed these; the printed CE and this one
          did not, so two bold figures appeared under TOTAL AMOUNT, in the
          same column, with nothing to say they were already inside it. */
-      if (hlRows.length && !noAmt) a.title('HIGHLIGHTED COSTS (already included above)', 3);
+      if (hlRows.length && !noAmt) a.title('HIGHLIGHTED COSTS (already included above)', CS_W);
       if (!noAmt) hlRows.forEach(r => a.total('', String(hlLabel(r)).toUpperCase() + ':', a.money(hlAmt(r))));
       if (servicesSummary.on && servicesSummary.ok && !noAmt) {
         a.blank();
-        a.title('SERVICES', 3);
+        a.title('SERVICES', CS_W);
         servicesSummary.lines.forEach(l => a.row('', l.label.toUpperCase() + ':', a.money(l.v)));
         if (Math.abs(servicesSummary.other) >= 0.005) a.row('', 'OTHER MISC. TO THE PROJECT:', a.money(servicesSummary.other));
         a.total('', 'SERVICES TOTAL AMOUNT:', a.money(servicesSummary.total));
@@ -779,18 +786,18 @@ function makeHandleExportXLSX(getCtx) {
       const sowNotes = (sowItems || []).filter(x => String(x.note || '').trim());
       if (notes.length || sowNotes.length) {
         a.blank();
-        a.title('NOTE', 3);
+        a.title('NOTE', CS_W);
         /* A text file has no font, so the flag has to be a word. Written in
            front of the note, where it is read before the note is. */
-        notes.forEach((n, i) => a.row(i + 1, (n.imp ? '[IMPORTANT] ' : '') + (n.text || '')));
-        sowNotes.forEach((x, i) => a.row(notes.length + i + 1, 'Scope ' + (sowLabels[x.id] || '') + ' — ' + String(x.note).trim()));
+        notes.forEach((n, i) => a.row(i + 1, wrapIn((n.imp ? '[IMPORTANT] ' : '') + (n.text || ''), 5, 105)));
+        sowNotes.forEach((x, i) => a.row(notes.length + i + 1, wrapIn('Scope ' + (sowLabels[x.id] || '') + ' — ' + String(x.note).trim(), 5, 105)));
       }
       if (approvers && approvers.length) {
         a.blank();
-        a.title('SIGNATORIES', 3);
+        a.title('SIGNATORIES', CS_W);
         approvers.forEach(ap => a.row(ap.role || '', ap.name || '', ap.title || ''));
       }
-    });
+    }, CS_COLS);
 
     /* ── Page 2: manpower loading, one block per shift ── */
     /* ── Mobilization / demobilization, manpower then expenses, per stage ── */

@@ -2845,6 +2845,7 @@ function App({
             const _st = String(_m.status || '').trim();
             if (_a.state === 'pending' && !Object.keys(_a.lines || {}).length && (!_st || _st === 'Draft')) _w.status = 'For Approval';
           }
+          Object.assign(_w, monSeed(_entry.info, _m));
           if (_revReason.current && _revReason.current.num === String(ceNum).toUpperCase() && !(monData[saved.id] || {}).remarks) {
             _w.remarks = '\u21BB Revision ' + (ceFamily(ceNum).rev ? 'R' + ceFamily(ceNum).rev : '') + ': ' + _revReason.current.why;
             _revReason.current = null;
@@ -2882,16 +2883,21 @@ function App({
       {multiline: true, required: true, min: 3, requiredMsg: 'A revision needs a reason.', minMsg: 'A revision needs a reason \u2014 a few words at least.', ok: 'Revise'});
     return t == null ? null : t;
   };
-  const noteRevisionRemark = async (num, reason) => {
+  const noteRevisionRemark = async (num, reason, inf) => {
     try {
       const saved = await dbFindCEByNum(num);
-      if (saved && saved.id != null) updateMon(saved.id, {remarks: '\u21BB Revision ' + (ceFamily(num).rev ? 'R' + ceFamily(num).rev : '') + ': ' + reason});
+      if (saved && saved.id != null) updateMon(saved.id, {remarks: '\u21BB Revision ' + (ceFamily(num).rev ? 'R' + ceFamily(num).rev : '') + ': ' + reason, ...monSeed(inf, monData[saved.id])});
     } catch (_e) { console.warn('revision remark skipped:', _e.message); }
   };
   const handleSaveRevision = guard('revise', async () => {
     const ceNum = (info.ceNum || '').trim();
     if (!ceNum) {
       showToast('Please enter a CE Number before saving a revision.', true);
+      return;
+    }
+    /* The same things Save asks for. A revision is a saved CE, and it used to get in without them. */
+    if (infoMissing.length) {
+      showToast('Project Info is incomplete. Still needed: ' + infoMissing.join(', ') + '.', true);
       return;
     }
     const _why = await askRevisionReason(ceNum);
@@ -2934,7 +2940,7 @@ function App({
     try {
       const _re = mkEntry(revLabel); _re.info = {..._re.info, revisionReason: _why};
       await dbSaveHistory(_re);
-      await noteRevisionRemark(_re.info.ceNum, _why);
+      await noteRevisionRemark(_re.info.ceNum, _why, _re.info);
       setInfo(p => ({
         ...p,
         ceNum: revCeNum, revisionReason: _why
@@ -2964,6 +2970,15 @@ function App({
     const d = new Date(b + 'T00:00:00'); if (isNaN(d)) return '';
     d.setDate(d.getDate() + 3);
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  };
+  /* The Monitoring fields a CE's own details can seed, only where the record has nothing. Saving a CE fills them, so the CE Monitoring table
+     shows its Customer, Job Title and Discipline without anyone setting them there; a value someone typed in Monitoring is never replaced. */
+  const monSeed = (inf, m) => {
+    const t = v => String(v == null ? '' : v).trim(), cur = m || {}, out = {};
+    if (!t(cur.customer) && t(inf && inf.client)) out.customer = t(inf.client);
+    if (!t(cur.jobTitle) && t(inf && inf.description)) out.jobTitle = t(inf.description);
+    if (!t(cur.designation) && !t(cur.discipline) && t(inf && inf.projType)) out.designation = t(inf.projType);
+    return out;
   };
   const infoFromMon = (inf, m) => {
     if (!m) return inf;

@@ -664,7 +664,7 @@ function MonitoringPanel(ctx) {
         const cur = m.designation || m.discipline || e.info?.discipline || e.info?.projType || '';
         if (ev.target.value !== String(cur)) updateMon(e.id, 'designation', ev.target.value);
       }
-    }) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11}}, m.designation || m.discipline || e.info?.discipline || e.info?.projType || '')), /*#__PURE__*/React.createElement("td", {
+    }) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11}}, m.designation || m.discipline || e.info?.discipline || e.info?.projType || (e._draft ? /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:'#F59E0B'},title:"This draft has no discipline yet. Saving the CE needs it."}, "needed") : ''))), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
         padding: '4px 6px'
@@ -684,7 +684,7 @@ function MonitoringPanel(ctx) {
         if (ev.target.value !== String(m.customer || e.info?.client || '')) updateMon(e.id, 'customer', ev.target.value);
       },
       placeholder: e.info?.client
-    }) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11}}, m.customer||e.info?.client||'—')), /*#__PURE__*/React.createElement("td", {
+    }) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11}}, m.customer||e.info?.client||(e._draft ? /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:'#F59E0B'},title:"This draft has no customer yet. Saving the CE needs it."}, "needed") : '—'))), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
         padding: '4px 6px',
@@ -706,7 +706,7 @@ function MonitoringPanel(ctx) {
         if (ev.target.value !== String(m.jobTitle || jobTitle)) updateMon(e.id, 'jobTitle', ev.target.value);
       },
       placeholder: jobTitle
-    }) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11,whiteSpace:'normal',wordBreak:'break-word',display:'block',maxWidth:310}}, m.jobTitle||jobTitle||'—')), /*#__PURE__*/React.createElement("td", {
+    }) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11,whiteSpace:'normal',wordBreak:'break-word',display:'block',maxWidth:310}}, m.jobTitle||jobTitle||(e._draft ? /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:'#F59E0B'},title:"This draft has no job title yet. Saving the CE needs it."}, "needed") : '—'))), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
         padding: '4px 6px',

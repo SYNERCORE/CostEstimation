@@ -10,7 +10,7 @@ const g = k => { const i = app.indexOf(k); return i < 0 ? '' : app.slice(i, i + 
 ck('a prompt asks for the reason; cancel or a blank answer returns nothing', app.indexOf("const askRevisionReason = async (num) => {") > 0 && app.indexOf("return t == null ? null : t;") > 0 && app.indexOf('required: true, min: 3') > 0 && app.indexOf("requiredMsg: 'A revision needs a reason.'") > 0);
 const btn = g("const handleSaveRevision = guard('revise'");
 ck('the Revise button asks first and stops without a reason', /await askRevisionReason\(ceNum\);\s*if \(!_why\) return;/.test(btn) && btn.indexOf('await dbSaveHistory') > btn.indexOf('askRevisionReason'));
-ck('the reason is saved on the CE and in the revision\'s remarks', btn.indexOf('revisionReason: _why') > 0 && btn.indexOf('noteRevisionRemark(_re.info.ceNum, _why)') > 0);
+ck('the reason is saved on the CE and in the revision\'s remarks', btn.indexOf('revisionReason: _why') > 0 && btn.indexOf('noteRevisionRemark(_re.info.ceNum, _why, _re.info)') > 0);
 const lst = g('const handleRevise = async (e) => {');
 ck('Revise from the list asks before loading the copy and stops without a reason', /await askRevisionReason\(raw \|\| newCeNum\);\s*if \(!_why\) return;/.test(lst) && lst.indexOf('askRevisionReason') < lst.indexOf('handleLoad('));
 ck('that copy carries the reason and is remembered for its first save', lst.indexOf('revisionReason: _why') > 0 && lst.indexOf('_revReason.current = {num: newCeNum.toUpperCase(), why: _why}') > 0);

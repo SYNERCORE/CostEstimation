@@ -479,5 +479,7 @@ jobs:
         run: node tools/test-summary-attach.js
       - name: Blank CE details filled from CE Monitoring
         run: node tools/test-info-from-monitoring.js
+      - name: Monitoring seed and Revise gate
+        run: node tools/test-mon-seed-and-revise-gate.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

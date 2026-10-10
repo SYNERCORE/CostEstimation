@@ -482,6 +482,8 @@ function App({
   const setSbView = v => { _setSbView(v); LS.set('sb_view', v); };
   const [sbPick, setSbPick] = useState('');   /* the task shown in Split view, or '__un' for Unassigned */
   const [sbType, setSbType] = useState('mp'); /* the resource type shown for it */
+  /* "Fill from kit": null when closed, else {task, svc, q, cat, mult, off}. A kit is a Scope Library service; off holds the rows the user unticked. */
+  const [kit, setKit] = useState(null);
   const [addMode, setAddMode] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null); /* true=add to existing CE, false=replace */
   const DRAFT_KEY = 'shic_draft';
@@ -1751,6 +1753,72 @@ function App({
   const miscDel = (cat, id) => setMisc(p => ({ ...p, [cat]: (p[cat] || []).filter(r => r.id !== id) }));
   const miscAdd = (cat, taskId, item) => setMisc(p => ({ ...p, [cat]: [...(p[cat] || []), { ...mkMiscRow(), desc: item ? item.desc : '', uom: item ? item.uom : 'Lot', cost: item ? item.cost : 0, taskId: taskId || '' }] }));
   const miscClearTask = taskId => setMisc(p => { const n = { ...p }; Object.keys(n).forEach(k => { if (Array.isArray(n[k])) n[k] = n[k].filter(r => r.taskId !== taskId); }); return n; });
+  /* ── Resource kit ───────────────────────────────────────────────────────────
+     A Scope Library service already lists the manpower, tools, consumables, PPE
+     and miscellaneous its work needs. "Fill from kit" files that list against ONE
+     scope task. The service's steps are flattened: the same item on two steps is
+     one row with the quantities added. Rows already on the task are skipped, so
+     pressing it twice never doubles the cost. Rates and units come from the
+     Masterlist, as Add to CE does. */
+  const KIT_TYPES = [['mp', 'Manpower'], ['tools', 'Tools & Equipment'], ['mats', 'Consumables'], ['ppe', 'PPE'], ['misc', 'Miscellaneous']];
+  const _kitMl = (type, name) => {
+    const list = masterlist && masterlist[type === 'mp' ? 'manpower' : type === 'mats' ? 'materials' : type];
+    const u = String(name || '').toUpperCase();
+    return (list || []).find(r => String(r.role || r.desc || '').toUpperCase() === u);
+  };
+  const kitItems = (svc, taskId, mult) => {
+    const out = {}, order = [];
+    const add = (type, raw) => {
+      const name = String(typeof raw === 'string' ? raw : (raw && (raw.name || raw.role || raw.desc)) || '').trim();
+      if (!name) return;
+      const o = typeof raw === 'string' || !raw ? {} : raw;
+      const days = type === 'mp' && Number(o.days) > 0 ? Number(o.days) : 0;
+      const cat = type === 'misc' ? (o.miscCat || 'requirements') : '';
+      const key = type + '|' + name.toUpperCase() + '|' + days + '|' + cat;
+      const q = (Number(o.qty) || 1) * mult;
+      if (out[key]) { out[key].qty += q; return; }
+      out[key] = { key, type, name, qty: q, days, cat, uom: o.uom || '' };
+      order.push(key);
+    };
+    ['mp', 'tools', 'mats', 'ppe', 'misc'].forEach(type => (svc[type] || []).forEach(raw => add(type, raw)));
+    return order.map(k => {
+      const x = out[k], u = x.name.toUpperCase();
+      const dup = x.type === 'misc'
+        ? miscFlat().some(r => r.taskId === taskId && String(r.desc || '').toUpperCase() === u)
+        : RES_TABS.find(t => t.key === x.type).rows.some(r => r.taskId === taskId && String(r[RES_TABS.find(t => t.key === x.type).nameKey] || '').toUpperCase() === u);
+      return { ...x, dup, noRate: x.type !== 'misc' && !_kitMl(x.type, x.name) };
+    });
+  };
+  const kitApply = () => {
+    if (!kit) return;
+    const svc = sowLib.find(s => s.id === kit.svc);
+    if (!svc) return;
+    const taskId = kit.task;
+    const rows = kitItems(svc, taskId, kit.mult).filter(x => !x.dup && !kit.off[x.key]);
+    if (!rows.length) { showToast('Nothing to add -- every row is ticked off or already on this task.', true); return; }
+    const by = t => rows.filter(x => x.type === t);
+    if (by('mp').length) setMp(p => [...p, ...by('mp').map(x => {
+      const m = _kitMl('mp', x.name);
+      return { ...mkMP(), role: x.name, pax: x.qty, days: x.days || N(info.days) || 1, rate: m ? m.rate : 0, perDiem: m ? (m.perDiem || 0) : 0, taskId };
+    })]);
+    [['tools', setTools, 'Lot'], ['mats', setMats, 'Lot'], ['ppe', setPpe, 'Pcs']].forEach(([type, setter, dflt]) => {
+      if (!by(type).length) return;
+      setter(p => [...p, ...by(type).map(x => {
+        const m = _kitMl(type, x.name);
+        return { ...mkRes(), desc: x.name, qty: x.qty, uom: (m && String(m.uom || '').trim()) || x.uom || dflt, cost: m ? m.cost : 0, ...(type === 'tools' ? toolSrcFields(m) : {}), taskId };
+      })]);
+    });
+    if (by('misc').length) setMisc(p => {
+      const valid = miscCats.map(c => c.k), next = { ...p };
+      by('misc').forEach(x => {
+        const k = valid.includes(x.cat) ? x.cat : valid[0];
+        if (k) next[k] = [...(next[k] || []), { ...mkMiscRow(), desc: x.name, qty: x.qty, taskId }];
+      });
+      return next;
+    });
+    setKit(null);
+    showToast('Added ' + rows.length + ' resource' + (rows.length === 1 ? '' : 's') + ' to task ' + (sowLabels[taskId] || '') + ' from ' + svc.title + '.');
+  };
   /* ── Consolidation ──────────────────────────────────────────────────────────
      One crew works across several scope tasks. If task 1 needs 1 electrician
      and task 2 needs 3, you mobilise 3 for the whole job and pay them for the
@@ -5117,7 +5185,7 @@ function App({
   }), tab === 'sow' && /*#__PURE__*/SowTab({ clearAllSow, deleteSowTask, setSowItems, sowItems }),
 
 /* ── SOW Breakdown: assign resources per scope task ── */
-tab === 'sowbreak' && SowBreakdownTab({ RES_TABS, sbPick, sbType, sbView, setSbPick, setSbType, setSbView, ceType, delRow, masterlist, mats, miscAdd, miscCats, miscDel, miscFlat, miscUpd, mp, ppe, rowCost, rowCostForTask, rowServesTask, rowShares, sbCollapsed, sbDlOn, sbSearch, sbSel, sbShow, setMisc, setMp, setPicker, setSbCollapsed, setSbDlOn, setSbSearch, setSbSel, setSbShow, setSowItems, setTab, showToast, sowItems, sowLabels, sowTaskGroup, sowUnassignedCount, taskCost, taskCostRollup, taskResCount, taskResCountRollup, tools, updRow }),
+tab === 'sowbreak' && SowBreakdownTab({ RES_TABS, sbPick, sbType, sbView, setSbPick, setSbType, setSbView, ceType, delRow, masterlist, mats, miscAdd, miscCats, miscDel, miscFlat, miscUpd, mp, ppe, rowCost, rowCostForTask, rowServesTask, rowShares, sbCollapsed, sbDlOn, sbSearch, sbSel, sbShow, setMisc, setMp, setPicker, setSbCollapsed, setSbDlOn, setSbSearch, setSbSel, setSbShow, setSowItems, setTab, showToast, sowItems, sowLabels, sowTaskGroup, sowUnassignedCount, taskCost, taskCostRollup, taskResCount, taskResCountRollup, tools, updRow, KIT_TYPES, kit, kitApply, kitItems, setKit, sowLib }),
 tab === 'scopelib' && ScopeLibraryEditor(),
 tab === 'calculators' && /*#__PURE__*/React.createElement(CalcDrawer, {
   page: true, open: true, onClose: () => setTab('materials'), calc, setCalc, std: calcStdNow, hist: calcHist,

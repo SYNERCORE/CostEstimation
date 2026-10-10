@@ -4,9 +4,13 @@
    and everything it reads comes in through ctx. */
 function SowBreakdownTab(ctx) {
   const {
+    KIT_TYPES,
     RES_TABS,
     ceType,
     delRow,
+    kit,
+    kitApply,
+    kitItems,
     masterlist,
     mats,
     miscAdd,
@@ -28,6 +32,7 @@ function SowBreakdownTab(ctx) {
     sbShow,
     sbType,
     sbView,
+    setKit,
     setMisc,
     setMp,
     setPicker,
@@ -44,6 +49,7 @@ function SowBreakdownTab(ctx) {
     showToast,
     sowItems,
     sowLabels,
+    sowLib,
     sowTaskGroup,
     sowUnassignedCount,
     taskCost,
@@ -398,6 +404,11 @@ function SowBreakdownTab(ctx) {
               style: { fontSize: 10, color: rollN ? OK : MT, background: (rollN ? OK : MT) + '18', borderRadius: 8, padding: '1px 7px', whiteSpace: 'nowrap' },
               title: hasSubs ? "Resource rows on this task and its sub-tasks" : undefined
             }, rollN ? rollN + " resource" + (rollN === 1 ? '' : 's') + (hasSubs ? " incl. sub-tasks" : '') : "no resources"),
+            open && /*#__PURE__*/React.createElement("button", {
+              className: 'sb-kit-btn', style: { ...btn('def', true), fontSize: 10, color: ACC, borderColor: ACC },
+              title: "Fill this task from a Scope Library service: its manpower, tools, consumables, PPE and miscellaneous",
+              onClick: () => setKit({ task: it.id, svc: '', q: '', cat: 'All', mult: 1, off: {} })
+            }, "Fill from kit"),
             open && others.length > 0 && /*#__PURE__*/React.createElement("select", {
               style: { ...INP, width: 132, fontSize: 10, padding: '2px 4px' }, value: '',
               title: "Copy all resources from another task into this one",
@@ -583,6 +594,69 @@ function SowBreakdownTab(ctx) {
     /*#__PURE__*/React.createElement("div", { className: 'sb-pane' },
       pick === '__un' ? unPanel : (() => { const it = _items.find(x => x.id === pick); return it ? card(it, true) : null; })()));
 
+
+  /* ── Fill from kit: pick a Scope Library service, preview what it brings, tick what to keep, add it to ONE task. ── */
+  const kitPanel = () => {
+    if (!kit) return null;
+    const lib = sowLib || [];
+    const svc = kit.svc ? lib.find(s => s.id === kit.svc) : null;
+    const cats = ['All', ...[...new Set(lib.map(s => s.cat).filter(Boolean))].sort()];
+    const q = String(kit.q || '').trim().toLowerCase();
+    const hits = lib.filter(s => (kit.cat === 'All' || s.cat === kit.cat) && (!q || String(s.title || '').toLowerCase().includes(q) || String(s.cat || '').toLowerCase().includes(q)));
+    const nRes = s => ['mp', 'tools', 'mats', 'ppe', 'misc'].reduce((a, k) => a + (s[k] || []).filter(r => (typeof r === 'string' ? r : r && (r.name || r.role || r.desc))).length, 0);
+    const rows = svc ? kitItems(svc, kit.task, kit.mult) : [];
+    const take = rows.filter(x => !x.dup && !kit.off[x.key]);
+    const upd = patch => setKit(p => ({ ...p, ...patch }));
+    const tog = key => setKit(p => ({ ...p, off: { ...p.off, [key]: !p.off[key] } }));
+    const taskIt = (sowItems || []).find(x => x.id === kit.task);
+    const chip = on => ({ ...btn('def', true), fontSize: 10, borderRadius: 8, padding: '1px 8px', color: on ? ACC : MT, borderColor: on ? ACC : BDR, background: on ? alpha(ACC, '14') : 'transparent' });
+    return /*#__PURE__*/React.createElement("div", {
+      className: 'sb-kit', style: { position: 'fixed', inset: 0, background: '#000b', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 },
+      onClick: () => setKit(null)
+    }, /*#__PURE__*/React.createElement("div", { style: { ...CS, width: 'min(860px,100%)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', marginBottom: 0 }, onClick: ev => ev.stopPropagation() },
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 } },
+        /*#__PURE__*/React.createElement("b", { style: { fontSize: 14 } }, "Fill task " + (sowLabels[kit.task] || '') + " from a kit"),
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: MT, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, taskIt ? taskIt.text : ''),
+        /*#__PURE__*/React.createElement("button", { style: { ...btn('def', true), fontSize: 11 }, title: "Close", onClick: () => setKit(null) }, "✕")),
+      /*#__PURE__*/React.createElement("div", { className: 'sb-kit-body', style: { display: 'flex', gap: 12, flex: 1, minHeight: 0, flexWrap: 'wrap' } },
+        /*#__PURE__*/React.createElement("div", { style: { flex: '1 1 260px', minWidth: 0, display: 'flex', flexDirection: 'column', maxHeight: '58vh' } },
+          /*#__PURE__*/React.createElement("input", { style: { ...INP, width: '100%', fontSize: 12, marginBottom: 6 }, placeholder: "Search the Scope Library...", value: kit.q, onChange: e => upd({ q: e.target.value }) }),
+          /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 } }, cats.map(c => /*#__PURE__*/React.createElement("button", { key: c, style: chip(kit.cat === c), onClick: () => upd({ cat: c }) }, c))),
+          /*#__PURE__*/React.createElement("div", { style: { overflowY: 'auto', flex: 1 } },
+            hits.slice(0, 80).map(s => {
+              const on = kit.svc === s.id;
+              return /*#__PURE__*/React.createElement("div", { key: s.id, onClick: () => upd({ svc: s.id, off: {} }),
+                style: { cursor: 'pointer', border: '1px solid ' + (on ? ACC : BDR), background: on ? alpha(ACC, '14') : 'transparent', borderRadius: 8, padding: '6px 8px', marginBottom: 4 } },
+                /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, fontWeight: 700 } }, s.title),
+                /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: MT } }, (s.cat || '') + ' · ' + (s.scope || []).filter(x => String(x).trim()).length + ' steps · ' + nRes(s) + ' resources'));
+            }),
+            hits.length > 80 && /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: MT, padding: 4 } }, "Showing 80 of " + hits.length + ". Narrow the search."),
+            !hits.length && /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: MT, padding: 8 } }, lib.length ? "No service matches." : "The Scope Library is empty."))),
+        /*#__PURE__*/React.createElement("div", { style: { flex: '1.5 1 320px', minWidth: 0, maxHeight: '58vh', overflowY: 'auto' } },
+          !svc ? /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: MT, padding: 8 } }, "Pick a service on the left to preview what it will add.")
+          : !rows.length ? /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: MT, padding: 8 } }, svc.title + " has no resources listed in the Scope Library.")
+          : [/*#__PURE__*/React.createElement("div", { key: 'h', style: { fontSize: 11, color: MT, marginBottom: 6 } }, "Preview of what will be added. Untick anything you don't need. Steps are flattened onto this one task."),
+            KIT_TYPES.map(([tk, tl]) => {
+              const g = rows.filter(x => x.type === tk);
+              if (!g.length) return null;
+              return /*#__PURE__*/React.createElement("div", { key: tk, style: { border: '1px solid ' + BDR, borderRadius: 8, marginBottom: 8, overflow: 'hidden' } },
+                /*#__PURE__*/React.createElement("div", { style: { background: alpha(ACC, '10'), padding: '3px 8px', fontSize: 11, fontWeight: 700 } }, tl + ' (' + g.length + ')'),
+                g.map(x => /*#__PURE__*/React.createElement("label", { key: x.key, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '3px 8px', fontSize: 12, cursor: x.dup ? 'default' : 'pointer', opacity: x.dup ? .55 : 1 } },
+                  /*#__PURE__*/React.createElement("input", { type: 'checkbox', checked: !x.dup && !kit.off[x.key], disabled: x.dup, onChange: () => tog(x.key) }),
+                  /*#__PURE__*/React.createElement("span", { style: { flex: 1, minWidth: 0 } }, x.name),
+                  x.dup && /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: MT } }, "already on this task"),
+                  !x.dup && x.noRate && /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: '#F59E0B' }, title: "Not in the Masterlist, so it arrives with no rate. Set one in the table." }, "no rate"),
+                  /*#__PURE__*/React.createElement("span", { style: { ...MONO, fontSize: 11, color: MT } }, x.type === 'mp' ? x.qty + ' pax' + (x.days ? ' · ' + x.days + ' d' : '') : x.qty + (x.uom ? ' ' + x.uom : '')))));
+            })])),
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' } },
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: MT } }, "Quantity"),
+        /*#__PURE__*/React.createElement("input", { type: 'number', min: 1, max: 20, style: { ...INP, width: 56, fontSize: 12 }, value: kit.mult, title: "Multiplies every quantity in the kit",
+          onChange: e => upd({ mult: Math.max(1, Math.min(20, Math.floor(Number(e.target.value)) || 1)) }) }),
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: MT, flex: 1 } }, svc ? 'Rates from the Masterlist · ' + take.length + ' of ' + rows.length + ' rows will be added' : ''),
+        /*#__PURE__*/React.createElement("button", { style: { ...btn('def', true), fontSize: 11 }, onClick: () => setKit(null) }, "Cancel"),
+        /*#__PURE__*/React.createElement("button", { style: { ...btn('acc', true), fontSize: 11 }, onClick: kitApply }, svc ? 'Add ' + take.length + ' resource' + (take.length === 1 ? '' : 's') + ' to task ' + (sowLabels[kit.task] || '') : 'Add to task'))));
+  };
+
   return /*#__PURE__*/React.createElement("div", null,
     /* Shared UOM suggestions for every input in this tab */
     /*#__PURE__*/React.createElement("datalist", { id: "shic-uom-list" }, UOMS.map(u => /*#__PURE__*/React.createElement("option", { key: u, value: u }))),
@@ -634,6 +708,7 @@ function SowBreakdownTab(ctx) {
     split && (sowItems || []).length === 0 && unPanel,
 
     /* Unassigned rows — existing CEs start here, and this is how you file them */
-    split ? null : unPanel
+    split ? null : unPanel,
+    kitPanel()
   );
 }

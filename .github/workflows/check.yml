@@ -481,5 +481,7 @@ jobs:
         run: node tools/test-info-from-monitoring.js
       - name: Monitoring seed and Revise gate
         run: node tools/test-mon-seed-and-revise-gate.js
+      - name: Resource tabs sticky toolbar
+        run: node tools/test-restab-sticky-toolbar.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

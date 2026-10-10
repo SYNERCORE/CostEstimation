@@ -319,11 +319,21 @@ const ResTab = ({
   return /*#__PURE__*/React.createElement("div", {
   style: CS
 }, /*#__PURE__*/React.createElement("div", {
+  /* Stays under the tab strip while a long list scrolls past, so From Masterlist, Combine, Add and the rest are always within reach. The
+     negative margin and matching padding stretch it over the card's own padding, so rows do not show through at its edges. */
+  className: 'res-sticky',
   style: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    position: 'sticky',
+    top: 'var(--y-body)',
+    zIndex: 40,
+    background: 'var(--bg-surface-card)',
+    margin: '-16px -16px 12px',
+    padding: '16px 16px 8px',
+    borderRadius: '10px 10px 0 0',
+    borderBottom: '1px solid ' + BDR,
     flexWrap: 'wrap',
     gap: 8
   }

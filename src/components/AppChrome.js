@@ -738,7 +738,13 @@ function AppHeader(ctx) {
       paddingLeft: 12,
       borderLeft: `1px solid ${BDR}`
     }
-  }, /*#__PURE__*/React.createElement(OnlinePill,null), /*#__PURE__*/React.createElement(AccountMenu, {
+  }, /* Project Analyzer and ML Insights. They floated over the bottom-right corner of every screen, on top of the last column of any list;
+       they live here now, where nothing is underneath. */
+  [['📁', 'Project Analyzer', 'openODPanel'], ['🧠', 'ML Insights', 'shicMLToggle']].map(([ic, lbl, fn]) => /*#__PURE__*/React.createElement("button", {
+    key: fn, className: 'tb-btn tb-tool', title: lbl, 'aria-label': lbl,
+    style: { ...btn('def', true), width: 30, height: 30, padding: 0, justifyContent: 'center', fontSize: 15, borderRadius: 8 },
+    onClick: () => { if (typeof window[fn] === 'function') window[fn](); }
+  }, ic)), /*#__PURE__*/React.createElement(OnlinePill,null), /*#__PURE__*/React.createElement(AccountMenu, {
     name: currentUser.name || currentUser.username, role: currentUser.role, flag: !(getApiKey() && provInfo)
   }, /*#__PURE__*/React.createElement(ThemeSwitch, null), /*#__PURE__*/React.createElement(ChangePasswordModal,{currentUser}), /*#__PURE__*/React.createElement("button", {style:{...btn('def',true), width:'100%', textAlign:'left'},title:"Your saved signature — used when you Approve & Sign",onClick:()=>setMySigOpen(true)}, "✍ My Signature"), /*#__PURE__*/React.createElement("button", {
     style: {

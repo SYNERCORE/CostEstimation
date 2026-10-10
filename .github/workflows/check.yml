@@ -485,5 +485,7 @@ jobs:
         run: node tools/test-restab-sticky-toolbar.js
       - name: Resource tabs pinned sideways scrollbar
         run: node tools/test-restab-hscroll-bar.js
+      - name: Project Analyzer and ML Insights in the top bar
+        run: node tools/test-tools-in-top-bar.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

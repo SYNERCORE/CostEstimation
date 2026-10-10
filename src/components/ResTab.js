@@ -313,6 +313,23 @@ const ResTab = ({
     } catch (ex) { showToast('Export failed: ' + ex.message, true); }
   };
   const _rtDescRef = useRef(null);
+  /* The sideways scrollbar belongs to the table, so on a long list it sits at the very bottom. A second bar, pinned to the bottom of the
+     window while the table is on screen, is kept in step with it: either one moves the table. It is drawn only when the table is wider
+     than its box. */
+  const _wrapRef = useRef(null), _barRef = useRef(null);
+  const [_sw, _setSw] = useState(0);
+  useEffect(() => {
+    const w = _wrapRef.current;
+    if (!w) return;
+    const measure = () => _setSw(w.scrollWidth > w.clientWidth + 1 ? w.scrollWidth : 0);
+    measure();
+    if (typeof ResizeObserver !== 'function') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(w);
+    const t = w.querySelector('table');
+    if (t) ro.observe(t);
+    return () => ro.disconnect();
+  }, [rows.length, showDays, showPower]);
   useEffect(() => {
     if (_rtNewId && _rtDescRef.current) { _rtDescRef.current.focus(); _rtSetNewId(null); }
   }, [_rtNewId]);
@@ -601,9 +618,11 @@ q && /*#__PURE__*/React.createElement("span", {
   style: { fontSize: 10, color: 'var(--text-secondary)', marginLeft: 'auto' }
 }, 'Filtered view. The buttons above still act on all ' + rows.length + '.')),
 /*#__PURE__*/React.createElement("div", {
+  ref: _wrapRef,
   style: {
     overflowX: 'auto'
   },
+  onScroll: e => { if (_barRef.current && _barRef.current.scrollLeft !== e.target.scrollLeft) _barRef.current.scrollLeft = e.target.scrollLeft; },
   onFocusCapture: _dlOn ? undefined : (ev => { if (ev.target && ev.target.tagName === 'INPUT') _setDlOn(true); })
 }, _dlEl, /*#__PURE__*/React.createElement("table", {
   style: {
@@ -878,7 +897,12 @@ q && /*#__PURE__*/React.createElement("span", {
       padding: '1px 5px'
     }
   }, "x")));
-}), _vis.bot))), /*#__PURE__*/React.createElement("div", {
+}), _vis.bot))), _sw > 0 && /*#__PURE__*/React.createElement("div", {
+  ref: _barRef, className: 'res-hbar',
+  title: "Scroll the table sideways",
+  style: { position: 'sticky', bottom: 0, zIndex: 35, overflowX: 'auto', overflowY: 'hidden', height: 16, background: 'var(--bg-surface-card)' },
+  onScroll: e => { if (_wrapRef.current && _wrapRef.current.scrollLeft !== e.target.scrollLeft) _wrapRef.current.scrollLeft = e.target.scrollLeft; }
+}, /*#__PURE__*/React.createElement("div", { style: { width: _sw, height: 1 } })), /*#__PURE__*/React.createElement("div", {
   style: {
     marginTop: 10,
     borderTop: `1px solid ${'var(--border-subtle)'}`,

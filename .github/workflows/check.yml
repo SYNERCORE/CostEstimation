@@ -483,5 +483,7 @@ jobs:
         run: node tools/test-mon-seed-and-revise-gate.js
       - name: Resource tabs sticky toolbar
         run: node tools/test-restab-sticky-toolbar.js
+      - name: Resource tabs pinned sideways scrollbar
+        run: node tools/test-restab-hscroll-bar.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

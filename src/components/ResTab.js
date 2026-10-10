@@ -900,7 +900,7 @@ q && /*#__PURE__*/React.createElement("span", {
 }), _vis.bot))), _sw > 0 && /*#__PURE__*/React.createElement("div", {
   ref: _barRef, className: 'res-hbar',
   title: "Scroll the table sideways",
-  style: { position: 'sticky', bottom: 0, zIndex: 35, overflowX: 'auto', overflowY: 'hidden', height: 16, background: 'var(--bg-surface-card)' },
+  style: { position: 'sticky', bottom: 0, zIndex: 35, overflowX: 'auto', overflowY: 'hidden', height: 22, background: 'var(--bg-surface-card)' },
   onScroll: e => { if (_wrapRef.current && _wrapRef.current.scrollLeft !== e.target.scrollLeft) _wrapRef.current.scrollLeft = e.target.scrollLeft; }
 }, /*#__PURE__*/React.createElement("div", { style: { width: _sw, height: 1 } })), /*#__PURE__*/React.createElement("div", {
   style: {

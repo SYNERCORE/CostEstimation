@@ -14,6 +14,7 @@ const ck = (n, c, x) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n + (!c &&
 
 ck('the table box and the bar are kept by ref', /const _wrapRef = useRef\(null\), _barRef = useRef\(null\);/.test(s) && /ref: _wrapRef,/.test(s) && /ref: _barRef, className: 'res-hbar'/.test(s));
 ck('the bar is pinned to the bottom of the window', /position: 'sticky', bottom: 0/.test(s));
+ck("the bar is thick, and thicker on hover", /height: 22, background/.test(s) && /.res-hbar::-webkit-scrollbar{height:16px}/.test(require("fs").readFileSync("index.html","utf8")) && /.res-hbar:hover::-webkit-scrollbar{height:22px}/.test(require("fs").readFileSync("index.html","utf8")));
 ck('it is drawn only when the table is wider than its box', /_sw > 0 && /.test(s) && /w\.scrollWidth > w\.clientWidth \+ 1 \? w\.scrollWidth : 0/.test(s));
 ck('its inner width follows the table', /width: _sw, height: 1/.test(s));
 ck('moving either one moves the other, without looping', /_barRef\.current\.scrollLeft !== e\.target\.scrollLeft\) _barRef\.current\.scrollLeft = e\.target\.scrollLeft/.test(s) && /_wrapRef\.current\.scrollLeft !== e\.target\.scrollLeft\) _wrapRef\.current\.scrollLeft = e\.target\.scrollLeft/.test(s));

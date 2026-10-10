@@ -4527,6 +4527,21 @@ function App({
     setAttachBusy(false);
   };
 
+  /* Attach files from the Summary tab: the same panel and the same SharePoint attachments as the 📎 button in CE Monitoring, opened for the CE on
+     screen. Attachments hang off the saved CE's monitoring record, so an unsaved CE has nowhere to put them; a saved CE with no record yet gets one
+     here (ensure mode, so nothing the site holds is overwritten). */
+  const attachFromSummary = async () => {
+    const rec = (history || []).find(h => h && h.info && h.info.ceNum === info.ceNum);
+    if (!rec) { showToast('Save the CE first -- attachments are filed against the saved CE.', true); return; }
+    if (!(USE_SP || getSiteURL())) { showToast('Attachments are kept on SharePoint, which is not connected here.', true); return; }
+    if (!_monSpIdCache[rec.id]) {
+      try { await dbSaveMonEntry(rec.id, info.ceNum, monData[rec.id] || {}, 'ensure'); }
+      catch (e) { showToast('Could not prepare the attachments: ' + (e.message || e), true); return; }
+      setMonSpIds(new Set(Object.keys(_monSpIdCache)));
+    }
+    openAttachPanel(rec.id);
+  };
+
   const handleAttachDelete = async (ceId, fileName) => {
     /* The button is hidden from everyone else, but the UI is not a permission
        boundary and this call reaches SharePoint. */
@@ -5884,7 +5899,7 @@ tab === 'dashboard' && DashboardTab({ dashAll, dashQ, dashReqQ, getStatusColor, 
        was never handed the reader. */
     readFile: resStable.readFile,
     masterlist, showToast: resStable.showToast, setPicker
-  }), tab === 'misc' && /*#__PURE__*/MiscTab({ ceType, masterlist, misc, miscT, mp, setMisc, setPicker, showToast, syncMealRates, syncMealRows }), tab === 'summary' && /*#__PURE__*/SummaryTab({ _defaultsUntouched, _mobTabs, addlCosts, aiSuggest, applyCeDefaults, approvers, apvBar, apvLocked, apvState, apvUsers, busyBtn, busyOp, ceDefaults, ceLayoutKey, ceType, cfg, collectZeroCost, demobVehicles, docFile, grand, handleExport, handleExportXLSX, handleGenerateCEWithCheck, handlePrintPreview, handleSave, handleSaveRevision, history, hlAmt, hlKeys, hlLabel, hlMissing, hlPick, hlPickQ, hlSources, info, isRequestor, loadSharedDrafts, margin, mats, misc, mkNote, mobVehicles, mp, notes, perJob, perJobNames, perJobT, ppe, qtyMulOn, qtyN, saveDraft, servicesSummary, setAddlCosts, setAiSuggest, setApprovers, setCeType, setDraftsOpen, setHlPick, setHlPickQ, setInfo, setMargin, setNotes, setSigModal, setTab, setVerifyNotes, sharedDrafts, showToast, showUnitP, sowItems, sowLabels, sowUnassignedCount, summaryDot, summaryRows, syncRatesFromML, tools, unitP, verifyNotes, visSigs })), /* Live Totals describe the CE being built, so they show on its estimating
+  }), tab === 'misc' && /*#__PURE__*/MiscTab({ ceType, masterlist, misc, miscT, mp, setMisc, setPicker, showToast, syncMealRates, syncMealRows }), tab === 'summary' && /*#__PURE__*/SummaryTab({ _defaultsUntouched, _mobTabs, addlCosts, aiSuggest, applyCeDefaults, approvers, apvBar, apvLocked, apvState, apvUsers, busyBtn, busyOp, ceDefaults, ceLayoutKey, ceType, cfg, collectZeroCost, demobVehicles, docFile, grand, handleExport, handleExportXLSX, handleGenerateCEWithCheck, handlePrintPreview, handleSave, handleSaveRevision, history, hlAmt, hlKeys, hlLabel, hlMissing, hlPick, hlPickQ, hlSources, info, isRequestor, loadSharedDrafts, margin, mats, misc, mkNote, mobVehicles, mp, notes, perJob, perJobNames, perJobT, ppe, qtyMulOn, qtyN, saveDraft, servicesSummary, setAddlCosts, setAiSuggest, setApprovers, setCeType, setDraftsOpen, setHlPick, setHlPickQ, setInfo, setMargin, setNotes, setSigModal, setTab, setVerifyNotes, sharedDrafts, showToast, showUnitP, sowItems, sowLabels, sowUnassignedCount, summaryDot, summaryRows, syncRatesFromML, tools, unitP, verifyNotes, visSigs, attachFromSummary })), /* Live Totals describe the CE being built, so they show on its estimating
      screens only -- on My Work, Monitoring, the Dashboard and the libraries they
      read ₱0.00 or another CE's figures and take a quarter of the width. */
   LiveTotalsSidebar({ TAB_GROUPS, cfg, demobSubT, grand, history, masterlist, matsT, miscT, mobSubT, mpTot, ppeT, provInfo, railSlim, rr, setApiKeyInput, setShowApiKey, setTab, tab, toggleRail, toolsT, unitP })));

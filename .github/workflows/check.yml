@@ -475,5 +475,7 @@ jobs:
         run: node tools/test-sow-breakdown-split.js
       - name: SOW Breakdown Fill from kit
         run: node tools/test-sow-resource-kit.js
+      - name: Summary Attach files button
+        run: node tools/test-summary-attach.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

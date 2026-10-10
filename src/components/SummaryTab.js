@@ -10,6 +10,7 @@ function SummaryTab(ctx) {
     aiSuggest,
     applyCeDefaults,
     approvers,
+    attachFromSummary,
     apvBar,
     apvLocked,
     apvState,
@@ -777,7 +778,12 @@ function SummaryTab(ctx) {
     disabled: !!busyOp.revise,
     onClick: handleSaveRevision,
     title: busyOp.revise ? 'Saving the revision\u2026' : 'Save as ' + ((info.ceNum || 'CE') + '-Rn revision')
-  }, busyOp.revise ? "\u21BB Saving\u2026" : "\u21BB Revise")), /*#__PURE__*/React.createElement("div", {
+  }, busyOp.revise ? "\u21BB Saving\u2026" : "\u21BB Revise"), /*#__PURE__*/React.createElement("button", {
+    className: 'sum-attach',
+    style: { ...btn('def'), borderColor: alpha(INFO, '55'), color: INFO },
+    onClick: attachFromSummary,
+    title: "Attach drawings, the TOR, a PO or any other file to this CE. They are kept on SharePoint with the saved CE and show under the \uD83D\uDCCE button in CE Monitoring."
+  }, "\uD83D\uDCCE Attach files")), /*#__PURE__*/React.createElement("div", {
     title: "Re-pricing from the Masterlist",
     style: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', border: '1px solid ' + BDR, borderRadius: 8, padding: '3px 6px' }
   }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, fontWeight: 700, letterSpacing: .6, color: MT, textTransform: 'uppercase' } }, "Prices"), /*#__PURE__*/React.createElement("button", {

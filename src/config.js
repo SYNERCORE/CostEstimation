@@ -463,6 +463,19 @@ function ceStatusName(s) {
   const t = String(s == null ? '' : s).trim();
   return Object.prototype.hasOwnProperty.call(STATUS_RENAMED, t) ? STATUS_RENAMED[t] : s;
 }
+/* The status filter's quick groups in CE Monitoring. A status in none of them (one added by hand on the Status manager) counts as Active, as
+   does a CE with no status yet: work nobody has closed or put on hold is still open. */
+const STATUS_GROUPS = [
+  { key: 'active', label: 'Active', has: ['Pending', 'Waiting for Information', 'Draft', 'Ongoing', 'Sourcing', 'For site Inspection', 'Revised', 'For Approval'] },
+  { key: 'closed', label: 'Closed', has: ['Approved', 'Submitted', 'Awarded', 'No Quote', 'Cancelled', 'Superseded'] },
+  { key: 'hold', label: 'On hold', has: ['On Hold'] }
+];
+const statusGroupMembers = (key, all) => {
+  const g = STATUS_GROUPS.find(x => x.key === key);
+  if (!g) return [];
+  const named = new Set([].concat(...STATUS_GROUPS.map(x => x.has)));
+  return key === 'active' ? ['', ...(all || []).filter(s => g.has.includes(s) || !named.has(s))] : g.has.filter(s => (all || []).includes(s));
+};
 const DEFAULT_STATUS_OPTIONS = ['Pending', 'Waiting for Information', 'Draft', 'Ongoing', 'Sourcing', 'For site Inspection', 'Revised', 'For Approval', 'Approved', 'Submitted', 'Awarded', 'On Hold', 'No Quote', 'Cancelled', 'Superseded'];
 
 /* WHEN A CE IS FINISHED WITH.

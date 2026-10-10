@@ -156,7 +156,7 @@ function MonitoringPanel(ctx) {
   }, /*#__PURE__*/React.createElement("button", {
     style: {...btn(monStatusFilter.size > 0 ? 'acc' : 'def', true), minWidth: 90},
     onClick: () => { setShowStatusFilter(p => !p); setShowStatusMgr(false); }
-  }, "▼ Status", monStatusFilter.size > 0 ? ` (${monStatusFilter.size})` : ''),
+  }, "▼ Status", monStatusFilter.size > 0 ? ` (${[...monStatusFilter].filter(Boolean).length || monStatusFilter.size})` : ''),
   showStatusFilter && /*#__PURE__*/React.createElement("div", {
     style: {position:'absolute', top:'110%', left:0, zIndex:200, background:SURF, border:`1px solid ${BDR}`, borderRadius:8, padding:8, minWidth:160, boxShadow:'0 4px 16px #0006'}
   }, /*#__PURE__*/React.createElement("div", {style:{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6}},
@@ -191,6 +191,17 @@ function MonitoringPanel(ctx) {
     }),
     s)
   ))),
+  /* Quick groups: one click picks every status in the group (Active, Closed, On hold); a second click on the lit one clears it. */
+  STATUS_GROUPS.map(g => {
+    const mem = statusGroupMembers(g.key, allStatuses);
+    const on = mem.length > 0 && monStatusFilter.size === mem.length && mem.every(s => monStatusFilter.has(s));
+    return /*#__PURE__*/React.createElement("button", {
+      key: g.key, className: 'mon-grp', 'data-on': on ? '1' : '0',
+      style: {...btn('def', true), fontSize: 11, borderRadius: 8, padding: '3px 10px', color: on ? ACC : MT, borderColor: on ? ACC : BDR, background: on ? alpha(ACC, '18') : 'transparent'},
+      title: (on ? 'Showing: ' : 'Show only: ') + mem.filter(Boolean).join(', ') + (g.key === 'active' ? ' (and CEs with no status yet)' : ''),
+      onClick: () => { setMonStatusFilter(on ? new Set() : new Set(mem)); setMonPage(0); setShowStatusFilter(false); }
+    }, g.label);
+  }),
   /*#__PURE__*/React.createElement("select", {
     style: {...INP, fontSize:11, width:150},
     value: monReqFilter,

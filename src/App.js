@@ -2965,6 +2965,19 @@ function App({
     d.setDate(d.getDate() + 3);
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   };
+  const infoFromMon = (inf, m) => {
+    if (!m) return inf;
+    const out = { ...inf };
+    const blank = v => !String(v == null ? '' : v).trim();
+    if (blank(out.client) && !blank(m.customer)) out.client = String(m.customer).trim();
+    if (blank(out.description) && !blank(m.jobTitle)) out.description = String(m.jobTitle).trim();
+    if (blank(out.projType)) {
+      const w = String(m.designation || m.discipline || '').trim().toLowerCase();
+      const hit = CE_DISCIPLINES.find(x => x.toLowerCase() === w);
+      if (hit) out.projType = hit;
+    }
+    return out;
+  };
   const handleLoad = async e => {
     /* A request nobody has accepted has no CE number to build the estimate
        under -- its RCE No. is only the key it is filed by. */
@@ -3023,9 +3036,13 @@ function App({
     _ownNum.current = String((d.info && d.info.ceNum) || d.ceNum || '').trim().toUpperCase();
     _loadedAt.current = { num: _ownNum.current, at: d.savedAt || '' };
     setCeType(d.ceType || 'onsite');
+    /* Customer, Job Title and Discipline can be set in CE Monitoring, which keeps them on the monitoring record, not in the CE. A CE whose own
+       Client, Description or Project type is blank would open, print and export without them, so those blanks are filled from the record. What
+       the CE itself holds is never overwritten. */
+    const _mon = d.id != null ? ((monData || {})[d.id] || (LS.get('monitoring') || {})[d.id]) : null;
     setInfo({
       ...BLANK_INFO,
-      ...d.info,
+      ...infoFromMon(d.info || {}, _mon),
       /* Saved before the company was a choice: it was using the first one. */
       companyId: (d.info && d.info.companyId != null && d.info.companyId !== '') ? d.info.companyId : (((companies || [])[0] || {}).id != null ? companies[0].id : '')
     });

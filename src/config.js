@@ -459,9 +459,13 @@ const DEFAULT_ML={
    are read under the new one so nothing is left holding a status that can no
    longer be picked. */
 const STATUS_RENAMED = { 'For site insp.': 'For site Inspection', 'Waiting in...': 'Waiting for Information' };
+/* Renames an admin made on the Status manager, old name -> current name. Same effect as STATUS_RENAMED: rows still carrying the old spelling
+   are read under the new one. */
+let STATUS_REN = {};
 function ceStatusName(s) {
   const t = String(s == null ? '' : s).trim();
-  return Object.prototype.hasOwnProperty.call(STATUS_RENAMED, t) ? STATUS_RENAMED[t] : s;
+  if (Object.prototype.hasOwnProperty.call(STATUS_RENAMED, t)) return STATUS_RENAMED[t];
+  return Object.prototype.hasOwnProperty.call(STATUS_REN, t) ? STATUS_REN[t] : s;
 }
 /* The status filter's quick groups in CE Monitoring. A status in none of them (one added by hand on the Status manager) counts as Active, as
    does a CE with no status yet: work nobody has closed or put on hold is still open. */
@@ -470,11 +474,50 @@ const STATUS_GROUPS = [
   { key: 'closed', label: 'Closed', has: ['Approved', 'Submitted', 'Awarded', 'No Quote', 'Cancelled', 'Superseded'] },
   { key: 'hold', label: 'On hold', has: ['On Hold'] }
 ];
+/* THE STATUS LIST AN ADMIN MANAGES.
+   Until an admin saves one, the factory list below (DEFAULT_STATUS_OPTIONS placed in STATUS_GROUPS) is what everyone sees. Once saved it is
+   [{name, group, color}] in the order dropdowns show, plus the renames made so far. These are the ones the code itself names -- the approval
+   flow sets Approved/For Approval/Superseded, new requests start as Pending, the dashboards count Awarded/No Quote/Cancelled -- so they
+   cannot be renamed, deleted or moved to another group; they can still be reordered and recoloured. */
+const STATUS_LOCKED = ['Pending', 'Draft', 'For Approval', 'Approved', 'Submitted', 'Awarded', 'No Quote', 'Cancelled', 'Superseded'];
+let STATUS_LIST = null;
+function statusFactoryList() {
+  return DEFAULT_STATUS_OPTIONS.map(name => {
+    const g = STATUS_GROUPS.find(x => x.has.includes(name));
+    return { name, group: g ? g.key : 'active', color: '' };
+  });
+}
+function statusNormalize(cfg) {
+  const fac = statusFactoryList(), seen = new Set(), list = [];
+  ((cfg && cfg.list) || []).forEach(e => {
+    const name = String((e && e.name) || '').trim();
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    const lk = STATUS_LOCKED.includes(name);
+    const g = lk ? fac.find(f => f.name === name).group : (STATUS_GROUPS.some(x => x.key === e.group) ? e.group : 'active');
+    list.push({ name, group: g, color: typeof e.color === 'string' ? e.color : '' });
+  });
+  fac.forEach(f => { if (STATUS_LOCKED.includes(f.name) && !seen.has(f.name)) list.push(f); });
+  const ren = {};
+  Object.entries((cfg && cfg.renames) || {}).forEach(([a, b]) => { if (a && b && a !== b && typeof b === 'string') ren[a] = b; });
+  return { list, renames: ren };
+}
+/* Puts a saved list into effect. CE_CLOSED_STATUSES is changed in place, so ceIsOpen -- and every dashboard, My Work and approval check that
+   asks it whether a CE is still open -- follows the Closed group without being touched itself. */
+function setStatusConfig(cfg) {
+  const n = statusNormalize(cfg);
+  STATUS_LIST = n.list;
+  STATUS_REN = n.renames;
+  const closed = n.list.filter(s => s.group === 'closed').map(s => s.name);
+  CE_CLOSED_STATUSES.splice(0, CE_CLOSED_STATUSES.length, ...closed);
+  return n;
+}
+function statusNames() { return (STATUS_LIST || statusFactoryList()).map(s => s.name); }
 const statusGroupMembers = (key, all) => {
-  const g = STATUS_GROUPS.find(x => x.key === key);
-  if (!g) return [];
-  const named = new Set([].concat(...STATUS_GROUPS.map(x => x.has)));
-  return key === 'active' ? ['', ...(all || []).filter(s => g.has.includes(s) || !named.has(s))] : g.has.filter(s => (all || []).includes(s));
+  if (!STATUS_GROUPS.some(x => x.key === key)) return [];
+  const list = STATUS_LIST || statusFactoryList(), known = new Set(list.map(s => s.name));
+  const mine = list.filter(s => s.group === key).map(s => s.name).filter(s => (all || []).includes(s));
+  return key === 'active' ? ['', ...mine, ...(all || []).filter(s => !known.has(s))] : mine;
 };
 const DEFAULT_STATUS_OPTIONS = ['Pending', 'Waiting for Information', 'Draft', 'Ongoing', 'Sourcing', 'For site Inspection', 'Revised', 'For Approval', 'Approved', 'Submitted', 'Awarded', 'On Hold', 'No Quote', 'Cancelled', 'Superseded'];
 

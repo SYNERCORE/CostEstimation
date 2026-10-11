@@ -625,23 +625,63 @@ function App({
       return [];
     }
   });
-  /* De-duplicated: a status someone added by hand ("Revised") and then made standard must not show twice. */
-  const allStatuses = useMemo(() => [...new Set([...DEFAULT_STATUS_OPTIONS, ...customStatuses])], [customStatuses]);
+  /* The status list the admin manages (Monitoring > Status), shared by everyone through the Companies list. Until one is saved the factory
+     list shows, plus anything this browser's old per-device "custom statuses" holds; once saved the shared list is the only list. */
+  const [statusCfg, setStatusCfg] = useState(null);
+  useEffect(() => {
+    let live = true;
+    dbGetCompanyKey('ce_statuses').then(v => {
+      if (!live || !v || !Array.isArray(v.list)) return;
+      setStatusConfig(v); setStatusCfg(v); setMonData(p => p);
+    }).catch(_e => logSwallowed('App:ce_statuses', _e));
+    return () => { live = false; };
+  }, []);
+  const allStatuses = useMemo(() => [...new Set([...statusNames(), ...(statusCfg ? [] : customStatuses)])], [customStatuses, statusCfg]);
+  /* One edit on the Status manager: `change(list, renames)` returns the new list (and may add to renames). Saved at once, for everyone. */
+  const statusEdit = change => {
+    if (!isAdmin) { showToast('Only an admin can change the status list.', true); return; }
+    const cur = statusCfg || {list: [], renames: {}};
+    const base = (statusCfg ? statusNames() : allStatuses).map(nm => ({...((STATUS_LIST || statusFactoryList()).find(s => s.name === nm) || {name: nm, group: 'active', color: ''})}));
+    const ren = {...(cur.renames || {})};
+    const list = change(base, ren);
+    if (!list) return;
+    const next = setStatusConfig({list, renames: ren});
+    setStatusCfg(next);
+    setMonData(p => p);
+    auditLog('status_list', JSON.stringify(next.list.map(s => s.name + ':' + s.group)), currentUser?.username);
+    dbSaveCompanyKey('ce_statuses', next).then(ok => { if (!ok) showToast('Saved on this device only: SharePoint did not accept the status list.', true); });
+  };
   const addStatus = s => {
-    if (!s.trim() || allStatuses.includes(s.trim())) return;
-    const n = [...customStatuses, s.trim()];
-    setCustomStatuses(n);
-    try {
-      localStorage.setItem('shic:statuses', JSON.stringify(n));
-    } catch(_e){logSwallowed('App:App',_e);}
+    const nm = String(s || '').trim();
+    if (!nm) return;
+    if (allStatuses.some(x => x.toLowerCase() === nm.toLowerCase())) { showToast('"' + nm + '" is already a status.', true); return; }
+    statusEdit(list => [...list, {name: nm, group: 'active', color: ''}]);
   };
-  const removeStatus = s => {
-    const n = customStatuses.filter(x => x !== s);
-    setCustomStatuses(n);
-    try {
-      localStorage.setItem('shic:statuses', JSON.stringify(n));
-    } catch(_e){logSwallowed('App:App',_e);}
+  const statusUse = nm => Object.values(monData || {}).filter(r => r && r.status === nm).length;
+  const statusRename = (from, to) => {
+    const nm = String(to || '').trim();
+    if (!nm || nm === from || STATUS_LOCKED.includes(from)) return;
+    if (allStatuses.some(x => x.toLowerCase() === nm.toLowerCase())) { showToast('"' + nm + '" is already a status.', true); return; }
+    statusEdit((list, ren) => {
+      Object.keys(ren).forEach(k => { if (ren[k] === from) ren[k] = nm; });
+      ren[from] = nm;
+      Object.keys(ren).forEach(k => { if (ren[k] === k) delete ren[k]; });
+      return list.map(s => s.name === from ? {...s, name: nm} : s);
+    });
   };
+  const statusRemove = nm => {
+    if (STATUS_LOCKED.includes(nm)) return;
+    const n = statusUse(nm);
+    if (n) { showToast('"' + nm + '" is still on ' + n + ' CE' + (n === 1 ? '' : 's') + '. Move them to another status first.', true); return; }
+    statusEdit(list => list.filter(s => s.name !== nm));
+  };
+  const statusMove = (nm, dir) => statusEdit(list => {
+    const i = list.findIndex(s => s.name === nm), j = i + dir;
+    if (i < 0 || j < 0 || j >= list.length) return null;
+    [list[i], list[j]] = [list[j], list[i]];
+    return list;
+  });
+  const statusSet = (nm, patch) => statusEdit(list => list.map(s => s.name === nm ? {...s, ...patch} : s));
   const MON_KEY = 'shic:monitoring';
   /* When each CE's row was last changed here. A fetch that was already in
      flight when someone changed a status came back holding the row from
@@ -4251,6 +4291,8 @@ function App({
     'Awarded': '#16a34a',
     'Superseded': '#94A3B8'
   };
+  /* A colour the admin picked on the Status manager wins over the built-in one. */
+  ((statusCfg && statusCfg.list) || []).forEach(s => { if (s.color) STATUS_COLOR_MAP[s.name] = s.color; });
   const getStatusColor = s => STATUS_COLOR_MAP[s] || ACC;
   const [newStatusInput, setNewStatusInput] = useState('');
   const [monSearch, setMonSearch] = useState('');
@@ -4981,7 +5023,7 @@ function App({
      (Written without the element-creating call by name: the guard in
      tools/check-remounting-editors.js reads the source as text, and would
      take a mention of it here for the real thing.) */
-  const HistPanel = () => MonitoringPanel({ MON_PAGE_SIZE, STATUS_COLOR_MAP, SortIcon, addStatus, allStatuses, assignPanel, attachList, attachPanel, ceImportProgress, coOptions, compareModal, compareSet, confirmDel, currentUser, custOptions, deleteDraft, discOptions, editingRow, fillBlankDisc, getStatusColor, handleClone, handleLoad, handleRevise, handleSave, histBusy, history, importMonitoringXLSX, importProgress, importShicCeFiles, isAdmin, isRequestor, loadHist, loadMonData, monApvMine, monCustFilter, monData, monDiscFilter, monMine, monOf, monPage, monPageRows, monReqFilter, monRevOpen, monSearch, monSpIds, monStatusFilter, monTableWrapRef, monTopScrollRef, monTypeFilter, newStatusInput, openAssign, openAttachPanel, openForPrint, openRequest, openReview, rceOf, removeStatus, reqOwns, resDays, resumeDraft, setAttachPanel, setCompareModal, setCompareSet, setConfirmDel, setDiffModal, setEditingRow, setHistory, setMonApvMine, setMonCustFilter, setMonDiscFilter, setMonMine, setMonPage, setMonReqFilter, setMonRevOpen, setMonSearch, setMonStatusFilter, setMonTypeFilter, setNewStatusInput, setRceReview, setRemarkDraft, setRemarksPanel, setShowStatusFilter, setShowStatusMgr, setStatusPanel, setUndoToast, setViewCE, showStatusFilter, showStatusMgr, showToast, sortedHistory, statusPanel, toggleSort, updateMon });
+  const HistPanel = () => MonitoringPanel({ MON_PAGE_SIZE, STATUS_COLOR_MAP, SortIcon, addStatus, allStatuses, assignPanel, attachList, attachPanel, ceImportProgress, coOptions, compareModal, compareSet, confirmDel, currentUser, custOptions, deleteDraft, discOptions, editingRow, fillBlankDisc, getStatusColor, handleClone, handleLoad, handleRevise, handleSave, histBusy, history, importMonitoringXLSX, importProgress, importShicCeFiles, isAdmin, isRequestor, loadHist, loadMonData, monApvMine, monCustFilter, monData, monDiscFilter, monMine, monOf, monPage, monPageRows, monReqFilter, monRevOpen, monSearch, monSpIds, monStatusFilter, monTableWrapRef, monTopScrollRef, monTypeFilter, newStatusInput, openAssign, openAttachPanel, openForPrint, openRequest, openReview, rceOf, statusMove, statusRemove, statusRename, statusSet, statusUse, reqOwns, resDays, resumeDraft, setAttachPanel, setCompareModal, setCompareSet, setConfirmDel, setDiffModal, setEditingRow, setHistory, setMonApvMine, setMonCustFilter, setMonDiscFilter, setMonMine, setMonPage, setMonReqFilter, setMonRevOpen, setMonSearch, setMonStatusFilter, setMonTypeFilter, setNewStatusInput, setRceReview, setRemarkDraft, setRemarksPanel, setShowStatusFilter, setShowStatusMgr, setStatusPanel, setUndoToast, setViewCE, showStatusFilter, showStatusMgr, showToast, sortedHistory, statusPanel, toggleSort, updateMon });
   /* ---- Scope Library Editor (Scope Library tab) ---- */
   /* ScopeLibraryEditor's state, and ResEditor's, held by App.
 
@@ -5876,7 +5918,7 @@ sigModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',ins
 /* ── My Work: everything waiting on the signed-in user, in one place ── */
 tab === 'mywork' && MyWorkTab({ currentUser, getStatusColor, handleLoad, isRequestor, meNames, monOf, monRows, mwOpen, mwQ, mwReqQ, myTodo, openRequest, openReview, reqDeadline, resumeDraft, setMwOpen, setMwQ, setMwReqQ, setRceReview, setTab, setViewCE, sharedDrafts }),
 
-tab === 'dashboard' && DashboardTab({ dashAll, dashQ, dashReqQ, getStatusColor, history, monOf, monRows, reqDeadline, setDashAll, setDashQ, setDashReqQ }), tab === 'info' && /*#__PURE__*/InfoTab({ ScopeBuilder, addMode, aiLoad, ceType, companies, docBusy, docFile, docFilesOf, docPreview, docStatus, extractDocInfo, fileRef, handleAI, handleDocUpload, info, monData, openCeId, openMonStatus, pickCompany, provInfo, qtyUom, rceNo, removeDoc, scope, setAddMode, setDocFile, setDocPreview, setDocStatus, setInfo, setScope, updateMon }), tab === 'manpower' && /*#__PURE__*/ManpowerTab({ _mobTabs, _weight, ben, benefitRows, benefitsT, cfg, collapsedShifts, copyMenu, delRow, demobSubT, demobVehicles, demobVehiclesT, history, incOn, info, masterlist, mobCopy, mobSubT, mobVehicles, mobVehiclesT, mp, mpSub, mpTot, mpWage, mpWageParts, rowCost, rowShares, rr, setCollapsedShifts, setCopyMenu, setDemobVehicles, setMobCopy, setMobVehicles, setMp, setPicker, setRates, showToast, sowItems, sowLabels, syncCrewRows, syncMealRates, syncMealRows, toggleShift, updRow }), tab === 'tools' && /*#__PURE__*/React.createElement(ResTabM, {
+tab === 'dashboard' && DashboardTab({ allStatuses, dashAll, dashQ, dashReqQ, getStatusColor, history, monOf, monRows, reqDeadline, setDashAll, setDashQ, setDashReqQ }), tab === 'info' && /*#__PURE__*/InfoTab({ ScopeBuilder, addMode, aiLoad, ceType, companies, docBusy, docFile, docFilesOf, docPreview, docStatus, extractDocInfo, fileRef, handleAI, handleDocUpload, info, monData, openCeId, openMonStatus, pickCompany, provInfo, qtyUom, rceNo, removeDoc, scope, setAddMode, setDocFile, setDocPreview, setDocStatus, setInfo, setScope, updateMon }), tab === 'manpower' && /*#__PURE__*/ManpowerTab({ _mobTabs, _weight, ben, benefitRows, benefitsT, cfg, collapsedShifts, copyMenu, delRow, demobSubT, demobVehicles, demobVehiclesT, history, incOn, info, masterlist, mobCopy, mobSubT, mobVehicles, mobVehiclesT, mp, mpSub, mpTot, mpWage, mpWageParts, rowCost, rowShares, rr, setCollapsedShifts, setCopyMenu, setDemobVehicles, setMobCopy, setMobVehicles, setMp, setPicker, setRates, showToast, sowItems, sowLabels, syncCrewRows, syncMealRates, syncMealRows, toggleShift, updRow }), tab === 'tools' && /*#__PURE__*/React.createElement(ResTabM, {
     rows: tools,
     set: setTools,
     total: toolsT,

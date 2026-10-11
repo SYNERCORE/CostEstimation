@@ -6,6 +6,7 @@
    survive leaving the tab. */
 function DashboardTab(ctx) {
   const {
+    allStatuses,
     dashAll,
     dashQ,
     dashReqQ,
@@ -192,9 +193,10 @@ function DashboardTab(ctx) {
       /* By status */
       /*#__PURE__*/React.createElement("div",{style:CS},
         /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,marginBottom:10,fontSize:12}}, "🏷 By Status"),
-        Object.entries(statusCount).sort((a,b)=>b[1]-a[1]).map(([s,c])=>/*#__PURE__*/React.createElement("div",{key:s,style:{display:'flex',justifyContent:'space-between',marginBottom:6,fontSize:12}},
-          /*#__PURE__*/React.createElement("span",null,s),
-          /*#__PURE__*/React.createElement("span",{style:{background:alpha(ACC, '33'),color:ACC,borderRadius:4,padding:'0 6px',fontWeight:700}},c)))),
+        /* In the order the admin set on the Status manager (a status that is not on the list, e.g. one since deleted, goes last), each in its own colour. */
+        Object.entries(statusCount).sort((a,b)=>{const ia=(allStatuses||[]).indexOf(a[0]),ib=(allStatuses||[]).indexOf(b[0]);return (ia<0?1e6:ia)-(ib<0?1e6:ib)||b[1]-a[1];}).map(([s,c])=>/*#__PURE__*/React.createElement("div",{key:s,style:{display:'flex',justifyContent:'space-between',marginBottom:6,fontSize:12}},
+          /*#__PURE__*/React.createElement("span",null,/*#__PURE__*/React.createElement("span",{style:{display:'inline-block',width:8,height:8,borderRadius:'50%',background:getStatusColor(s),marginRight:6}}),s),
+          /*#__PURE__*/React.createElement("span",{style:{background:getStatusColor(s)+'33',color:getStatusColor(s),borderRadius:4,padding:'0 6px',fontWeight:700}},c)))),
       /* Top clients */
       /*#__PURE__*/React.createElement("div",{style:CS},
         /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,marginBottom:10,fontSize:12}}, "🏆 Top 5 Clients"),

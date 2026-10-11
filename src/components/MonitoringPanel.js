@@ -63,7 +63,11 @@ function MonitoringPanel(ctx) {
     openRequest,
     openReview,
     rceOf,
-    removeStatus,
+    statusMove,
+    statusRemove,
+    statusRename,
+    statusSet,
+    statusUse,
     reqOwns,
     resDays,
     resumeDraft,
@@ -101,6 +105,37 @@ function MonitoringPanel(ctx) {
     toggleSort,
     updateMon
   } = ctx;
+
+  /* The Status manager (admin). Every change is saved at once, for everyone: reorder, recolour (click the dot), rename, regroup, add, delete.
+     A status the code itself names is locked: it can be reordered and recoloured only. Closed-group statuses end a CE's open work; see ceIsOpen. */
+  const SWATCHES = ['#6B7280', '#94A3B8', '#EAB308', '#F97316', '#EF4444', '#A855F7', '#38BDF8', '#06B6D4', '#22C55E', '#16a34a'];
+  const statusMgrPanel = () => {
+    const h = React.createElement, list = STATUS_LIST || statusFactoryList();
+    const cell = {display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', borderBottom: `1px solid ${BDR}`};
+    return h('div', {className: 'status-mgr', style: {marginTop: 12, padding: 10, background: SURF, borderRadius: 7, border: `1px solid ${BDR}`}},
+      h('div', {style: {color: MT, fontSize: 11, fontWeight: 700, marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.07em'}}, 'Status manager'),
+      h('div', {style: {color: MT, fontSize: 11, marginBottom: 8}}, 'Changes save at once and apply to everyone: the dropdowns, the filters, the Active / Closed / On hold buttons and the dashboards follow this list and its order. Click a dot to change its colour. Statuses marked \uD83D\uDD12 are used by the approval flow and the dashboards, so they can only be moved and recoloured.'),
+      allStatuses.map((s, i) => {
+        const lk = STATUS_LOCKED.includes(s), n = statusUse(s), e = list.find(x => x.name === s) || {group: 'active'};
+        return h('div', {key: s, className: 'status-row', style: cell},
+          h('button', {style: {...btn('def', true), padding: '0 6px'}, disabled: i === 0, title: 'Move up', 'aria-label': 'Move ' + s + ' up', onClick: () => statusMove(s, -1)}, '\u25B2'),
+          h('button', {style: {...btn('def', true), padding: '0 6px'}, disabled: i === allStatuses.length - 1, title: 'Move down', 'aria-label': 'Move ' + s + ' down', onClick: () => statusMove(s, 1)}, '\u25BC'),
+          h('button', {className: 'status-dot', title: 'Click to change the colour', 'aria-label': 'Change colour of ' + s, style: {width: 18, height: 18, borderRadius: '50%', border: `1px solid ${BDR}`, background: getStatusColor(s), cursor: 'pointer', flexShrink: 0, padding: 0},
+            onClick: () => statusSet(s, {color: SWATCHES[(SWATCHES.indexOf(getStatusColor(s)) + 1) % SWATCHES.length]})}),
+          lk ? h('span', {style: {flex: 1, fontSize: 12, fontWeight: 600}, title: 'Used by the approval flow and the dashboards: cannot be renamed or deleted'}, s + ' \uD83D\uDD12')
+             : h('input', {key: s, defaultValue: s, style: {...INP, flex: 1, fontSize: 12, padding: '2px 6px'}, 'aria-label': 'Name of ' + s,
+                 onBlur: ev => { statusRename(s, ev.target.value); ev.target.value = s; },
+                 onKeyDown: ev => { if (ev.key === 'Enter') ev.target.blur(); }}),
+          h('select', {style: {...INP, fontSize: 11, width: 90, padding: '2px 4px'}, value: e.group, disabled: lk, 'aria-label': 'Group of ' + s, title: lk ? 'Fixed for this status' : 'Which quick group this status belongs to',
+            onChange: ev => statusSet(s, {group: ev.target.value})}, STATUS_GROUPS.map(g => h('option', {key: g.key, value: g.key}, g.label))),
+          h('span', {style: {width: 54, textAlign: 'right', fontSize: 11, color: MT}}, n + ' CE' + (n === 1 ? '' : 's')),
+          lk ? h('span', {style: {width: 26}}) : h('button', {style: {...btn('danger', true), padding: '0 6px', width: 26}, title: n ? 'Still on ' + n + ' CE(s): move them first' : 'Delete this status', 'aria-label': 'Delete ' + s, onClick: () => statusRemove(s)}, '\u00D7'));
+      }),
+      h('div', {style: {display: 'flex', gap: 6, marginTop: 8}},
+        h('input', {style: {...INP, flex: 1, fontSize: 11}, value: newStatusInput, onChange: ev => setNewStatusInput(ev.target.value), placeholder: 'New status (added to Active; move it with the group box)...',
+          onKeyDown: ev => { if (ev.key === 'Enter') { addStatus(newStatusInput); setNewStatusInput(''); } }}),
+        h('button', {style: btn('acc', true), onClick: () => { addStatus(newStatusInput); setNewStatusInput(''); }}, '+ Add')));
+  };
 
   return React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -270,10 +305,10 @@ function MonitoringPanel(ctx) {
       display: 'flex',
       gap: 6
     }
-  }, /*#__PURE__*/React.createElement("button", {
+  }, isAdmin && /*#__PURE__*/React.createElement("button", {
     style: btn('def', true),
     onClick: () => setShowStatusMgr(p => !p),
-    title: "Manage status options"
+    title: "Status manager (admin): add, rename, reorder, recolour and group the statuses"
   }, "\u2699 Status"), /*#__PURE__*/React.createElement("button", {
     style: btn('ok', true),
     title: "Log a request for estimation: CE number, customer, deadline, who it is assigned to, and its documents",
@@ -332,73 +367,7 @@ function MonitoringPanel(ctx) {
   })), `${Math.round(importProgress.done/importProgress.total*100)}%`), /*#__PURE__*/React.createElement("button", {
     style: btn('acc'),
     onClick: handleSave
-  }, "+ Save Current CE"))), showStatusMgr && /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginTop: 12,
-      padding: 10,
-      background: SURF,
-      borderRadius: 7,
-      border: `1px solid ${BDR}`
-    }
-  }, /*#__PURE__*/React.createElement("div", {style: {color: MT, fontSize: 11, fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.07em'}}, "Status Options"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      flexWrap: 'wrap',
-      gap: 5,
-      marginBottom: 8
-    }
-  }, allStatuses.map(s => /*#__PURE__*/React.createElement("span", {
-    key: s,
-    style: {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 4,
-      background: getStatusColor(s) + '22',
-      color: getStatusColor(s),
-      border: `1px solid ${getStatusColor(s)}44`,
-      borderRadius: 12,
-      padding: '2px 10px',
-      fontSize: 11,
-      fontWeight: 700
-    }
-  }, s, !DEFAULT_STATUS_OPTIONS.includes(s) && /*#__PURE__*/React.createElement("button", {
-    onClick: () => removeStatus(s),
-    style: {
-      background: 'none',
-      border: 'none',
-      color: 'inherit',
-      cursor: 'pointer',
-      fontSize: 11,
-      padding: '0 2px',
-      lineHeight: 1
-    }
-  }, "\xD7")))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 6
-    }
-  }, /*#__PURE__*/React.createElement("input", {
-    style: {
-      ...INP,
-      flex: 1,
-      fontSize: 11
-    },
-    value: newStatusInput,
-    onChange: e => setNewStatusInput(e.target.value),
-    placeholder: "Add custom status...",
-    onKeyDown: e => {
-      if (e.key === 'Enter') {
-        addStatus(newStatusInput);
-        setNewStatusInput('');
-      }
-    }
-  }), /*#__PURE__*/React.createElement("button", {
-    style: btn('acc', true),
-    onClick: () => {
-      addStatus(newStatusInput);
-      setNewStatusInput('');
-    }
-  }, "+ Add")))), histBusy && /*#__PURE__*/React.createElement("div", {
+  }, "+ Save Current CE"))), isAdmin && showStatusMgr && statusMgrPanel()), histBusy && /*#__PURE__*/React.createElement("div", {
     style: {
       ...CS,
       textAlign: 'center',

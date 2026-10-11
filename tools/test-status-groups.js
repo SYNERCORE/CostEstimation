@@ -12,8 +12,9 @@ const mon = fs.readFileSync('src/components/MonitoringPanel.js', 'utf8');
 let bad = 0;
 const ck = (n, c, x) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n + (!c && x ? '  -> ' + x : '')); if (!c) bad++; };
 
-const g = cfg.match(/const STATUS_GROUPS = \[[\s\S]*?\n\];\nconst statusGroupMembers = [\s\S]*?\n\};/);
-ck('the groups and the member function are in config', !!g);
+const a0 = cfg.indexOf('const STATUS_GROUPS = ['), b0 = cfg.indexOf('const CE_CLOSED_STATUSES');
+const g = a0 > 0 && b0 > a0 ? [cfg.slice(a0, b0) + "const CE_CLOSED_STATUSES = [];"] : null;
+ck('the groups and the member function are in config', !!g && /const statusGroupMembers =/.test(g[0]) && /const DEFAULT_STATUS_OPTIONS =/.test(g[0]));
 const DEFAULTS = eval(cfg.match(/const DEFAULT_STATUS_OPTIONS = (\[[^\]]*\])/)[1]);
 const api = g ? new Function(g[0] + '; return { STATUS_GROUPS, statusGroupMembers };')() : null;
 if (api) {

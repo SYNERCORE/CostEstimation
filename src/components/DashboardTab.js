@@ -133,9 +133,10 @@ function DashboardTab(ctx) {
           /*#__PURE__*/React.createElement("span",{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'},title:x.m.jobTitle||x.h.info?.description||''}, /*#__PURE__*/React.createElement("span",{style:{...MONO,color:INFO,fontWeight:600}}, x.h.info?.ceNum||x.h.ceNum||'—'), ' ', x.h.info?.client||x.m.customer||'', (x.m.jobTitle||x.h.info?.description) && /*#__PURE__*/React.createElement("span",{style:{color:MT}}, ' · ' + (x.m.jobTitle||x.h.info?.description))),
           /*#__PURE__*/React.createElement("span",{style:{...MONO,whiteSpace:'nowrap',color:days===null?MT:days<0?ERR:days<=7?'var(--status-warning)':OK}}, days===null?'no deadline':days<0?(-days)+'d late':days===0?'today':days+'d'));}));
   };
-  const kpiCard = (label,value,color) => /*#__PURE__*/React.createElement("div",{style:{background:SURF,border:'1px solid '+BDR,borderRadius:8,padding:'14px 18px',flex:1,minWidth:140}},
+  const kpiCard = (label,value,color) => /*#__PURE__*/React.createElement("div",{style:{background:SURF,border:'1px solid '+BDR,borderRadius:8,padding:'14px 18px',flex:'1 1 150px',minWidth:0,overflow:'hidden'}},
     /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT,marginBottom:4}},label),
-    /*#__PURE__*/React.createElement("div",{style:{fontSize:20,fontWeight:800,color:color||TX,...MONO}},value));
+    /* A big peso figure steps down in size so it stays inside its card instead of running into the next one. */
+    /*#__PURE__*/React.createElement("div",{style:{fontSize:String(value).length>14?14:String(value).length>11?17:20,fontWeight:800,color:color||TX,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',...MONO},title:String(value)},value));
   return /*#__PURE__*/React.createElement("div",{style:{padding:'0 0 24px'}},
     /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:15,marginBottom:supersededN?4:16,color:ACC}}, "📊 Dashboard"),
     /* Said out loud, because a figure that quietly drops is a figure nobody

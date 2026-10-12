@@ -130,7 +130,7 @@ function DashboardTab(ctx) {
       /*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:MT,marginBottom:4}}, nxt.length ? 'Next due' : 'No open CEs'),
       nxt.map(x=>{ const dl = x.m.deadline, days = dl ? Math.round((new Date(dl+'T00:00:00') - _today)/86400000) : null;
         return /*#__PURE__*/React.createElement("div",{key:x.h.id,style:{display:'flex',justifyContent:'space-between',gap:8,fontSize:11,padding:'2px 0',borderBottom:'1px solid '+BDR}},
-          /*#__PURE__*/React.createElement("span",{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'},title:x.m.jobTitle||x.h.info?.description||''}, /*#__PURE__*/React.createElement("span",{style:{...MONO,color:INFO,fontWeight:600}}, x.h.info?.ceNum||x.h.ceNum||'—'), ' ', x.h.info?.client||x.m.customer||''),
+          /*#__PURE__*/React.createElement("span",{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'},title:x.m.jobTitle||x.h.info?.description||''}, /*#__PURE__*/React.createElement("span",{style:{...MONO,color:INFO,fontWeight:600}}, x.h.info?.ceNum||x.h.ceNum||'—'), ' ', x.h.info?.client||x.m.customer||'', (x.m.jobTitle||x.h.info?.description) && /*#__PURE__*/React.createElement("span",{style:{color:MT}}, ' · ' + (x.m.jobTitle||x.h.info?.description))),
           /*#__PURE__*/React.createElement("span",{style:{...MONO,whiteSpace:'nowrap',color:days===null?MT:days<0?ERR:days<=7?'var(--status-warning)':OK}}, days===null?'no deadline':days<0?(-days)+'d late':days===0?'today':days+'d'));}));
   };
   const kpiCard = (label,value,color) => /*#__PURE__*/React.createElement("div",{style:{background:SURF,border:'1px solid '+BDR,borderRadius:8,padding:'14px 18px',flex:1,minWidth:140}},

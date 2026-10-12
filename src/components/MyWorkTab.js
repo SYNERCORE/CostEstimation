@@ -77,7 +77,18 @@ function MyWorkTab(ctx) {
   /* A requestor's own table of requests has its own box: every word typed must be found in the row, in any order. */
   const _rqw = String(mwReqQ || '').toLowerCase().split(/\s+/).filter(Boolean);
   const sentShown = !_rqw.length ? sent : sent.filter(x => { const hay = _rowHay(x) + ' ' + ((x.e.info && x.e.info.reviewStatus) || '') + ' ' + ((x.e.info && x.e.info.reviewNote) || ''); return _rqw.every(w => hay.toLowerCase().indexOf(w) >= 0); });
-  const fDrafts = !_mq.length ? drafts : drafts.filter(d => _mqHit([d.info && d.info.ceNum, d.info && d.info.client, d.info && d.info.description, d.savedBy].join(' ')));
+  const fDraftsAll = !_mq.length ? drafts : drafts.filter(d => _mqHit([d.info && d.info.ceNum, d.info && d.info.client, d.info && d.info.description, d.savedBy].join(' ')));
+  /* A CE that is saved AND has an autosaved draft of the same number is one item: the open-CE row carries the draft's "unsaved changes" and
+     Resume, and the draft is not listed a second time under My drafts. (Only drafts of CEs actually shown above are folded in.) */
+  const _dkey = n => String(n || '').trim().toUpperCase();
+  const draftOfOpen = {};
+  fOpen.slice(0, 15).forEach(x => {
+    const k = _dkey((x.e.info && x.e.info.ceNum) || x.e.ceNum);
+    const hit = k && drafts.filter(d => _dkey(d.info && d.info.ceNum) === k).sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')))[0];
+    if (hit) draftOfOpen[x.e.id] = hit;
+  });
+  const _folded = new Set(Object.values(draftOfOpen));
+  const fDrafts = fDraftsAll.filter(d => !_folded.has(d));
   const peso = v => '₱' + Math.round(N(v)).toLocaleString();
   const kpi = (label, val, sub, col) => /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:'12px 14px',minWidth:0}},
     /*#__PURE__*/React.createElement("div", {style:{fontSize:10,color:MT,textTransform:'uppercase',letterSpacing:'.06em'}}, label),
@@ -152,7 +163,7 @@ function MyWorkTab(ctx) {
     mwPanel([
       section('✍ For my approval', fToSign, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT,whiteSpace:'nowrap'}}, apv(x).signed + '/' + apv(x).total + ' signed'), viewBtn(x)), 'No CE is waiting on your signature.'),
       section('↩ Returned to me', fReturned, x => line(x, (x.e.info || {}).reviewNote && (x.e.info || {}).request ? /*#__PURE__*/React.createElement("span", {title: x.e.info.reviewNote, style:{fontSize:10,color:ACC,maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, 'Returned: ' + x.e.info.reviewNote) : null, loadBtn(x)), 'Nothing returned.'),
-      section('📂 My open CEs', fOpen, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,fontWeight:700,whiteSpace:'nowrap',color:x.dl.late ? ERR : x.dl.days != null && x.dl.days <= 3 ? 'var(--accent-orange, #F07F12)' : MT}}, (x.m.status || 'Draft') + ' · ' + x.dl.label), [viewBtn(x), loadBtn(x)]), 'No open CEs assigned to you.'),
+      section('📂 My open CEs', fOpen, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,fontWeight:700,whiteSpace:'nowrap',color:x.dl.late ? ERR : x.dl.days != null && x.dl.days <= 3 ? 'var(--accent-orange, #F07F12)' : MT}}, (x.m.status || 'Draft') + ' · ' + x.dl.label), [draftOfOpen[x.e.id] && /*#__PURE__*/React.createElement(React.Fragment, {key:'ud'}, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,fontWeight:700,whiteSpace:'nowrap',color:'#F59E0B'},title:'Autosaved ' + new Date(draftOfOpen[x.e.id].savedAt).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) + ' -- newer than the saved CE until you Save'}, '✎ unsaved changes'), /*#__PURE__*/React.createElement("button", {style:btn('info',true),title:'Open the autosaved version',onClick:()=>resumeDraft(draftOfOpen[x.e.id])}, "Resume")), viewBtn(x), loadBtn(x)]), 'No open CEs assigned to you.'),
       section('📝 My drafts', fDrafts, d => /*#__PURE__*/React.createElement("div", {key: d.draftId, style:{display:'flex',alignItems:'center',gap:8,padding:'6px 2px',borderBottom:'1px solid '+alpha(BDR,'44'),fontSize:12}},
         /*#__PURE__*/React.createElement("b", {style:{...MONO,fontSize:11}}, (d.info && d.info.ceNum) || 'Untitled'),
         /*#__PURE__*/React.createElement("span", {style:{flex:1,color:MT,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, ((d.info && d.info.client) || '') + ' · saved ' + new Date(d.savedAt).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})),

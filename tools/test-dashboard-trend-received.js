@@ -18,12 +18,14 @@ if (m) {
   const hist = [
     { id: 1, grand: 100, savedAt: '2026-10-12T09:00:00+08:00' },            // saved Oct, received Aug -> Aug
     { id: 2, grand: 50, savedAt: '2026-09-30T09:00:00+08:00' },             // no received date -> day saved, Sep
-    { id: 3, grand: 7, savedAt: '2026-10-01T09:00:00+08:00' }               // received Sep 1 (local day, not shifted) -> Sep
+    { id: 3, grand: 7, savedAt: '2026-10-01T09:00:00+08:00' },              // received Sep 1 (local day, not shifted) -> Sep
+    { id: 4, grand: 900, savedAt: '2026-09-15T09:00:00+08:00' }             // Superseded -> not counted
   ];
-  const mon = { 1: { dateRecv: '2026-08-31' }, 2: {}, 3: { dateRecv: '2026-09-01' } };
+  const mon = { 1: { dateRecv: '2026-08-31' }, 2: {}, 3: { dateRecv: '2026-09-01' }, 4: { status: 'Superseded' } };
   const r = new Function('months', 'liveHist', 'monOf', 'N', m[0] + '\nreturn monthTotals;')(months, hist, h => mon[h.id], N);
   ck('a CE saved in October but received in August counts in August', r[0].total === 100, JSON.stringify(r));
   ck('no received date falls back to the save day; first-of-month dates keep their month', r[1].total === 57, JSON.stringify(r));
+  ck('a Superseded CE adds nothing to the trend', r[1].total === 57 && /Superseded/.test(m[0]));
 }
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nDashboard trend by received OK');
 process.exit(bad ? 1 : 0);

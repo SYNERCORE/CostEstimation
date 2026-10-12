@@ -93,7 +93,7 @@ function DashboardTab(ctx) {
   const months=[]; for(let i=5;i>=0;i--){const d=new Date(thisYear,thisMonth-i,1);months.push({label:d.toLocaleString('default',{month:'short'})+' '+d.getFullYear().toString().slice(2),month:d.getMonth(),year:d.getFullYear()});}
   /* Grouped by the date the CE was received -- the one the Date Recv. column shows: the record's own received date, else the day it was saved. */
   const recvDate = h => { const r = (monOf(h) || {}).dateRecv; return /^\d{4}-\d{2}-\d{2}$/.test(r || '') ? new Date(r + 'T00:00:00') : new Date(h.savedAt || 0); };
-  const monthTotals = months.map(m=>({...m,total:liveHist.filter(h=>{const d=recvDate(h);return d.getMonth()===m.month&&d.getFullYear()===m.year;}).reduce((s,h)=>s+N(h.grand||0),0)}));
+  const monthTotals = months.map(m=>({...m,total:liveHist.filter(h=>{if(((monOf(h)||{}).status||'')==='Superseded')return false;const d=recvDate(h);return d.getMonth()===m.month&&d.getFullYear()===m.year;}).reduce((s,h)=>s+N(h.grand||0),0)}));
   const maxBar = Math.max(...monthTotals.map(m=>m.total),1);
   /* Mechanical and Electrical monitored apart: each CE and request goes to the discipline on its record (the project type, or the Monitoring
      Discipline). Anything else, or blank, is counted under "No discipline" so the two cards always add up with the figures above. */

@@ -33,10 +33,12 @@ function DashboardTab(ctx) {
   const _dd = dashDisc || '';
   const byDisc = h => !_dd || discOf({h, m: monOf(h)}) === _dd;
   const allHist = liveOnly(history), liveHist = allHist.filter(byDisc), liveRows = liveOnly(monRows).filter(byDisc);
+  /* The money figures leave out Superseded CEs: a replaced estimate is not value that can still come in. */
+  const valHist = liveHist.filter(h => ((monOf(h) || {}).status || '') !== 'Superseded');
   const supersededN = history.length - allHist.length;
-  const monthHist = liveHist.filter(h => { const d=new Date(h.savedAt||h.createdAt||0); return d.getMonth()===thisMonth&&d.getFullYear()===thisYear; });
+  const monthHist = valHist.filter(h => { const d=new Date(h.savedAt||h.createdAt||0); return d.getMonth()===thisMonth&&d.getFullYear()===thisYear; });
   const totalThis = monthHist.reduce((s,h)=>s+N(h.grand||0),0);
-  const avgVal = liveHist.length ? liveHist.reduce((s,h)=>s+N(h.grand||0),0)/liveHist.length : 0;
+  const avgVal = valHist.length ? valHist.reduce((s,h)=>s+N(h.grand||0),0)/valHist.length : 0;
   const statuses = liveRows.map(h=>monOf(h).status||'Draft');
   /* An "open" CE is one still needing work. Submitted, No Quote and Cancelled
      CE_CLOSED_STATUSES are the end states -- everything else, Draft and On
@@ -87,13 +89,13 @@ function DashboardTab(ctx) {
     return _dq.every(w => hay.indexOf(w) >= 0);
   });
   const statusCount = statuses.reduce((m,s)=>{m[s]=(m[s]||0)+1;return m;},{});
-  const clients = {}; liveHist.forEach(h=>{const c=h.info?.client||h.client||'Unknown';clients[c]=(clients[c]||{count:0,total:0});clients[c].count++;clients[c].total+=N(h.grand||0);});
+  const clients = {}; valHist.forEach(h=>{const c=h.info?.client||h.client||'Unknown';clients[c]=(clients[c]||{count:0,total:0});clients[c].count++;clients[c].total+=N(h.grand||0);});
   const top5 = Object.entries(clients).sort((a,b)=>b[1].total-a[1].total).slice(0,5);
-  const prefixMap = {}; liveHist.forEach(h=>{const cn=(h.info?.ceNum||'').toUpperCase();const pfx=cn.split('-CE-')[0]||'?';prefixMap[pfx]=(prefixMap[pfx]||{count:0,total:0});prefixMap[pfx].count++;prefixMap[pfx].total+=N(h.grand||0);});
+  const prefixMap = {}; valHist.forEach(h=>{const cn=(h.info?.ceNum||'').toUpperCase();const pfx=cn.split('-CE-')[0]||'?';prefixMap[pfx]=(prefixMap[pfx]||{count:0,total:0});prefixMap[pfx].count++;prefixMap[pfx].total+=N(h.grand||0);});
   const months=[]; for(let i=5;i>=0;i--){const d=new Date(thisYear,thisMonth-i,1);months.push({label:d.toLocaleString('default',{month:'short'})+' '+d.getFullYear().toString().slice(2),month:d.getMonth(),year:d.getFullYear()});}
   /* Grouped by the date the CE was received -- the one the Date Recv. column shows: the record's own received date, else the day it was saved. */
   const recvDate = h => { const r = (monOf(h) || {}).dateRecv; return /^\d{4}-\d{2}-\d{2}$/.test(r || '') ? new Date(r + 'T00:00:00') : new Date(h.savedAt || 0); };
-  const monthTotals = months.map(m=>({...m,total:liveHist.filter(h=>{if(((monOf(h)||{}).status||'')==='Superseded')return false;const d=recvDate(h);return d.getMonth()===m.month&&d.getFullYear()===m.year;}).reduce((s,h)=>s+N(h.grand||0),0)}));
+  const monthTotals = months.map(m=>({...m,total:valHist.filter(h=>{const d=recvDate(h);return d.getMonth()===m.month&&d.getFullYear()===m.year;}).reduce((s,h)=>s+N(h.grand||0),0)}));
   const maxBar = Math.max(...monthTotals.map(m=>m.total),1);
   /* Mechanical and Electrical monitored apart: each CE and request goes to the discipline on its record (the project type, or the Monitoring
      Discipline). Anything else, or blank, is counted under "No discipline" so the two cards always add up with the figures above. */

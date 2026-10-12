@@ -2340,8 +2340,14 @@ function App({
        letter produced a second id for one CE and only one of them was retired. */
     const key = n => String(n || '').trim().toUpperCase();
     const mine = new Set(nums.filter(Boolean).map(key));
+    /* And my drafts of the same job under an earlier number: saving -R1 (or any revision) makes a draft of the base number, or of an
+       earlier revision, obsolete -- it is the same CE, now saved -- so it goes too instead of lingering as a superseded UNSAVED row.
+       Only drafts at or below the revision being saved; a later revision still in progress is left alone. */
+    const fams = nums.filter(Boolean).map(ceFamily).filter(f => f.key);
     (sharedDrafts || []).forEach(d => {
-      if (d.savedBy === currentUser.username && mine.has(key(d.info && d.info.ceNum))) ids.add(d.draftId);
+      if (d.savedBy !== currentUser.username) return;
+      const dn = d.info && d.info.ceNum, df = ceFamily(dn);
+      if (mine.has(key(dn)) || (df.key && fams.some(f => f.key === df.key && df.rev <= f.rev))) ids.add(d.draftId);
     });
     for (const id of ids) {
       try { await dbDeleteDraft(id); } catch (e) { console.warn('draft cleanup:', e.message); }

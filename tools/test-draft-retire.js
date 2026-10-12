@@ -34,6 +34,8 @@ const ck = (n, c, x) => { if (c) console.log('  PASS  ' + n); else { console.log
 const body = app.match(/const retireDrafts = async \(\.\.\.nums\) => \{[\s\S]*?\n  \};/);
 if (!body) { console.error('retireDrafts not found'); process.exit(1); }
 
+const famSrc = app.match(/const CE_REV_RE = [^\n]*\nfunction ceFamily\(num\) \{[\s\S]*?\n\}/);
+const ceFamily = famSrc ? new Function(famSrc[0] + '\nreturn ceFamily;')() : null;
 const mk = (drafts, lastId) => {
   const deleted = [];
   const currentUser = {username: 'aestillore'};
@@ -42,13 +44,13 @@ const mk = (drafts, lastId) => {
   let kept = drafts;
   const fn = new Function(
     '_live', '_lastAutoSig', '_lastDraftId', 'draftIdFor', 'dbDeleteDraft',
-    'sharedDrafts', 'currentUser', 'setSharedDrafts', 'console',
+    'sharedDrafts', 'currentUser', 'setSharedDrafts', 'console', 'ceFamily',
     'return ' + body[0].replace(/^const retireDrafts = /, '').replace(/;$/, '')
   )(
     {current: null}, {current: null}, _lastDraftId, draftIdFor,
     async id => { deleted.push(id); },
     drafts, currentUser,
-    f => { kept = f(kept); }, console
+    f => { kept = f(kept); }, console, ceFamily
   );
   return {fn, deleted, kept: () => kept, _lastDraftId};
 };

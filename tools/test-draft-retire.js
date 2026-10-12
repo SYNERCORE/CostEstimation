@@ -99,6 +99,14 @@ const d = (id, ceNum) => ({draftId: id, savedBy: 'aestillore', info: {ceNum}});
     /for\(const x of r\)await spDelete\(spList\('Drafts'\),x\.Id\)/.test(db),
     'a retried POST leaves two rows, and deleting one left the draft on screen');
 
+  /* A revision supersedes the drafts of its earlier numbers (the leftover "1203 SUPERSEDED / UNSAVED" row). */
+  t = mk([d('draft_SHIC-CE-2026-1203_aestillore', 'SHIC-CE-2026-1203'), d('draft_SHIC-CE-2026-1203-R2_aestillore', 'SHIC-CE-2026-1203-R2'), d('draft_SHIC-CE-2026-1300_aestillore', 'SHIC-CE-2026-1300'), {draftId: 'draft_SHIC-CE-2026-1203_other', savedBy: 'other', info: {ceNum: 'SHIC-CE-2026-1203'}}]);
+  await t.fn('SHIC-CE-2026-1203-R1');
+  ck('saving -R1 retires my draft of the base number', t.deleted.indexOf('draft_SHIC-CE-2026-1203_aestillore') >= 0);
+  ck('but not a later revision still in progress', t.deleted.indexOf('draft_SHIC-CE-2026-1203-R2_aestillore') < 0);
+  ck('nor a different CE', t.deleted.indexOf('draft_SHIC-CE-2026-1300_aestillore') < 0);
+  ck('nor somebody else\'s draft', t.deleted.indexOf('draft_SHIC-CE-2026-1203_other') < 0);
+
   console.log('\nand a save that reached nobody says so:');
   ck('handleSave looks at what dbSaveHistory returned',
     /const _res = await spWithRetry\(\(\) => dbSaveHistory\(_entry(, \{[^}]*\})?\)\)/.test(app),

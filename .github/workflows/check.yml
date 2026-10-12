@@ -497,5 +497,7 @@ jobs:
         run: node tools/test-import-date-received.js
       - name: CE file import: timeouts and steps
         run: node tools/test-ce-file-import-timeouts.js
+      - name: Date Recv. column format
+        run: node tools/test-date-recv-format.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

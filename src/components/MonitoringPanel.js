@@ -704,7 +704,8 @@ function MonitoringPanel(ctx) {
         color: MT,
         fontSize: 10
       }
-    }, m.dateRecv || dateRecv), /*#__PURE__*/React.createElement("td", {
+    }, /* A received date typed or imported as 2026-03-09 is shown the same way as one taken from the save date: Mar 9, 2026. */
+    /^\d{4}-\d{2}-\d{2}$/.test(String(m.dateRecv || '')) ? new Date(m.dateRecv + 'T00:00:00').toLocaleDateString('en-PH', {year: 'numeric', month: 'short', day: 'numeric'}) : (m.dateRecv || dateRecv)), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
         padding: '4px 6px'

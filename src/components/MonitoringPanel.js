@@ -111,6 +111,28 @@ function MonitoringPanel(ctx) {
   /* The Status manager (admin). Every change is saved at once, for everyone: reorder, recolour (click the dot), rename, regroup, add, delete.
      A status the code itself names is locked: it can be reordered and recoloured only. Closed-group statuses end a CE's open work; see ceIsOpen. */
   const SWATCHES = ['#6B7280', '#94A3B8', '#EAB308', '#F97316', '#EF4444', '#A855F7', '#38BDF8', '#06B6D4', '#22C55E', '#16a34a'];
+  /* Export what the list is showing (the current filters and sort, revisions included, drafts left out) in the same columns as the import
+     template, so the file can be edited and imported back. A date is written only if the record has one of its own: the "day it was saved"
+     shown in Date Recv. is not exported, or an import would turn it into a received date. */
+  const exportMonXlsx = () => {
+    const rows = [];
+    sortedHistory.forEach(e => { if (!e._draft) rows.push(e); (e._revs || []).forEach(r => { if (!r._draft) rows.push(r); }); });
+    if (!rows.length) { showToast('Nothing to export: the list is empty.', true); return; }
+    const aoa = [['CE No.','CE Name','Company Designation','Discipline','Customer','Job Title','Date Recieved','Deadline','Date Submitted','Status','Recieved By','Remarks','RCE No.']];
+    rows.forEach(e => {
+      const i = e.info || {}, m = monOf(e) || {};
+      aoa.push([i.ceNum || e.ceNum || '', m.ceeName || m.preparedBy || '', i.company || '', m.designation || m.discipline || i.projType || i.discipline || '',
+        m.customer || i.client || '', m.jobTitle || i.description || '', m.dateRecv || '', m.deadline || '', m.dateSubmitted || '', m.status || '',
+        m.receivedBy || '', m.remarks || '', m.rceNo || i.requestNum || '']);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [18,18,16,14,26,40,13,13,13,18,18,30,16].map(w => ({wch: w}));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'CE Monitoring');
+    const d = new Date(), pad = n => String(n).padStart(2, '0');
+    XLSX.writeFile(wb, 'SHIC_CE_Monitoring_' + d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + '.xlsx');
+    showToast('Exported ' + rows.length + ' CE(s) to Excel.');
+  };
   const statusMgrPanel = () => {
     const h = React.createElement, list = STATUS_LIST || statusFactoryList();
     const cell = {display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', borderBottom: `1px solid ${BDR}`};
@@ -345,7 +367,11 @@ function MonitoringPanel(ctx) {
       XLSX.utils.book_append_sheet(wb, ws, 'CE Monitoring');
       XLSX.writeFile(wb, 'SHIC_CE_Import_Template.xlsx');
     }
-  }, "\u2193 Template"), /*#__PURE__*/React.createElement("label", {
+  }, "\u2193 Template"), /*#__PURE__*/React.createElement("button", {
+    title: "Download the CEs now showing in this list (your filters and sort apply) as an Excel file in the import-template columns",
+    style: btn('def', true),
+    onClick: exportMonXlsx
+  }, "\u2b07 Export xlsx"), /*#__PURE__*/React.createElement("label", {
     title: "Import CE Tracking spreadsheet (.xlsx)",
     style: {...btn('def', true), cursor:'pointer', display:'inline-flex', alignItems:'center', gap:4}
   }, importProgress ? `Importing\u2026 ${importProgress.done}/${importProgress.total}` : "\u2B06 Import xlsx", /*#__PURE__*/React.createElement("input", {

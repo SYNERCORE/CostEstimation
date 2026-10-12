@@ -16,5 +16,11 @@ ck('each card counts open CEs, their value, past-deadline, awaiting review and o
 ck('the open test is the shared ceIsOpen one, so the status manager\'s Closed group applies', /openCEs = [\s\S]*?ceIsOpen\(x\.m\.status\)/.test(d) && /open = openCEs\.filter/.test(d));
 ck('the status mix follows the admin\'s order and colours', /allStatuses\|\|\[\]\)\.indexOf\(a\[0\]\)/.test(d) && /getStatusColor\(st\)/.test(d));
 ck('other disciplines are named below the cards, not silently dropped', /discNone > 0/.test(d) && /have no Mechanical or Electrical discipline set/.test(d));
+const app = fs.readFileSync('src/App.js', 'utf8');
+ck('a Show toggle (All / Mechanical / Electrical) sits above the figures', /dash-disc-toggle/.test(d) && /\['', 'All'\]/.test(d) && /setDashDisc\(k\)/.test(d));
+ck('picking one narrows both the history and the monitoring rows, so every figure and list follows', /liveHist = allHist\.filter\(byDisc\), liveRows = liveOnly\(monRows\)\.filter\(byDisc\)/.test(d));
+ck('the superseded-revision note still counts every discipline', /supersededN = history\.length - allHist\.length/.test(d));
+ck('the side-by-side cards are hidden while one discipline is picked', /!_dd && .*discCard\('Mechanical'/.test(d));
+ck('the choice lives in App, so it survives leaving the tab', /const \[dashDisc, setDashDisc\] = useState\(''\)/.test(app) && /DashboardTab\(\{ allStatuses, dashAll, dashDisc, setDashDisc,/.test(app));
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nDashboard disciplines OK');
 process.exit(bad ? 1 : 0);

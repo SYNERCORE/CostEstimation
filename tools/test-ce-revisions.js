@@ -136,7 +136,7 @@ ck('a superseded row says so', /'SUPERSEDED'/.test(app));
 ck('and a collision says so', /'⚠ DUPLICATE No\.'/.test(app));
 
 console.log('\nand so is the dashboard:');
-ck('it counts the newest revision only', /const liveHist = liveOnly\(history\), liveRows = liveOnly\(monRows\)/.test(app));
+ck('it counts the newest revision only', /allHist = liveOnly\(history\), liveHist = allHist\.filter\(byDisc\), liveRows = liveOnly\(monRows\)\.filter\(byDisc\)/.test(app));
 /* From the collapse down to the end of the figures. The two lines that do the
    collapsing read `history` by definition, so the scan starts below them. */
 const dash = app.slice(app.indexOf('const supersededN = history.length'), app.indexOf('const kpiCard ='));

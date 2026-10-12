@@ -8,6 +8,8 @@ function DashboardTab(ctx) {
   const {
     allStatuses,
     dashAll,
+    dashDisc,
+    setDashDisc,
     dashQ,
     dashReqQ,
     getStatusColor,
@@ -26,8 +28,12 @@ function DashboardTab(ctx) {
      pipeline -- so a job revised twice reported three times the money it could
      ever bring in. Every figure below is of the NEWEST revision only. */
   const liveOnly = rows => groupCERevisions(rows, h => (h.info && h.info.ceNum) || h.ceNum || '').map(g => g.head);
-  const liveHist = liveOnly(history), liveRows = liveOnly(monRows);
-  const supersededN = history.length - liveHist.length;
+  /* The Mechanical / Electrical toggle: when one is picked every figure and list on this page is of that discipline alone. */
+  const discOf = x => { const d = String((x.h.info && x.h.info.projType) || x.m.designation || '').toLowerCase(); return /electr/.test(d) ? 'Electrical' : /mechan/.test(d) ? 'Mechanical' : ''; };
+  const _dd = dashDisc || '';
+  const byDisc = h => !_dd || discOf({h, m: monOf(h)}) === _dd;
+  const allHist = liveOnly(history), liveHist = allHist.filter(byDisc), liveRows = liveOnly(monRows).filter(byDisc);
+  const supersededN = history.length - allHist.length;
   const monthHist = liveHist.filter(h => { const d=new Date(h.savedAt||h.createdAt||0); return d.getMonth()===thisMonth&&d.getFullYear()===thisYear; });
   const totalThis = monthHist.reduce((s,h)=>s+N(h.grand||0),0);
   const avgVal = liveHist.length ? liveHist.reduce((s,h)=>s+N(h.grand||0),0)/liveHist.length : 0;
@@ -89,7 +95,6 @@ function DashboardTab(ctx) {
   const maxBar = Math.max(...monthTotals.map(m=>m.total),1);
   /* Mechanical and Electrical monitored apart: each CE and request goes to the discipline on its record (the project type, or the Monitoring
      Discipline). Anything else, or blank, is counted under "No discipline" so the two cards always add up with the figures above. */
-  const discOf = x => { const d = String((x.h.info && x.h.info.projType) || x.m.designation || '').toLowerCase(); return /electr/.test(d) ? 'Electrical' : /mechan/.test(d) ? 'Mechanical' : ''; };
   const discRows = liveRows.map(h => ({h, m: monOf(h)}));
   const discStats = key => {
     const mine = discRows.filter(x => discOf(x) === key);
@@ -137,14 +142,19 @@ function DashboardTab(ctx) {
       kpiCard('CEs This Month', monthHist.length, INFO),
       kpiCard('Value This Month', '₱'+ph(totalThis), OK),
       kpiCard('Avg CE Value', '₱'+ph(avgVal), ACC),
-      kpiCard('Total CEs', history.length, MT),
+      kpiCard('Total CEs', _dd ? liveHist.length : history.length, MT),
       kpiCard('Open CEs', openCEs.length, ERR),
       /* What the Cost Estimation team has to decide on. Returned ones are with their requestors, so they are named but not counted. */
       kpiCard('Requests Awaiting Review' + (reqReturnedN ? ' (' + reqReturnedN + ' returned)' : ''), reqAwaitingN, reqAwaitingN ? ACC : MT),
       kpiCard('Overdue Requests', reqOverdueN, reqOverdueN ? ERR : MT)),
+    /* Toggle for the whole page */
+    /*#__PURE__*/React.createElement("div",{className:'dash-disc-toggle',style:{display:'flex',gap:6,alignItems:'center',marginBottom:14,flexWrap:'wrap'}},
+      /*#__PURE__*/React.createElement("span",{style:{fontSize:11,color:MT}}, 'Show:'),
+      [['', 'All'], ['Mechanical', '⚙ Mechanical'], ['Electrical', '⚡ Electrical']].map(([k, l]) => /*#__PURE__*/React.createElement("button",{key:k||'all','data-on':_dd===k?'1':'0','aria-pressed':_dd===k,style:{...btn(_dd===k?'acc':'def',true),borderRadius:14,padding:'3px 14px'},onClick:()=>setDashDisc && setDashDisc(k)}, l)),
+      _dd && /*#__PURE__*/React.createElement("span",{style:{fontSize:11,color:MT}}, 'Every figure and list below is ' + _dd + ' only.')),
     /* Mechanical and Electrical, each on its own */
-    /*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:12,flexWrap:'wrap',marginBottom:discNone?4:20}}, discCard('Mechanical','#38BDF8'), discCard('Electrical','#F59E0B')),
-    discNone > 0 && /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT,marginBottom:20}}, discNone + ' open CE or overdue request' + (discNone === 1 ? '' : 's') + ' have no Mechanical or Electrical discipline set, so they are in neither card (Civil, General or blank).'),
+    !_dd && /*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:12,flexWrap:'wrap',marginBottom:discNone?4:20}}, discCard('Mechanical','#38BDF8'), discCard('Electrical','#F59E0B')),
+    !_dd && discNone > 0 && /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT,marginBottom:20}}, discNone + ' open CE or overdue request' + (discNone === 1 ? '' : 's') + ' have no Mechanical or Electrical discipline set, so they are in neither card (Civil, General or blank).'),
     /* Monthly trend */
     /*#__PURE__*/React.createElement("div",{style:{...CS,marginBottom:16}},
       /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,marginBottom:12,fontSize:12}}, "📈 Monthly Trend (Last 6 Months)"),

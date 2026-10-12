@@ -501,5 +501,7 @@ jobs:
         run: node tools/test-date-recv-format.js
       - name: Revisions inherit received date and deadline
         run: node tools/test-revision-inherits-dates.js
+      - name: Import date received
+        run: node tools/test-import-date-received.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

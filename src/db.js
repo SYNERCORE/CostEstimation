@@ -327,17 +327,22 @@ async function dbAcceptRequest(ceId,oldNum,newNum,info){
 }
 
 /* Batch-save all entries (import / migration). histItems needed for ceNum lookup. */
-async function dbSaveMonAll(monData, histItems){
-  if(!(USE_SP||getSiteURL()))return;
+/* onProgress(done, total) after each batch, so a caller can show it moving. Returns {saved, failed} -- a failed entry used to vanish into
+   logSwallowed, so a run where SharePoint refused every row looked like a clean save. */
+async function dbSaveMonAll(monData, histItems, onProgress){
+  if(!(USE_SP||getSiteURL()))return {saved:0,failed:0};
   const ceNumMap={};
   for(const h of(histItems||[])){ceNumMap[h.id]=h.info?.ceNum||h.ceNum||String(h.id);}
   const entries=Object.entries(monData);
   const BATCH=3;
+  let saved=0,failed=0;
   for(let i=0;i<entries.length;i+=BATCH){
     const chunk=entries.slice(i,i+BATCH);
-    await Promise.all(chunk.map(([ceId,fields])=>dbSaveMonEntry(ceId,ceNumMap[ceId]||String(ceId),fields).catch(_e=>logSwallowed('db:dbSaveMonAll',_e))));
+    await Promise.all(chunk.map(([ceId,fields])=>dbSaveMonEntry(ceId,ceNumMap[ceId]||String(ceId),fields).then(()=>{saved++;}).catch(_e=>{failed++;logSwallowed('db:dbSaveMonAll',_e);})));
+    if(onProgress)try{onProgress(Math.min(i+BATCH,entries.length),entries.length);}catch(_e){logSwallowed('db:dbSaveMonAll',_e);}
     if(i+BATCH<entries.length)await new Promise(r=>setTimeout(r,500));
   }
+  return {saved,failed};
 }
 
 

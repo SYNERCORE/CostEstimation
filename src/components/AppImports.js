@@ -514,17 +514,24 @@ function makeImportMonitoringXLSX(getCtx) {
 
       // Reload history to get real IDs, apply monitoring data to all matched CEs
       const fresh = await dbGetHistory(null, true).catch(() => []);
-      const merged = {...monData};
+      const merged = {...monData}, changed = {};
       for (const h of fresh) {
         const key = (h.info?.ceNum || h.ceNum || '').toUpperCase().trim();
-        if (monPatch[key]) merged[h.id] = {...(monData[h.id] || {}), ...monPatch[key]};
-        else if (monByCeNum[key]) merged[h.id] = monByCeNum[key];
+        if (monPatch[key]) merged[h.id] = changed[h.id] = {...(monData[h.id] || {}), ...monPatch[key]};
+        else if (monByCeNum[key]) merged[h.id] = changed[h.id] = monByCeNum[key];
       }
       setMonData(merged);
       try { localStorage.setItem(MON_KEY, JSON.stringify(merged)); } catch {}
-      await dbSaveMonAll(merged, fresh).catch(_e=>logSwallowed('App:L6149',_e));
+      /* Only the CEs in the file are written to SharePoint. Every monitoring record used to be (about 1,100, a few at a time with a pause
+         between), so a short list kept the button on "Importing 0/1" for many minutes -- and a reload before it finished lost the change. */
+      const nChanged = Object.keys(changed).length;
+      setImportProgress({done: 0, total: nChanged || 1});
+      let monRes = {saved: 0, failed: 0};
+      try { monRes = await dbSaveMonAll(changed, fresh, (d, t) => setImportProgress({done: d, total: t})) || monRes; }
+      catch (_e) { logSwallowed('App:L6149', _e); monRes.failed = nChanged; }
       setHistory(fresh);
       setImportProgress(null);
+      if (monRes.failed) importFails.push(monRes.failed + ' monitoring record(s) did not save to SharePoint -- the change shows here but is not on the site yet; import the list again');
       const ok = imported - importFails.length;
       auditLog('xlsx_import', `${ok} CEs added, ${updated} updated${importFails.length ? ', ' + importFails.length + ' FAILED' : ''}`, currentUser?.username);
       if (importFails.length) {

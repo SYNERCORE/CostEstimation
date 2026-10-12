@@ -20,7 +20,7 @@ if (!m) { console.error('importer not found'); process.exit(1); }
 
 const sheet = rows => { const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'S'); return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }); };
 
-async function run(rows, existingHist, monData) {
+async function run(rows, existingHist, monData, saveOverride) {
   const saved = {}, ctxOut = {};
   const sandbox = {
     XLSX, console, Promise, Object, Array, String, Set, Date, JSON,
@@ -29,7 +29,7 @@ async function run(rows, existingHist, monData) {
     spWithRetry: f => f(),
     dbSaveHistory: async () => ({ sp: true }),
     dbGetHistory: async () => existingHist,
-    dbSaveMonAll: async merged => { saved.merged = merged; },
+    dbSaveMonAll: saveOverride || (async (merged, h, cb) => { saved.merged = merged; if (cb) cb(Object.keys(merged).length, Object.keys(merged).length); return { saved: Object.keys(merged).length, failed: 0 }; }),
     auditLog() {}, setSyncStatus() {}, logSwallowed() {}
   };
   const ctx = vm.createContext(sandbox);
@@ -40,7 +40,7 @@ async function run(rows, existingHist, monData) {
     setHistory() {}, setImportProgress() {}, setMonData: v => { lastMon = v; }, showToast: (t, e) => { ctxOut.toast = t; ctxOut.err = e; }
   }));
   await imp({ arrayBuffer: async () => { const b = sheet(rows); return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength); } });
-  return { mon: lastMon, ...ctxOut };
+  return { mon: lastMon, saved, ...ctxOut };
 }
 
 const HEAD = (recv) => ['CE No.', 'CE Name', 'Customer', 'Job Title', recv, 'Deadline', 'Status', 'Received By'];
@@ -79,6 +79,19 @@ const existingMon = { 7: { status: 'Ongoing', dateRecv: '2026-10-12', customer: 
   r = await run([[], [], HEAD('Date Received'), ['SHIC-CE-2026-0099', 'Ana', 'ACME', 'x', '2026-10-01', '', '', '']], [], {});
   ck('a CE not in the app yet is created (no history match, so the importer reports it)', typeof r.preview === 'string' && /1 new CE/.test(r.preview), r.preview);
 
-  console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nImport date received OK');
+  /* only the CEs in the file are written to SharePoint, not the whole monitoring table */
+  const many = {}; for (let i = 100; i < 150; i++) many[i] = { status: 'Draft' };
+  many[7] = existingMon[7];
+  const ONE = [[], [], HEAD('Date Received'), ['SHIC-CE-2026-0001', 'Ana', 'ACME', 'x', '2026-10-05', '', '', '']];
+  r = await run(ONE, hist, many);
+  ck('a one-row list writes ONE monitoring record to SharePoint, not all of them', r.saved.merged && Object.keys(r.saved.merged).length === 1 && !!r.saved.merged[7], JSON.stringify(Object.keys((r.saved.merged) || {})));
+
+  /* a SharePoint failure is reported, not swallowed */
+  r = await run(ONE, hist, existingMon, async () => ({ saved: 0, failed: 1 }));
+  ck('records SharePoint refused are named in the result', r.err === true && /did not save to SharePoint/.test(r.toast || ''), r.toast);
+  r = await run(ONE, hist, existingMon);
+  ck('a clean save still says complete', /^Import complete/.test(r.toast || ''), r.toast);
+
+  console.log(bad ?'\n' + bad + ' FAILURE(S)' : '\nImport date received OK');
   process.exit(bad ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

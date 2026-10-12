@@ -29,7 +29,7 @@ function DashboardTab(ctx) {
      ever bring in. Every figure below is of the NEWEST revision only. */
   const liveOnly = rows => groupCERevisions(rows, h => (h.info && h.info.ceNum) || h.ceNum || '').map(g => g.head);
   /* The Mechanical / Electrical toggle: when one is picked every figure and list on this page is of that discipline alone. */
-  const discOf = x => { const d = String((x.h.info && x.h.info.projType) || x.m.designation || '').toLowerCase(); return /electr/.test(d) ? 'Electrical' : /mechan/.test(d) ? 'Mechanical' : ''; };
+  const discOf = x => { const i = x.h.info || {}, d = String(x.m.designation || x.m.discipline || i.discipline || i.projType || '').toLowerCase(); return /electr/.test(d) ? 'Electrical' : /mechan/.test(d) ? 'Mechanical' : ''; };
   const _dd = dashDisc || '';
   const byDisc = h => !_dd || discOf({h, m: monOf(h)}) === _dd;
   const allHist = liveOnly(history), liveHist = allHist.filter(byDisc), liveRows = liveOnly(monRows).filter(byDisc);
@@ -66,7 +66,7 @@ function DashboardTab(ctx) {
   const _rq = String(dashReqQ || '').toLowerCase().split(/\s+/).filter(Boolean);
   const reqShown = !_rq.length ? reqOverdueRows : reqOverdueRows.filter(x => {
     const hay = [x.h.info?.requestNum || x.m.rceNo || x.h.info?.ceNum || x.h.ceNum, x.h.info?.client || x.m.customer, x.m.jobTitle || x.h.info?.description,
-      x.h.info?.projType || x.m.designation, x.m.ceeName, x.m.receivedBy, x.m.preparedBy, x.m.status || 'Pending'].join(' ').toLowerCase();
+      x.m.designation || x.m.discipline || x.h.info?.discipline || x.h.info?.projType, x.m.ceeName, x.m.receivedBy, x.m.preparedBy, x.m.status || 'Pending'].join(' ').toLowerCase();
     return _rq.every(w => hay.indexOf(w) >= 0);
   });
   const openCEs = liveRows.filter(h => !isUnacceptedReq(h)).map(h => ({h, m: monOf(h)}))
@@ -83,7 +83,7 @@ function DashboardTab(ctx) {
   const _dq = String(dashQ || '').toLowerCase().split(/\s+/).filter(Boolean);
   const openShown = !_dq.length ? openCEs : openCEs.filter(x => {
     const hay = [x.h.info?.ceNum || x.h.ceNum, x.m.rceNo || x.h.info?.requestNum || x.h.info?.rceNo, x.h.info?.client || x.h.client, x.m.jobTitle || x.h.info?.description,
-      x.h.info?.projType || x.m.designation, x.m.ceeName, x.m.preparedBy, x.m.receivedBy, x.m.status || 'Draft'].join(' ').toLowerCase();
+      x.m.designation || x.m.discipline || x.h.info?.discipline || x.h.info?.projType, x.m.ceeName, x.m.preparedBy, x.m.receivedBy, x.m.status || 'Draft'].join(' ').toLowerCase();
     return _dq.every(w => hay.indexOf(w) >= 0);
   });
   const statusCount = statuses.reduce((m,s)=>{m[s]=(m[s]||0)+1;return m;},{});
@@ -182,7 +182,7 @@ function DashboardTab(ctx) {
             /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,color:INFO,fontWeight:600,whiteSpace:'nowrap'}}, x.h.info?.requestNum || x.m.rceNo || x.h.info?.ceNum || x.h.ceNum || '\u2014'),
             /*#__PURE__*/React.createElement("td",{style:TDS}, x.h.info?.client || x.m.customer || '\u2014'),
             /*#__PURE__*/React.createElement("td",{style:{...TDS,maxWidth:260,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'},title:x.m.jobTitle || x.h.info?.description || ''}, x.m.jobTitle || x.h.info?.description || '\u2014'),
-            /*#__PURE__*/React.createElement("td",{style:TDS}, x.h.info?.projType || x.m.designation || '\u2014'),
+            /*#__PURE__*/React.createElement("td",{style:TDS}, x.m.designation || x.m.discipline || x.h.info?.discipline || x.h.info?.projType || '\u2014'),
             /*#__PURE__*/React.createElement("td",{style:{...TDS,whiteSpace:'nowrap'}}, String(x.m.ceeName || '').replace(/^Unassigned$/, '') || '\u2014'),
             /*#__PURE__*/React.createElement("td",{style:{...TDS,whiteSpace:'nowrap'}}, x.m.receivedBy || '\u2014'),
             /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,whiteSpace:'nowrap'}}, x.m.dateRecv ? new Date(x.m.dateRecv+'T00:00:00').toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'}) : '\u2014'),
@@ -217,7 +217,7 @@ function DashboardTab(ctx) {
                     /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,whiteSpace:'nowrap'}}, x.m.rceNo || x.h.info?.requestNum || x.h.info?.rceNo || '\u2014'),
                     /*#__PURE__*/React.createElement("td",{style:TDS}, x.h.info?.client || x.h.client || 'Unknown'),
                     /*#__PURE__*/React.createElement("td",{style:{...TDS,maxWidth:260,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'},title:x.m.jobTitle || x.h.info?.description || ''}, x.m.jobTitle || x.h.info?.description || '\u2014'),
-                    /*#__PURE__*/React.createElement("td",{style:TDS}, x.h.info?.projType || x.m.designation || '\u2014'),
+                    /*#__PURE__*/React.createElement("td",{style:TDS}, x.m.designation || x.m.discipline || x.h.info?.discipline || x.h.info?.projType || '\u2014'),
                     /*#__PURE__*/React.createElement("td",{style:{...TDS,whiteSpace:'nowrap'}}, String(x.m.ceeName || '').replace(/^Unassigned$/, '') || x.m.preparedBy || '\u2014'),
                     /*#__PURE__*/React.createElement("td",{style:{...TDS,whiteSpace:'nowrap'}}, x.m.receivedBy || '\u2014'),
                     /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,whiteSpace:'nowrap'}}, x.m.dateRecv ? new Date(x.m.dateRecv+'T00:00:00').toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'}) : '\u2014'),

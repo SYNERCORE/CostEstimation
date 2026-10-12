@@ -10,7 +10,7 @@ const fs = require('fs');
 const d = fs.readFileSync('src/components/DashboardTab.js', 'utf8');
 let bad = 0;
 const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
-ck('a CE goes to the discipline on its record (project type, else Monitoring discipline)', /discOf = x => .*projType.*designation/.test(d) && /electr/.test(d) && /mechan/.test(d));
+ck('a CE goes to the discipline on its record (the Monitoring Discipline first, the same order the Monitoring table shows, then the CE itself)', /discOf = x => .*x\.m\.designation \|\| x\.m\.discipline \|\| i\.discipline \|\| i\.projType/.test(d) && /electr/.test(d) && /mechan/.test(d));
 ck('there is one card for each of Mechanical and Electrical, side by side', /discCard\('Mechanical'/.test(d) && /discCard\('Electrical'/.test(d));
 ck('each card counts open CEs, their value, past-deadline, awaiting review and overdue requests', ['Open CEs', 'Open value', 'Past deadline', 'Awaiting review', 'Overdue requests'].every(l => d.includes("'" + l + "'")));
 ck('the open test is the shared ceIsOpen one, so the status manager\'s Closed group applies', /openCEs = [\s\S]*?ceIsOpen\(x\.m\.status\)/.test(d) && /open = openCEs\.filter/.test(d));

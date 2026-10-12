@@ -100,10 +100,13 @@ function DashboardTab(ctx) {
     const mine = discRows.filter(x => discOf(x) === key);
     const reqs = mine.filter(x => isUnacceptedReq(x.h));
     const open = openCEs.filter(x => discOf(x) === key);
-    const sc = {}; mine.filter(x => !isUnacceptedReq(x.h) || x.h._draft).forEach(x => { const st = x.m.status || 'Draft'; sc[st] = (sc[st] || 0) + 1; });
+    const sc = {}; mine.filter(x => !isUnacceptedReq(x.h) || x.h._draft).forEach(x => { const st = x.m.status || '(no status)'; sc[st] = (sc[st] || 0) + 1; });
     const late = open.filter(x => x.m.deadline && new Date(x.m.deadline + 'T00:00:00') < _today).length;
     return {
       key, open, late, sc,
+      /* "Open" is everything not closed, so it includes On hold; Active / On hold are the same groups as CE Monitoring's buttons. */
+      activeN: open.filter(x => statusGroupMembers('active', allStatuses || []).includes(x.m.status || '')).length,
+      holdN: open.filter(x => statusGroupMembers('hold', allStatuses || []).includes(x.m.status || '')).length,
       value: open.reduce((t, x) => t + N(x.h.grand || 0), 0),
       awaiting: reqs.filter(x => !x.h._draft && typeof x.h.id === 'number' && (x.h.info || {}).reviewStatus !== 'returned' && (x.h.info || {}).reviewStatus !== 'declined').length,
       overdueReq: reqOverdueRows.filter(x => discOf(x) === key).length
@@ -120,7 +123,7 @@ function DashboardTab(ctx) {
     return /*#__PURE__*/React.createElement("div",{key,className:'dash-disc',style:{...CS,flex:'1 1 420px',minWidth:0,margin:0,borderTop:'3px solid '+col}},
       /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:13,marginBottom:10,color:col}}, key === 'Electrical' ? "⚡ Electrical" : "⚙ Mechanical"),
       /*#__PURE__*/React.createElement("div",{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,max-content))',columnGap:24,rowGap:10,marginBottom:12}},
-        stat('Open CEs', d.open.length), stat('Open value', '₱' + ph(d.value), OK), stat('Past deadline', d.late, d.late ? ERR : MT),
+        stat('Open CEs', d.open.length), stat('Active', d.activeN), stat('On hold', d.holdN, d.holdN ? 'var(--status-warning)' : MT), stat('Open value', '₱' + ph(d.value), OK), stat('Past deadline', d.late, d.late ? ERR : MT),
         stat('Awaiting review', d.awaiting, d.awaiting ? ACC : MT), stat('Overdue requests', d.overdueReq, d.overdueReq ? ERR : MT)),
       Object.keys(d.sc).length > 0 && /*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12}},
         Object.entries(d.sc).sort((a,b)=>{const ia=(allStatuses||[]).indexOf(a[0]),ib=(allStatuses||[]).indexOf(b[0]);return (ia<0?1e6:ia)-(ib<0?1e6:ib);}).map(([st,c])=>/*#__PURE__*/React.createElement("span",{key:st,style:{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:10,whiteSpace:'nowrap',flex:'0 0 auto',lineHeight:'16px',background:getStatusColor(st)+'22',color:getStatusColor(st),border:'1px solid '+getStatusColor(st)+'44'}}, st + ' ' + c))),

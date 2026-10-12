@@ -201,9 +201,9 @@ function MonitoringPanel(ctx) {
       onClick: () => { setMonStatusFilter(new Set()); setMonPage(0); }
     }, "Clear")
   ),
-  allStatuses.map(s =>
+  ['', ...allStatuses].map(s =>
     /*#__PURE__*/React.createElement("label", {
-      key: s,
+      key: s || '(none)',
       style: {display:'flex', alignItems:'center', gap:8, padding:'4px 2px', cursor:'pointer', fontSize:12}
     },
     /*#__PURE__*/React.createElement("input", {
@@ -224,7 +224,7 @@ function MonitoringPanel(ctx) {
         background: STATUS_COLOR_MAP[s] || ACC, flexShrink:0
       }
     }),
-    s)
+    s || '(no status)')
   ))),
   /* Quick groups: one click picks every status in the group (Active, Closed, On hold); a second click on the lit one clears it. */
   STATUS_GROUPS.map(g => {

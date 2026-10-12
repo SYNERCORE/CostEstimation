@@ -33,7 +33,7 @@ ck('and carries the reason, not just a flag', /_spFailReason=msg/.test(db),
   '"SharePoint refused it" is not actionable without the why');
 
 console.log('\nthe CE-file import acts on it:');
-const ceImp = (app.match(/const res = await dbSaveHistory\(entry\);[\s\S]{0,700}/) || [''])[0];
+const ceImp = (app.match(/const res = await within\(dbSaveHistory\(entry\), saveMs,[^\n]*\n[\s\S]{0,700}/) || [''])[0];
 ck('a failed CE is not counted as done', /if \(res && res\.sp === false\)[\s\S]{0,200}continue;/.test(ceImp),
   'done++ ran regardless, and the success toast with it');
 ck('it lands in the errors list the summary reads', /errors\.push\(effCeNum \+ ': SharePoint refused it/.test(ceImp));

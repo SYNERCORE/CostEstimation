@@ -11,15 +11,24 @@ function makeImportShicCeFiles(getCtx) {
       history,
       loadHist,
       setCeImportProgress,
-      showToast
+      showToast,
+      readMs = 60000,     /* opening the file */
+      saveMs = 240000     /* writing it to SharePoint: header, then every line item */
     } = getCtx();
     const list = Array.from(files);
     if (!list.length) return;
-    setCeImportProgress({done: 0, total: list.length, errors: []});
     let done = 0, errors = [];
+    /* Where it is, so the button can say so: a single file moves the bar only when it is finished, which looked exactly like a hang. */
+    const step = t => setCeImportProgress({done, total: list.length, errors, step: t});
+    /* A read or a save that never answers (a OneDrive file that is not on this PC, a locked file, a stalled SharePoint call) used to
+       leave the button on "Importing 0/1" for good. Each wait now has a limit and says what to do. */
+    const within = (p, ms, msg) => { let t; return Promise.race([p, new Promise((_, rej) => { t = setTimeout(() => rej(new Error(msg)), ms); })]).finally(() => clearTimeout(t)); };
+    step('Reading');
+    try {
     for (const file of list) {
       try {
-        const ab = await file.arrayBuffer();
+        step('Reading');
+        const ab = await within(file.arrayBuffer(), readMs, 'could not open the file within ' + Math.round(readMs / 1000) + ' seconds. If it is in OneDrive, right-click it > "Always keep on this device" (or copy it to a local folder), close it in Excel, and try again');
         const wb = XLSX.read(ab, {type:'array', cellDates:true});
         const getSheet = name => {
           // Try exact name first, then case-insensitive match
@@ -273,10 +282,12 @@ function makeImportShicCeFiles(getCtx) {
         const effCeNum = ceNum || fallbackCeNum;
         const dupIdx = history.findIndex(h => (h.info?.ceNum || h.ceNum) === effCeNum);
         if (dupIdx >= 0) {
+          step('Waiting for your answer');
           const confirmed = await uiConfirm(`CE ${effCeNum} already exists in history. Overwrite it?`);
           if (!confirmed) { errors.push(file.name + ': skipped (duplicate)'); setCeImportProgress({done, total:list.length, errors}); continue; }
         }
-        const res = await dbSaveHistory(entry);
+        step('Saving');
+        const res = await within(dbSaveHistory(entry), saveMs, 'SharePoint did not finish saving within ' + Math.round(saveMs / 60000) + ' minutes. It may still complete: refresh CE Monitoring and check the CE has its line items before importing it again');
         /* A CE that only reached this browser is not imported. Saying it was
            is how a run of these ended up in SharePoint as headers with a total
            and no line items under them, reported as a clean success. */
@@ -293,7 +304,10 @@ function makeImportShicCeFiles(getCtx) {
     await loadHist();
     if (errors.length) showToast(`Imported ${done}/${list.length} CE files. ${errors.length} failed: ${errors[0]}`, true);
     else if (list.length > 1) showToast(`Imported ${done} CE files successfully.`);
-    setTimeout(()=>setCeImportProgress(null), 3000);
+    } finally {
+      /* Whatever happened above, the button comes back. */
+      setTimeout(()=>setCeImportProgress(null), 3000);
+    }
   };
 }
 

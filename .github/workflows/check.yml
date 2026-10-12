@@ -495,5 +495,7 @@ jobs:
         run: node tools/test-dashboard-disciplines.js
       - name: xlsx import: Date Received, merge not replace
         run: node tools/test-import-date-received.js
+      - name: CE file import: timeouts and steps
+        run: node tools/test-ce-file-import-timeouts.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

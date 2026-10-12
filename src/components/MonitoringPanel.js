@@ -350,7 +350,7 @@ function MonitoringPanel(ctx) {
   })), /*#__PURE__*/React.createElement("label", {
     title: "Import one or multiple SHIC CE Excel files (reads BOTE, BOCM, PPE, MISC sheets)",
     style: {...btn('info', true), cursor:'pointer', display:'inline-flex', alignItems:'center', gap:4}
-  }, ceImportProgress ? `\u21BB Importing ${ceImportProgress.done}/${ceImportProgress.total}\u2026` : "\u2B06 Import CE File(s)", /*#__PURE__*/React.createElement("input", {
+  }, ceImportProgress ? `\u21BB ${ceImportProgress.step || 'Importing'} ${ceImportProgress.done}/${ceImportProgress.total}\u2026` : "\u2B06 Import CE File(s)", /*#__PURE__*/React.createElement("input", {
     type: "file",
     accept: ".xlsx,.xls",
     multiple: true,

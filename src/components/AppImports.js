@@ -491,15 +491,18 @@ function makeImportMonitoringXLSX(getCtx) {
           ? 'New: ' + toInsert.slice(0,5).map(e => e.info.ceNum).join(', ') + (toInsert.length > 5 ? ` +${toInsert.length-5} more` : '')
           : '',
         '',
-        toInsert.length > 0 ? 'Press OK to continue -- the next question is whether to create the ' + toInsert.length + ' new CE(s) or skip them and update only the existing ones.' : 'Proceed with import?'
+        toInsert.length > 0
+          ? 'The ' + toInsert.length + ' new CE(s) are not in the app now (for example ones you deleted). Choose "Update existing only" to leave them out.'
+          : 'Proceed with import?'
       ].filter(Boolean).join('\n');
-      if (!await uiConfirm(preview)) return;
+      /* One question, three answers. CEs not in the app (e.g. ones deleted from Monitoring on purpose) are only created if asked for. */
+      const answer = toInsert.length > 0
+        ? await uiConfirm(preview, { ok: 'Update and create ' + toInsert.length + ' new', extra: 'Update existing only', cancel: 'Cancel import' })
+        : await uiConfirm(preview);
+      if (!answer) return;
+      const skipNew = answer === 'extra';
 
-      /* CEs in the file that are not in the app (e.g. ones deleted from Monitoring on purpose) are only created if asked for. */
-      if (toInsert.length > 0 && !await uiConfirm(
-        toInsert.length + ' CE(s) in the file are not in the app' + (updated ? ' (' + updated + ' are)' : '') + ', for example ones you deleted before:\n' +
-        toInsert.slice(0, 8).map(e => '  ' + e.info.ceNum).join('\n') + (toInsert.length > 8 ? '\n  +' + (toInsert.length - 8) + ' more' : '') +
-        '\n\nCreate them again? Choose "Skip them" to update only the CEs already in the app.', { ok: 'Create them' })) {
+      if (skipNew) {
         for (const e of toInsert) delete monByCeNum[e.info.ceNum];
         toInsert.length = 0;
         if (!updated) { showToast('Nothing to update: every CE in the file is missing from the app.', true); return; }

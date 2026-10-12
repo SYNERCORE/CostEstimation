@@ -108,6 +108,13 @@
       cancelBtn.onclick = function () { finish(job.kind === 'prompt' ? null : false); };
       row.appendChild(cancelBtn);
     }
+    /* An optional third choice (o.extra = its label): the promise then resolves 'extra' for it, true for OK, false for Cancel. */
+    if (job.kind === 'confirm' && o.extra) {
+      var exBtn = el('button', btnCss + 'background:transparent;color:var(--text-primary,#fff);', o.extra);
+      exBtn.type = 'button';
+      exBtn.onclick = function () { finish('extra'); };
+      row.appendChild(exBtn);
+    }
     var okBtn = el('button', btnCss + (danger
       ? 'background:var(--status-danger,#ef4444);border-color:var(--status-danger,#ef4444);color:#fff;'
       : 'background:var(--brand-accent,#f59e0b);border-color:var(--brand-accent,#f59e0b);color:var(--on-accent,#000);'), okLabel);
@@ -135,7 +142,7 @@
         e.preventDefault(); e.stopPropagation(); okBtn.click();
       }
       else if (e.key === 'Tab') {
-        var f = [field, cancelBtn, okBtn].filter(Boolean), i = f.indexOf(document.activeElement);
+        var f = [field, cancelBtn, typeof exBtn !== 'undefined' ? exBtn : null, okBtn].filter(Boolean), i = f.indexOf(document.activeElement);
         e.preventDefault();
         f[(i + (e.shiftKey ? f.length - 1 : 1)) % f.length].focus();
       }

@@ -25,7 +25,7 @@ async function run(rows, existingHist, monData, saveOverride, skipNew) {
   const sandbox = {
     XLSX, console, Promise, Object, Array, String, Set, Date, JSON,
     localStorage: { setItem() {}, getItem() { return null; } },
-    uiConfirm: async msg => { if (ctxOut.preview !== undefined) { ctxOut.asked = msg; return !skipNew; } ctxOut.preview = msg; return true; },
+    uiConfirm: async (msg, o) => { ctxOut.preview = msg; if (o && o.extra) { ctxOut.asked = msg; ctxOut.opts = o; return skipNew ? 'extra' : true; } return true; },
     spWithRetry: f => f(),
     dbSaveHistory: async () => ({ sp: true }),
     dbGetHistory: async () => existingHist,
@@ -95,10 +95,11 @@ const existingMon = { 7: { status: 'Ongoing', dateRecv: '2026-10-12', customer: 
   /* CEs missing from the app (deleted on purpose) are only re-created if asked for */
   const TWO = [[], [], HEAD('Date Received'), ['SHIC-CE-2026-0001', 'Ana', 'ACME', 'x', '2026-10-05', '', '', ''], ['SHIC-CE-2026-0555', 'Bo', 'ACME', 'y', '2026-10-06', '', '', '']];
   r = await run(TWO, hist, existingMon, null, true);
-  ck('it asks before re-creating a CE that is not in the app', /not in the app/.test(r.asked || '') && /0555/.test(r.asked), r.asked);
+  ck('one dialog offers cancel / update existing only / update and create', r.opts && r.opts.extra === 'Update existing only' && /Cancel import/.test(r.opts.cancel) && /create 1 new/.test(r.opts.ok), JSON.stringify(r.opts));
+  ck('and it lists the new CE', /0555/.test(r.asked || ''), r.asked);
   ck('"Skip them" updates the existing CE and creates nothing', r.mon && r.mon[7] && r.mon[7].dateRecv === '2026-10-05' && Object.keys(r.mon).length === 1, JSON.stringify(r.mon && Object.keys(r.mon)));
   r = await run(TWO, hist, existingMon, null, false);
-  ck('"Create them" still goes ahead', /not in the app/.test(r.asked || '') && !!r.mon);
+  ck('"Update and create" still goes ahead', Object.keys(r.mon || {}).length >= 1 && !!r.asked);
 
   console.log(bad ?'\n' + bad + ' FAILURE(S)' : '\nImport date received OK');
   process.exit(bad ? 1 : 0);

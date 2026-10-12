@@ -20,12 +20,12 @@ if (!m) { console.error('importer not found'); process.exit(1); }
 
 const sheet = rows => { const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'S'); return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }); };
 
-async function run(rows, existingHist, monData, saveOverride) {
+async function run(rows, existingHist, monData, saveOverride, skipNew) {
   const saved = {}, ctxOut = {};
   const sandbox = {
     XLSX, console, Promise, Object, Array, String, Set, Date, JSON,
     localStorage: { setItem() {}, getItem() { return null; } },
-    uiConfirm: async msg => { ctxOut.preview = msg; return true; },
+    uiConfirm: async msg => { if (ctxOut.preview !== undefined) { ctxOut.asked = msg; return !skipNew; } ctxOut.preview = msg; return true; },
     spWithRetry: f => f(),
     dbSaveHistory: async () => ({ sp: true }),
     dbGetHistory: async () => existingHist,
@@ -91,6 +91,14 @@ const existingMon = { 7: { status: 'Ongoing', dateRecv: '2026-10-12', customer: 
   ck('records SharePoint refused are named in the result', r.err === true && /did not save to SharePoint/.test(r.toast || ''), r.toast);
   r = await run(ONE, hist, existingMon);
   ck('a clean save still says complete', /^Import complete/.test(r.toast || ''), r.toast);
+
+  /* CEs missing from the app (deleted on purpose) are only re-created if asked for */
+  const TWO = [[], [], HEAD('Date Received'), ['SHIC-CE-2026-0001', 'Ana', 'ACME', 'x', '2026-10-05', '', '', ''], ['SHIC-CE-2026-0555', 'Bo', 'ACME', 'y', '2026-10-06', '', '', '']];
+  r = await run(TWO, hist, existingMon, null, true);
+  ck('it asks before re-creating a CE that is not in the app', /not in the app/.test(r.asked || '') && /0555/.test(r.asked), r.asked);
+  ck('"Skip them" updates the existing CE and creates nothing', r.mon && r.mon[7] && r.mon[7].dateRecv === '2026-10-05' && Object.keys(r.mon).length === 1, JSON.stringify(r.mon && Object.keys(r.mon)));
+  r = await run(TWO, hist, existingMon, null, false);
+  ck('"Create them" still goes ahead', /not in the app/.test(r.asked || '') && !!r.mon);
 
   console.log(bad ?'\n' + bad + ' FAILURE(S)' : '\nImport date received OK');
   process.exit(bad ? 1 : 0);

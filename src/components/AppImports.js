@@ -475,12 +475,12 @@ function makeImportMonitoringXLSX(getCtx) {
         }
       }
 
-      const total = toInsert.length + updated;
-      if (!total) { showToast('No valid CE rows found in the file.', true); return; }
+      const total0 = toInsert.length + updated;
+      if (!total0) { showToast('No valid CE rows found in the file.', true); return; }
 
       // Preview confirmation before applying
       const preview = [
-        `Found ${total} CE row(s) in the file:`,
+        `Found ${total0} CE row(s) in the file:`,
         `  • ${toInsert.length} new CE(s) to create`,
         `  • ${updated} existing CE(s) to update (only the columns in the file are changed; blank cells leave the value as it is)`,
         iRecvDate >= 0
@@ -494,6 +494,17 @@ function makeImportMonitoringXLSX(getCtx) {
         'Proceed with import?'
       ].filter(Boolean).join('\n');
       if (!await uiConfirm(preview)) return;
+
+      /* CEs in the file that are not in the app (e.g. ones deleted from Monitoring on purpose) are only created if asked for. */
+      if (toInsert.length > 0 && !await uiConfirm(
+        toInsert.length + ' CE(s) in the file are not in the app' + (updated ? ' (' + updated + ' are)' : '') + ', for example ones you deleted before:\n' +
+        toInsert.slice(0, 8).map(e => '  ' + e.info.ceNum).join('\n') + (toInsert.length > 8 ? '\n  +' + (toInsert.length - 8) + ' more' : '') +
+        '\n\nCreate them again? Choose "Skip them" to update only the CEs already in the app.', { ok: 'Create them' })) {
+        for (const e of toInsert) delete monByCeNum[e.info.ceNum];
+        toInsert.length = 0;
+        if (!updated) { showToast('Nothing to update: every CE in the file is missing from the app.', true); return; }
+      }
+      const total = toInsert.length + updated;
 
       // Batch insert new CEs — 5 at a time to avoid SP throttling
       const BATCH = 5;

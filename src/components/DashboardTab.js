@@ -87,6 +87,41 @@ function DashboardTab(ctx) {
   const months=[]; for(let i=5;i>=0;i--){const d=new Date(thisYear,thisMonth-i,1);months.push({label:d.toLocaleString('default',{month:'short'})+' '+d.getFullYear().toString().slice(2),month:d.getMonth(),year:d.getFullYear()});}
   const monthTotals = months.map(m=>({...m,total:liveHist.filter(h=>{const d=new Date(h.savedAt||0);return d.getMonth()===m.month&&d.getFullYear()===m.year;}).reduce((s,h)=>s+N(h.grand||0),0)}));
   const maxBar = Math.max(...monthTotals.map(m=>m.total),1);
+  /* Mechanical and Electrical monitored apart: each CE and request goes to the discipline on its record (the project type, or the Monitoring
+     Discipline). Anything else, or blank, is counted under "No discipline" so the two cards always add up with the figures above. */
+  const discOf = x => { const d = String((x.h.info && x.h.info.projType) || x.m.designation || '').toLowerCase(); return /electr/.test(d) ? 'Electrical' : /mechan/.test(d) ? 'Mechanical' : ''; };
+  const discRows = liveRows.map(h => ({h, m: monOf(h)}));
+  const discStats = key => {
+    const mine = discRows.filter(x => discOf(x) === key);
+    const reqs = mine.filter(x => isUnacceptedReq(x.h));
+    const open = openCEs.filter(x => discOf(x) === key);
+    const sc = {}; mine.filter(x => !isUnacceptedReq(x.h) || x.h._draft).forEach(x => { const st = x.m.status || 'Draft'; sc[st] = (sc[st] || 0) + 1; });
+    const late = open.filter(x => x.m.deadline && new Date(x.m.deadline + 'T00:00:00') < _today).length;
+    return {
+      key, open, late, sc,
+      value: open.reduce((t, x) => t + N(x.h.grand || 0), 0),
+      awaiting: reqs.filter(x => !x.h._draft && typeof x.h.id === 'number' && (x.h.info || {}).reviewStatus !== 'returned' && (x.h.info || {}).reviewStatus !== 'declined').length,
+      overdueReq: reqOverdueRows.filter(x => discOf(x) === key).length
+    };
+  };
+  const discNone = openCEs.filter(x => !discOf(x)).length + reqOverdueRows.filter(x => !discOf(x)).length;
+  const discCard = (key, col) => {
+    const d = discStats(key), nxt = d.open.slice(0, 5);
+    const stat = (l, v, c) => /*#__PURE__*/React.createElement("div",{style:{flex:1,minWidth:70}},
+      /*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:MT}}, l), /*#__PURE__*/React.createElement("div",{style:{fontSize:17,fontWeight:800,color:c||TX,...MONO}}, v));
+    return /*#__PURE__*/React.createElement("div",{key,className:'dash-disc',style:{...CS,flex:1,minWidth:300,margin:0,borderTop:'3px solid '+col}},
+      /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:13,marginBottom:10,color:col}}, key === 'Electrical' ? "⚡ Electrical" : "⚙ Mechanical"),
+      /*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:10,flexWrap:'wrap',marginBottom:10}},
+        stat('Open CEs', d.open.length), stat('Open value', '₱' + ph(d.value), OK), stat('Past deadline', d.late, d.late ? ERR : MT),
+        stat('Awaiting review', d.awaiting, d.awaiting ? ACC : MT), stat('Overdue requests', d.overdueReq, d.overdueReq ? ERR : MT)),
+      Object.keys(d.sc).length > 0 && /*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}},
+        Object.entries(d.sc).sort((a,b)=>{const ia=(allStatuses||[]).indexOf(a[0]),ib=(allStatuses||[]).indexOf(b[0]);return (ia<0?1e6:ia)-(ib<0?1e6:ib);}).map(([st,c])=>/*#__PURE__*/React.createElement("span",{key:st,style:{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:10,background:getStatusColor(st)+'22',color:getStatusColor(st),border:'1px solid '+getStatusColor(st)+'44'}}, st + ' ' + c))),
+      /*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:MT,marginBottom:4}}, nxt.length ? 'Next due' : 'No open CEs'),
+      nxt.map(x=>{ const dl = x.m.deadline, days = dl ? Math.round((new Date(dl+'T00:00:00') - _today)/86400000) : null;
+        return /*#__PURE__*/React.createElement("div",{key:x.h.id,style:{display:'flex',justifyContent:'space-between',gap:8,fontSize:11,padding:'2px 0',borderBottom:'1px solid '+BDR}},
+          /*#__PURE__*/React.createElement("span",{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'},title:x.m.jobTitle||x.h.info?.description||''}, /*#__PURE__*/React.createElement("span",{style:{...MONO,color:INFO,fontWeight:600}}, x.h.info?.ceNum||x.h.ceNum||'—'), ' ', x.h.info?.client||x.m.customer||''),
+          /*#__PURE__*/React.createElement("span",{style:{...MONO,whiteSpace:'nowrap',color:days===null?MT:days<0?ERR:days<=7?'var(--status-warning)':OK}}, days===null?'no deadline':days<0?(-days)+'d late':days===0?'today':days+'d'));}));
+  };
   const kpiCard = (label,value,color) => /*#__PURE__*/React.createElement("div",{style:{background:SURF,border:'1px solid '+BDR,borderRadius:8,padding:'14px 18px',flex:1,minWidth:140}},
     /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT,marginBottom:4}},label),
     /*#__PURE__*/React.createElement("div",{style:{fontSize:20,fontWeight:800,color:color||TX,...MONO}},value));
@@ -107,6 +142,9 @@ function DashboardTab(ctx) {
       /* What the Cost Estimation team has to decide on. Returned ones are with their requestors, so they are named but not counted. */
       kpiCard('Requests Awaiting Review' + (reqReturnedN ? ' (' + reqReturnedN + ' returned)' : ''), reqAwaitingN, reqAwaitingN ? ACC : MT),
       kpiCard('Overdue Requests', reqOverdueN, reqOverdueN ? ERR : MT)),
+    /* Mechanical and Electrical, each on its own */
+    /*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:12,flexWrap:'wrap',marginBottom:discNone?4:20}}, discCard('Mechanical','#38BDF8'), discCard('Electrical','#F59E0B')),
+    discNone > 0 && /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT,marginBottom:20}}, discNone + ' open CE or overdue request' + (discNone === 1 ? '' : 's') + ' have no Mechanical or Electrical discipline set, so they are in neither card (Civil, General or blank).'),
     /* Monthly trend */
     /*#__PURE__*/React.createElement("div",{style:{...CS,marginBottom:16}},
       /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,marginBottom:12,fontSize:12}}, "📈 Monthly Trend (Last 6 Months)"),

@@ -491,5 +491,7 @@ jobs:
         run: node tools/test-status-groups.js
       - name: Status manager (admin)
         run: node tools/test-status-manager.js
+      - name: Dashboard Mechanical / Electrical cards
+        run: node tools/test-dashboard-disciplines.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

@@ -1,0 +1,20 @@
+#!/usr/bin/env node
+/*
+ * Dashboard: Mechanical and Electrical are monitored apart, each on its own card (open CEs and value, past deadline, requests awaiting review,
+ * overdue requests, status mix in the admin's order and colours, next five due). CEs of any other discipline are said out loud, not dropped.
+ *
+ * Run: node tools/test-dashboard-disciplines.js
+ */
+'use strict';
+const fs = require('fs');
+const d = fs.readFileSync('src/components/DashboardTab.js', 'utf8');
+let bad = 0;
+const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
+ck('a CE goes to the discipline on its record (project type, else Monitoring discipline)', /discOf = x => .*projType.*designation/.test(d) && /electr/.test(d) && /mechan/.test(d));
+ck('there is one card for each of Mechanical and Electrical, side by side', /discCard\('Mechanical'/.test(d) && /discCard\('Electrical'/.test(d));
+ck('each card counts open CEs, their value, past-deadline, awaiting review and overdue requests', ['Open CEs', 'Open value', 'Past deadline', 'Awaiting review', 'Overdue requests'].every(l => d.includes("'" + l + "'")));
+ck('the open test is the shared ceIsOpen one, so the status manager\'s Closed group applies', /openCEs = [\s\S]*?ceIsOpen\(x\.m\.status\)/.test(d) && /open = openCEs\.filter/.test(d));
+ck('the status mix follows the admin\'s order and colours', /allStatuses\|\|\[\]\)\.indexOf\(a\[0\]\)/.test(d) && /getStatusColor\(st\)/.test(d));
+ck('other disciplines are named below the cards, not silently dropped', /discNone > 0/.test(d) && /have no Mechanical or Electrical discipline set/.test(d));
+console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nDashboard disciplines OK');
+process.exit(bad ? 1 : 0);

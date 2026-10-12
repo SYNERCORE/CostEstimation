@@ -505,5 +505,7 @@ jobs:
         run: node tools/test-import-date-received.js
       - name: My Work draft fold
         run: node tools/test-mywork-draft-fold.js
+      - name: Import date received
+        run: node tools/test-import-date-received.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

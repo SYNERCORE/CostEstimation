@@ -491,7 +491,7 @@ function makeImportMonitoringXLSX(getCtx) {
           ? 'New: ' + toInsert.slice(0,5).map(e => e.info.ceNum).join(', ') + (toInsert.length > 5 ? ` +${toInsert.length-5} more` : '')
           : '',
         '',
-        'Proceed with import?'
+        toInsert.length > 0 ? 'Press OK to continue -- the next question is whether to create the ' + toInsert.length + ' new CE(s) or skip them and update only the existing ones.' : 'Proceed with import?'
       ].filter(Boolean).join('\n');
       if (!await uiConfirm(preview)) return;
 

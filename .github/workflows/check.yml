@@ -499,5 +499,7 @@ jobs:
         run: node tools/test-ce-file-import-timeouts.js
       - name: Date Recv. column format
         run: node tools/test-date-recv-format.js
+      - name: Revisions inherit received date and deadline
+        run: node tools/test-revision-inherits-dates.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

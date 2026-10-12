@@ -16,6 +16,8 @@ function MonitoringPanel(ctx) {
     attachList,
     attachPanel,
     ceImportProgress,
+    revDateFixes,
+    fillRevDates,
     coOptions,
     compareModal,
     compareSet,
@@ -264,6 +266,11 @@ function MonitoringPanel(ctx) {
     onClick: fillBlankDisc,
     title: "Give a discipline to every CE in this view that has none. Ones that already have one are left alone."
   }, "Set blank disciplines"),
+  isAdmin && (revDateFixes || []).length > 0 && /*#__PURE__*/React.createElement("button", {
+    style: {...btn('def', true), fontSize: 10},
+    onClick: fillRevDates,
+    title: "Revisions saved before they inherited: give each the received date, deadline, receiver and RCE No. of the revision before it, where it has none of its own."
+  }, "Inherit revision dates (" + revDateFixes.length + ")"),
   /*#__PURE__*/React.createElement("select", {
     style: {...INP, fontSize:11, width:150},
     value: monDiscFilter,

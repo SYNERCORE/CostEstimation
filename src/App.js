@@ -2930,10 +2930,23 @@ function App({
       {multiline: true, required: true, min: 3, requiredMsg: 'A revision needs a reason.', minMsg: 'A revision needs a reason \u2014 a few words at least.', ok: 'Revise'});
     return t == null ? null : t;
   };
-  const noteRevisionRemark = async (num, reason, inf) => {
+  /* A revision is the same job: it keeps the received date, deadline, who received it and the RCE No. of the CE it revises. The date is what the
+     Date Recv. column shows for that CE (its own, else the day it was saved). */
+  const localIso = v => { const d = new Date(v); return isNaN(d) ? '' : d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  const REV_INHERIT = ['dateRecv', 'deadline', 'receivedBy', 'rceNo'];
+  const effRecv = (e, m) => String((m && m.dateRecv) || (e && e.savedAt ? localIso(e.savedAt) : '') || '');
+  const revInherit = (fromNum, cur) => {
+    const key = n => String(n || '').trim().toUpperCase();
+    const src = fromNum ? (history || []).find(h => key(h.info && h.info.ceNum) === key(fromNum)) : null;
+    if (!src) return {};
+    const sm = monData[src.id] || {}, val = {dateRecv: effRecv(src, sm), deadline: sm.deadline || '', receivedBy: sm.receivedBy || '', rceNo: sm.rceNo || ''}, out = {};
+    REV_INHERIT.forEach(k => { if (val[k] && !(cur && cur[k])) out[k] = val[k]; });
+    return out;
+  };
+  const noteRevisionRemark = async (num, reason, inf, fromNum) => {
     try {
       const saved = await dbFindCEByNum(num);
-      if (saved && saved.id != null) updateMon(saved.id, {remarks: '\u21BB Revision ' + (ceFamily(num).rev ? 'R' + ceFamily(num).rev : '') + ': ' + reason, ...monSeed(inf, monData[saved.id])});
+      if (saved && saved.id != null) updateMon(saved.id, {remarks: '\u21BB Revision ' + (ceFamily(num).rev ? 'R' + ceFamily(num).rev : '') + ': ' + reason, ...monSeed(inf, monData[saved.id]), ...revInherit(fromNum, monData[saved.id])});
     } catch (_e) { console.warn('revision remark skipped:', _e.message); }
   };
   const handleSaveRevision = guard('revise', async () => {
@@ -2987,7 +3000,7 @@ function App({
     try {
       const _re = mkEntry(revLabel); _re.info = {..._re.info, revisionReason: _why};
       await dbSaveHistory(_re);
-      await noteRevisionRemark(_re.info.ceNum, _why, _re.info);
+      await noteRevisionRemark(_re.info.ceNum, _why, _re.info, ceNum);
       setInfo(p => ({
         ...p,
         ceNum: revCeNum, revisionReason: _why
@@ -4877,6 +4890,34 @@ function App({
     showToast(pick + ' set on ' + blanks.length + ' CE(s).');
   };
   const custOptions = useMonFacet(monCust);
+  /* Revisions saved before they inherited: each CE with older revisions takes the received date, deadline, receiver and RCE No. of the one
+     before it where its own is blank. Only blanks are filled, and only the date that was SHOWN (own, else save date) is carried forward. */
+  const revDateFixes = useMemo(() => {
+    const fixes = [];
+    const rows = monRows.filter(e => !e._draft && typeof e.id === 'number');
+    groupCERevisions(rows, h => (h.info && h.info.ceNum) || h.ceNum || '').forEach(g => {
+      if (g.dup || !g.revs.length) return;
+      const chain = [...g.revs].reverse().concat([g.head]), carry = {};
+      chain.forEach((e, i) => {
+        const m = monOf(e), patch = {};
+        REV_INHERIT.forEach(k => {
+          const own = String(m[k] || '');
+          if (i > 0 && !own && carry[k]) patch[k] = carry[k];
+          const now = patch[k] || own || (i === 0 && k === 'dateRecv' ? effRecv(e, m) : '');
+          if (now) carry[k] = now;
+        });
+        if (Object.keys(patch).length) fixes.push({id: e.id, num: (e.info && e.info.ceNum) || e.ceNum, patch});
+      });
+    });
+    return fixes;
+  }, [monRows, monData]);
+  const fillRevDates = async () => {
+    if (!isAdmin || !revDateFixes.length) return;
+    if (!await uiConfirm(revDateFixes.length + ' revision(s) are missing a received date, deadline, receiver or RCE No. that the CE before them has.' + String.fromCharCode(10) + String.fromCharCode(10) + 'Fill them in from the previous revision? Values a revision already has are not touched.')) return;
+    revDateFixes.forEach(f => updateMon(f.id, f.patch));
+    auditLog('revision_inherit', 'x' + revDateFixes.length, currentUser?.username);
+    showToast('Filled ' + revDateFixes.length + ' revision(s) from the CE before them.');
+  };
 
   /* The RCE No. a row goes by: the one on its monitoring row, else the one the request was filed under. */
   const rceOf = (e, m) => String((m && m.rceNo) || (e.info && (e.info.requestNum || e.info.rceNo)) || '').trim();
@@ -5030,7 +5071,7 @@ function App({
      (Written without the element-creating call by name: the guard in
      tools/check-remounting-editors.js reads the source as text, and would
      take a mention of it here for the real thing.) */
-  const HistPanel = () => MonitoringPanel({ MON_PAGE_SIZE, STATUS_COLOR_MAP, SortIcon, addStatus, allStatuses, assignPanel, attachList, attachPanel, ceImportProgress, coOptions, compareModal, compareSet, confirmDel, currentUser, custOptions, deleteDraft, discOptions, editingRow, fillBlankDisc, getStatusColor, handleClone, handleLoad, handleRevise, handleSave, histBusy, history, importMonitoringXLSX, importProgress, importShicCeFiles, isAdmin, isRequestor, loadHist, loadMonData, monApvMine, monCustFilter, monData, monDiscFilter, monMine, monOf, monPage, monPageRows, monReqFilter, monRevOpen, monSearch, monSpIds, monStatusFilter, monTableWrapRef, monTopScrollRef, monTypeFilter, newStatusInput, openAssign, openAttachPanel, openForPrint, openRequest, openReview, rceOf, statusMove, statusRemove, statusRename, statusSet, statusUse, reqOwns, resDays, resumeDraft, setAttachPanel, setCompareModal, setCompareSet, setConfirmDel, setDiffModal, setEditingRow, setHistory, setMonApvMine, setMonCustFilter, setMonDiscFilter, setMonMine, setMonPage, setMonReqFilter, setMonRevOpen, setMonSearch, setMonStatusFilter, setMonTypeFilter, setNewStatusInput, setRceReview, setRemarkDraft, setRemarksPanel, setShowStatusFilter, setShowStatusMgr, setStatusPanel, setUndoToast, setViewCE, showStatusFilter, showStatusMgr, showToast, sortedHistory, statusPanel, toggleSort, updateMon });
+  const HistPanel = () => MonitoringPanel({ revDateFixes, fillRevDates, MON_PAGE_SIZE, STATUS_COLOR_MAP, SortIcon, addStatus, allStatuses, assignPanel, attachList, attachPanel, ceImportProgress, coOptions, compareModal, compareSet, confirmDel, currentUser, custOptions, deleteDraft, discOptions, editingRow, fillBlankDisc, getStatusColor, handleClone, handleLoad, handleRevise, handleSave, histBusy, history, importMonitoringXLSX, importProgress, importShicCeFiles, isAdmin, isRequestor, loadHist, loadMonData, monApvMine, monCustFilter, monData, monDiscFilter, monMine, monOf, monPage, monPageRows, monReqFilter, monRevOpen, monSearch, monSpIds, monStatusFilter, monTableWrapRef, monTopScrollRef, monTypeFilter, newStatusInput, openAssign, openAttachPanel, openForPrint, openRequest, openReview, rceOf, statusMove, statusRemove, statusRename, statusSet, statusUse, reqOwns, resDays, resumeDraft, setAttachPanel, setCompareModal, setCompareSet, setConfirmDel, setDiffModal, setEditingRow, setHistory, setMonApvMine, setMonCustFilter, setMonDiscFilter, setMonMine, setMonPage, setMonReqFilter, setMonRevOpen, setMonSearch, setMonStatusFilter, setMonTypeFilter, setNewStatusInput, setRceReview, setRemarkDraft, setRemarksPanel, setShowStatusFilter, setShowStatusMgr, setStatusPanel, setUndoToast, setViewCE, showStatusFilter, showStatusMgr, showToast, sortedHistory, statusPanel, toggleSort, updateMon });
   /* ---- Scope Library Editor (Scope Library tab) ---- */
   /* ScopeLibraryEditor's state, and ResEditor's, held by App.
 

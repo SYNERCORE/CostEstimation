@@ -29,7 +29,7 @@ if (fn) {
   ck('no record at all is fine', fn(inf, undefined).customer === 'ACME');
 }
 ck('Save seeds the record when it first lists the CE', /Object\.assign\(_w, monSeed\(_entry\.info, _m\)\);/.test(app));
-ck('a revision seeds its own record too', /noteRevisionRemark\(_re\.info\.ceNum, _why, _re\.info\)/.test(app) && /\.\.\.monSeed\(inf, monData\[saved\.id\]\)/.test(app));
+ck('a revision seeds its own record too', /noteRevisionRemark\(_re\.info\.ceNum, _why, _re\.info, ceNum\)/.test(app) && /\.\.\.monSeed\(inf, monData\[saved\.id\]\)/.test(app));
 ck('Revise refuses an incomplete Project Info before it even asks for a reason', /infoMissing\.length\) \{\n\s+showToast\('Project Info is incomplete[^\n]*\n\s+return;\n\s+\}\n\s+const _why = await askRevisionReason\(ceNum\);/.test(app));
 ck('Save is still gated, and Draft is still not', /if \(infoMissing\.length\) \{\n\s+showToast\('Project Info is incomplete/.test(app) && !/const saveDraft = guard\('draft', async \(\) => \{[\s\S]{0,600}infoMissing/.test(app));
 ck('a draft row shows "needed" in each of the three blank cells', (mon.match(/e\._draft \? \/\*#__PURE__\*\/React\.createElement\("span", \{style:\{fontSize:10,color:'#F59E0B'\},title:"This draft has no (discipline|customer|job title) yet/g) || []).length === 3);

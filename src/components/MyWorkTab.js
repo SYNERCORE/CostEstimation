@@ -91,11 +91,11 @@ function MyWorkTab(ctx) {
       title: [(x.e.info && x.e.info.client) || x.m.customer || '', x.m.jobTitle || (x.e.info && x.e.info.description) || ''].filter(Boolean).join(' · ')},
       [(x.e.info && x.e.info.client) || x.m.customer || '', x.m.jobTitle || (x.e.info && x.e.info.description) || ''].filter(Boolean).join(' · '),
       /* Which discipline it is and who it is with, so the list can be read without opening each one. */
-      (() => { const d = (x.e.info && x.e.info.projType) || x.m.designation || '', who = String(x.m.ceeName || '').replace(/^Unassigned$/, '') || x.m.preparedBy || '';
+      (() => { const d = (x.e.info && x.e.info.projType) || x.m.designation || '', who = String(x.m.ceeName || '').replace(/^Unassigned$/, '') || x.m.preparedBy || x.e.savedByName || x.e.savedBy || '';
         /* The RCE No. (a request already shows it as its label), who received it and when. */
         const i = x.e.info || {}, rce = (i.request && !i.acceptedCeNum) ? '' : String(x.m.rceNo || i.requestNum || i.rceNo || '').trim();
         const rcv = x.m.dateRecv ? new Date(x.m.dateRecv + 'T00:00:00').toLocaleDateString('en-PH', {month:'short', day:'numeric', year:'numeric'}) : '';
-        const bits = [d, who && ('\u270E ' + who), rce && ('RCE ' + rce), x.m.receivedBy && ('from ' + x.m.receivedBy), rcv && ('recv ' + rcv)].filter(Boolean);
+        const bits = [d, who && ('Estimator: ' + who), rce && ('RCE ' + rce), x.m.receivedBy && ('from ' + x.m.receivedBy), rcv && ('recv ' + rcv)].filter(Boolean);
         return bits.length ? /*#__PURE__*/React.createElement("div", {style:{fontSize:10,opacity:.8}}, bits.join(' · ')) : null; })()),
     extra, actions);
   const viewBtn = x => typeof x.e.id === 'number' && /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setViewCE({id:x.e.id,ceNum:ceLabel(x.e)})}, "👁 View");

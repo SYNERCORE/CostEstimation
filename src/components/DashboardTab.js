@@ -109,7 +109,10 @@ function DashboardTab(ctx) {
       overdueReq: reqOverdueRows.filter(x => discOf(x) === key).length
     };
   };
-  const discNone = openCEs.filter(x => !discOf(x)).length + reqOverdueRows.filter(x => !discOf(x)).length;
+  const discLeft = [...openCEs, ...reqOverdueRows].filter(x => !discOf(x));
+  const discNone = discLeft.length;
+  /* Which ones, and what their discipline says, so the note can be acted on instead of just worried about. */
+  const discLeftTxt = discLeft.slice(0, 8).map(x => ((x.h.info && (x.h.info.ceNum || x.h.info.requestNum)) || x.h.ceNum || '?') + ' (' + (String(x.m.designation || x.m.discipline || (x.h.info && (x.h.info.discipline || x.h.info.projType)) || '').trim() || 'blank') + ')').join(', ') + (discLeft.length > 8 ? ' and ' + (discLeft.length - 8) + ' more' : '');
   const discCard = (key, col) => {
     const d = discStats(key), nxt = d.open.slice(0, 5);
     const stat = (l, v, c) => /*#__PURE__*/React.createElement("div",{style:{minWidth:0}},
@@ -154,7 +157,7 @@ function DashboardTab(ctx) {
       _dd && /*#__PURE__*/React.createElement("span",{style:{fontSize:11,color:MT}}, 'Every figure and list below is ' + _dd + ' only.')),
     /* Mechanical and Electrical, each on its own */
     !_dd && /*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:12,flexWrap:'wrap',marginBottom:discNone?4:20}}, discCard('Mechanical','#38BDF8'), discCard('Electrical','#F59E0B')),
-    !_dd && discNone > 0 && /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT,marginBottom:20}}, discNone + ' open CE or overdue request' + (discNone === 1 ? '' : 's') + ' have no Mechanical or Electrical discipline set, so they are in neither card (Civil, General or blank).'),
+    !_dd && discNone > 0 && /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT,marginBottom:20}}, discNone + ' open CE or overdue request' + (discNone === 1 ? '' : 's') + ' have no Mechanical or Electrical discipline set, so they are in neither card: ' + discLeftTxt + '.'),
     /* Monthly trend */
     /*#__PURE__*/React.createElement("div",{style:{...CS,marginBottom:16}},
       /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,marginBottom:12,fontSize:12}}, "📈 Monthly Trend (Last 6 Months)"),

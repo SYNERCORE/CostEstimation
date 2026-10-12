@@ -509,5 +509,7 @@ jobs:
         run: node tools/test-import-date-received.js
       - name: Monitoring export
         run: node tools/test-monitoring-export.js
+      - name: Dashboard trend by received
+        run: node tools/test-dashboard-trend-received.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

@@ -112,15 +112,15 @@ function DashboardTab(ctx) {
   const discNone = openCEs.filter(x => !discOf(x)).length + reqOverdueRows.filter(x => !discOf(x)).length;
   const discCard = (key, col) => {
     const d = discStats(key), nxt = d.open.slice(0, 5);
-    const stat = (l, v, c) => /*#__PURE__*/React.createElement("div",{style:{flex:1,minWidth:70}},
-      /*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:MT}}, l), /*#__PURE__*/React.createElement("div",{style:{fontSize:17,fontWeight:800,color:c||TX,...MONO}}, v));
-    return /*#__PURE__*/React.createElement("div",{key,className:'dash-disc',style:{...CS,flex:1,minWidth:300,margin:0,borderTop:'3px solid '+col}},
+    const stat = (l, v, c) => /*#__PURE__*/React.createElement("div",{style:{minWidth:0}},
+      /*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:MT,whiteSpace:'nowrap'}}, l), /*#__PURE__*/React.createElement("div",{style:{fontSize:16,fontWeight:800,color:c||TX,whiteSpace:'nowrap',...MONO}}, v));
+    return /*#__PURE__*/React.createElement("div",{key,className:'dash-disc',style:{...CS,flex:'1 1 420px',minWidth:0,margin:0,borderTop:'3px solid '+col}},
       /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:13,marginBottom:10,color:col}}, key === 'Electrical' ? "⚡ Electrical" : "⚙ Mechanical"),
-      /*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:10,flexWrap:'wrap',marginBottom:10}},
+      /*#__PURE__*/React.createElement("div",{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,max-content))',columnGap:24,rowGap:10,marginBottom:12}},
         stat('Open CEs', d.open.length), stat('Open value', '₱' + ph(d.value), OK), stat('Past deadline', d.late, d.late ? ERR : MT),
         stat('Awaiting review', d.awaiting, d.awaiting ? ACC : MT), stat('Overdue requests', d.overdueReq, d.overdueReq ? ERR : MT)),
-      Object.keys(d.sc).length > 0 && /*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}},
-        Object.entries(d.sc).sort((a,b)=>{const ia=(allStatuses||[]).indexOf(a[0]),ib=(allStatuses||[]).indexOf(b[0]);return (ia<0?1e6:ia)-(ib<0?1e6:ib);}).map(([st,c])=>/*#__PURE__*/React.createElement("span",{key:st,style:{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:10,background:getStatusColor(st)+'22',color:getStatusColor(st),border:'1px solid '+getStatusColor(st)+'44'}}, st + ' ' + c))),
+      Object.keys(d.sc).length > 0 && /*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12}},
+        Object.entries(d.sc).sort((a,b)=>{const ia=(allStatuses||[]).indexOf(a[0]),ib=(allStatuses||[]).indexOf(b[0]);return (ia<0?1e6:ia)-(ib<0?1e6:ib);}).map(([st,c])=>/*#__PURE__*/React.createElement("span",{key:st,style:{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:10,whiteSpace:'nowrap',flex:'0 0 auto',lineHeight:'16px',background:getStatusColor(st)+'22',color:getStatusColor(st),border:'1px solid '+getStatusColor(st)+'44'}}, st + ' ' + c))),
       /*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:MT,marginBottom:4}}, nxt.length ? 'Next due' : 'No open CEs'),
       nxt.map(x=>{ const dl = x.m.deadline, days = dl ? Math.round((new Date(dl+'T00:00:00') - _today)/86400000) : null;
         return /*#__PURE__*/React.createElement("div",{key:x.h.id,style:{display:'flex',justifyContent:'space-between',gap:8,fontSize:11,padding:'2px 0',borderBottom:'1px solid '+BDR}},

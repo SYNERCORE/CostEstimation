@@ -330,7 +330,9 @@ function makeImportMonitoringXLSX(getCtx) {
       const iCeNum=headers.findIndex(h => _hn(h)==='ceno') >= 0 ? headers.findIndex(h => _hn(h)==='ceno') : col('CENo'),
             iRce=headers.findIndex(h => ['rceno','rce','rcenumber'].includes(_hn(h))), iCeName=col('CEName'), iComp=col('CompanyDesignation'),
             iDisc=headers.findIndex(h => { const c=h.toLowerCase().replace(/\s+/g,''); return c==='designation'||c==='discipline'; }), iClient=col('Customer'),
-            iTitle=col('JobTitle'), iRecvDate=col('DateRecieved'), iDeadline=col('Deadline'),
+            iTitle=col('JobTitle'), iDeadline=col('Deadline'),
+            /* Date Received: the sheet's own spelling is "Date Recieved"; "Date Received" and "Date Recv." are the same column. */
+            iRecvDate=headers.findIndex(h => ['daterecieved','datereceived','daterecv','receiveddate','recieveddate'].includes(_hn(h))),
             iSubmDate=col('DateSubmitted');
       // Status column header is blank in Google Sheets export — fallback to position after Date Submitted
       const iStatus = col('Column12') >= 0 ? col('Column12') : col('Status') >= 0 ? col('Status') : (iSubmDate >= 0 ? iSubmDate + 1 : -1);
@@ -371,19 +373,28 @@ function makeImportMonitoringXLSX(getCtx) {
         if (k) existingMap[k] = h;
       });
 
+      /* A calendar date, read as written. toISOString() converted to UTC first, so a date typed as text ("10/10/2026", "Oct 10, 2026")
+         read in local time came out a day early in the Philippines. */
       const parseDate = v => {
         if (!v) return '';
         try {
-          const d = new Date(v);
-          if (isNaN(d.getTime())) return '';
-          const y = d.getFullYear();
-          if (y < 2000 || y > 2100) return '';
-          return d.toISOString().slice(0,10);
+          const t = String(v).trim();
+          const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+          let y, m, dd;
+          if (iso) { y = +iso[1]; m = +iso[2]; dd = +iso[3]; }
+          else {
+            const d = v instanceof Date ? v : new Date(t);
+            if (isNaN(d.getTime())) return '';
+            y = d.getFullYear(); m = d.getMonth() + 1; dd = d.getDate();
+          }
+          if (y < 2000 || y > 2100 || m < 1 || m > 12 || dd < 1 || dd > 31) return '';
+          return y + '-' + String(m).padStart(2, '0') + '-' + String(dd).padStart(2, '0');
         } catch { return ''; }
       };
 
       const toInsert = [];   // new CEs to create
       const monByCeNum = {}; // monitoring data keyed by ceNum (both new + existing)
+      const monPatch = {};   // existing CEs: just the values the file carries
       let updated = 0;
 
       for (const r of dataRows) {
@@ -396,12 +407,13 @@ function makeImportMonitoringXLSX(getCtx) {
         const appStatus = Object.entries(statusMap).find(([k]) => rawLower.startsWith(k))?.[1] || rawStatus || 'Pending';
         const estimatorName = String(r[iCeName]||'').trim();
 
+        const recvIso = parseDate(r[iRecvDate]);
         monByCeNum[ceNum] = {
           status: appStatus,
           standing: String(r[iStanding]||'').trim(),
           deadline: parseDate(r[iDeadline]),
           dateSubmitted: parseDate(r[iSubmDate]),
-          dateReceived: parseDate(r[iRecvDate]),
+          dateRecv: recvIso,
           receivedBy: String(r[iRecvBy]||'').trim(),
           ...(iRce >= 0 && String(r[iRce]||'').trim() ? {rceNo: String(r[iRce]).trim()} : {}),
           remarks: String(r[iRemarks]||'').trim(),
@@ -409,6 +421,23 @@ function makeImportMonitoringXLSX(getCtx) {
           ceeName: estimatorName,
           designation: String(r[iDisc]||'').trim(),
         };
+        /* For a CE already in the app only what the file actually says is changed: a column the file does not have, or a blank cell,
+           leaves the record's value alone. (The whole record used to be replaced, wiping what the file does not carry.) */
+        if (existingMap[ceNum]) {
+          const say = (idx, v) => idx >= 0 && v !== '' && v != null;
+          const patch = {};
+          if (say(iStatus, rawStatus)) patch.status = appStatus;
+          if (say(iStanding, String(r[iStanding]||'').trim())) patch.standing = String(r[iStanding]).trim();
+          if (say(iDeadline, parseDate(r[iDeadline]))) patch.deadline = parseDate(r[iDeadline]);
+          if (say(iSubmDate, parseDate(r[iSubmDate]))) patch.dateSubmitted = parseDate(r[iSubmDate]);
+          if (say(iRecvDate, recvIso)) patch.dateRecv = recvIso;
+          if (say(iRecvBy, String(r[iRecvBy]||'').trim())) patch.receivedBy = String(r[iRecvBy]).trim();
+          if (iRce >= 0 && String(r[iRce]||'').trim()) patch.rceNo = String(r[iRce]).trim();
+          if (say(iRemarks, String(r[iRemarks]||'').trim())) patch.remarks = String(r[iRemarks]).trim();
+          if (say(iCeName, estimatorName)) { patch.preparedBy = estimatorName; patch.ceeName = estimatorName; }
+          if (say(iDisc, String(r[iDisc]||'').trim())) patch.designation = String(r[iDisc]).trim();
+          monPatch[ceNum] = patch;
+        }
 
         if (existingMap[ceNum]) {
           updated++;
@@ -439,7 +468,10 @@ function makeImportMonitoringXLSX(getCtx) {
       const preview = [
         `Found ${total} CE row(s) in the file:`,
         `  • ${toInsert.length} new CE(s) to create`,
-        `  • ${updated} existing CE(s) to update`,
+        `  • ${updated} existing CE(s) to update (only the columns in the file are changed; blank cells leave the value as it is)`,
+        iRecvDate >= 0
+          ? `  • Date Received set from the file for ${Object.keys(monByCeNum).filter(k => monByCeNum[k].dateRecv).length} CE(s)`
+          : '  • No "Date Received" column was found in the file, so no received dates will change',
         '',
         toInsert.length > 0
           ? 'New: ' + toInsert.slice(0,5).map(e => e.info.ceNum).join(', ') + (toInsert.length > 5 ? ` +${toInsert.length-5} more` : '')
@@ -471,7 +503,8 @@ function makeImportMonitoringXLSX(getCtx) {
       const merged = {...monData};
       for (const h of fresh) {
         const key = (h.info?.ceNum || h.ceNum || '').toUpperCase().trim();
-        if (monByCeNum[key]) merged[h.id] = monByCeNum[key];
+        if (monPatch[key]) merged[h.id] = {...(monData[h.id] || {}), ...monPatch[key]};
+        else if (monByCeNum[key]) merged[h.id] = monByCeNum[key];
       }
       setMonData(merged);
       try { localStorage.setItem(MON_KEY, JSON.stringify(merged)); } catch {}

@@ -493,5 +493,7 @@ jobs:
         run: node tools/test-status-manager.js
       - name: Dashboard Mechanical / Electrical cards
         run: node tools/test-dashboard-disciplines.js
+      - name: xlsx import: Date Received, merge not replace
+        run: node tools/test-import-date-received.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

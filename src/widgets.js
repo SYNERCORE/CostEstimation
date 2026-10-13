@@ -101,6 +101,18 @@ function SignInBanner() {
       }
     }, busy ? 'Opening Microsoft sign-in…' : '⚠ Sign in to Microsoft'));
 }
+/* One honest answer to "is my work saved to SharePoint?" for the whole app. The status chips used to say "SP connected" whenever a load had
+   succeeded -- even when SharePoint was off (test mode, no site set) and the load came from this browser. It reads the real link first. */
+function syncSummary(sync) {
+  const NAMES = {masterlist: 'Masterlist', monitoring: 'Monitoring', sowlib: 'Scope Lib', drafts: 'Drafts'}, keys = Object.keys(NAMES);
+  if (!getSiteURL()) return {level: 'local', icon: '○', label: 'Local only', short: 'Local only', tip: 'SharePoint is not connected here (test mode, or no site set). Everything stays in this browser; nothing is sent to the team.'};
+  const failed = keys.filter(k => sync[k] === 'error'), local = keys.filter(k => sync[k] === 'local'), busy = keys.filter(k => sync[k] === 'saving');
+  if (sync.sp === 'error' || failed.length) return {level: 'error', icon: '✗', label: 'Sync failed' + (failed.length ? ': ' + failed.map(k => NAMES[k]).join(', ') : ''), short: 'Sync failed', tip: 'SharePoint refused or could not be reached. Press Refresh to retry. Until then changes may exist only on this device.'};
+  if (busy.length) return {level: 'busy', icon: '↻', label: 'Syncing…', short: 'Syncing…', tip: 'Talking to SharePoint now.'};
+  if (local.length || sync.dirty) return {level: 'warn', icon: '⚠', label: 'Not saved to SharePoint' + (local.length ? ': ' + local.map(k => NAMES[k]).join(', ') : ''), short: 'Not saved to SharePoint', tip: 'This is the copy in your browser; SharePoint has not confirmed it, so others may see something different. Press Refresh to retry.'};
+  if (sync.sp !== 'connected') return {level: 'unknown', icon: '○', label: 'Connecting…', short: 'Connecting…', tip: 'Not fetched from SharePoint yet in this session.'};
+  return {level: 'ok', icon: '✓', label: 'Saved to SharePoint', short: 'SharePoint synced', tip: 'In step with SharePoint.'};
+}
 function SyncStatusBar() {
   const [sync, setSync] = React.useState(() => getSyncStatus());
   React.useEffect(() => {
@@ -109,8 +121,10 @@ function SyncStatusBar() {
     return () => window.removeEventListener('shic:sync:updated', h);
   }, []);
 
-  const spColor = sync.sp === 'connected' ? OK : sync.sp === 'error' ? ERR : 'var(--status-warning)';
-  const spLabel = sync.sp === 'connected' ? '✓ SP' : sync.sp === 'error' ? '✗ SP Error' : '○ SP';
+  const [more, setMore] = React.useState(false);
+  const sum = syncSummary(sync);
+  const spColor = sum.level === 'ok' ? OK : sum.level === 'error' ? ERR : sum.level === 'warn' || sum.level === 'busy' ? 'var(--status-warning)' : MT;
+  const spLabel = sum.icon + ' ' + sum.label;
 
   const lastSync = sync.lastSyncAt ? (() => {
     const mins = Math.round((Date.now() - new Date(sync.lastSyncAt)) / 60000);
@@ -145,17 +159,14 @@ function SyncStatusBar() {
     }
   },
     /* SP pill */
-    React.createElement('span', {
-      title: 'SharePoint connection',
-      style:{display:'flex',alignItems:'center',gap:4,padding:'2px 8px',borderRadius:10,
+    React.createElement('button', {
+      type: 'button', 'aria-expanded': more, title: sum.tip + ' Click for the detail.', onClick: () => setMore(v => !v),
+      style:{display:'flex',alignItems:'center',gap:4,padding:'2px 8px',borderRadius:10,cursor:'pointer',fontFamily:'inherit',fontSize:10,
              background:alpha(spColor, '22'),color:spColor,border:'1px solid '+alpha(spColor, '44'),fontWeight:700}
-    }, spLabel),
+    }, spLabel, React.createElement('span', {style:{opacity:.7}}, more ? ' ▴' : ' ▾')),
 
-    /* divider */
-    React.createElement('span', {style:{color:BDR}}, '|'),
-
-    /* per-entity pills */
-    ...entities.map(({key, label}) => {
+    /* per-entity pills: the detail, on request */
+    ...(more && sum.level !== 'local' ? entities : []).map(({key, label}) => {
       const x = st(sync[key] || 'unknown');
       return React.createElement('span', {
         key,
@@ -656,11 +667,11 @@ function StatusBar({ currentUser }) {
     /*#__PURE__*/React.createElement("span", {
       style: {
         width: 6, height: 6, borderRadius: '50%', display: 'inline-block',
-        background: sync.sp === 'connected' ? OK : sync.masterlist === 'error' ? ERR : MT
+        background: ({ok: OK, error: ERR, warn: 'var(--status-warning)', busy: 'var(--status-warning)'})[syncSummary(sync).level] || MT
       }
     }),
     /*#__PURE__*/React.createElement("span", {style: MONO},
-      "DB: " + (sync.sp === 'connected' ? 'Realtime Sync' : 'Local only'))),
+      "DB: " + syncSummary(sync).short)),
   /*#__PURE__*/React.createElement("span", {style: {marginLeft: 'auto', ...MONO, color: 'var(--text-muted)'}},
     currentUser.username ? currentUser.username + " / " + String(currentUser.role || '').toUpperCase() : ''));
 }
@@ -684,10 +695,10 @@ function FooterBar() {
     /*#__PURE__*/React.createElement("span", {
       style: {
         width: 6, height: 6, borderRadius: '50%', display: 'inline-block',
-        background: sync.sp === 'connected' ? OK : MT
+        background: ({ok: OK, error: ERR, warn: 'var(--status-warning)', busy: 'var(--status-warning)'})[syncSummary(sync).level] || MT
       }
     }),
-    "Database: " + (sync.sp === 'connected' ? 'SharePoint (synced)' : 'This browser only')),
+    "Database: " + (syncSummary(sync).level === 'ok' ? 'SharePoint (synced)' : syncSummary(sync).level === 'local' ? 'This browser only' : syncSummary(sync).short)),
   /*#__PURE__*/React.createElement("span", {style: {...MONO, color: 'var(--text-muted)'}},
     "Engine build " + (typeof APP_BUILD === 'undefined' ? '?' : APP_BUILD)),
   /*#__PURE__*/React.createElement("span", {style: {marginLeft: 'auto', ...MONO, color: 'var(--text-muted)'}},

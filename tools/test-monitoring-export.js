@@ -11,7 +11,7 @@ let bad = 0;
 const ck = (n, c, x) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n + (!c && x ? '  -> ' + x : '')); if (!c) bad++; };
 const m = src.match(/const exportMonXlsx = \(\) => \{[\s\S]*?\n  \};\n/);
 ck('the export function exists', !!m);
-ck('the button is wired to it and says Export xlsx', src.includes('onClick: exportMonXlsx') && src.includes(' Export xlsx"'));
+ck('the button is wired to it and says Export xlsx', src.includes('() => exportMonXlsx()') && src.includes('Export this list (xlsx)'));
 if (m) {
   const sorted = [
     { id: 1, info: { ceNum: 'SHIC-CE-2026-0001', client: 'ACME', description: 'Overhaul', projType: 'Mechanical' }, _revs: [{ id: 2, info: { ceNum: 'SHIC-CE-2026-0001-R1' } }] },

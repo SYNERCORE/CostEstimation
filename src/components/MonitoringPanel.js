@@ -111,6 +111,21 @@ function MonitoringPanel(ctx) {
   /* The Status manager (admin). Every change is saved at once, for everyone: reorder, recolour (click the dot), rename, regroup, add, delete.
      A status the code itself names is locked: it can be reordered and recoloured only. Closed-group statuses end a CE's open work; see ceIsOpen. */
   const SWATCHES = ['#6B7280', '#94A3B8', '#EAB308', '#F97316', '#EF4444', '#A855F7', '#38BDF8', '#06B6D4', '#22C55E', '#16a34a'];
+  const monTemplateXlsx = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+        ['CE No.','CE Name','Company Designation','Discipline','Customer','Job Title','Date Recieved','Deadline','Date Submitted','Status','Recieved By','Remarks','RCE No.'],
+        ['CE-2826-0001','Juan Dela Cruz','SHIC','Mechanical','Sample Client Inc.','PUMP OVERHAUL AND REPAIR','2026-01-15','2026-01-22','2026-01-21','Submitted','Kenneth Mendoza','','RCE-2026-0001'],
+      ]);
+      ws['!cols'] = [120,120,120,100,140,200,110,110,110,90,120,140,110].map(w=>({wch:Math.round(w/7)}));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'CE Monitoring');
+      XLSX.writeFile(wb, 'SHIC_CE_Import_Template.xlsx');
+  };
+  /* The Import / Export menu closes when you click anywhere else. */
+  if (typeof window !== 'undefined' && !window._monMenuClose) {
+    window._monMenuClose = true;
+    document.addEventListener('click', e => document.querySelectorAll('details.mon-data-menu[open]').forEach(d => { if (!d.contains(e.target)) d.removeAttribute('open'); }));
+  }
   /* Export what the list is showing (the current filters and sort, revisions included, drafts left out) in the same columns as the import
      template, so the file can be edited and imported back. A date is written only if the record has one of its own: the "day it was saved"
      shown in Date Recv. is not exported, or an import would turn it into a received date. */
@@ -354,43 +369,31 @@ function MonitoringPanel(ctx) {
         if (r && r.moved) showToast('Moved ' + r.moved + ' CE(s) to offline storage, freeing ' + Math.round((r.freedBytes||0)/1024) + ' KB.');
       }).catch(ex => console.warn('CE archive migration skipped:', ex.message));
     }
-  }, "\u21BB Refresh"), /*#__PURE__*/React.createElement("button", {
-    title: "Download a blank Excel template with the correct column headers for bulk import",
-    style: btn('def', true),
-    onClick: () => {
-      const ws = XLSX.utils.aoa_to_sheet([
-        ['CE No.','CE Name','Company Designation','Discipline','Customer','Job Title','Date Recieved','Deadline','Date Submitted','Status','Recieved By','Remarks','RCE No.'],
-        ['CE-2826-0001','Juan Dela Cruz','SHIC','Mechanical','Sample Client Inc.','PUMP OVERHAUL AND REPAIR','2026-01-15','2026-01-22','2026-01-21','Submitted','Kenneth Mendoza','','RCE-2026-0001'],
-      ]);
-      ws['!cols'] = [120,120,120,100,140,200,110,110,110,90,120,140,110].map(w=>({wch:Math.round(w/7)}));
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'CE Monitoring');
-      XLSX.writeFile(wb, 'SHIC_CE_Import_Template.xlsx');
-    }
-  }, "\u2193 Template"), /*#__PURE__*/React.createElement("button", {
-    title: "Download the CEs now showing in this list (your filters and sort apply) as an Excel file in the import-template columns",
-    style: btn('def', true),
-    onClick: exportMonXlsx
-  }, "\u2b07 Export xlsx"), /*#__PURE__*/React.createElement("label", {
-    title: "Import CE Tracking spreadsheet (.xlsx)",
-    style: {...btn('def', true), cursor:'pointer', display:'inline-flex', alignItems:'center', gap:4}
-  }, importProgress ? `Importing\u2026 ${importProgress.done}/${importProgress.total}` : "\u2B06 Import xlsx", /*#__PURE__*/React.createElement("input", {
-    type: "file",
-    accept: ".xlsx",
-    style: {display:'none'},
-    disabled: !!importProgress,
+  }, "\u21BB Refresh"), /*#__PURE__*/React.createElement("input", {
+    type: "file", id: "mon-import-xlsx", accept: ".xlsx", style: {display:'none'}, disabled: !!importProgress,
     onChange: e => { if(e.target.files[0]) { importMonitoringXLSX(e.target.files[0]); e.target.value=''; } }
-  })), /*#__PURE__*/React.createElement("label", {
-    title: "Import one or multiple SHIC CE Excel files (reads BOTE, BOCM, PPE, MISC sheets)",
-    style: {...btn('info', true), cursor:'pointer', display:'inline-flex', alignItems:'center', gap:4}
-  }, ceImportProgress ? `\u21BB ${ceImportProgress.step || 'Importing'} ${ceImportProgress.done}/${ceImportProgress.total}\u2026` : "\u2B06 Import CE File(s)", /*#__PURE__*/React.createElement("input", {
-    type: "file",
-    accept: ".xlsx,.xls",
-    multiple: true,
-    style: {display:'none'},
-    disabled: !!ceImportProgress,
+  }), /*#__PURE__*/React.createElement("input", {
+    type: "file", id: "mon-import-cefiles", accept: ".xlsx,.xls", multiple: true, style: {display:'none'}, disabled: !!ceImportProgress,
     onChange: e => { if(e.target.files.length) { importShicCeFiles(e.target.files); e.target.value=''; } }
-  })), importProgress && /*#__PURE__*/React.createElement("div", {
+  }), /* The data chores (template, export, the two imports) live in one menu so the everyday controls -- filters, New Request, Refresh, Save -- are what the eye finds. */
+  /*#__PURE__*/React.createElement("details", {className: 'mon-data-menu', style: {position: 'relative'}},
+    /*#__PURE__*/React.createElement("summary", {
+      title: "Excel in and out: download the template, export this list, update CEs from a list, or bring in CE workbooks",
+      style: {...btn('def', true), listStyle: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4}
+    }, importProgress ? `Importing\u2026 ${importProgress.done}/${importProgress.total}` : ceImportProgress ? `\u21BB ${ceImportProgress.step || 'Importing'} ${ceImportProgress.done}/${ceImportProgress.total}\u2026` : "\u21C5 Import / Export \u25BE"),
+    /*#__PURE__*/React.createElement("div", {
+      role: 'menu',
+      style: {position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 60, minWidth: 300, padding: 6, background: SURF, border: `1px solid ${BDR}`, borderRadius: 8, boxShadow: '0 10px 28px rgba(0,0,0,.35)'}
+    }, [
+      ['Export this list (xlsx)', 'The CEs now showing, filters and sort applied, in the import columns.', () => exportMonXlsx(), false],
+      ['Update CEs from a list (xlsx)', 'Dates, status, deadline and more for CEs by CE No. Asks before creating any that are not in the app.', () => document.getElementById('mon-import-xlsx').click(), !!importProgress],
+      ['Import CE workbooks (xlsx)', 'Whole CE files, with their BOTE, BOCM, PPE and MISC sheets.', () => document.getElementById('mon-import-cefiles').click(), !!ceImportProgress],
+      ['Blank list template (xlsx)', 'The columns the list import expects.', () => monTemplateXlsx(), false]
+    ].map(([label, desc, run, off]) => /*#__PURE__*/React.createElement("button", {
+      key: label, type: 'button', role: 'menuitem', disabled: off,
+      onClick: e => { const d = e.currentTarget.closest('details'); if (d) d.removeAttribute('open'); run(); },
+      style: {display: 'block', width: '100%', textAlign: 'left', cursor: off ? 'not-allowed' : 'pointer', opacity: off ? .5 : 1, background: 'transparent', color: 'inherit', border: 'none', borderRadius: 6, padding: '7px 9px', fontFamily: 'inherit'}
+    }, /*#__PURE__*/React.createElement("div", {style: {fontSize: 12, fontWeight: 700}}, label), /*#__PURE__*/React.createElement("div", {style: {fontSize: 10, color: MT, marginTop: 1}}, desc))))), importProgress && /*#__PURE__*/React.createElement("div", {
     style: {display:'flex', alignItems:'center', gap:6, fontSize:10, color:ACC}
   }, /*#__PURE__*/React.createElement("div", {
     style: {width:80, height:4, background:BDR, borderRadius:4, overflow:'hidden'}

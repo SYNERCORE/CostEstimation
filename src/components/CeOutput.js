@@ -4,6 +4,85 @@
    makeX(() => ({ ...the names it reads... })) once per render. The names are read when the function is CALLED, not when it is made,
    so a function still sees the same values (and can reach ones declared further down App) exactly as the closure it replaces did. */
 
+/* ── Scope breakdown: the scope of work with what is used on each task, beside it ─────────────────────────────────────
+   One block per main scope task (its sub-tasks as A, B, C under it), and beside it the manpower, tools, consumables, PPE and
+   miscellaneous charged to it -- name, quantity and unit, never an amount, so it is safe on the client's copy. Resources linked to no
+   task print last. Optional per CE (info.showScopeBreakdown). A task with a long list is cut into blocks of at most `cap` lines, each
+   with its own scope cell, so no page break can land inside one block's merged cell. */
+const SB_KEYS = ['mp', 'tools', 'mats', 'ppe', 'misc'];
+const SB_TITLES = ['MANPOWER', 'TOOLS AND EQUIPMENT', 'CONSUMABLES', 'PPE', 'MISCELLANEOUS'];
+function sbChunks(sb, cap) {
+  const out = [];
+  const add = (no, title, subs, cols) => {
+    const n = Math.max(1, ...SB_KEYS.map(k => (cols[k] || []).length));
+    for (let s = 0; s < n; s += cap) {
+      const rows = [];
+      for (let i = s; i < Math.min(n, s + cap); i++) rows.push(SB_KEYS.map(k => (cols[k] || [])[i] || null));
+      out.push({ no, title, subs: s ? [] : subs, cont: s > 0, rows });
+    }
+  };
+  ((sb && sb.groups) || []).forEach(g => add(g.no, g.title, g.subs, g.cols));
+  if (sb && sb.unlinked) add('', 'NOT LINKED TO A TASK', [], sb.unlinked);
+  return out;
+}
+const sbQty = q => { const n = Math.round((Number(q) || 0) * 100) / 100; return String(n); };
+function sbHtml(sb, br, esc) {
+  const ch = sbChunks(sb, 14);
+  if (!ch.length) return '';
+  const cell = c => c
+    ? '<td>' + esc(c.d) + '</td><td class="c">' + esc(sbQty(c.q)) + '</td><td class="c">' + esc(c.u || '') + '</td>'
+    : '<td></td><td class="c"></td><td class="c"></td>';
+  const widths = [18.5].concat(SB_KEYS.reduce((a) => a.concat([10.2, 2.6, 3.4]), []));
+  const head1 = '<tr class="rep"><th rowspan="2" style="background:' + br.bar + ';color:' + br.text + '">SCOPE OF WORK</th>' +
+    SB_TITLES.map(t => '<th colspan="3" style="background:' + br.bar + ';color:' + br.text + '">' + t + '</th>').join('') + '</tr>';
+  const sub = ['ITEM DESCRIPTION', 'QTY', 'UOM'];
+  const head2 = '<tr class="rep">' + SB_KEYS.map(() => sub.map(h => '<th style="background:#dbe5f1">' + h + '</th>').join('')).join('') + '</tr>';
+  let body = '';
+  ch.forEach(b => {
+    const letters = b.subs.map((s, i) => String.fromCharCode(65 + (i % 26)) + '. ' + esc(s));
+    const scope = '<td class="sc" rowspan="' + b.rows.length + '"><b>' + (b.no ? b.no + '. ' : '') + esc(b.title) + (b.cont ? ' (continued)' : '') + '</b>' +
+      letters.map(l => '<div>' + l + '</div>').join('') + '</td>';
+    b.rows.forEach((r, i) => {
+      body += '<tr data-grp="1"' + (i ? '' : ' data-start="1"') + (i ? '' : ' style="border-top:1.5px solid #000"') + '>' + (i ? '' : scope) + r.map(cell).join('') + '</tr>';
+    });
+  });
+  return '<table class="sbt" style="table-layout:fixed"><colgroup>' + widths.map(w => '<col style="width:' + w + '%">').join('') + '</colgroup>' +
+    head1 + head2 + body + '</table>';
+}
+/* The same sheet for the two Excel exports: columns, merged scope cells, rows. */
+function sbSheet(sb, h) {
+  const C = (v, s, span, ht) => ({ v, s, span, ht });
+  const NL = String.fromCharCode(10);
+  const ch = sbChunks(sb, 14);
+  const rows = [], merges = [];
+  rows.push([C(h.name || '', 'val')]);
+  rows.push([C('SCOPE BREAKDOWN', 'secbar', 15)]);
+  rows.push([C('CE No.:', 'label'), C(h.ceNum || '', 'val', 1), null, C('CE TYPE:', 'label'), C(h.ceType || '', 'val', 1), null, C('DATE:', 'label'), C(h.date || '', 'val', 1)]);
+  rows.push([]);
+  const g = rows.length;
+  const grp = [C('SCOPE OF WORK', 'th')];
+  SB_TITLES.forEach(t => { grp.push(C(t, 'th', 2), C('', 'th'), C('', 'th')); });
+  rows.push(grp);
+  const sub = [C('', 'th')];
+  SB_KEYS.forEach(() => sub.push(C('ITEM DESCRIPTION', 'th'), C('QTY', 'th'), C('UOM', 'th')));
+  rows.push(sub);
+  merges.push('A' + (g + 1) + ':A' + (g + 2));
+  ch.forEach(b => {
+    const letters = b.subs.map((s, i) => String.fromCharCode(65 + (i % 26)) + '. ' + s);
+    const text = (b.no ? b.no + '. ' : '') + b.title + (b.cont ? ' (continued)' : '') + (letters.length ? NL + letters.join(NL) : '');
+    const lines = [(b.no ? b.no + '. ' : '') + b.title].concat(letters).reduce((n, l) => n + Math.max(1, Math.ceil(l.length / 34)), 0);
+    const ht = Math.max(15, Math.ceil(lines * 12.5 / b.rows.length));
+    const start = rows.length;
+    b.rows.forEach((r, i) => {
+      const row = [i ? C('', 'td', 0, ht) : C(text, 'note', 0, ht)];
+      r.forEach(c => { row.push(c ? C(c.d, 'td') : C('', 'td'), c ? C(Number(sbQty(c.q)), 'tdc') : C('', 'tdc'), c ? C(c.u || '', 'tdc') : C('', 'tdc')); });
+      rows.push(row);
+    });
+    if (b.rows.length > 1) merges.push('A' + (start + 1) + ':A' + (start + b.rows.length));
+  });
+  return { name: 'SCOPE BREAKDOWN', cols: [34, 24, 6, 8, 24, 6, 8, 24, 6, 8, 22, 6, 8, 22, 6, 8], merges, rows };
+}
+
 function makeHandleGenerateCE(getCtx) {
   return (opt) => {
     const {
@@ -44,6 +123,7 @@ function makeHandleGenerateCE(getCtx) {
       qtyUom,
       rceNo,
       rr,
+      scopeBreakdown,
       servicesSummary,
       showUnitP,
       signatures,
@@ -79,6 +159,7 @@ function makeHandleGenerateCE(getCtx) {
       /* Zero: every sheet carries its own margins as padding, so what is on
          screen is exactly what leaves the printer. */
       @page{size:A4 portrait;margin:0}
+      @page land{size:A4 landscape;margin:0}
       *{box-sizing:border-box}
       body{font-family:Arial,sans-serif;font-size:8pt;color:#000;margin:0;padding:0}
       table{width:100%;border-collapse:collapse}
@@ -103,6 +184,9 @@ function makeHandleGenerateCE(getCtx) {
          no way to count pages, so "Page 3 of 12" was impossible that way. */
       .sheet{width:210mm;height:297mm;padding:9mm 7mm 8mm;display:flex;flex-direction:column;overflow:hidden;background:#fff;page-break-after:always;break-after:page}
       .sheet:last-child{page-break-after:auto;break-after:auto}
+      .sheet.land{width:297mm;height:210mm;page:land}
+      .sbt td,.sbt th{font-size:6.3pt;padding:1px 3px;line-height:1.25;overflow-wrap:anywhere}
+      .sbt td.sc{vertical-align:top;font-size:6.8pt;padding:2px 4px}
       .sbody{flex:1;min-height:0;overflow:hidden}
       .run-hdr,.run-ftr{font-size:6.5pt;color:#333;display:flex;justify-content:space-between;gap:8px;flex:none}
       .run-hdr{display:block;font-size:inherit;color:inherit;margin-bottom:2mm}
@@ -342,6 +426,8 @@ function makeHandleGenerateCE(getCtx) {
 
     const sowPage=sowItems.length?`<div class="page page-break">${docHdr('SCOPE OF WORK')}<div style="font-size:8pt;line-height:1.6">${(()=>{let mc=0,sc=0;return sowItems.map(it=>{if(it.type==='main'){mc++;sc=0;return`<div style="margin-top:4px"><b>${mc}. ${esc(it.text)}</b></div>`;}else{sc++;return`<div style="margin-left:14px">${mc}.${sc} ${esc(it.text)}</div>`;}}).join('');})()}</div></div>`:'';
 
+    const sbPage = scopeBreakdown && scopeBreakdown.on ? `<div class="page page-break" data-land="1">${docHdr('SCOPE BREAKDOWN')}${sbHtml(scopeBreakdown, _br, esc)}</div>` : '';
+
     const runHdr = `<div class="run-hdr">${docTop}</div>`;
     const runFtr = `<div class="run-ftr"><span>Document No.: ${esc(co.doc)} Rev. ${esc(co.revNo)}</span><span class="pnum"></span></div>`;
     /* Laid out here, not by the browser: only by measuring can a header and a
@@ -349,8 +435,8 @@ function makeHandleGenerateCE(getCtx) {
        the sheets can a footer say "of 12". */
     const paginator = `(function(){
       var HDR = ${JSON.stringify(runHdr)}, FTR = ${JSON.stringify(runFtr)};
-      function sheet(){
-        var d = document.createElement('div'); d.className = 'sheet';
+      function sheet(land){
+        var d = document.createElement('div'); d.className = land ? 'sheet land' : 'sheet';
         d.innerHTML = HDR + '<div class="sbody"></div>' + FTR;
         document.getElementById('out').appendChild(d); return d;
       }
@@ -360,7 +446,8 @@ function makeHandleGenerateCE(getCtx) {
         src.style.display = '';
         var sections = [].slice.call(src.children);
         var sh = null, body = null, avail = 0;
-        function fresh(){ sh = sheet(); body = sh.querySelector('.sbody'); avail = body.clientHeight; }
+        var curLand = false;
+        function fresh(land){ if (land !== undefined) curLand = land; sh = sheet(curLand); body = sh.querySelector('.sbody'); avail = body.clientHeight; }
         /* What is measured is the bottom of the content, not scrollHeight:
            scrollHeight is a whole number and never reports less than the box
            itself, so it can neither see a row overflowing by half a line nor
@@ -419,15 +506,24 @@ function makeHandleGenerateCE(getCtx) {
         function split(tbl){
           if (tbl.tagName !== 'TABLE') return;
           body.removeChild(tbl);
-          var rows = [].slice.call(tbl.rows), head = rows.length ? rows[0].cloneNode(true) : null, i = 0;
+          var rows = [].slice.call(tbl.rows), heads = rows.filter(function(r){ return r.className === 'rep'; }), i = 0;
+          if (!heads.length && rows.length) heads = [rows[0]];
+          heads = heads.map(function(r){ return r.cloneNode(true); });
+          var cg = tbl.querySelector('colgroup');
           while (i < rows.length) {
             var part = tbl.cloneNode(false), tb = document.createElement('tbody');
+            if (cg) part.appendChild(cg.cloneNode(true));
             part.appendChild(tb); body.appendChild(part);
-            if (i && head) tb.appendChild(head.cloneNode(true));
+            if (i) heads.forEach(function(h){ tb.appendChild(h.cloneNode(true)); });
             var placed = 0;
             while (i < rows.length) {
               tb.appendChild(rows[i]);
-              if (!fits() && placed) { tb.removeChild(rows[i]); break; }
+              if (!fits() && placed) {
+                tb.removeChild(rows[i]);
+                /* A scope block is one merged cell over several rows: cut only between blocks, never inside one. */
+                while (rows[i].hasAttribute('data-grp') && !rows[i].hasAttribute('data-start') && placed > 1) { i--; placed--; tb.removeChild(rows[i]); }
+                break;
+              }
               i++; placed++;
             }
             if (i < rows.length) fresh();
@@ -435,7 +531,7 @@ function makeHandleGenerateCE(getCtx) {
         }
         fresh();
         sections.forEach(function(sec, si){
-          if (si) fresh();
+          if (si || sec.getAttribute('data-land') === '1') fresh(sec.getAttribute('data-land') === '1');
           [].slice.call(sec.children).forEach(put);
         });
         src.parentNode.removeChild(src);
@@ -479,6 +575,7 @@ function makeHandleGenerateCE(getCtx) {
         ${sigBlock}
       </div>
       ${sowPage}
+      ${sbPage}
       ${billsPage}
       </div><div id="out"></div>
       <script>${paginator}</script>
@@ -623,6 +720,7 @@ function makeHandleExportXLSX(getCtx) {
       pwrFrac,
       qtyUom,
       rr,
+      scopeBreakdown,
       servicesSummary,
       showToast,
       showUnitP,
@@ -916,6 +1014,7 @@ function makeHandleExportXLSX(getCtx) {
       });
     }, CS_COLS);
 
+    if (scopeBreakdown && scopeBreakdown.on) sheets.push(sbSheet(scopeBreakdown, { name: co.logo ? '' : [co.name, co.sub].filter(Boolean).join(' — '), ceNum: info.ceNum, ceType: ceTypeLabel(ceType).toUpperCase(), date: info.date }));
     if (noAmt) stripSheetAmounts(sheets);
     SHICXlsx.download((info.ceNum || 'CE') + '_' + (info.client || 'export').replace(/[^a-z0-9]/gi, '_') + (noAmt ? '_no-amounts' : '') + '.xlsx', sheets,
       { bar: ceBrand(coI).bar, barText: ceBrand(coI).text, logo: co.logo });
@@ -963,6 +1062,7 @@ function makeHandleExport(getCtx) {
       qtyUom,
       rceNo,
       rr,
+      scopeBreakdown,
       servicesSummary,
       showToast,
       showUnitP,
@@ -1194,6 +1294,7 @@ function makeHandleExport(getCtx) {
     }
 
     const _xb = ceBrand(getCompanies().find(c => String(c.id) === String(info.companyId)) || getCompanies()[0] || {});
+    if (scopeBreakdown && scopeBreakdown.on) sheets.push(sbSheet(scopeBreakdown, { name: '', ceNum: info.ceNum, ceType: ceTypeLabel(ceType).toUpperCase(), date: info.date }));
     if (noAmt) stripSheetAmounts(sheets);
     SHICXlsx.download((info.ceNum || 'CE') + '_' + ceType + (noAmt ? '_no-amounts' : '') + '.xlsx', sheets, { bar: _xb.bar, barText: _xb.text });
     showToast('Excel exported — ' + sheets.length + ' sheets.');

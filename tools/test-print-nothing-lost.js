@@ -27,6 +27,7 @@ function El(tag, h, label) {
     style: {}, innerHTML: '',
     get rows() { const r = []; (function walk(n) { n.children.forEach(c => { if (c.tagName === 'TR') r.push(c); else walk(c); }); })(this); return r; },
     get offsetHeight() { return this.tagName === 'TR' ? this._h : this.children.reduce((s, c) => s + c.offsetHeight, this._h); },
+    hasAttribute() { return false },
     get lastElementChild() { return this.children[this.children.length - 1] || null; },
     appendChild(c) { if (c.parentNode) c.parentNode.removeChild(c); c.parentNode = this; this.children.push(c); return c; },
     removeChild(c) { const i = this.children.indexOf(c); if (i < 0) throw new Error('removeChild: not a child'); this.children.splice(i, 1); c.parentNode = null; return c; },
@@ -56,7 +57,7 @@ const sheets = [];
 const layout = sections => {
   sheets.length = 0;
   const run = new Function('sections', 'makeSheet', 'El', 'document',
-    code.replace('function fresh(){ sh = sheet(); body = sh.querySelector(\'.sbody\'); avail = body.clientHeight; }',
+    code.replace(/function fresh\(land\)\{[^\n]*\}/,
       'function fresh(){ body = makeSheet(); avail = ' + AVAIL + '; }')
     + '\n fresh();\n sections.forEach(function(sec, si){ if (si) fresh(); [].slice.call(sec.children).forEach(put); });');
   run(sections, () => { const b = El('DIV', 0, 'sbody'); b.className = 'sbody'; sheets.push(b); return b; }, El,

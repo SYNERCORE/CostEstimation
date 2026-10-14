@@ -56,6 +56,7 @@ function SummaryTab(ctx) {
     qtyMulOn,
     qtyN,
     saveDraft,
+    scopeBreakdown,
     servicesSummary,
     setAddlCosts,
     setAiSuggest,
@@ -232,6 +233,14 @@ function SummaryTab(ctx) {
               /*#__PURE__*/React.createElement("td", {style:{padding:'2px 4px'}}, "SERVICES TOTAL AMOUNT"),
               /*#__PURE__*/React.createElement("td", {style:{...MONO,textAlign:'right',padding:'2px 4px'}}, "₱" + ph(servicesSummary.total)))))
     )),
+  /* Scope breakdown card -- per CE on/off; a landscape page / sheet with the scope beside what each task uses */
+  /*#__PURE__*/React.createElement("div", {style:{...CS, marginBottom:10}},
+    /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}},
+      /*#__PURE__*/React.createElement("label", {style:{display:'flex',alignItems:'center',gap:6,fontWeight:700,fontSize:12,cursor:'pointer'}},
+        /*#__PURE__*/React.createElement("input", {type:'checkbox', checked:!!info.showScopeBreakdown, onChange:e=>{const v=e.target.checked; setInfo(p=>({...p, showScopeBreakdown:v}));}}),
+        "Scope breakdown on this CE"),
+      /*#__PURE__*/React.createElement("span", {style:{color:MT,fontSize:11}}, "— a page (and Excel sheet) listing each scope item with its manpower, tools, consumables, PPE and miscellaneous; no prices")),
+    info.showScopeBreakdown && scopeBreakdown.empty && /*#__PURE__*/React.createElement("div", {style:{color:ACC,fontSize:11,marginTop:4}}, "No scope items or resources yet, so nothing will print.")),
   /* Highlighted Costs card — callouts of costs already counted in the CE */
   /*#__PURE__*/React.createElement("div", {style:{...CS, borderColor:'#F59E0B44', marginBottom:10}},
     /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'center',gap:8,marginBottom:4,flexWrap:'wrap'}},

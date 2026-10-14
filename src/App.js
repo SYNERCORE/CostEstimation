@@ -1977,6 +1977,42 @@ function App({
     return RES_TABS.reduce((s, t) => s + t.rows.filter(r => r[t.nameKey] && bad(r)).length, 0)
       + miscFlat().filter(r => r.desc && bad(r)).length;
   })();
+  /* ── Scope breakdown ─────────────────────────────────────────────────────
+     The scope of work with what each task uses, beside it: for every main
+     item, its sub-items as A, B, C and the manpower, tools, consumables, PPE
+     and miscellaneous linked to the item or any of its sub-items. Names,
+     quantities and units only -- no amounts. A shared row appears under each
+     task it serves; a row linked to no task goes in `unlinked`. Optional per
+     CE (info.showScopeBreakdown); `on` is true only when there is something
+     to print. */
+  const scopeBreakdown = (() => {
+    const list = sowItems || [];
+    const valid = new Set(list.map(s => s.id));
+    const colsFor = ids => {
+      const serves = r => ids.some(id => rowServesTask(r, id));
+      const out = {};
+      RES_TABS.forEach(t => {
+        out[t.key] = t.rows.filter(r => r[t.nameKey] && serves(r)).map(r => ({ d: r[t.nameKey], q: r[t.qtyKey], u: t.key === 'mp' ? 'PAX' : (r.uom || '') }));
+      });
+      out.misc = miscFlat().filter(r => r.desc && serves(r)).map(r => ({ d: r.desc, q: r.qty, u: r.uom || '' }));
+      return out;
+    };
+    const groups = [];
+    let mc = 0;
+    list.forEach(it => {
+      if (it.type !== 'main') return;
+      mc++;
+      const ids = sowTaskGroup(it);
+      groups.push({ no: mc, title: String(it.text || '').trim() || 'Scope item ' + mc, subs: ids.slice(1).map(id => String((list.find(s => s.id === id) || {}).text || '').trim()).filter(Boolean), cols: colsFor(ids) });
+    });
+    const bad = r => !r.taskId || !valid.has(r.taskId);
+    const un = {};
+    RES_TABS.forEach(t => { un[t.key] = t.rows.filter(r => r[t.nameKey] && bad(r) && !rowShares(r)).map(r => ({ d: r[t.nameKey], q: r[t.qtyKey], u: t.key === 'mp' ? 'PAX' : (r.uom || '') })); });
+    un.misc = miscFlat().filter(r => r.desc && bad(r) && !rowShares(r)).map(r => ({ d: r.desc, q: r.qty, u: r.uom || '' }));
+    const unlinked = Object.keys(un).some(k => un[k].length) ? un : null;
+    const hasAny = groups.length > 0 || !!unlinked;
+    return { groups, unlinked, on: !!info.showScopeBreakdown && hasAny, empty: !!info.showScopeBreakdown && !hasAny };
+  })();
   /* One snapshot of everything a scope deletion can touch, and one way to put
      it all back. Deleting a step used to be undoable only when it carried
      sub-steps or resources, so an empty main step, any sub-step and Clear All
@@ -3717,7 +3753,7 @@ function App({
      Written through SHICXlsx rather than XLSX.writeFile because the vendored
      SheetJS build cannot write cell styles, and the formatting is the whole
      point of this export. */
-  const handleExport = makeHandleExport(() => ({ approvers, benefitRows, benefitsT, ceBreakdown, ceLayout, ceSections, ceType, cfg, demobVehicles, demobVehiclesT, docStatus, grand, hlAmt, hlLabel, hlRows, info, kwhRate, margin, mats, matsT, miscCosted, miscT, mobVehicles, mobVehiclesT, mp, mpTot, mpWage, notes, perJobLbl, perJobT, ppe, ppeT, pwrFrac, qtyUom, rceNo, rr, servicesSummary, showToast, showUnitP, sowItems, sowLabels, toolBasis, tools, toolsT, unitLbl, unitP }));
+  const handleExport = makeHandleExport(() => ({ approvers, benefitRows, benefitsT, ceBreakdown, ceLayout, ceSections, ceType, cfg, demobVehicles, demobVehiclesT, docStatus, grand, hlAmt, hlLabel, hlRows, info, kwhRate, margin, mats, matsT, miscCosted, miscT, mobVehicles, mobVehiclesT, mp, mpTot, mpWage, notes, perJobLbl, perJobT, ppe, ppeT, pwrFrac, qtyUom, rceNo, rr, scopeBreakdown, servicesSummary, showToast, showUnitP, sowItems, sowLabels, toolBasis, tools, toolsT, unitLbl, unitP }));
 
   /* ---- Scope Builder (Project Info tab - multi-select) ---- */
   /* Called, not rendered as a component: see ExpenseTable. A component
@@ -5224,7 +5260,7 @@ function App({
   };
   const summaryDot = label => SUMMARY_DOT[String(label).replace(/^[A-Z]\.\s+/, '')] || MT;
   const summaryRows = [...ceSections.map(x => [(x.letter ? x.letter + '  ' : '') + x.label, x.v])];
-  const handleGenerateCE = makeHandleGenerateCE(() => ({ approvers, benefitRows, benefitsT, ceBreakdown, ceLayout, ceSections, ceType, demobVehicles, demobVehiclesT, grand, hlAmt, hlLabel, hlRows, incOn, info, kwhRate, margin, mats, matsT, miscCosted, miscT, mobVehicles, mobVehiclesT, monData, mp, mpTot, notes, openCeId, perJobLbl, perJobT, powerOn, ppe, ppeT, pwrFrac, qtyUom, rceNo, rr, servicesSummary, showUnitP, signatures, sowItems, sowLabels, toolBasis, tools, toolsT, unitLbl, unitP }));
+  const handleGenerateCE = makeHandleGenerateCE(() => ({ approvers, benefitRows, benefitsT, ceBreakdown, ceLayout, ceSections, ceType, demobVehicles, demobVehiclesT, grand, hlAmt, hlLabel, hlRows, incOn, info, kwhRate, margin, mats, matsT, miscCosted, miscT, mobVehicles, mobVehiclesT, monData, mp, mpTot, notes, openCeId, perJobLbl, perJobT, powerOn, ppe, ppeT, pwrFrac, qtyUom, rceNo, rr, scopeBreakdown, servicesSummary, showUnitP, signatures, sowItems, sowLabels, toolBasis, tools, toolsT, unitLbl, unitP }));
   /* Feature 1: Print Preview (no auto-print) */
   const handlePrintPreview = () => {
     /* The document only. This used to call Generate CE outright -- which opened
@@ -5280,7 +5316,7 @@ function App({
      HONEST LIMIT: the bundled SheetJS is the community build, which ignores
      cell styling on write. Layout, merges, column widths and number formats
      survive; bold text, the black header bars and cell borders do not. */
-  const handleExportXLSX = makeHandleExportXLSX(() => ({ approvers, benefitRows, benefitsT, ceBreakdown, ceLayout, ceSections, ceType, cfg, demobVehicles, demobVehiclesT, docStatus, grand, hlAmt, hlLabel, hlRows, incOn, info, kwhRate, margin, mats, matsT, misc, miscT, mobVehicles, mobVehiclesT, mp, mpTot, mpWageParts, notes, perJobLbl, perJobT, powerOn, ppe, ppeT, pwrFrac, qtyUom, rr, servicesSummary, showToast, showUnitP, sowItems, sowLabels, toolBasis, tools, toolsT, unitLbl, unitP }));
+  const handleExportXLSX = makeHandleExportXLSX(() => ({ approvers, benefitRows, benefitsT, ceBreakdown, ceLayout, ceSections, ceType, cfg, demobVehicles, demobVehiclesT, docStatus, grand, hlAmt, hlLabel, hlRows, incOn, info, kwhRate, margin, mats, matsT, misc, miscT, mobVehicles, mobVehiclesT, mp, mpTot, mpWageParts, notes, perJobLbl, perJobT, powerOn, ppe, ppeT, pwrFrac, qtyUom, rr, scopeBreakdown, servicesSummary, showToast, showUnitP, sowItems, sowLabels, toolBasis, tools, toolsT, unitLbl, unitP }));
   const handleExportPlanning = makeHandleExportPlanning(() => ({ benefitRows, info, mats, mp, mpWageParts, ppe, showToast }));
   const [showDraftBanner, setShowDraftBanner] = React.useState(() => hasDraft());
   /* Refreshed on every render so the auto-save timer never works from a
@@ -6016,7 +6052,7 @@ tab === 'dashboard' && DashboardTab({ allStatuses, dashAll, dashDisc, setDashDis
        was never handed the reader. */
     readFile: resStable.readFile,
     masterlist, showToast: resStable.showToast, setPicker
-  }), tab === 'misc' && /*#__PURE__*/MiscTab({ ceType, masterlist, misc, miscT, mp, setMisc, setPicker, showToast, syncMealRates, syncMealRows }), tab === 'summary' && /*#__PURE__*/SummaryTab({ _defaultsUntouched, _mobTabs, addlCosts, aiSuggest, applyCeDefaults, approvers, apvBar, apvLocked, apvState, apvUsers, busyBtn, busyOp, ceDefaults, ceLayoutKey, ceType, cfg, collectZeroCost, demobVehicles, docFile, grand, handleExport, handleExportXLSX, handleGenerateCEWithCheck, handlePrintPreview, handleSave, handleSaveRevision, history, hlAmt, hlKeys, hlLabel, hlMissing, hlPick, hlPickQ, hlSources, info, isRequestor, loadSharedDrafts, margin, mats, misc, mkNote, mobVehicles, mp, notes, perJob, perJobNames, perJobT, ppe, qtyMulOn, qtyN, saveDraft, servicesSummary, setAddlCosts, setAiSuggest, setApprovers, setCeType, setDraftsOpen, setHlPick, setHlPickQ, setInfo, setMargin, setNotes, setSigModal, setTab, setVerifyNotes, sharedDrafts, showToast, showUnitP, sowItems, sowLabels, sowUnassignedCount, summaryDot, summaryRows, syncRatesFromML, tools, unitP, verifyNotes, visSigs, attachFromSummary })), /* Live Totals describe the CE being built, so they show on its estimating
+  }), tab === 'misc' && /*#__PURE__*/MiscTab({ ceType, masterlist, misc, miscT, mp, setMisc, setPicker, showToast, syncMealRates, syncMealRows }), tab === 'summary' && /*#__PURE__*/SummaryTab({ _defaultsUntouched, _mobTabs, addlCosts, aiSuggest, applyCeDefaults, approvers, apvBar, apvLocked, apvState, apvUsers, busyBtn, busyOp, ceDefaults, ceLayoutKey, ceType, cfg, collectZeroCost, demobVehicles, docFile, grand, handleExport, handleExportXLSX, handleGenerateCEWithCheck, handlePrintPreview, handleSave, handleSaveRevision, history, hlAmt, hlKeys, hlLabel, hlMissing, hlPick, hlPickQ, hlSources, info, isRequestor, loadSharedDrafts, margin, mats, misc, mkNote, mobVehicles, mp, notes, perJob, perJobNames, perJobT, ppe, qtyMulOn, qtyN, saveDraft, scopeBreakdown, servicesSummary, setAddlCosts, setAiSuggest, setApprovers, setCeType, setDraftsOpen, setHlPick, setHlPickQ, setInfo, setMargin, setNotes, setSigModal, setTab, setVerifyNotes, sharedDrafts, showToast, showUnitP, sowItems, sowLabels, sowUnassignedCount, summaryDot, summaryRows, syncRatesFromML, tools, unitP, verifyNotes, visSigs, attachFromSummary })), /* Live Totals describe the CE being built, so they show on its estimating
      screens only -- on My Work, Monitoring, the Dashboard and the libraries they
      read ₱0.00 or another CE's figures and take a quarter of the width. */
   LiveTotalsSidebar({ TAB_GROUPS, cfg, demobSubT, grand, history, masterlist, matsT, miscT, mobSubT, mpTot, ppeT, provInfo, railSlim, rr, setApiKeyInput, setShowApiKey, setTab, tab, toggleRail, toolsT, unitP })));

@@ -54,6 +54,32 @@ function MonDupTidy() {
            : (l.startsWith('✅') || l.startsWith('  ✓') || l.startsWith('🎉')) ? OK : MT
     }}, l))));
 }
+/* A CE number typed wrongly (11239 for 1239) is held in the shared list of claimed numbers, so every New CE carries on from it even after
+   the CE itself is corrected. This looks for claims no saved CE or draft uses that sit far above the real numbers, and lets them go. */
+function CeNumberClaims() {
+  const [busy, setBusy] = React.useState(false);
+  const [res, setRes] = React.useState(null);
+  const [msg, setMsg] = React.useState('');
+  const run = async apply => {
+    setBusy(true); setMsg('');
+    try {
+      const r = await dbStrayCeReservations(apply);
+      setRes(r);
+      if (apply) setMsg(r.saved ? '✅ Released ' + r.stray.length + ' stray number(s). The next New CE continues from the real numbers.' : '❌ SharePoint did not save the change.');
+      else setMsg(r.stray.length ? 'Found ' + r.stray.length + ' stray number(s): ' + r.stray.join(', ') : '✅ No stray numbers. ' + r.total + ' claim(s) on the list, all close to the real ones.');
+    } catch (e) { setMsg('❌ ' + e.message); }
+    setBusy(false);
+  };
+  const connected = !!getSiteURL();
+  return React.createElement('div', {style:{marginTop:18,paddingTop:14,borderTop:'1px solid '+BDR}},
+    React.createElement('div', {style:{fontWeight:700,fontSize:13,marginBottom:4}}, '🔢 Claimed CE numbers'),
+    React.createElement('div', {style:{fontSize:11,color:MT,marginBottom:10,lineHeight:1.6}},
+      'Every New CE claims its number so two people never get the same one. A mistyped number (11239 for 1239) stays claimed for 14 days even after the CE is fixed, and New CE carries on from it. Look first; releasing only drops claims that no saved CE or draft uses and that sit more than 3 above the highest real number.'),
+    React.createElement('div', {style:{display:'flex',gap:8,flexWrap:'wrap'}},
+      React.createElement('button', {style:{...btn('def'), opacity: connected ? 1 : 0.5}, disabled: busy || !connected, onClick: () => run(false)}, busy ? 'Working…' : '🔍 Look for stray numbers'),
+      res && res.stray.length > 0 && !res.saved && React.createElement('button', {style:btn('danger'), disabled: busy, onClick: () => run(true)}, 'Release ' + res.stray.length + ' stray number(s)')),
+    msg && React.createElement('div', {style:{marginTop:10,fontSize:11,fontFamily:"'JetBrains Mono',monospace",color: msg.startsWith('❌') ? ERR : msg.startsWith('✅') ? OK : MT}}, msg));
+}
 /* How full each SharePoint list is, against the 5,000-item limit. The same check runs once a day for an admin and warns from 4,000. */
 function SpListSizes() {
   const [busy, setBusy] = React.useState(false);
@@ -266,6 +292,7 @@ function LocalToSPSync() {
       : `⚠ ${counts.ok} pushed, ${counts.fail} had issues. Items marked ✗/⚠ above were NOT synced.`
     ),
     React.createElement(MonDupTidy, null),
+    React.createElement(CeNumberClaims, null),
     React.createElement(SpListSizes, null)
   );
 }

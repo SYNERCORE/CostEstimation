@@ -1479,6 +1479,26 @@ async function _ceReserveRecheck(prefix,history,known,me,mine,onMoved){
     if(n2&&n2!==mine.n)onMoved(n2);
   }catch(_e){logSwallowed('db:_ceReserveRecheck',_e);}
 }
+/* A mistyped CE number (11239 for 1239) is claimed in the shared reservation list the moment it is handed out, and stays there for
+   CE_RESERVE_DAYS even after the CE is corrected, so every New CE carries on from it. A reservation is stray when no saved CE or draft
+   uses it and it sits well above the highest number that is really in use (more than `margin` ahead -- a colleague's fresh CE is
+   never that far ahead). `apply` false only looks. */
+async function dbStrayCeReservations(apply,margin){
+  const gap=margin==null?3:margin;
+  const v=await dbGetCompanyKey(CE_RESERVE_KEY);
+  const rows=v&&Array.isArray(v.rows)?v.rows:[];
+  let real=[];
+  try{real=real.concat(await dbGetCeNumbers()||[]);}catch(_e){logSwallowed('db:dbStrayCeReservations',_e);}
+  try{(await dbGetDrafts()||[]).forEach(x=>{const n=x&&x.info&&x.info.ceNum;if(n)real.push(n);});}catch(_e){logSwallowed('db:dbStrayCeReservations',_e);}
+  const live=new Set(real.map(r=>String(r).toUpperCase()));
+  const top={};
+  real.forEach(n=>{const s=ceSeqOf(n);if(!s)return;const y=s.seq.slice(0,4),k=parseInt(s.seq.slice(5),10)||0;if(k>(top[y]||0))top[y]=k;});
+  const isStray=r=>{const s=ceSeqOf(r.n);if(!s||live.has(String(r.n).toUpperCase()))return false;const y=s.seq.slice(0,4);return (parseInt(s.seq.slice(5),10)||0)>(top[y]||0)+gap;};
+  const stray=rows.filter(isStray);
+  let saved=false;
+  if(apply&&stray.length)saved=await dbSaveCompanyKey(CE_RESERVE_KEY,{rows:rows.filter(r=>!isStray(r))});
+  return {total:rows.length,stray:stray.map(r=>r.n),top,saved};
+}
 async function dbSaveShiftRates(obj){
   try{localStorage.setItem('shic:shift_rates',JSON.stringify(obj));}catch{}
   if(USE_SP||getSiteURL()){

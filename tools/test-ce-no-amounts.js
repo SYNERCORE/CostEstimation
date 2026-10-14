@@ -41,7 +41,7 @@ const mon = R('src/components/MonitoringPanel.js');
 ck('each CE row has a "CE (no amounts)" button that opens the CE for print as noamt', /openForPrint\(e\.id,'noamt'\)/.test(mon) && /CE \(no amounts\)/.test(mon));
 ck('it is for saved CEs only, like the other print buttons', /typeof e\.id==='number'&&[^;]{0,60}createElement\("button",\{style:\{gridRow: 4, gridColumn: 3[\s\S]{0,200}noamt/.test(mon));
 ck('the print URL accepts as=noamt, and the Excel kinds', /\['detailed', 'detailed-noamt', 'template', 'template-noamt', 'planning', 'view', 'noamt'\]\.includes\(_q\.get\('as'\)\)/.test(app));
-ck('and the opened CE is generated with noAmounts', /as === 'noamt'\) handleGenerateCE\(\{ noAmounts: true \}\)/.test(app));
+ck('and the opened CE is generated with noAmounts', app.includes("as === 'noamt') handleGenerateCE({ noAmounts: true, withScope"));
 ck('the Summary tab no longer has the button', !/no amounts/.test(sum) && !/handleGenerateCENoAmounts/.test(sum) && !/handleGenerateCENoAmounts/.test(app));
 ck('the ordinary Generate CE is still the one with the zero-cost check', /const handleGenerateCEWithCheck = async \(\) => \{\s*if \(!await confirmZeroCost\('Proceed with generating CE\?'\)\) return;\s*handleGenerateCE\(\);/.test(app));
 
@@ -50,7 +50,7 @@ ck('the Detailed and Template exports have no-amounts buttons on each saved CE r
 ck('both exporters take the option', /function makeHandleExportXLSX\(getCtx\) \{\s*return \(opt\) => \{\s*const noAmt = !!\(opt && opt\.noAmounts\);/.test(out) && /function makeHandleExport\(getCtx\) \{\s*return \(opt\) => \{\s*const noAmt = !!\(opt && opt\.noAmounts\);/.test(out));
 ck('both strip the sheets before writing, and name the file', (out.match(/if \(noAmt\) stripSheetAmounts\(sheets\);/g) || []).length === 2 && (out.match(/\(noAmt \? '_no-amounts' : ''\)/g) || []).length === 2);
 ck('the highlighted-costs and services blocks are left out of the printed CE and both workbooks', (out.match(/hlRows\.length && !noAmt/g) || []).length === 3 && (out.match(/servicesSummary\.ok && !noAmt/g) || []).length === 3);
-ck('an opened CE runs the matching export', /handleExportXLSX\(_no\); else handleExport\(_no\)/.test(app) && /_no = \/-noamt\$\/\.test\(as\) \? \{ noAmounts: true \} : undefined/.test(app));
+ck('an opened CE runs the matching export', app.includes('handleExportXLSX(_no); else handleExport(_no)') && app.includes('_no = { noAmounts: /-noamt$/.test(as), withScope'));
 
 const sm = out.match(/const SHEET_MONEY_STYLES = [^\n]*\nfunction stripSheetAmounts\(sheets\) \{[\s\S]*?\n\}\n/);
 ck('stripSheetAmounts is found', !!sm);

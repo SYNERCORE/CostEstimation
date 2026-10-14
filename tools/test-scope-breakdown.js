@@ -56,6 +56,15 @@ ck('printed page is landscape and added to the document', ce.includes('@page lan
 ck('both Excel exporters add the sheet before amounts are stripped', (ce.match(/sheets\.push\(sbSheet\(/g) || []).length === 2);
 
 
+/* CE Monitoring's "with Scope Breakdown" box adds it to a CE that was saved without it */
+vm.runInContext('this.sbWanted=sbWanted', ctx);
+const mon = fs.readFileSync('src/components/MonitoringPanel.js', 'utf8');
+ck('one print can ask for it: off CE + withScope + data -> on', ctx.sbWanted({ on: false, groups: [{}], unlinked: null }, { withScope: true }) === true);
+ck('without the ask, an off CE stays off; an on CE stays on', ctx.sbWanted({ on: false, groups: [{}], unlinked: null }, {}) === false && ctx.sbWanted({ on: true, groups: [{}] }, undefined) === true);
+ck('nothing to show means nothing printed even when asked', ctx.sbWanted({ on: false, groups: [], unlinked: null }, { withScope: true }) === false);
+ck('CE Monitoring has the box, remembered in the browser, and it adds sb=1 to the print URL', mon.includes('with Scope Breakdown') && mon.includes('shic_print_sb') && app.includes("'&sb=1'") && app.includes("_q.get('sb') === '1'"));
+ck('the flag reaches the CE, no-amounts CE and both Excel exports', (app.match(/withScope: !!autoPrint.sb/g) || []).length >= 5);
+
 /* the real workbook writer, read back */
 (async () => {
   const XLSX = require('../vendor/xlsx.full.min.js');

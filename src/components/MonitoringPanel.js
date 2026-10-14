@@ -375,7 +375,8 @@ function MonitoringPanel(ctx) {
   }), /*#__PURE__*/React.createElement("input", {
     type: "file", id: "mon-import-cefiles", accept: ".xlsx,.xls", multiple: true, style: {display:'none'}, disabled: !!ceImportProgress,
     onChange: e => { if(e.target.files.length) { importShicCeFiles(e.target.files); e.target.value=''; } }
-  }), /* The data chores (template, export, the two imports) live in one menu so the everyday controls -- filters, New Request, Refresh, Save -- are what the eye finds. */
+  }), /*#__PURE__*/React.createElement("label", {title: "Adds the Scope Breakdown page (or sheet) to every CE you generate or export from this list, even ones saved without it", style: {display:'flex',alignItems:'center',gap:4,fontSize:11,cursor:'pointer',whiteSpace:'nowrap'}},
+    /*#__PURE__*/React.createElement("input", {type:'checkbox', defaultChecked: (()=>{ try { return localStorage.getItem('shic_print_sb') === '1'; } catch(_e) { return false; } })(), onChange: e => { try { localStorage.setItem('shic_print_sb', e.target.checked ? '1' : '0'); } catch(_e) {} }}), "with Scope Breakdown"), /* The data chores (template, export, the two imports) live in one menu so the everyday controls -- filters, New Request, Refresh, Save -- are what the eye finds. */
   /*#__PURE__*/React.createElement("details", {className: 'mon-data-menu', style: {position: 'relative'}},
     /*#__PURE__*/React.createElement("summary", {
       title: "Excel in and out: download the template, export this list, update CEs from a list, or bring in CE workbooks",

@@ -25,6 +25,8 @@ function sbChunks(sb, cap) {
   if (sb && sb.unlinked) add('', 'NOT LINKED TO A TASK', [], sb.unlinked);
   return out;
 }
+/* On when the CE asks for it, or when this one print does (CE Monitoring's "with Scope Breakdown"), as long as there is something to show. */
+const sbWanted = (sb, opt) => !!sb && (sb.on || (!!(opt && opt.withScope) && (sb.groups.length > 0 || !!sb.unlinked)));
 const sbQty = q => { const n = Math.round((Number(q) || 0) * 100) / 100; return String(n); };
 function sbHtml(sb, br, esc) {
   const ch = sbChunks(sb, 14);
@@ -426,7 +428,7 @@ function makeHandleGenerateCE(getCtx) {
 
     const sowPage=sowItems.length?`<div class="page page-break">${docHdr('SCOPE OF WORK')}<div style="font-size:8pt;line-height:1.6">${(()=>{let mc=0,sc=0;return sowItems.map(it=>{if(it.type==='main'){mc++;sc=0;return`<div style="margin-top:4px"><b>${mc}. ${esc(it.text)}</b></div>`;}else{sc++;return`<div style="margin-left:14px">${mc}.${sc} ${esc(it.text)}</div>`;}}).join('');})()}</div></div>`:'';
 
-    const sbPage = scopeBreakdown && scopeBreakdown.on ? `<div class="page page-break" data-land="1">${docHdr('SCOPE BREAKDOWN')}${sbHtml(scopeBreakdown, _br, esc)}</div>` : '';
+    const sbPage = sbWanted(scopeBreakdown, opt) ? `<div class="page page-break" data-land="1">${docHdr('SCOPE BREAKDOWN')}${sbHtml(scopeBreakdown, _br, esc)}</div>` : '';
 
     const runHdr = `<div class="run-hdr">${docTop}</div>`;
     const runFtr = `<div class="run-ftr"><span>Document No.: ${esc(co.doc)} Rev. ${esc(co.revNo)}</span><span class="pnum"></span></div>`;
@@ -1014,7 +1016,7 @@ function makeHandleExportXLSX(getCtx) {
       });
     }, CS_COLS);
 
-    if (scopeBreakdown && scopeBreakdown.on) sheets.push(sbSheet(scopeBreakdown, { name: co.logo ? '' : [co.name, co.sub].filter(Boolean).join(' — '), ceNum: info.ceNum, ceType: ceTypeLabel(ceType).toUpperCase(), date: info.date }));
+    if (sbWanted(scopeBreakdown, opt)) sheets.push(sbSheet(scopeBreakdown, { name: co.logo ? '' : [co.name, co.sub].filter(Boolean).join(' — '), ceNum: info.ceNum, ceType: ceTypeLabel(ceType).toUpperCase(), date: info.date }));
     if (noAmt) stripSheetAmounts(sheets);
     SHICXlsx.download((info.ceNum || 'CE') + '_' + (info.client || 'export').replace(/[^a-z0-9]/gi, '_') + (noAmt ? '_no-amounts' : '') + '.xlsx', sheets,
       { bar: ceBrand(coI).bar, barText: ceBrand(coI).text, logo: co.logo });
@@ -1294,7 +1296,7 @@ function makeHandleExport(getCtx) {
     }
 
     const _xb = ceBrand(getCompanies().find(c => String(c.id) === String(info.companyId)) || getCompanies()[0] || {});
-    if (scopeBreakdown && scopeBreakdown.on) sheets.push(sbSheet(scopeBreakdown, { name: '', ceNum: info.ceNum, ceType: ceTypeLabel(ceType).toUpperCase(), date: info.date }));
+    if (sbWanted(scopeBreakdown, opt)) sheets.push(sbSheet(scopeBreakdown, { name: '', ceNum: info.ceNum, ceType: ceTypeLabel(ceType).toUpperCase(), date: info.date }));
     if (noAmt) stripSheetAmounts(sheets);
     SHICXlsx.download((info.ceNum || 'CE') + '_' + ceType + (noAmt ? '_no-amounts' : '') + '.xlsx', sheets, { bar: _xb.bar, barText: _xb.text });
     showToast('Excel exported — ' + sheets.length + ' sheets.');

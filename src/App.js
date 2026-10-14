@@ -1122,7 +1122,7 @@ function App({
               const full = await dbLoadCE(_pid);
               if (!full) { console.error('open CE ' + _pid + ': dbLoadCE returned nothing'); showToast('Could not open that CE — it is not in SharePoint or this browser.', true); return; }
               await handleLoad(full);
-              setAutoPrint({as: _as, relay: _relay, pid: _projId, ceNum: (full.info || {}).ceNum || ''});
+              setAutoPrint({as: _as, relay: _relay, sb: _q.get('sb') === '1', pid: _projId, ceNum: (full.info || {}).ceNum || ''});
             } catch (ex) { console.error('open CE ' + _pid + ' failed:', ex); showToast('Could not open that CE: ' + ex.message, true); }
           }, 600);
         }
@@ -2669,6 +2669,8 @@ function App({
      to be on screen somewhere. It opens in its own tab, which is the part that
      matters: the CE you have open here does not move, and there is nothing to
      restore afterwards. */
+  /* CE Monitoring's "with Scope Breakdown" box: adds the page/sheet to whatever is generated from the list, whatever the CE itself says. */
+  const printWithScope = () => { try { return localStorage.getItem('shic_print_sb') === '1'; } catch (_e) { return false; } };
   const openForPrint = (id, as, projectId) => {
     /* Everything is made in a hidden frame, never in a tab of its own: a new tab opened a whole second copy of the app, and it stayed
        open behind the document after it was printed. A workbook downloads straight from the frame. The printed CE is handed back to this
@@ -2677,7 +2679,7 @@ function App({
     const isFile = /^(detailed|template|planning)/.test(as);
     const f = document.createElement('iframe');
     f.style.display = 'none';
-    f.src = window.location.pathname + '?print=' + id + '&as=' + as + (isFile ? '' : '&relay=1') + (projectId ? '&pid=' + encodeURIComponent(projectId) : '');
+    f.src = window.location.pathname + '?print=' + id + '&as=' + as + (isFile ? '' : '&relay=1') + (projectId ? '&pid=' + encodeURIComponent(projectId) : '') + (printWithScope() ? '&sb=1' : '');
     if (isFile) {
       document.body.appendChild(f);
       setTimeout(() => { try { f.remove(); } catch(_e){logSwallowed('App:L2640',_e);} }, 60000);
@@ -2719,7 +2721,7 @@ function App({
     setAutoPrint(null);
     setTimeout(() => {
       try { if (/^(detailed|template|planning)/.test(as)) {
-        const _no = /-noamt$/.test(as) ? { noAmounts: true } : undefined;
+        const _no = { noAmounts: /-noamt$/.test(as), withScope: !!autoPrint.sb };
         if (as === 'planning') handleExportPlanning({ projectId: autoPrint.pid });
         else if (/^detailed/.test(as)) handleExportXLSX(_no); else handleExport(_no);
         /* In the hidden frame: once the file is out, stop this copy of the app
@@ -2727,10 +2729,10 @@ function App({
         if (window !== window.top) setTimeout(() => { document.open(); document.write('<p>Exported.</p>'); document.close(); }, 3000);
       } else if (autoPrint.relay && window !== window.top) {
         /* Hand the finished document to the window that asked, then stop this copy of the app. */
-        const _html = handleGenerateCE({ htmlOnly: true, noAmounts: as === 'noamt' });
+        const _html = handleGenerateCE({ htmlOnly: true, noAmounts: as === 'noamt', withScope: !!autoPrint.sb });
         window.parent.postMessage({ shicCeHtml: _html || '' }, window.location.origin);
         setTimeout(() => { document.open(); document.write('<p>Done.</p>'); document.close(); }, 500);
-      } else if (as === 'view') handleGenerateCE({ embed: true }); else if (as === 'noamt') handleGenerateCE({ noAmounts: true }); else handleGenerateCE(); }
+      } else if (as === 'view') handleGenerateCE({ embed: true, withScope: !!autoPrint.sb }); else if (as === 'noamt') handleGenerateCE({ noAmounts: true, withScope: !!autoPrint.sb }); else handleGenerateCE({ withScope: !!autoPrint.sb }); }
       catch (ex) { showToast('Could not produce the document: ' + ex.message, true); }
     }, 250);
   }, [autoPrint, info.ceNum, mp, tools, mats, ppe]);

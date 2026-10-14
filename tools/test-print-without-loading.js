@@ -65,9 +65,9 @@ ck('it waits for the CE number to match', /\(info\.ceNum \|\| ''\) !== autoPrint
 ck('it re-checks as the rows land', /\[autoPrint, info\.ceNum, mp, tools, mats, ppe\]/.test(eff[0]));
 ck('it fires once, not on every render', /setAutoPrint\(null\);/.test(eff[0]));
 ck('printable CE and Export Detailed are both reachable',
-  /if \(\/\^\(detailed\|template\|planning\)\/\.test\(as\)\) \{[\s\S]{0,300}handleExportXLSX\(_no\); else handleExport\(_no\);[\s\S]{0,600}\} else if \(autoPrint\.relay && window !== window\.top\) \{[\s\S]{0,700}\} else if \(as === 'view'\) handleGenerateCE\(\{ embed: true \}\); else if \(as === 'noamt'\) handleGenerateCE\(\{ noAmounts: true \}\); else handleGenerateCE\(\)/.test(eff[0]));
+  /if \(\/\^\(detailed\|template\|planning\)\/\.test\(as\)\) \{[\s\S]{0,300}handleExportXLSX\(_no\); else handleExport\(_no\);[\s\S]{0,600}\} else if \(autoPrint\.relay && window !== window\.top\) \{[\s\S]{0,700}\} else if \(as === 'view'\) handleGenerateCE\(\{ embed: true, withScope: !!autoPrint\.sb \}\); else if \(as === 'noamt'\) handleGenerateCE\(\{ noAmounts: true, withScope: !!autoPrint\.sb \}\); else handleGenerateCE\(\{ withScope: !!autoPrint\.sb \}\)/.test(eff[0]));
 ck('a frame hands the finished CE to the window that asked, then stops',
-  /handleGenerateCE\(\{ htmlOnly: true, noAmounts: as === 'noamt' \}\);\s*window\.parent\.postMessage\(\{ shicCeHtml: _html \|\| '' \}, window\.location\.origin\);/.test(eff[0]));
+  /handleGenerateCE\(\{ htmlOnly: true, noAmounts: as === 'noamt', withScope: !!autoPrint\.sb \}\);\s*window\.parent\.postMessage\(\{ shicCeHtml: _html \|\| '' \}, window\.location\.origin\);/.test(eff[0]));
 
 console.log('\n⬇ xlsx leaves no window behind:');
 ck('a workbook is built in a hidden frame, not a new tab or window',

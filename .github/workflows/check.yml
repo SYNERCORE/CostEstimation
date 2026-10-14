@@ -515,5 +515,7 @@ jobs:
         run: node tools/test-sync-summary.js
       - name: Monitoring toolbar
         run: node tools/test-monitoring-toolbar.js
+      - name: Document status
+        run: node tools/test-doc-status.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

@@ -2178,15 +2178,10 @@ function App({
      truth and this is read from it, so the two can never say different things
      about the same estimate. Before then -- a CE being written, not yet saved
      -- it is info.status, which seeds Monitoring on save. */
-  const docStatus = (openMonStatus && MON_TO_DOC[openMonStatus]) || info.status || 'DRAFT';
-  const setDocStatus = v => {
-    setInfo(p => ({...p, status: v}));
-    const mapped = DOC_TO_MON[v];
-    /* Write through only when the pipeline would actually change meaning.
-       Ongoing already reads as REVISED, so re-selecting REVISED must not shove
-       the pipeline back to Ongoing from, say, For site insp. */
-    if (openCeId != null && mapped && MON_TO_DOC[openMonStatus] !== v) updateMon(openCeId, 'status', mapped);
-  };
+  const docStatus = ceDocStatus(openMonStatus, info.status);
+  /* Only a CE that is not saved yet takes its status from this box (it seeds Monitoring on the first save). Once the CE is tracked, Monitoring
+     is the one place the status is changed -- the box shows it and cannot silently move the pipeline, e.g. APPROVED here used to set Approved there. */
+  const setDocStatus = v => { if (openCeId == null) setInfo(p => ({...p, status: v})); };
   const mkEntry = (revSuffix = '') => {
     const revNum = revSuffix ? info.ceNum.trim() + '-' + revSuffix : info.ceNum.trim();
     return {

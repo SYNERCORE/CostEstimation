@@ -180,13 +180,14 @@ function InfoTab(ctx) {
   }, "Status"), /*#__PURE__*/React.createElement("select", {
     style: INP,
     value: docStatus,
-    title: openMonStatus
-      ? 'Kept in step with the Monitoring status (' + openMonStatus + ')'
+    disabled: openCeId != null,
+    title: openCeId != null
+      ? 'Shows the Monitoring status' + (openMonStatus ? ' (' + openMonStatus + ')' : '') + '. Change it in CE Monitoring.'
       : 'Seeds the Monitoring status when this CE is saved',
     onChange: e => setDocStatus(e.target.value)
-  }, CE_DOC_STATUSES.map(s => /*#__PURE__*/React.createElement("option", {
+  }, (CE_DOC_STATUSES.indexOf(docStatus) < 0 ? [docStatus] : []).concat(CE_DOC_STATUSES).map(s => /*#__PURE__*/React.createElement("option", {
     key: s
-  }, s))))), /*#__PURE__*/React.createElement("div", {
+  }, s))), openCeId != null && /*#__PURE__*/React.createElement("div", {style: {fontSize: 10, color: MT, marginTop: 3}}, 'Change it in CE Monitoring.'))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: '1fr 1fr 1fr',

@@ -572,7 +572,7 @@ const DOC_TO_MON = {
 const MON_TO_DOC = {
   'Draft': 'DRAFT',
   'Pending': 'DRAFT',
-  'Ongoing': 'REVISED',
+  'Ongoing': 'DRAFT',
   'Sourcing': 'DRAFT',
   'Waiting for Information': 'DRAFT',
   'Revised': 'REVISED',
@@ -585,6 +585,17 @@ const MON_TO_DOC = {
   'No Quote': 'REJECTED',
   'Superseded': 'REJECTED'
 };
+/* What the printed estimate and the Status box say. Monitoring is the truth once a CE is tracked, so the label follows it:
+     - a status with a document equivalent prints that (Ongoing is work in progress, so DRAFT -- it used to print REVISED, as if it were a revision);
+     - Superseded prints SUPERSEDED, not REJECTED: a newer revision replaced it, nobody turned it down;
+     - On Hold, and any status added in the Status manager, print their own name instead of falling back to a stale value.
+   MON_TO_DOC itself is unchanged for those two: it decides when a document state means the same as the pipeline status. */
+const DOC_PRINT_LABEL = { 'Superseded': 'SUPERSEDED' };
+function ceDocStatus(monStatus, infoStatus) {
+  const m = String(monStatus || '').trim();
+  if (m) return DOC_PRINT_LABEL[m] || MON_TO_DOC[m] || m.toUpperCase();
+  return infoStatus || 'DRAFT';
+}
 /* ── Default notes and signatories, per CE type and discipline ───────────────
    The signatory roster and the notes used to be hardcoded in two places in
    App.js -- the initial state and handleNew -- so every CE started with the

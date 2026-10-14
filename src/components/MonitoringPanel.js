@@ -743,7 +743,21 @@ function MonitoringPanel(ctx) {
         fontSize: 10
       }
     }, /* A received date typed or imported as 2026-03-09 is shown the same way as one taken from the save date: Mar 9, 2026. */
-    /^\d{4}-\d{2}-\d{2}$/.test(String(m.dateRecv || '')) ? new Date(m.dateRecv + 'T00:00:00').toLocaleDateString('en-PH', {year: 'numeric', month: 'short', day: 'numeric'}) : (m.dateRecv || dateRecv)), /*#__PURE__*/React.createElement("td", {
+    /* An admin can correct the date a CE was received (it drives the Dashboard's Monthly Trend); the change is written to the audit log. */
+    isAdmin && editingRow === e.id ? /*#__PURE__*/React.createElement("input", {
+      type: "date",
+      style: {...INP, border: 'none', background: 'transparent', padding: '2px 4px', fontSize: 10, width: '100%', ...MONO},
+      key: e.id + 'dateRecv',
+      title: 'Date received (admin)',
+      defaultValue: /^\d{4}-\d{2}-\d{2}$/.test(String(m.dateRecv || '')) ? m.dateRecv : (e.savedAt ? String(e.savedAt).slice(0, 10) : ''),
+      onBlur: ev => {
+        const v = ev.target.value, old = /^\d{4}-\d{2}-\d{2}$/.test(String(m.dateRecv || '')) ? m.dateRecv : '';
+        if (v && v !== old) {
+          updateMon(e.id, 'dateRecv', v);
+          auditLog('change_date_received', (e.info?.ceNum || e.ceNum || e.id) + ': ' + (old || '(none)') + ' -> ' + v, currentUser?.username);
+        }
+      }
+    }) : /^\d{4}-\d{2}-\d{2}$/.test(String(m.dateRecv || '')) ? new Date(m.dateRecv + 'T00:00:00').toLocaleDateString('en-PH', {year: 'numeric', month: 'short', day: 'numeric'}) : (m.dateRecv || dateRecv)), /*#__PURE__*/React.createElement("td", {
       style: {
         ...TDS,
         padding: '4px 6px'

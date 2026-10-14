@@ -521,5 +521,7 @@ jobs:
         run: node tools/test-scope-breakdown.js
       - name: Estimator name
         run: node tools/test-estimator-name.js
+      - name: Admin date received
+        run: node tools/test-admin-date-received.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

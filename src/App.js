@@ -4395,6 +4395,16 @@ function App({
   const [monApvMine, setMonApvMine] = React.useState(false);
   /* Reassigning from the row: {id, ceNum, from, to} while the picker is open. */
   const [assignPanel, setAssignPanel] = React.useState(null);
+  /* One name per estimator. A CE saved by its estimator carries their username (savedBy), one that was assigned carries the full name
+     the picker offered, so the same person showed up twice. Shown everywhere as the full name of the matching user; a name that is
+     nobody's username (an imported initial, a typed name) is left as written. */
+  const [monUsers, setMonUsers] = React.useState([]);
+  React.useEffect(() => { if (currentUser) dbGetUsers().then(u => setMonUsers(u || [])).catch(_e => logSwallowed('App:monUsers', _e)); }, [currentUser && currentUser.username]);
+  const estName = v => {
+    const toks = String(v || '').split(/[,;]/).map(x => x.trim()).filter(Boolean);
+    if (!toks.length) return String(v || '');
+    return toks.map(t => { const u = monUsers.find(x => x && x.name && String(x.username || '').toUpperCase() === t.toUpperCase()); return u ? u.name : t; }).join(', ');
+  };
   const openAssign = e => {
     const m = monOf(e);
     const cur = m.ceeName || m.preparedBy || e.savedBy || '';
@@ -4976,7 +4986,7 @@ function App({
       if (monMine && !ceeMatches(meNames(), m.ceeName || m.preparedBy || e.savedBy || '')) return false;
       if (!monSearch) return true;
       /* Every word typed must be found in some column of the row, in any order (same as the Dashboard's Open CEs filter). */
-      const hay = [e.info?.ceNum, rceOf(e, m), e.info?.client, e.info?.description, m.jobTitle, m.customer, e.info?.projType, m.designation, m.ceeName, m.preparedBy, e.savedBy, m.receivedBy, m.rceNo, m.remarks, m.status || 'Draft'].join(' ').toLowerCase();
+      const hay = [e.info?.ceNum, rceOf(e, m), e.info?.client, e.info?.description, m.jobTitle, m.customer, e.info?.projType, m.designation, m.ceeName, estName(m.ceeName || m.preparedBy || e.savedBy), m.preparedBy, e.savedBy, m.receivedBy, m.rceNo, m.remarks, m.status || 'Draft'].join(' ').toLowerCase();
       return monSearch.toLowerCase().split(/\s+/).filter(Boolean).every(w => hay.indexOf(w) >= 0);
     });
     /* What each column actually SHOWS, so sorting agrees with the eye.
@@ -4991,7 +5001,7 @@ function App({
        value than it displays is the same bug wearing a hat. */
     const sortVal = (e, m) => {
       switch (monSortCol) {
-        case 'ceeName':      return m.ceeName || m.preparedBy || e.savedBy || '';
+        case 'ceeName':      return estName(m.ceeName || m.preparedBy || e.savedBy || '');
         /* What the cell shows, which is the CE number's own prefix. Sorting by
            the stored field put a SY3 CE among the SHIC ones. */
         case 'companyDesig': return ceNumPrefix((e.info && e.info.ceNum) || e.ceNum) || m.companyDesig || 'SHIC';
@@ -5104,7 +5114,7 @@ function App({
      (Written without the element-creating call by name: the guard in
      tools/check-remounting-editors.js reads the source as text, and would
      take a mention of it here for the real thing.) */
-  const HistPanel = () => MonitoringPanel({ revDateFixes, fillRevDates, MON_PAGE_SIZE, STATUS_COLOR_MAP, SortIcon, addStatus, allStatuses, assignPanel, attachList, attachPanel, ceImportProgress, coOptions, compareModal, compareSet, confirmDel, currentUser, custOptions, deleteDraft, discOptions, editingRow, fillBlankDisc, getStatusColor, handleClone, handleLoad, handleRevise, handleSave, histBusy, history, importMonitoringXLSX, importProgress, importShicCeFiles, isAdmin, isRequestor, loadHist, loadMonData, monApvMine, monCustFilter, monData, monDiscFilter, monMine, monOf, monPage, monPageRows, monReqFilter, monRevOpen, monSearch, monSpIds, monStatusFilter, monTableWrapRef, monTopScrollRef, monTypeFilter, newStatusInput, openAssign, openAttachPanel, openForPrint, openRequest, openReview, rceOf, statusMove, statusRemove, statusRename, statusSet, statusUse, reqOwns, resDays, resumeDraft, setAttachPanel, setCompareModal, setCompareSet, setConfirmDel, setDiffModal, setEditingRow, setHistory, setMonApvMine, setMonCustFilter, setMonDiscFilter, setMonMine, setMonPage, setMonReqFilter, setMonRevOpen, setMonSearch, setMonStatusFilter, setMonTypeFilter, setNewStatusInput, setRceReview, setRemarkDraft, setRemarksPanel, setShowStatusFilter, setShowStatusMgr, setStatusPanel, setUndoToast, setViewCE, showStatusFilter, showStatusMgr, showToast, sortedHistory, statusPanel, toggleSort, updateMon });
+  const HistPanel = () => MonitoringPanel({ estName, revDateFixes, fillRevDates, MON_PAGE_SIZE, STATUS_COLOR_MAP, SortIcon, addStatus, allStatuses, assignPanel, attachList, attachPanel, ceImportProgress, coOptions, compareModal, compareSet, confirmDel, currentUser, custOptions, deleteDraft, discOptions, editingRow, fillBlankDisc, getStatusColor, handleClone, handleLoad, handleRevise, handleSave, histBusy, history, importMonitoringXLSX, importProgress, importShicCeFiles, isAdmin, isRequestor, loadHist, loadMonData, monApvMine, monCustFilter, monData, monDiscFilter, monMine, monOf, monPage, monPageRows, monReqFilter, monRevOpen, monSearch, monSpIds, monStatusFilter, monTableWrapRef, monTopScrollRef, monTypeFilter, newStatusInput, openAssign, openAttachPanel, openForPrint, openRequest, openReview, rceOf, statusMove, statusRemove, statusRename, statusSet, statusUse, reqOwns, resDays, resumeDraft, setAttachPanel, setCompareModal, setCompareSet, setConfirmDel, setDiffModal, setEditingRow, setHistory, setMonApvMine, setMonCustFilter, setMonDiscFilter, setMonMine, setMonPage, setMonReqFilter, setMonRevOpen, setMonSearch, setMonStatusFilter, setMonTypeFilter, setNewStatusInput, setRceReview, setRemarkDraft, setRemarksPanel, setShowStatusFilter, setShowStatusMgr, setStatusPanel, setUndoToast, setViewCE, showStatusFilter, showStatusMgr, showToast, sortedHistory, statusPanel, toggleSort, updateMon });
   /* ---- Scope Library Editor (Scope Library tab) ---- */
   /* ScopeLibraryEditor's state, and ResEditor's, held by App.
 
@@ -5997,9 +6007,9 @@ sigModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',ins
 
 /* ── Feature 9: Dashboard Tab ── */
 /* ── My Work: everything waiting on the signed-in user, in one place ── */
-tab === 'mywork' && MyWorkTab({ currentUser, getStatusColor, handleLoad, isRequestor, meNames, monOf, monRows, mwOpen, mwQ, mwReqQ, myTodo, openRequest, openReview, reqDeadline, resumeDraft, setMwOpen, setMwQ, setMwReqQ, setRceReview, setTab, setViewCE, sharedDrafts }),
+tab === 'mywork' && MyWorkTab({ estName, currentUser, getStatusColor, handleLoad, isRequestor, meNames, monOf, monRows, mwOpen, mwQ, mwReqQ, myTodo, openRequest, openReview, reqDeadline, resumeDraft, setMwOpen, setMwQ, setMwReqQ, setRceReview, setTab, setViewCE, sharedDrafts }),
 
-tab === 'dashboard' && DashboardTab({ allStatuses, dashAll, dashDisc, setDashDisc, dashQ, dashReqQ, getStatusColor, history, monOf, monRows, reqDeadline, setDashAll, setDashQ, setDashReqQ }), tab === 'info' && /*#__PURE__*/InfoTab({ ScopeBuilder, addMode, aiLoad, ceType, companies, docBusy, docFile, docFilesOf, docPreview, docStatus, extractDocInfo, fileRef, handleAI, handleDocUpload, info, monData, openCeId, openMonStatus, pickCompany, provInfo, qtyUom, rceNo, removeDoc, scope, setAddMode, setDocFile, setDocPreview, setDocStatus, setInfo, setScope, updateMon }), tab === 'manpower' && /*#__PURE__*/ManpowerTab({ _mobTabs, _weight, ben, benefitRows, benefitsT, cfg, collapsedShifts, copyMenu, delRow, demobSubT, demobVehicles, demobVehiclesT, history, incOn, info, masterlist, mobCopy, mobSubT, mobVehicles, mobVehiclesT, mp, mpSub, mpTot, mpWage, mpWageParts, rowCost, rowShares, rr, setCollapsedShifts, setCopyMenu, setDemobVehicles, setMobCopy, setMobVehicles, setMp, setPicker, setRates, showToast, sowItems, sowLabels, syncCrewRows, syncMealRates, syncMealRows, toggleShift, updRow }), tab === 'tools' && /*#__PURE__*/React.createElement(ResTabM, {
+tab === 'dashboard' && DashboardTab({ estName, allStatuses, dashAll, dashDisc, setDashDisc, dashQ, dashReqQ, getStatusColor, history, monOf, monRows, reqDeadline, setDashAll, setDashQ, setDashReqQ }), tab === 'info' && /*#__PURE__*/InfoTab({ ScopeBuilder, addMode, aiLoad, ceType, companies, docBusy, docFile, docFilesOf, docPreview, docStatus, extractDocInfo, fileRef, handleAI, handleDocUpload, info, monData, openCeId, openMonStatus, pickCompany, provInfo, qtyUom, rceNo, removeDoc, scope, setAddMode, setDocFile, setDocPreview, setDocStatus, setInfo, setScope, updateMon }), tab === 'manpower' && /*#__PURE__*/ManpowerTab({ _mobTabs, _weight, ben, benefitRows, benefitsT, cfg, collapsedShifts, copyMenu, delRow, demobSubT, demobVehicles, demobVehiclesT, history, incOn, info, masterlist, mobCopy, mobSubT, mobVehicles, mobVehiclesT, mp, mpSub, mpTot, mpWage, mpWageParts, rowCost, rowShares, rr, setCollapsedShifts, setCopyMenu, setDemobVehicles, setMobCopy, setMobVehicles, setMp, setPicker, setRates, showToast, sowItems, sowLabels, syncCrewRows, syncMealRates, syncMealRows, toggleShift, updRow }), tab === 'tools' && /*#__PURE__*/React.createElement(ResTabM, {
     rows: tools,
     set: setTools,
     total: toolsT,

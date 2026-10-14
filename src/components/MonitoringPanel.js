@@ -6,6 +6,7 @@
    tools/check-remounting-editors.js). It holds no hooks; every piece of App state and every helper it reads arrives through `ctx`. The
    state itself (filters, page, panels) stays in App so it survives leaving the tab. */
 function MonitoringPanel(ctx) {
+  const estName = ctx.estName || (x => x);
   const {
     MON_PAGE_SIZE,
     STATUS_COLOR_MAP,
@@ -560,12 +561,12 @@ function MonitoringPanel(ctx) {
         color: CE_CFG[e.ceType]?.color || ACC
       },
       key: e.id + 'ceeName',
-      defaultValue: m.ceeName || m.preparedBy || e.savedBy || '',
+      defaultValue: estName(m.ceeName || m.preparedBy || e.savedBy || ''),
       onBlur: ev => {
-        if (ev.target.value !== String(m.ceeName || m.preparedBy || e.savedBy || '')) updateMon(e.id, 'ceeName', ev.target.value);
+        if (ev.target.value !== String(estName(m.ceeName || m.preparedBy || e.savedBy || ''))) updateMon(e.id, 'ceeName', ev.target.value);
       },
       placeholder: "Estimator"
-    }) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11,fontWeight:700,color:CE_CFG[e.ceType]?.color||ACC}}, m.ceeName||m.preparedBy||e.savedBy||'—'), /*#__PURE__*/React.createElement("span", {
+    }) : /*#__PURE__*/React.createElement("span", {style:{fontSize:11,fontWeight:700,color:CE_CFG[e.ceType]?.color||ACC}}, estName(m.ceeName||m.preparedBy||e.savedBy||'')||'—'), /*#__PURE__*/React.createElement("span", {
       title: monSpIds.has(String(e.id)) ? 'Synced with SharePoint' : 'Local only — no SP record yet',
       style: {fontSize:9, marginLeft:3, color: monSpIds.has(String(e.id)) ? OK : BDR, cursor:'default'}
     }, monSpIds.has(String(e.id)) ? '☁' : '○')), /*#__PURE__*/React.createElement("td", {

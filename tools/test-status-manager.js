@@ -57,7 +57,7 @@ ck('the old per-device list is only used until a shared one exists', /statusCfg 
 ck('a picked colour wins over the built-in one', /if \(s\.color\) STATUS_COLOR_MAP\[s\.name\] = s\.color/.test(app));
 ck('the panel and its button are admin-only', /isAdmin && showStatusMgr && statusMgrPanel\(\)/.test(mon) && /isAdmin && \/\*#__PURE__\*\/React\.createElement\("button", \{\n\s+style: btn\('def', true\),\n\s+onClick: \(\) => setShowStatusMgr/.test(mon));
 ck('the panel can reorder, recolour, rename, regroup, add and delete', ['statusMove', 'statusSet', 'statusRename', 'statusRemove', 'addStatus'].every(f => new RegExp(f + '\\(').test(mon)));
-ck('the dashboard lists statuses in the admin\'s order, in their colours', /allStatuses/.test(dash) && /getStatusColor\(s\)\+'33'/.test(dash) && /DashboardTab\(\{ allStatuses,/.test(app));
+ck('the dashboard lists statuses in the admin\'s order, in their colours', /allStatuses/.test(dash) && /getStatusColor\(s\)\+'33'/.test(dash) && /DashboardTab\(\{ estName, allStatuses,/.test(app));
 
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nStatus manager OK');
 process.exit(bad ? 1 : 0);

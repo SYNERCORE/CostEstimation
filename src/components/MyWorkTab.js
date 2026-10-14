@@ -3,6 +3,7 @@
    Moved out of App.js unchanged. Invoked as MyWorkTab({...}) from the render of App, never as an element: it holds no state or hooks,
    and everything it reads comes in through ctx. */
 function MyWorkTab(ctx) {
+  const estName = ctx.estName || (x => x);
   const {
     currentUser,
     getStatusColor,
@@ -102,7 +103,7 @@ function MyWorkTab(ctx) {
       title: [(x.e.info && x.e.info.client) || x.m.customer || '', x.m.jobTitle || (x.e.info && x.e.info.description) || ''].filter(Boolean).join(' · ')},
       [(x.e.info && x.e.info.client) || x.m.customer || '', x.m.jobTitle || (x.e.info && x.e.info.description) || ''].filter(Boolean).join(' · '),
       /* Which discipline it is and who it is with, so the list can be read without opening each one. */
-      (() => { const d = (x.e.info && x.e.info.projType) || x.m.designation || '', who = String(x.m.ceeName || '').replace(/^Unassigned$/, '') || x.m.preparedBy || x.e.savedByName || x.e.savedBy || '';
+      (() => { const d = (x.e.info && x.e.info.projType) || x.m.designation || '', who = estName(String(x.m.ceeName || '').replace(/^Unassigned$/, '') || x.m.preparedBy || x.e.savedByName || x.e.savedBy || '');
         /* The RCE No. (a request already shows it as its label), who received it and when. */
         const i = x.e.info || {}, rce = (i.request && !i.acceptedCeNum) ? '' : String(x.m.rceNo || i.requestNum || i.rceNo || '').trim();
         const rcv = x.m.dateRecv ? new Date(x.m.dateRecv + 'T00:00:00').toLocaleDateString('en-PH', {month:'short', day:'numeric', year:'numeric'}) : '';
@@ -170,7 +171,7 @@ function MyWorkTab(ctx) {
         /*#__PURE__*/React.createElement("button", {style:btn('acc',true),onClick:()=>resumeDraft(d)}, "Resume")), 'No saved drafts.'),
       section('⏳ My CEs in approval', fInApproval, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT,whiteSpace:'nowrap'}}, apv(x).signed + '/' + apv(x).total + ' signed · waiting on ' + (apv(x).waiting || []).join(', ')), viewBtn(x)), 'None of your CEs are in approval.'),
       !isRequestor && fSent.length > 0 && section('📤 Requests I sent', fSent, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,whiteSpace:'nowrap',color:MT}},
-        (x.m.status || 'Pending') + (x.m.ceeName ? ' · with ' + x.m.ceeName : '')), viewBtn(x)), 'You have not sent a request yet. Use + New Request in CE Monitoring.'),
+        (x.m.status || 'Pending') + (x.m.ceeName ? ' · with ' + estName(x.m.ceeName) : '')), viewBtn(x)), 'You have not sent a request yet. Use + New Request in CE Monitoring.'),
       !isRequestor && fAwaiting.length > 0 && section('📥 Requests awaiting review', fAwaiting, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,whiteSpace:'nowrap',color:MT}}, (x.m.ceeName || 'Unassigned') + (((x.e.info || {}).reviewStatus) ? ' · ' + (x.e.info || {}).reviewStatus : '')), [viewBtn(x), /*#__PURE__*/React.createElement("button", {key:'rv',style:btn('ok',true),title:'Review the checklist and decide: proceed, secure the missing data first, or decline',onClick:()=>openReview(x.e, 'review')}, "Review")]), ''),
       !isRequestor && fForReview.length > 0 && section('🔎 For review (status For Approval)', fForReview, x => line(x, null, viewBtn(x)), '')]),
     isRequestor && /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:'12px 14px',overflowX:'auto'}},
@@ -189,7 +190,7 @@ function MyWorkTab(ctx) {
             /*#__PURE__*/React.createElement("td", {style:td}, (x.e.info && x.e.info.client) || x.m.customer || '—'),
             /*#__PURE__*/React.createElement("td", {style:td}, x.m.jobTitle || (x.e.info && x.e.info.description) || '—'),
             /*#__PURE__*/React.createElement("td", {style:td}, (x.e.info && x.e.info.projType) || x.m.designation || '—'),
-            /*#__PURE__*/React.createElement("td", {style:td}, x.m.ceeName || '—'),
+            /*#__PURE__*/React.createElement("td", {style:td}, estName(x.m.ceeName) || '—'),
             /*#__PURE__*/React.createElement("td", {style:td}, /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'2px 10px',borderRadius:12,fontSize:11,fontWeight:700,color:col,border:'1px solid '+col,background:alpha(col,'18')}}, st),
               still && x.e.info.reviewStatus && /*#__PURE__*/React.createElement("div", {style:{fontSize:10,marginTop:3,color:x.e.info.reviewStatus === 'declined' ? ERR : MT}},
                 String(x.e.info.reviewStatus).toUpperCase() + (x.e.info.reviewNote ? ': ' + x.e.info.reviewNote : ''))),

@@ -21,6 +21,6 @@ ck('a Show toggle (All / Mechanical / Electrical) sits above the figures', /dash
 ck('picking one narrows both the history and the monitoring rows, so every figure and list follows', /liveHist = allHist\.filter\(byDisc\), liveRows = liveOnly\(monRows\)\.filter\(byDisc\)/.test(d));
 ck('the superseded-revision note still counts every discipline', /supersededN = history\.length - allHist\.length/.test(d));
 ck('the side-by-side cards are hidden while one discipline is picked', /!_dd && .*discCard\('Mechanical'/.test(d));
-ck('the choice lives in App, so it survives leaving the tab', /const \[dashDisc, setDashDisc\] = useState\(''\)/.test(app) && /DashboardTab\(\{ allStatuses, dashAll, dashDisc, setDashDisc,/.test(app));
+ck('the choice lives in App, so it survives leaving the tab', /const \[dashDisc, setDashDisc\] = useState\(''\)/.test(app) && /DashboardTab\(\{ estName, allStatuses, dashAll, dashDisc, setDashDisc,/.test(app));
 console.log(bad ? '\n' + bad + ' FAILURE(S)' : '\nDashboard disciplines OK');
 process.exit(bad ? 1 : 0);

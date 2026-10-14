@@ -11,7 +11,7 @@ ck('every word must be found, in any order', a > 0 && app.indexOf('.every(w => h
 const seg = a > 0 ? app.slice(a, app.indexOf('\n    });', a)) : '';
 ck('estimator, discipline, status and job title are searched', ['m.ceeName', 'm.designation', "m.status || 'Draft'", 'm.jobTitle'].every(k => seg.indexOf(k) > 0));
 ck('the box says what it filters', app.indexOf('"aria-label": "Filter CE Monitoring"') > 0);
-const f = (q, e, m) => { const body = seg.split('\n').filter(l => !/^\s*\/\*/.test(l)).join('\n'); return new Function('monSearch', 'e', 'm', 'rceOf', body)(q, e, m, () => ''); };
+const f = (q, e, m) => { const body = seg.split('\n').filter(l => !/^\s*\/\*/.test(l)).join('\n'); return new Function('monSearch', 'e', 'm', 'rceOf', 'estName', body)(q, e, m, () => '', x => x); };
 const E = { info: { ceNum: 'SY3-CE-1', client: 'HEDCOR', description: 'Pump seal' } }, M = { ceeName: 'Ben Reyes', status: 'Pending' };
 ck('one word, any case', f('hedcor', E, M) === true);
 ck('words from different columns', f('ben pending', E, M) === true && f('seal hedcor', E, M) === true);

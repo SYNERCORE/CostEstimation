@@ -5,6 +5,7 @@
    used to reach by closure. The two lists' filter boxes and "show all" state still live in App (dashQ, dashReqQ, dashAll) so they
    survive leaving the tab. */
 function DashboardTab(ctx) {
+  const estName = ctx.estName || (x => x);
   const {
     allStatuses,
     dashAll,
@@ -194,7 +195,7 @@ function DashboardTab(ctx) {
             /*#__PURE__*/React.createElement("td",{style:TDS}, x.h.info?.client || x.m.customer || '\u2014'),
             /*#__PURE__*/React.createElement("td",{style:{...TDS,maxWidth:260,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'},title:x.m.jobTitle || x.h.info?.description || ''}, x.m.jobTitle || x.h.info?.description || '\u2014'),
             /*#__PURE__*/React.createElement("td",{style:TDS}, x.m.designation || x.m.discipline || x.h.info?.discipline || x.h.info?.projType || '\u2014'),
-            /*#__PURE__*/React.createElement("td",{style:{...TDS,whiteSpace:'nowrap'}}, String(x.m.ceeName || '').replace(/^Unassigned$/, '') || '\u2014'),
+            /*#__PURE__*/React.createElement("td",{style:{...TDS,whiteSpace:'nowrap'}}, estName(String(x.m.ceeName || '').replace(/^Unassigned$/, '')) || '\u2014'),
             /*#__PURE__*/React.createElement("td",{style:{...TDS,whiteSpace:'nowrap'}}, x.m.receivedBy || '\u2014'),
             /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,whiteSpace:'nowrap'}}, x.m.dateRecv ? new Date(x.m.dateRecv+'T00:00:00').toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'}) : '\u2014'),
             /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,whiteSpace:'nowrap'}}, new Date(x.dl+'T00:00:00').toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'})),
@@ -229,7 +230,7 @@ function DashboardTab(ctx) {
                     /*#__PURE__*/React.createElement("td",{style:TDS}, x.h.info?.client || x.h.client || 'Unknown'),
                     /*#__PURE__*/React.createElement("td",{style:{...TDS,maxWidth:260,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'},title:x.m.jobTitle || x.h.info?.description || ''}, x.m.jobTitle || x.h.info?.description || '\u2014'),
                     /*#__PURE__*/React.createElement("td",{style:TDS}, x.m.designation || x.m.discipline || x.h.info?.discipline || x.h.info?.projType || '\u2014'),
-                    /*#__PURE__*/React.createElement("td",{style:{...TDS,whiteSpace:'nowrap'}}, String(x.m.ceeName || '').replace(/^Unassigned$/, '') || x.m.preparedBy || '\u2014'),
+                    /*#__PURE__*/React.createElement("td",{style:{...TDS,whiteSpace:'nowrap'}}, estName(String(x.m.ceeName || '').replace(/^Unassigned$/, '') || x.m.preparedBy) || '\u2014'),
                     /*#__PURE__*/React.createElement("td",{style:{...TDS,whiteSpace:'nowrap'}}, x.m.receivedBy || '\u2014'),
                     /*#__PURE__*/React.createElement("td",{style:{...TDS,...MONO,fontSize:10,whiteSpace:'nowrap'}}, x.m.dateRecv ? new Date(x.m.dateRecv+'T00:00:00').toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'}) : '\u2014'),
                     /*#__PURE__*/React.createElement("td",{style:TDS}, /*#__PURE__*/React.createElement("span",{style:{background:getStatusColor(st)+'33',color:getStatusColor(st),borderRadius:4,padding:'1px 6px',fontWeight:700,whiteSpace:'nowrap'}}, st)),

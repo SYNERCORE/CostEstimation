@@ -1007,8 +1007,10 @@ async function dbCacheAllCEs(progressCb){
   step('Checking what is already stored...',0.75);
   const have=new Map();
   try{for(const r of await ceAll()) have.set(String(r.ceNum||'').toUpperCase(),r.savedAt||'');}catch(_){logSwallowed('db:dbCacheAllCEs',_);}
+  const _isArch=h=>{try{return !!JSON.parse(h.shicInfo||'{}').archived;}catch(_e){logSwallowed('db:archived',_e);return false;}};
   const out=[];let skipped=0;
   for(const h of heads){
+    if(_isArch(h)){skipped++;continue;}
     const num=String(h.Title||'').toUpperCase();
     if(num&&have.has(num)&&have.get(num)===(h.shicSavedAt||'')){skipped++;continue;}
     const ce=_assembleCE(h,mpBy.get(String(h.Id))||[],resBy.get(String(h.Id))||[]);
@@ -1031,11 +1033,11 @@ async function dbLoadCE(id){
      would not open. The IndexedDB archive holds the full record -- line items
      and all -- so serve it instead. SharePoint stays authoritative when online. */
   if(!(USE_SP||getSiteURL()))return await _ceLoadLocal(id);
-  try{const[hR,mR,rR]=await Promise.all([_spGetTolerant(spList('CEs'),`Id eq ${id}`,'Id,Title,shicType,shicClient,shicDesc,shicTotal,shicSavedBy,shicSavedAt,shicScope,shicNotes,shicApprovers,shicMob,shicDemob,shicMisc,shicSOW,shicInfo'),_spGetByCE(spList('CE_MP'),id,'Id,shicRole,shicRate,shicShift,shicDays,shicQty,shicPax,shicOTHours,shicPerDiem,shicTaskId,shicShares'),_spGetByCE(spList('CE_Resources'),id,'Id,shicTab,shicDesc,shicQty,shicUOM,shicCost,shicDays,shicTaskId,shicShares,shicTier,shicHours,shicKW,shicRunHrs,shicSrc')]);if(!hR.length)return null;const h=hR[0];/* Rows outside the last save's row keys are either leftovers an earlier save
+  try{const[hR,mR,rR]=await Promise.all([_spGetTolerant(spList('CEs'),`Id eq ${id}`,'Id,Title,shicType,shicClient,shicDesc,shicTotal,shicSavedBy,shicSavedAt,shicScope,shicNotes,shicApprovers,shicMob,shicDemob,shicMisc,shicSOW,shicInfo'),_spGetByCE(spList('CE_MP'),id,'Id,shicRole,shicRate,shicShift,shicDays,shicQty,shicPax,shicOTHours,shicPerDiem,shicTaskId,shicShares'),_spGetByCE(spList('CE_Resources'),id,'Id,shicTab,shicDesc,shicQty,shicUOM,shicCost,shicDays,shicTaskId,shicShares,shicTier,shicHours,shicKW,shicRunHrs,shicSrc')]);if(!hR.length)return null;const h=hR[0];const _arch=_archInfoOf(h).archived||null;if(_arch&&!mR.length&&!rR.length){_rowOrphans=0;_rowDrop=false;_rowMissing=0;const _ac=_assembleCE(h,[],[]);_rowMissing=0;_ac._partial=true;_ac._archived=_arch;_ac._missingRows=(_arch.mp||0)+(_arch.res||0);return _ac;}/* Rows outside the last save's row keys are either leftovers an earlier save
    failed to delete, or real rows the keys do not describe. Only the saved
    total can tell which: build the CE both ways and keep the one that matches
    it. If neither does, nothing is dropped and the figures are reported. */
-_rowOrphans=0;_rowDrop=false;_rowMissing=0;let _ce=_assembleCE(h,mR,rR);const _extra=_rowOrphans,_missing=_rowMissing;
+_rowOrphans=0;_rowDrop=false;_rowMissing=0;let _ce=_assembleCE(h,mR,rR);const _extra=_rowOrphans,_missing=_rowMissing;if(_arch&&_ce.info)delete _ce.info.archived;
 /* An interrupted save: the header (and its total) reached SharePoint but some
    of its lines did not. The saving browser kept the whole CE locally, so if
    this is that browser, open that copy instead of the partial one. */
@@ -1094,7 +1096,8 @@ async function dbFindHeaderOnlyCEs(progressCb){
     for(const r of rows)seen.add(String(r.shicCEId));
   }
   progressCb&&progressCb({msg:'Reading CE headers...',progress:lists.length/(lists.length+1)});
-  const heads=await spGet(spList('CEs'),null,'Id,Title,shicTotal,shicSavedBy,shicSavedAt');
+  const _isArch=h=>{try{return !!JSON.parse(h.shicInfo||'{}').archived;}catch(_e){logSwallowed('db:archived',_e);return false;}};
+  const heads=(await spGet(spList('CEs'),null,'Id,Title,shicTotal,shicSavedBy,shicSavedAt,shicInfo')).filter(h=>!_isArch(h));
   /* A CE with a total of zero is not evidence of anything -- a tracking stub
      imported from the monitoring spreadsheet has no rows by design. */
   return heads
@@ -1203,7 +1206,7 @@ async function dbFindDuplicateRevisions(progressCb){
                 {conflict:{by,at}} comes back. The Save handler already asks about changes it can see when the button is pressed; this closes
                 the gap after that, while its question is on screen or the rows are being written, which can be minutes.
    opts.me      the saving user, whose own later saves (another tab, an approval) are not conflicts. */
-async function dbSaveHistory(e,opts){_spFailReason='';if(USE_SP||getSiteURL()){try{const existing=await spGet(spList('CEs'),`Title eq '${(e.info.ceNum||'').replace(/'/g,"''")}'`,'Id,shicSavedAt,shicSavedBy');if(existing.length&&opts&&opts.baseAt){const _cf=ceChangedSince({at:opts.baseAt},{savedAt:existing[0].shicSavedAt,savedBy:existing[0].shicSavedBy},opts.me);if(_cf)return{sp:false,conflict:_cf,reason:(_cf.by+' saved '+e.info.ceNum+' after you opened it')};}const hdr={Title:e.info.ceNum,shicType:e.ceType,shicClient:e.info.client||'',shicDesc:e.info.description||'',shicTotal:Math.round((e.grand||0)*100)/100,shicSavedBy:e.savedBy||'',shicSavedAt:new Date().toISOString(),shicScope:e.scope||'',shicNotes:JSON.stringify(e.notes||[]),shicApprovers:JSON.stringify(e.approvers||[]),shicMob:JSON.stringify(e.mobVehicles||[]),shicDemob:JSON.stringify(e.demobVehicles||[]),shicMisc:JSON.stringify({...(e.misc||{}), _addlCosts:(e.addlCosts||[]), _margin:(e.margin||0), _verifyNotes:(e.verifyNotes||{}), _rates:(e.rates||{}), _docRef:(e.docRef||null), _rowKeys:_rowKeysOf(e), _signatures:(e.signatures||{}),_calc:(e.calc||null)}),shicSOW:JSON.stringify(e.sowItems||[]),/* The whole info object. Only client and description had columns, so date, location, discipline, department, status, material, QUANTITY, DAYS, attention, end user and the issuing company never reached SharePoint at all -- they lived in the saving browser's cache and nowhere else. Anyone else opening the CE got BLANK_INFO defaults: today's date, qty 1, status DRAFT, discipline Electrical. Saving from there wrote those defaults back as if they were real. One JSON column carries the lot, and new fields ride along without another migration. */shicInfo:JSON.stringify(e.info||{})};let ceId;if(existing.length){ceId=existing[0].Id;await spWithRetry(()=>spPatch(spList('CEs'),ceId,hdr));}else{const r=await spWithRetry(()=>spPost(spList('CEs'),hdr));ceId=r.Id;/* Race-condition guard: if two users POSTed simultaneously, keep the lowest Id and delete the duplicate */const dupes=await spGet(spList('CEs'),`Title eq '${(e.info.ceNum||'').replace(/'/g,"''")}'`,'Id,shicSavedBy');if(dupes.length>1){dupes.sort((a,b)=>a.Id-b.Id);const winner=dupes[0];if(winner.Id!==ceId){/* We lost the race — our row is the duplicate. Delete it, preserve our data locally, and surface a clear error to the user so they can save under a different CE number. The winner row is left completely untouched. */await spDelete(spList('CEs'),ceId).catch(_e=>logSwallowed('db:dbSaveHistory',_e));const _savedAt=new Date().toISOString();try{const h=LS.get('history')||[];LS.set('history',[{...e,id:Date.now(),savedAt:_savedAt,_raceConflict:true},...h.filter(x=>(x.info?.ceNum||x.ceNum)!==e.info.ceNum)]);LS.set('ce_cache:'+e.info.ceNum,{...e,id:Date.now(),savedAt:_savedAt});}catch(_){logSwallowed('db:dbSaveHistory',_);}/* 'local': we LOST the race and deleted our own SharePoint row, so this browser holds the only copy of the user's work. Nothing may ever delete a 'local' record. */try{await cePut({...e,ceNum:e.info.ceNum,savedAt:_savedAt,savedBy:e.savedBy||'',_syncState:'local',_raceConflict:true});}catch(_){logSwallowed('db:dbSaveHistory',_);}throw new Error(`CE number "${e.info.ceNum}" was saved by "${winner.shicSavedBy||'another user'}" at the same time. Your data has been kept in this browser — load the local draft and save again with a different CE number.`);}else{for(const dup of dupes.slice(1))await spDelete(spList('CEs'),dup.Id).catch(_e=>logSwallowed('db:dbSaveHistory',_e));}}}/* Fresh, not the big-list snapshot: rows another browser added since it was
+async function dbSaveHistory(e,opts){_spFailReason='';if(e&&e.info&&e.info.archived&&!((e.mp||[]).length||(e.tools||[]).length||(e.mats||[]).length||(e.ppe||[]).length))return{sp:false,reason:'The line items of '+(e.info.ceNum||'this CE')+' are archived. Restore the archive file first (Admin sync panel, Archive old CEs).'};if(USE_SP||getSiteURL()){try{const existing=await spGet(spList('CEs'),`Title eq '${(e.info.ceNum||'').replace(/'/g,"''")}'`,'Id,shicSavedAt,shicSavedBy');if(existing.length&&opts&&opts.baseAt){const _cf=ceChangedSince({at:opts.baseAt},{savedAt:existing[0].shicSavedAt,savedBy:existing[0].shicSavedBy},opts.me);if(_cf)return{sp:false,conflict:_cf,reason:(_cf.by+' saved '+e.info.ceNum+' after you opened it')};}const hdr={Title:e.info.ceNum,shicType:e.ceType,shicClient:e.info.client||'',shicDesc:e.info.description||'',shicTotal:Math.round((e.grand||0)*100)/100,shicSavedBy:e.savedBy||'',shicSavedAt:new Date().toISOString(),shicScope:e.scope||'',shicNotes:JSON.stringify(e.notes||[]),shicApprovers:JSON.stringify(e.approvers||[]),shicMob:JSON.stringify(e.mobVehicles||[]),shicDemob:JSON.stringify(e.demobVehicles||[]),shicMisc:JSON.stringify({...(e.misc||{}), _addlCosts:(e.addlCosts||[]), _margin:(e.margin||0), _verifyNotes:(e.verifyNotes||{}), _rates:(e.rates||{}), _docRef:(e.docRef||null), _rowKeys:_rowKeysOf(e), _signatures:(e.signatures||{}),_calc:(e.calc||null)}),shicSOW:JSON.stringify(e.sowItems||[]),/* The whole info object. Only client and description had columns, so date, location, discipline, department, status, material, QUANTITY, DAYS, attention, end user and the issuing company never reached SharePoint at all -- they lived in the saving browser's cache and nowhere else. Anyone else opening the CE got BLANK_INFO defaults: today's date, qty 1, status DRAFT, discipline Electrical. Saving from there wrote those defaults back as if they were real. One JSON column carries the lot, and new fields ride along without another migration. */shicInfo:JSON.stringify(e.info||{})};let ceId;if(existing.length){ceId=existing[0].Id;await spWithRetry(()=>spPatch(spList('CEs'),ceId,hdr));}else{const r=await spWithRetry(()=>spPost(spList('CEs'),hdr));ceId=r.Id;/* Race-condition guard: if two users POSTed simultaneously, keep the lowest Id and delete the duplicate */const dupes=await spGet(spList('CEs'),`Title eq '${(e.info.ceNum||'').replace(/'/g,"''")}'`,'Id,shicSavedBy');if(dupes.length>1){dupes.sort((a,b)=>a.Id-b.Id);const winner=dupes[0];if(winner.Id!==ceId){/* We lost the race — our row is the duplicate. Delete it, preserve our data locally, and surface a clear error to the user so they can save under a different CE number. The winner row is left completely untouched. */await spDelete(spList('CEs'),ceId).catch(_e=>logSwallowed('db:dbSaveHistory',_e));const _savedAt=new Date().toISOString();try{const h=LS.get('history')||[];LS.set('history',[{...e,id:Date.now(),savedAt:_savedAt,_raceConflict:true},...h.filter(x=>(x.info?.ceNum||x.ceNum)!==e.info.ceNum)]);LS.set('ce_cache:'+e.info.ceNum,{...e,id:Date.now(),savedAt:_savedAt});}catch(_){logSwallowed('db:dbSaveHistory',_);}/* 'local': we LOST the race and deleted our own SharePoint row, so this browser holds the only copy of the user's work. Nothing may ever delete a 'local' record. */try{await cePut({...e,ceNum:e.info.ceNum,savedAt:_savedAt,savedBy:e.savedBy||'',_syncState:'local',_raceConflict:true});}catch(_){logSwallowed('db:dbSaveHistory',_);}throw new Error(`CE number "${e.info.ceNum}" was saved by "${winner.shicSavedBy||'another user'}" at the same time. Your data has been kept in this browser — load the local draft and save again with a different CE number.`);}else{for(const dup of dupes.slice(1))await spDelete(spList('CEs'),dup.Id).catch(_e=>logSwallowed('db:dbSaveHistory',_e));}}}/* Fresh, not the big-list snapshot: rows another browser added since it was
    taken would be missed here, never deleted, and counted on every load. */_spInvalidateBigList();const[om,or]=await Promise.all([_spGetByCE(spList('CE_MP'),ceId,'Id'),_spGetByCE(spList('CE_Resources'),ceId,'Id')]);/* Insert new rows FIRST — if any insert fails the old rows are still intact */const mpPayloads=(e.mp||[]).filter(r=>r.role).map(r=>({shicCEId:ceId,shicRole:r.role,shicRate:r.rate||0,shicShift:r.shift||'regular_day',shicDays:r.days||1,shicPax:r.pax||1,shicOTHours:r.otHours||0,shicPerDiem:r.perDiem||0,shicTaskId:r.taskId||'',shicShares:_shDump(r.shares)}));const resPayloads=[...(e.tools||[]).filter(r=>r.desc).map(r=>({shicCEId:ceId,shicTab:'tools',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicDays:r.days||1,shicTaskId:r.taskId||'',shicShares:_shDump(r.shares),/* Tier 2 is the default and what every existing row already is, so it is written as 0 rather than 2: an unrepaired site rejects the column, and a row that never names a tier must still cost what it always did. */shicTier:r.tier||0,shicHours:r.hours||0,shicKW:r.kw||0,shicRunHrs:r.runHrs||0,shicSrc:_srcDump(r)})),...(e.mats||[]).filter(r=>r.desc).map(r=>({shicCEId:ceId,shicTab:'mats',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicTaskId:r.taskId||'',shicShares:_shDump(r.shares)})),...(e.ppe||[]).filter(r=>r.desc).map(r=>({shicCEId:ceId,shicTab:'ppe',shicDesc:r.desc,shicQty:r.qty||1,shicUOM:r.uom||'Lot',shicCost:r.cost||0,shicTaskId:r.taskId||'',shicShares:_shDump(r.shares)}))];const insFns=[...mpPayloads.map(p=>()=>spWithRetry(()=>spPost(spList('CE_MP'),p))),...resPayloads.map(p=>()=>spWithRetry(()=>spPost(spList('CE_Resources'),p)))];let spErr=null;for(let i=0;i<insFns.length;i+=5){try{await Promise.all(insFns.slice(i,i+5).map(fn=>fn()));}catch(batchErr){spErr=batchErr;console.error('dbSaveHistory batch insert failed:',batchErr.message);break;}}if(spErr)throw spErr;/* Only delete OLD rows after new ones safely written */const dels=[...om.map(x=>()=>spDelete(spList('CE_MP'),x.Id)),...or.map(x=>()=>spDelete(spList('CE_Resources'),x.Id))];let _delFail=0;for(let i=0;i<dels.length;i+=5)await Promise.all(dels.slice(i,i+5).map(fn=>fn().catch(()=>{_delFail++;})));if(_delFail)setTimeout(()=>(window._shicToast||console.warn)(_delFail+' old line(s) of '+e.info.ceNum+' could not be removed from SharePoint. They are ignored when the CE opens; save it again to clear them.',true),1200);_spInvalidateBigList();try{LS.set('ce_cache:'+e.info.ceNum,{...e,id:ceId,savedAt:hdr.shicSavedAt});}catch(_){logSwallowed('db:dbSaveHistory',_);}/* Write through to IndexedDB alongside the localStorage cache. 'synced' -- SharePoint accepted it, so the migration may safely treat the two copies as agreeing. */try{await cePut({...e,ceNum:e.info.ceNum,id:ceId,savedAt:hdr.shicSavedAt,savedBy:e.savedBy||'',_syncState:'synced'});}catch(_){logSwallowed('db:dbSaveHistory',_);}return{sp:true,id:ceId};}catch(e2){const msg=e2.message||String(e2);_spFailReason=msg;console.warn('dbSaveHistory SP error:',msg);/* A 400 InvalidClientQueryException on an insert almost always means the
    site is missing a column this version writes -- exactly what happened when
    shicPax/shicOTHours/shicPerDiem shipped without being added to the
@@ -1498,6 +1501,101 @@ async function dbStrayCeReservations(apply,margin){
   let saved=false;
   if(apply&&stray.length)saved=await dbSaveCompanyKey(CE_RESERVE_KEY,{rows:rows.filter(r=>!isStray(r))});
   return {total:rows.length,stray:stray.map(r=>r.n),top,saved};
+}
+/* ── Archiving old CEs ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   CE_MP and CE_Resources hold every line of every CE ever saved, ~40 rows a CE, and only ever grow. An old, closed CE is read perhaps
+   once a year, but its rows are counted in the list size every day. Archiving moves a CE's line items out of SharePoint into a file the
+   admin keeps; the header stays (so Monitoring, the Dashboard and totals are untouched), marked info.archived. Nothing is deleted until
+   the file has been handed to the admin and they have said so, and a CE comes back, exactly as it was, by restoring that file.
+   An archived CE does not open (it would show an empty estimate): dbLoadCE flags it _partial and _archived, which the open, sign and
+   save paths already refuse. */
+const _ARCH_MP_COLS='Id,shicRole,shicRate,shicShift,shicDays,shicQty,shicPax,shicOTHours,shicPerDiem,shicTaskId,shicShares';
+const _ARCH_RES_COLS='Id,shicTab,shicDesc,shicQty,shicUOM,shicCost,shicDays,shicTaskId,shicShares,'+['shicTier','shicHours','shicKW','shicRunHrs','shicSrc'].join(',');
+function _archInfoOf(h){try{return JSON.parse(h.shicInfo||'{}')||{};}catch(_e){return {};}}
+async function dbFindArchivable(months,progressCb){
+  if(!(USE_SP||getSiteURL()))throw new Error('This needs a SharePoint connection.');
+  const cut=Date.now()-(Number(months)||24)*30.44*864e5;
+  const step=(m,p)=>{try{progressCb&&progressCb({msg:m,progress:p});}catch(_e){logSwallowed('db:archive.progress',_e);}};
+  step('Reading CE headers...',0.1);
+  const heads=await spGet(spList('CEs'),null,'Id,Title,shicTotal,shicSavedAt,shicInfo');
+  step('Reading the Monitoring list...',0.3);
+  const mon=(await dbGetMon())||{};
+  const closed=new Set(statusGroupMembers('closed',statusNames()));
+  step('Counting line items...',0.5);
+  const cnt={};
+  for(const list of ['CE_MP','CE_Resources']){
+    const rows=await spGet(spList(list),null,'Id,shicCEId');
+    for(const r of rows){const k=String(r.shicCEId);cnt[k]=(cnt[k]||0)+1;}
+  }
+  const out=[];
+  for(const h of heads){
+    const info=_archInfoOf(h);
+    if(info.archived)continue;
+    const n=cnt[String(h.Id)]||0;
+    if(!n)continue;
+    const m=mon[h.Id]||mon[String(h.Id)]||{};
+    if(!closed.has(m.status))continue;
+    const saved=new Date(h.shicSavedAt||0).getTime();
+    const recv=/^\d{4}-\d{2}-\d{2}$/.test(String(m.dateRecv||''))?new Date(m.dateRecv+'T00:00:00').getTime():0;
+    if(!(saved&&saved<cut)||(recv&&recv>=cut))continue;
+    out.push({id:h.Id,ceNum:h.Title||('#'+h.Id),status:m.status,savedAt:h.shicSavedAt||'',total:Number(h.shicTotal||0),rows:n});
+  }
+  return out.sort((a,b)=>String(a.savedAt).localeCompare(String(b.savedAt)));
+}
+/* items: from dbFindArchivable. deliver(bundle) must put the file in the admin's hands; deleting starts only if it returns true. */
+async function dbArchiveCEs(items,deliver,onStep){
+  const say=m=>{try{onStep&&onStep(m);}catch(_e){logSwallowed('db:archive.progress',_e);}};
+  const bundle={format:'shic-ce-archive',v:1,at:new Date().toISOString(),ces:[]};
+  _spInvalidateBigList();
+  for(const it of items){
+    const [mp,res]=await Promise.all([_spGetByCE(spList('CE_MP'),it.id,_ARCH_MP_COLS),_spGetByCE(spList('CE_Resources'),it.id,_ARCH_RES_COLS)]);
+    if(!mp.length&&!res.length){say('  skipped '+it.ceNum+': no line items found');continue;}
+    bundle.ces.push({id:it.id,ceNum:it.ceNum,mp,res});
+    say('  read '+it.ceNum+': '+(mp.length+res.length)+' line(s)');
+  }
+  if(!bundle.ces.length)return {archived:0,rows:0,failed:0};
+  const ok=await deliver(bundle);
+  if(!ok){say('Stopped before anything was deleted.');return {archived:0,rows:0,failed:0,stopped:true};}
+  let archived=0,rows=0,failed=0;
+  for(const c of bundle.ces){
+    try{
+      const h=(await spGet(spList('CEs'),`Id eq ${c.id}`,'Id,shicInfo'))[0];
+      if(!h)throw new Error('header not found');
+      const info=_archInfoOf(h);
+      info.archived={at:bundle.at,mp:c.mp.length,res:c.res.length};
+      /* Flag first, rows second: an interruption leaves the flag with rows still there, which dbLoadCE ignores. */
+      await spWithRetry(()=>spPatch(spList('CEs'),c.id,{shicInfo:JSON.stringify(info)}));
+      const dels=[...c.mp.map(x=>()=>spDelete(spList('CE_MP'),x.Id)),...c.res.map(x=>()=>spDelete(spList('CE_Resources'),x.Id))];
+      for(let i=0;i<dels.length;i+=5)await Promise.all(dels.slice(i,i+5).map(fn=>spWithRetry(fn)));
+      archived++;rows+=c.mp.length+c.res.length;
+      say('  ✓ '+c.ceNum+' archived');
+    }catch(e){failed++;say('  ✗ '+c.ceNum+': '+(e.message||e)+' — its line items are still in the archive file');}
+  }
+  _spInvalidateBigList();
+  return {archived,rows,failed};
+}
+async function dbRestoreArchive(bundle,onStep){
+  const say=m=>{try{onStep&&onStep(m);}catch(_e){logSwallowed('db:archive.progress',_e);}};
+  if(!bundle||bundle.format!=='shic-ce-archive'||!Array.isArray(bundle.ces))throw new Error('This is not a CE archive file.');
+  const keep=r=>{const o={};Object.keys(r).forEach(k=>{if(/^shic/.test(k)&&k!=='shicCEId'&&r[k]!==null&&r[k]!==undefined)o[k]=r[k];});return o;};
+  let restored=0,skipped=0,rows=0;
+  for(const c of bundle.ces){
+    try{
+      let h=(await spGet(spList('CEs'),`Id eq ${c.id}`,'Id,Title,shicInfo'))[0];
+      if(!h||String(h.Title||'')!==String(c.ceNum||'')){const byNum=await spGet(spList('CEs'),`Title eq '${String(c.ceNum||'').replace(/'/g,"''")}'`,'Id,Title,shicInfo');h=byNum[0];}
+      if(!h){skipped++;say('  - '+c.ceNum+': no CE with this number any more, not restored');continue;}
+      _spInvalidateBigList();
+      const have=(await _spGetByCE(spList('CE_MP'),h.Id,'Id')).length+(await _spGetByCE(spList('CE_Resources'),h.Id,'Id')).length;
+      if(have){skipped++;say('  - '+c.ceNum+': already has '+have+' line(s) in SharePoint, left alone');continue;}
+      const posts=[...c.mp.map(r=>()=>spWithRetry(()=>spPost(spList('CE_MP'),{...keep(r),shicCEId:h.Id}))),...c.res.map(r=>()=>spWithRetry(()=>spPost(spList('CE_Resources'),{...keep(r),shicCEId:h.Id})))];
+      for(let i=0;i<posts.length;i+=5)await Promise.all(posts.slice(i,i+5).map(fn=>fn()));
+      const info=_archInfoOf(h);delete info.archived;
+      await spWithRetry(()=>spPatch(spList('CEs'),h.Id,{shicInfo:JSON.stringify(info)}));
+      restored++;rows+=posts.length;say('  ✓ '+c.ceNum+' restored ('+posts.length+' line(s))');
+    }catch(e){skipped++;say('  ✗ '+c.ceNum+': '+(e.message||e));}
+  }
+  _spInvalidateBigList();
+  return {restored,skipped,rows};
 }
 async function dbSaveShiftRates(obj){
   try{localStorage.setItem('shic:shift_rates',JSON.stringify(obj));}catch{}

@@ -80,6 +80,81 @@ function CeNumberClaims() {
       res && res.stray.length > 0 && !res.saved && React.createElement('button', {style:btn('danger'), disabled: busy, onClick: () => run(true)}, 'Release ' + res.stray.length + ' stray number(s)')),
     msg && React.createElement('div', {style:{marginTop:10,fontSize:11,fontFamily:"'JetBrains Mono',monospace",color: msg.startsWith('❌') ? ERR : msg.startsWith('✅') ? OK : MT}}, msg));
 }
+/* CE_MP and CE_Resources only grow. Old, closed CEs can have their line items moved into a file the admin keeps; the CE stays in
+   Monitoring and the Dashboard with its total, and comes back by restoring the file. */
+function ArchiveOldCEs() {
+  const [busy, setBusy] = React.useState(false);
+  const [months, setMonths] = React.useState(24);
+  const [found, setFound] = React.useState(null);
+  const [log, setLog] = React.useState([]);
+  const fileRef = React.useRef(null);
+  const add = m => setLog(p => [...p, m]);
+  const PER_RUN = 100;
+  const look = async () => {
+    setBusy(true); setLog([]); setFound(null);
+    try {
+      const f = await dbFindArchivable(months);
+      setFound(f);
+      const rows = f.reduce((n, x) => n + x.rows, 0);
+      add(f.length ? f.length + ' closed CE(s) not saved for ' + months + '+ months, ' + rows.toLocaleString() + ' line item(s). Each run takes the oldest ' + PER_RUN + '.' : '✅ Nothing to archive: no closed CE older than ' + months + ' months still has line items in SharePoint.');
+      f.slice(0, 15).forEach(x => add('  • ' + x.ceNum + ' · ' + x.status + ' · saved ' + String(x.savedAt).slice(0, 10) + ' · ' + x.rows + ' line(s)'));
+      if (f.length > 15) add('  … and ' + (f.length - 15) + ' more.');
+    } catch (e) { add('❌ ' + e.message); }
+    setBusy(false);
+  };
+  const deliver = async bundle => {
+    const text = JSON.stringify(bundle);
+    const blob = new Blob([text], { type: 'application/json' });
+    const url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = 'ce-archive-' + bundle.at.slice(0, 10) + '-' + bundle.ces.length + 'CEs.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    const NL = String.fromCharCode(10);
+    return await uiConfirm('The archive file for ' + bundle.ces.length + ' CE(s) has been downloaded (' + a.download + ', ' + Math.round(text.length / 1024).toLocaleString() + ' KB).' + NL + NL +
+      'Check that it is saved somewhere safe. Once you continue, their line items are deleted from SharePoint, and this file is the only copy.' + NL + NL + 'Delete them from SharePoint now?', { ok: 'File is saved, delete now', cancel: 'Stop, keep everything' });
+  };
+  const archive = async () => {
+    if (!found || !found.length) return;
+    const take = found.slice(0, PER_RUN);
+    setBusy(true); add('Archiving ' + take.length + ' CE(s)…');
+    try {
+      const r = await dbArchiveCEs(take, deliver, add);
+      if (r.stopped) add('Nothing was deleted.');
+      else add(r.failed ? '⚠ ' + r.archived + ' archived (' + r.rows.toLocaleString() + ' line items), ' + r.failed + ' failed — those are still complete in SharePoint.' : '🎉 ' + r.archived + ' CE(s) archived, ' + r.rows.toLocaleString() + ' line items moved into the file. Keep the file safe.');
+      if (r.archived) { try { auditLog('archive_ces', r.archived + ' CE(s), ' + r.rows + ' line items', ''); } catch (_e) { logSwallowed('archive:audit', _e); } }
+      if (r.archived) setFound(null);
+    } catch (e) { add('❌ ' + e.message); }
+    setBusy(false);
+  };
+  const restore = async file => {
+    if (!file) return;
+    setBusy(true); setLog([]);
+    try {
+      const bundle = JSON.parse(await file.text());
+      add('Restoring ' + ((bundle.ces || []).length) + ' CE(s) from ' + file.name + '…');
+      const r = await dbRestoreArchive(bundle, add);
+      add((r.skipped ? '⚠ ' : '🎉 ') + r.restored + ' CE(s) restored (' + r.rows.toLocaleString() + ' line items)' + (r.skipped ? ', ' + r.skipped + ' left alone' : '') + '. Press ↻ Refresh in CE Monitoring.');
+      if (r.restored) { try { auditLog('restore_ces', r.restored + ' CE(s), ' + r.rows + ' line items', ''); } catch (_e) { logSwallowed('archive:audit', _e); } }
+    } catch (e) { add('❌ ' + e.message); }
+    setBusy(false);
+  };
+  const connected = !!getSiteURL();
+  return React.createElement('div', { style: { marginTop: 18, paddingTop: 14, borderTop: '1px solid ' + BDR } },
+    React.createElement('div', { style: { fontWeight: 700, fontSize: 13, marginBottom: 4 } }, '🗃 Archive old CEs'),
+    React.createElement('div', { style: { fontSize: 11, color: MT, marginBottom: 10, lineHeight: 1.6 } },
+      'The manpower and resource lists only grow. Old CEs that are closed (Approved, Submitted, Awarded, No Quote, Cancelled, Superseded) can have their line items moved into a file you keep. They stay in CE Monitoring and the Dashboard with their total, but cannot be opened or printed until the file is restored. Nothing is deleted until the file is downloaded and you confirm.'),
+    React.createElement('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' } },
+      React.createElement('span', { style: { fontSize: 11, color: MT } }, 'Not saved for'),
+      React.createElement('input', { type: 'number', min: 6, max: 120, value: months, onChange: e => setMonths(Math.max(6, Number(e.target.value) || 24)), style: { ...INP, width: 70 } }),
+      React.createElement('span', { style: { fontSize: 11, color: MT } }, 'months'),
+      React.createElement('button', { style: { ...btn('def'), opacity: connected ? 1 : 0.5 }, disabled: busy || !connected, onClick: look }, busy ? 'Working…' : '🔍 Look'),
+      found && found.length > 0 && React.createElement('button', { style: btn('danger'), disabled: busy, onClick: archive }, '🗃 Archive ' + Math.min(found.length, PER_RUN) + ' CE(s)'),
+      React.createElement('button', { style: { ...btn('def'), opacity: connected ? 1 : 0.5 }, disabled: busy || !connected, onClick: () => fileRef.current && fileRef.current.click() }, '⬆ Restore from file…'),
+      React.createElement('input', { type: 'file', accept: '.json', style: { display: 'none' }, ref: fileRef, onChange: e => { const f = e.target.files[0]; e.target.value = ''; restore(f); } })),
+    log.length > 0 && React.createElement('div', { style: { marginTop: 10, maxHeight: 220, overflowY: 'auto', background: SURF, border: '1px solid ' + BDR, borderRadius: 6, padding: '8px 10px' } },
+      log.map((l, i) => React.createElement('div', { key: i, style: { fontSize: 11, fontFamily: "'JetBrains Mono',monospace", marginBottom: 2,
+        color: (l.startsWith('❌') || l.startsWith('  ✗')) ? ERR : l.startsWith('⚠') ? 'var(--status-warning)' : (l.startsWith('✅') || l.startsWith('  ✓') || l.startsWith('🎉')) ? OK : MT } }, l))));
+}
 /* How full each SharePoint list is, against the 5,000-item limit. The same check runs once a day for an admin and warns from 4,000. */
 function SpListSizes() {
   const [busy, setBusy] = React.useState(false);
@@ -293,6 +368,7 @@ function LocalToSPSync() {
     ),
     React.createElement(MonDupTidy, null),
     React.createElement(CeNumberClaims, null),
+    React.createElement(ArchiveOldCEs, null),
     React.createElement(SpListSizes, null)
   );
 }

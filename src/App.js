@@ -3095,11 +3095,14 @@ function App({
     if (hasUnsavedWork() && !await uiConfirm('Load this CE? Your current unsaved work will be replaced.\n\nTip: save a draft first (Ctrl+S or the Save Draft button) if you need to keep it.')) return;
     let d = e.data || e;
     // SP history items have numeric id but no tools — fetch full CE before applying
+    if (d._archived) { showToast((d.info && d.info.ceNum || 'This CE') + ' is archived — its line items were moved out of SharePoint' + (d._archived && d._archived.at ? ' on ' + String(d._archived.at).slice(0, 10) : '') + '. An admin can restore it from the archive file (Admin sync panel, Archive old CEs).', true); return; }
     if (d.tools === undefined) {
       // Try SP first, fall back to local full-data cache
       if (typeof d.id === 'number' && (USE_SP || getSiteURL())) {
         try { const full = await dbLoadCE(d.id); if (full) d = full; } catch(ex) { console.warn('handleLoad dbLoadCE:', ex.message); }
       }
+      /* Archived: its line items were moved to an archive file, so there is nothing to open. */
+      if (d._archived) { showToast((d.info && d.info.ceNum || 'This CE') + ' is archived — its line items were moved out of SharePoint' + (d._archived.at ? ' on ' + String(d._archived.at).slice(0, 10) : '') + '. An admin can restore it from the archive file (Admin sync panel, Archive old CEs).', true); return; }
       // Still no tools — try the local cache written by dbSaveHistory
       if (d.tools === undefined) {
         try { const cached = LS.get('ce_cache:' + (d.info?.ceNum || d.ceNum)); if (cached) d = cached; } catch(_){logSwallowed('App:L2914',_);}

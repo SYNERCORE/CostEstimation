@@ -37,8 +37,8 @@ function ProjectInfoGate({ missing, companies, companyId, client, ceType, ceType
       h('div', { style: { marginTop: 12 } }, L('Project Description / Scope Summary', true, !String(description || '').trim(),
         h('textarea', { style: { ...INP, height: 78, resize: 'vertical', ...(String(description || '').trim() || !touched ? {} : { borderColor: ERR }) },
           value: description || '', placeholder: 'What the client is asking for, in a line or two', onChange: e => T(onDescription)(e.target.value) }))),
-      h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end', marginTop: 16 } },
-        h('div', { style: { flex: 1, fontSize: 11, color: done ? OK : touched ? ERR : MT, fontWeight: 600 } }, done ? 'All five filled in.' : touched ? 'Still needed: ' + missing.join(', ') + '.' : 'All five are required.'),
+      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'flex-end', marginTop: 16 } },
+        h('div', { style: { flex: '1 1 180px', fontSize: 11, color: done ? OK : touched ? ERR : MT, fontWeight: 600 } }, done ? 'All five filled in.' : touched ? 'Still needed: ' + missing.join(', ') + '.' : 'All five are required.'),
         h('button', { style: btn('def'), onClick: onCancel, title: 'Go back to My Work' }, 'Cancel'),
         h('button', { style: btn('acc'), disabled: !done, onClick: onContinue }, 'Continue to Project Info'))));
 }

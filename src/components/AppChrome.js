@@ -627,6 +627,7 @@ function AppHeader(ctx) {
   } = ctx;
   return React.createElement(React.Fragment, null, React.createElement("div", {
     role: 'banner',
+    className: 'shic-topbar',
     style: {
       background: CARD,
       borderBottom: `1px solid ${BDR}`,
@@ -643,6 +644,7 @@ function AppHeader(ctx) {
       overflowY: 'hidden'
     }
   }, /*#__PURE__*/React.createElement("div", {
+    className: 'shic-tb-logo',
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -675,6 +677,7 @@ function AppHeader(ctx) {
       fontSize: 10
     }
   }, "v3")), /*#__PURE__*/React.createElement("div", {
+    className: 'shic-tb-type',
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -699,6 +702,7 @@ function AppHeader(ctx) {
       fontSize: 11
     }
   }, /*#__PURE__*/React.createElement("option", { value: "", disabled: true }, "— Project type * —"), Object.keys(CE_CFG).map(ceKey => /*#__PURE__*/React.createElement("option", { key: ceKey, value: ceKey }, ceTypeLabel(ceKey))))), /*#__PURE__*/React.createElement("div", {
+    className: 'shic-tb-actions',
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -733,6 +737,7 @@ function AppHeader(ctx) {
     title: "Keyboard shortcuts: Ctrl+S = Save  •  Ctrl+N = New CE",
     style: {fontSize:9, color:BDR, cursor:'default', userSelect:'none', letterSpacing:.3}
   }, "Ctrl+S / Ctrl+N"), /*#__PURE__*/React.createElement(SignInBanner, null)), /*#__PURE__*/React.createElement("div", {
+    className: 'shic-tb-account',
     style: {
       display: 'flex',
       alignItems: 'center',

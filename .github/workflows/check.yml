@@ -535,5 +535,7 @@ jobs:
         run: node tools/test-a11y-landmarks.js
       - name: Phone layout
         run: node tools/test-phone-layout.js
+      - name: Banner landmark and page heading
+        run: node tools/test-a11y-landmarks.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

@@ -5358,6 +5358,7 @@ function App({
   AppBanners({ bulkOn, clearDraft, currentUser, deleteDraft, draftOwners, draftTidyBusy, draftTidyGroups, draftsOpen, draftsShown, drftBy, drftQ, hasDraft, history, isAdmin, isRequestor, loadDraft, loadSharedDrafts, resumeDraft, setBulkOn, setDraftsOpen, setDrftBy, setDrftQ, setShowDraftBanner, setUpdateInfo, sharedDrafts, showDraftBanner, showToast, tidyDrafts, toast, toastErr, undoToast, updateInfo }), Picker(), ApiKeyModal({ apiKeyInput, setApiKeyInput, setShowApiKey, showApiKey, showToast }), /*#__PURE__*/AppHeader({ TABS, TAB_GROUPS, _tabMemory, busyBtn, busyOp, ceType, currentUser, handleExport, handleNew, handleSave, isRequestor, loadSharedDrafts, mats, misc, mp, myTodo, onLogout, ppe, provInfo, setApiKeyInput, setCeType, setDraftsOpen, setMySigOpen, setShowApiKey, setTab, sharedDrafts, sowUnassignedCount, tab, tools }), /*#__PURE__*/React.createElement("div", {
     className: "shic-workspace"
   }, /*#__PURE__*/React.createElement("div", {
+    role: 'main',
     style: {
       flex: 1,
       padding: 16,

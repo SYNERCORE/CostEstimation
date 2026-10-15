@@ -169,6 +169,7 @@ function InfoTab(ctx) {
   }, "General"))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     style: LBL
   }, "Department"), /*#__PURE__*/React.createElement("input", {
+    'aria-label': 'Department',
     style: INP,
     value: info.dept,
     onChange: e => setInfo(p => ({
@@ -197,6 +198,7 @@ function InfoTab(ctx) {
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     style: LBL
   }, "Material"), /*#__PURE__*/React.createElement("input", {
+    'aria-label': 'Material',
     style: INP,
     value: info.material,
     onChange: e => setInfo(p => ({
@@ -247,6 +249,7 @@ function InfoTab(ctx) {
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     style: LBL
   }, "No. of Days"), /*#__PURE__*/React.createElement("input", {
+    'aria-label': 'No. of Days',
     style: {
       ...INP,
       ...MONO

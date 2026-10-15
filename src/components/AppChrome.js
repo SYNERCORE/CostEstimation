@@ -626,6 +626,7 @@ function AppHeader(ctx) {
     tools
   } = ctx;
   return React.createElement(React.Fragment, null, React.createElement("div", {
+    role: 'banner',
     style: {
       background: CARD,
       borderBottom: `1px solid ${BDR}`,
@@ -661,6 +662,8 @@ function AppHeader(ctx) {
     }
   }, "SHIC"), /*#__PURE__*/React.createElement("span", {
     className: "shic-hide-tight",
+    role: 'heading',
+    'aria-level': 1,
     style: {
       fontWeight: 700,
       fontSize: 14

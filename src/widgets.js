@@ -233,7 +233,7 @@ function TopRefreshButton() {
   const vals = keys.map(k => sync[k] || 'unknown');
   const busy = vals.indexOf('saving') >= 0, bad = vals.indexOf('error') >= 0 || sync.sp === 'error', local = vals.indexOf('local') >= 0;
   const c = busy ? 'var(--status-warning)' : bad ? 'var(--status-danger)' : local ? 'var(--status-warning)' : 'var(--status-success)';
-  const label = busy ? 'Syncing\u2026' : bad ? 'Sync failed - retry' : local ? 'This device only - refresh' : 'Refresh';
+  const label = busy ? 'Syncing\u2026' : bad ? 'Sync failed - retry' : local ? 'Not synced - sync now' : 'Refresh';
   return React.createElement('button', {
     onClick: shicRefreshAll, disabled: busy,
     title: 'Refresh everything from SharePoint.  ' + keys.map((k, i) => k + ': ' + vals[i]).join(', '),

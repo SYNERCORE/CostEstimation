@@ -8,10 +8,13 @@
    Info and in the top bar, so nothing is stored here. */
 function ProjectInfoGate({ missing, companies, companyId, client, ceType, ceTypes, projType, description, onCompany, onClient, onType, onDiscipline, onDescription, onCancel, onContinue }) {
   const h = React.createElement;
+  /* The red marks and the list of what is missing wait until the person has started filling in, so a fresh form is not already an error. */
+  const [touched, setTouched] = React.useState(false);
+  const T = fn => v => { setTouched(true); fn(v); };
   const L = (label, req, bad, el) => h('label', { style: { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, color: MT } },
     h('span', null, label, req ? h('span', { style: { color: ERR } }, ' *') : null), el);
   const sel = (bad, value, onChange, blank, opts) => h('select', {
-    style: { ...INP, ...(bad ? { borderColor: ERR } : {}) }, value, onChange: e => onChange(e.target.value)
+    style: { ...INP, ...(bad && touched ? { borderColor: ERR } : {}) }, value, onChange: e => T(onChange)(e.target.value)
   }, h('option', { value: '', disabled: true }, blank), opts.map(o => h('option', { key: o.v, value: o.v }, o.t)));
   const noCo = companyId == null || companyId === '';
   const done = !missing.length;
@@ -26,16 +29,16 @@ function ProjectInfoGate({ missing, companies, companyId, client, ceType, ceType
       h('div', { style: { marginTop: 14 } }, L('Issuing Company', true, noCo, sel(noCo, noCo ? '' : String(companyId), onCompany, '— Select issuing company —',
         (companies || []).map(c => ({ v: String(c.id), t: c.name + (c.sub ? ' — ' + c.sub : '') }))))),
       h('div', { style: { marginTop: 12 } }, L('Client Name', true, !String(client || '').trim(),
-        h('input', { style: { ...INP, ...(String(client || '').trim() ? {} : { borderColor: ERR }) }, value: client || '', placeholder: 'Who the estimate is for', onChange: e => onClient(e.target.value) }))),
+        h('input', { style: { ...INP, ...(String(client || '').trim() || !touched ? {} : { borderColor: ERR }) }, value: client || '', placeholder: 'Who the estimate is for', onChange: e => T(onClient)(e.target.value) }))),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12, marginTop: 12 } },
         L('Project Type', true, !ceType, sel(!ceType, ceType || '', onType, '— Select project type —', (ceTypes || []).map(c => ({ v: c.k, t: c.label })))),
         L('Discipline', true, !projType, sel(!projType, projType || '', onDiscipline, '— Select discipline —',
           ['Electrical', 'Mechanical', 'Civil', 'General'].map(x => ({ v: x, t: x }))))),
       h('div', { style: { marginTop: 12 } }, L('Project Description / Scope Summary', true, !String(description || '').trim(),
-        h('textarea', { style: { ...INP, height: 78, resize: 'vertical', ...(String(description || '').trim() ? {} : { borderColor: ERR }) },
-          value: description || '', placeholder: 'What the client is asking for, in a line or two', onChange: e => onDescription(e.target.value) }))),
+        h('textarea', { style: { ...INP, height: 78, resize: 'vertical', ...(String(description || '').trim() || !touched ? {} : { borderColor: ERR }) },
+          value: description || '', placeholder: 'What the client is asking for, in a line or two', onChange: e => T(onDescription)(e.target.value) }))),
       h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end', marginTop: 16 } },
-        h('div', { style: { flex: 1, fontSize: 11, color: done ? OK : ERR, fontWeight: 600 } }, done ? 'All five filled in.' : 'Still needed: ' + missing.join(', ') + '.'),
+        h('div', { style: { flex: 1, fontSize: 11, color: done ? OK : touched ? ERR : MT, fontWeight: 600 } }, done ? 'All five filled in.' : touched ? 'Still needed: ' + missing.join(', ') + '.' : 'All five are required.'),
         h('button', { style: btn('def'), onClick: onCancel, title: 'Go back to My Work' }, 'Cancel'),
         h('button', { style: btn('acc'), disabled: !done, onClick: onContinue }, 'Continue to Project Info'))));
 }

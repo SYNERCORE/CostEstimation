@@ -529,5 +529,7 @@ jobs:
         run: node tools/test-archive-ces.js
       - name: SP index status
         run: node tools/test-sp-index-status.js
+      - name: Start-CE dialog and sync button wording
+        run: node tools/test-project-info-dialog.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

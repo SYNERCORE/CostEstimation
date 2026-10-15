@@ -10,6 +10,6 @@ ck('widgets.js parses', (() => { try { new Function(w); return true; } catch (e)
 ck('one refresh action, shared', w.indexOf('async function shicRefreshAll()') > 0 && w.indexOf('onClick: shicRefreshAll,\n      title: \'Refresh all from SharePoint\'') > 0);
 ck('the strip no longer holds its own copy of the action', (w.match(/All data refreshed from SharePoint/g) || []).length === 1);
 ck('a top-bar button exists and uses the same action', w.indexOf('function TopRefreshButton()') > 0 && w.indexOf('onClick: shicRefreshAll, disabled: busy') > 0);
-ck('it says syncing, failed, this device only, or just Refresh', ["'Syncing", "'Sync failed - retry'", "'This device only - refresh'", "'Refresh'"].every(k => w.indexOf(k) > 0));
+ck('it says syncing, failed, not synced, or just Refresh', ["'Syncing", "'Sync failed - retry'", "'Not synced - sync now'", "'Refresh'"].every(k => w.indexOf(k) > 0));
 ck('the top bar draws it before + New', app.indexOf('React.createElement(TopRefreshButton, null)') > 0 && app.indexOf('React.createElement(TopRefreshButton, null)') < app.indexOf('title: "New CE (Ctrl+N)"'));
 process.exit(bad ? 1 : 0);

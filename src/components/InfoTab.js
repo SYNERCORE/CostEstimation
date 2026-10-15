@@ -5,6 +5,8 @@
 function InfoTab(ctx) {
   const {
     ScopeBuilder,
+    ceNums,
+    history,
     addMode,
     aiLoad,
     ceType,
@@ -79,7 +81,16 @@ function InfoTab(ctx) {
       ...p,
       ceNum: e.target.value
     }))
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+  }), (() => {
+    const t = ceNumTypo(info.ceNum, history, ceNums);
+    return t && React.createElement("div", {
+      role: 'alert',
+      style: { marginTop: 6, fontSize: 11, lineHeight: 1.5, color: 'var(--status-warning)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }
+    }, "The highest CE number in use this year is " + t.max + ". Did you mean " + t.suggested + "?", React.createElement("button", {
+      type: 'button', style: { ...btn('def', true), padding: '2px 8px', fontSize: 11 },
+      onClick: () => setInfo(p => ({ ...p, ceNum: t.suggested }))
+    }, "Use " + t.suggested));
+  })()), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     style: LBL
   }, "Date"), /*#__PURE__*/React.createElement("input", {
     style: {

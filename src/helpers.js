@@ -118,6 +118,31 @@ function nextCeNum(history, cePrefix, known) {
   (known || []).forEach(consider);
   return pfx + String(max + 1).padStart(4, '0');
 }
+/* A typed CE number that is far above every number in use this year is almost always a slipped key (11239 for 1239), and every New CE
+   after it would count on from it. Returns null when the number looks fine, else {max, suggested}: the highest number others use and the
+   number to offer instead -- the typed digits with one removed when that lands within reach of the highest, else the next free one.
+   It only warns; the person decides. */
+function ceNumTypo(typed, history, known, margin) {
+  const s = ceSeqOf(typed);
+  const yr = String(new Date().getFullYear());
+  if (!s || s.seq.slice(0, 4) !== yr) return null;
+  const num = parseInt(s.seq.slice(5), 10) || 0;
+  const mine = ceSeqOf(typed).seq;
+  let max = 0;
+  const consider = n => { const q = ceSeqOf(n); if (!q || q.seq === mine || q.seq.slice(0, 4) !== yr) return; const v = parseInt(q.seq.slice(5), 10) || 0; if (v > max) max = v; };
+  (history || []).forEach(h => consider((h.info && h.info.ceNum) || h.ceNum));
+  (known || []).forEach(consider);
+  const reach = max + (margin == null ? 3 : margin);
+  if (!max || num <= reach) return null;
+  const digits = String(num);
+  let best = 0;
+  for (let i = 0; i < digits.length; i++) {
+    const v = parseInt(digits.slice(0, i) + digits.slice(i + 1), 10);
+    if (v > max - 20 && v <= reach && v > best) best = v;
+  }
+  const pick = best || (max + 1);
+  return { max, suggested: String(typed).trim().toUpperCase().replace(/-CE-(\d{4})-\d+/, (m, y) => '-CE-' + y + '-' + String(pick).padStart(4, '0')) };
+}
 function nextCeNumForCompany(history, company, known) {
   return nextCeNum(history, (company && company.cePrefix) ? company.cePrefix : 'SHIC', known);
 }

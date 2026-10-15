@@ -159,6 +159,12 @@ function ArchiveOldCEs() {
 function SpListSizes() {
   const [busy, setBusy] = React.useState(false);
   const [rows, setRows] = React.useState(null);
+  const [idx, setIdx] = React.useState(null);
+  const checkIdx = async () => {
+    setBusy(true);
+    try { setIdx(await dbSpIndexStatus()); } catch (e) { setIdx([{ key: 'error', col: '', indexed: undefined, error: e.message }]); }
+    setBusy(false);
+  };
   const look = async () => {
     setBusy(true);
     try { setRows(await dbSpListSizes()); } catch (e) { setRows([{ key: 'error', name: '', count: null, level: 'unknown', error: e.message }]); }
@@ -171,6 +177,11 @@ function SpListSizes() {
     React.createElement('div', {style:{fontSize:11,color:MT,marginBottom:10,lineHeight:1.6}},
       'Past 5,000 items SharePoint refuses a filter on any column that is not indexed. The CE lists grow with every CE saved. You are warned once a day from 4,000.'),
     React.createElement('button', {style:{...btn('def'), opacity: connected ? 1 : 0.5}, disabled: busy || !connected, onClick: look}, busy ? 'Counting…' : '🔍 Check list sizes'),
+    React.createElement('button', {style:{...btn('def'), marginLeft:8, opacity: connected ? 1 : 0.5}, disabled: busy || !connected, onClick: checkIdx}, busy ? 'Checking…' : '🔎 Check indexes'),
+    idx && React.createElement('div', {style:{marginTop:10,background:SURF,border:'1px solid '+BDR,borderRadius:6,padding:'8px 10px'}},
+      idx.map(r => React.createElement('div', {key:r.key+r.col, style:{display:'flex',justifyContent:'space-between',gap:12,fontSize:11,fontFamily:"'JetBrains Mono',monospace",marginBottom:2,color: r.indexed === true ? OK : r.indexed === false ? ERR : MT}},
+        React.createElement('span', null, r.key + ' · ' + r.col),
+        React.createElement('span', null, r.indexed === true ? 'indexed ✓' : r.indexed === false ? 'NOT indexed — press Repair lists & columns in SP Setup' : r.indexed === null ? 'column not found' : 'unavailable' + (r.error ? ' — ' + String(r.error).slice(0, 60) : ''))))),
     rows && React.createElement('div', {style:{marginTop:10,background:SURF,border:'1px solid '+BDR,borderRadius:6,padding:'8px 10px'}},
       rows.map(r => React.createElement('div', {key:r.key, style:{display:'flex',justifyContent:'space-between',gap:12,fontSize:11,fontFamily:"'JetBrains Mono',monospace",marginBottom:2,color:colour(r.level)}},
         React.createElement('span', null, r.key),

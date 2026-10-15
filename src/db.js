@@ -368,6 +368,17 @@ async function dbSpListSizes(){
   }
   return out;
 }
+/* The columns the app filters on, per list: the ones SP Setup > Repair lists & columns indexes. Read only. */
+const SP_INDEX_CHECKS=[['CEs','Title'],['CE_MP','shicCEId'],['CE_Resources','shicCEId'],['CE_Documents','shicCEId'],['Monitoring','shicCEId'],['Monitoring','shicCENum'],['Drafts','Title'],['ML_Imports','Title']];
+async function dbSpIndexStatus(){
+  if(!(USE_SP||getSiteURL()))return [];
+  const out=[];
+  for(const [k,col] of SP_INDEX_CHECKS){
+    try{out.push({key:k,col,indexed:await spFieldIndexed(spList(k),col)});}
+    catch(e){out.push({key:k,col,indexed:undefined,error:e.message});}
+  }
+  return out;
+}
 /* Once a day, for an admin: say so if a list is close to the limit or past it. */
 async function dbWarnSpListSizes(){
   const today=new Date().toISOString().slice(0,10);

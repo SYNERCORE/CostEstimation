@@ -361,6 +361,17 @@ async function spGet(l,f='',sel=''){
   }
   return results;
 }
+/* Whether a column carries an index. Read only: the field's own Indexed flag (null when the column does not exist). */
+async function spFieldIndexed(l,fieldName){
+  const su=getSiteURL();if(!su)return null;
+  const tok=await getSPToken();if(!tok)throw new Error('SP '+l+': not signed in (offline or session expired)');
+  const q="$filter="+encodeURIComponent("InternalName eq '"+fieldName+"'")+"&$select=InternalName,Indexed";
+  const r=await spFetch(`${su}/_api/web/lists/getbytitle('${l}')/fields?${q}`,{credentials:'omit',headers:{'Accept':'application/json;odata=nometadata','Authorization':'Bearer '+tok}},'get',l);
+  if(!r.ok){let body='';try{body=await r.text();}catch(_){logSwallowed('sp:spFieldIndexed',_);}throw spErr('get',l,r.status,body,r.headers&&r.headers.get('Retry-After'));}
+  const j=await r.json();
+  const f=(j.value||[])[0];
+  return f?!!f.Indexed:null;
+}
 /* How many items a list holds, without reading them: the list's own ItemCount. */
 async function spItemCount(l){
   const su=getSiteURL();if(!su)return null;

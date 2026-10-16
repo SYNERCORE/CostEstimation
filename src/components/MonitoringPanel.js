@@ -45,6 +45,14 @@ function MonitoringPanel(ctx) {
     loadMonData,
     monApvMine,
     monCustFilter,
+    monDateField,
+    setMonDateField,
+    monDatePreset,
+    setMonDatePreset,
+    monDateFrom,
+    setMonDateFrom,
+    monDateTo,
+    setMonDateTo,
     monData,
     monDiscFilter,
     monMine,
@@ -329,6 +337,26 @@ function MonitoringPanel(ctx) {
     custOptions.map(o => /*#__PURE__*/React.createElement("option", {key: o.key, value: o.key},
       (o.label || '(none)') + '  \u00b7 ' + o.n))
   ),
+  /* Date filter: a preset (or a custom range) on the date received, the deadline or the date submitted. A CE with no such date is
+     left out while a range is on. */
+  /*#__PURE__*/React.createElement("select", {
+    style: {...INP, fontSize:11, width:140, ...(monDatePreset !== 'any' ? {borderColor: ACC} : {})},
+    value: monDatePreset, 'aria-label': 'Date range',
+    onChange: e => { setMonDatePreset(e.target.value); setMonPage(0); },
+    title: "Show only CEs whose date falls in a range"
+  },
+    [['any', 'Any date'], ['today', 'Today'], ['week', 'This week'], ['month', 'This month'], ['last30', 'Last 30 days'], ['year', 'This year'], ['custom', 'Custom range\u2026']].map(([v, t]) => /*#__PURE__*/React.createElement("option", {key: v, value: v}, t))
+  ),
+  monDatePreset !== 'any' && /*#__PURE__*/React.createElement("select", {
+    style: {...INP, fontSize:11, width:130}, value: monDateField, 'aria-label': 'Which date',
+    onChange: e => { setMonDateField(e.target.value); setMonPage(0); },
+    title: "Which date the range applies to"
+  },
+    [['recv', 'Date received'], ['deadline', 'Deadline'], ['sub', 'Date submitted']].map(([v, t]) => /*#__PURE__*/React.createElement("option", {key: v, value: v}, t))
+  ),
+  monDatePreset === 'custom' && /*#__PURE__*/React.createElement("span", {style: {display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: MT}},
+    "From", /*#__PURE__*/React.createElement("input", {type: 'date', 'aria-label': 'From date', style: {...INP, fontSize:11, width:128, colorScheme: 'dark'}, value: monDateFrom, onChange: e => { setMonDateFrom(e.target.value); setMonPage(0); }}),
+    "to", /*#__PURE__*/React.createElement("input", {type: 'date', 'aria-label': 'To date', style: {...INP, fontSize:11, width:128, colorScheme: 'dark'}, value: monDateTo, onChange: e => { setMonDateTo(e.target.value); setMonPage(0); }})),
   /*#__PURE__*/React.createElement("button", {
     style: btn(monMine ? 'acc' : 'def', true),
     title: "Only the CEs and requests whose Estimator is you",
@@ -339,10 +367,10 @@ function MonitoringPanel(ctx) {
     title: "Only the CEs waiting on your signature",
     onClick: () => { setMonApvMine(v => !v); setMonPage(0); }
   }, "✍ Awaiting my signature (" + Object.values(monData || {}).filter(m => apvMonWaitsOn(m, currentUser.username)).length + ")"),
-  (monSearch || monStatusFilter.size > 0 || monReqFilter !== 'all' || monTypeFilter !== 'all' || monDiscFilter !== 'all' || monCustFilter !== 'all') && /*#__PURE__*/React.createElement("button", {
+  (monSearch || monStatusFilter.size > 0 || monReqFilter !== 'all' || monTypeFilter !== 'all' || monDiscFilter !== 'all' || monCustFilter !== 'all' || monDatePreset !== 'any') && /*#__PURE__*/React.createElement("button", {
     style: {...btn('danger', true), fontSize:10},
     title: "Clear all filters",
-    onClick: () => { setMonSearch(''); setMonStatusFilter(new Set()); setMonTypeFilter('all'); setMonReqFilter('all'); setMonDiscFilter('all'); setMonCustFilter('all'); setMonPage(0); }
+    onClick: () => { setMonSearch(''); setMonStatusFilter(new Set()); setMonTypeFilter('all'); setMonReqFilter('all'); setMonDiscFilter('all'); setMonCustFilter('all'); setMonDatePreset('any'); setMonDateFrom(''); setMonDateTo(''); setMonPage(0); }
   }, "\u2715 Clear Filters"),
   /*#__PURE__*/React.createElement("div", {
     style: {

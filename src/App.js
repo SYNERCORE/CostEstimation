@@ -4357,6 +4357,11 @@ function App({
   const [monReqFilter, setMonReqFilter] = useState('all');
   const [monDiscFilter, setMonDiscFilter] = useState('all');
   const [monCustFilter, setMonCustFilter] = useState('all');
+  /* Date filter: which date (recv | deadline | sub), a preset or 'custom', and the custom range. */
+  const [monDateField, setMonDateField] = useState('recv');
+  const [monDatePreset, setMonDatePreset] = useState('any');
+  const [monDateFrom, setMonDateFrom] = useState('');
+  const [monDateTo, setMonDateTo] = useState('');
   const [compareSet, setCompareSet] = useState(new Set()); // CE comparison: max 2 ids
   const [compareModal, setCompareModal] = useState(null); // {a, b} loaded CE data // 'all' | 'onsite' | 'shopworks' | 'supply'
   const [showStatusFilter, setShowStatusFilter] = useState(false);
@@ -4970,6 +4975,7 @@ function App({
   /* 'pending' a request nobody has accepted, 'accepted' a request that became a CE, 'ce' everything else. */
   const reqKind = e => { const i = e.info || {}; return i.request ? (i.acceptedCeNum ? 'accepted' : 'pending') : 'ce'; };
   const sortedHistory = useMemo(() => {
+    const _dRange = monDateRange(monDatePreset, monDateFrom, monDateTo);
     const filtered = monRows.filter(e => {
       const m = monOf(e);
       if (monReqFilter !== 'all' && reqKind(e) !== monReqFilter) return false;
@@ -4985,6 +4991,10 @@ function App({
          discipline is a real thing to go looking for. */
       if (monDiscFilter !== 'all' && monDisc(e, m).trim().toUpperCase() !== monDiscFilter) return false;
       if (monCustFilter !== 'all' && monCust(e, m).trim().toUpperCase() !== monCustFilter) return false;
+      if (_dRange[0] || _dRange[1]) {
+        const k = monDateKey(monDateField === 'deadline' ? m.deadline : monDateField === 'sub' ? m.dateSubmitted : effRecv(e, m));
+        if (!k || (_dRange[0] && k < _dRange[0]) || (_dRange[1] && k > _dRange[1])) return false;
+      }
       if (monApvMine && !apvMonWaitsOn(m, currentUser.username)) return false;
       if (monMine && !ceeMatches(meNames(), m.ceeName || m.preparedBy || e.savedBy || '')) return false;
       if (!monSearch) return true;
@@ -5071,7 +5081,7 @@ function App({
          SY3-CE-2026-10, and "aestillore" must sit with "Aestillore". */
       return String(va).localeCompare(String(vb), 'en', {numeric: true, sensitivity: 'base'}) * dir;
     });
-  }, [monRows, monData, monSearch, monStatusFilter, monTypeFilter, monReqFilter, monDiscFilter, monCustFilter, monMine, monApvMine, monSortCol, monSortDir]);
+  }, [monRows, monData, monSearch, monStatusFilter, monTypeFilter, monReqFilter, monDiscFilter, monCustFilter, monDateField, monDatePreset, monDateFrom, monDateTo, monMine, monApvMine, monSortCol, monSortDir]);
   /* The rows actually drawn: one page of CEs, with the superseded revisions of
      any CE that has been expanded slotted in underneath it. Expanded after the
      page is cut, so a page is always the same 25 CEs whether or not anyone has
@@ -5117,7 +5127,7 @@ function App({
      (Written without the element-creating call by name: the guard in
      tools/check-remounting-editors.js reads the source as text, and would
      take a mention of it here for the real thing.) */
-  const HistPanel = () => MonitoringPanel({ estName, revDateFixes, fillRevDates, MON_PAGE_SIZE, STATUS_COLOR_MAP, SortIcon, addStatus, allStatuses, assignPanel, attachList, attachPanel, ceImportProgress, coOptions, compareModal, compareSet, confirmDel, currentUser, custOptions, deleteDraft, discOptions, editingRow, fillBlankDisc, getStatusColor, handleClone, handleLoad, handleRevise, handleSave, histBusy, history, importMonitoringXLSX, importProgress, importShicCeFiles, isAdmin, isRequestor, loadHist, loadMonData, monApvMine, monCustFilter, monData, monDiscFilter, monMine, monOf, monPage, monPageRows, monReqFilter, monRevOpen, monSearch, monSpIds, monStatusFilter, monTableWrapRef, monTopScrollRef, monTypeFilter, newStatusInput, openAssign, openAttachPanel, openForPrint, openRequest, openReview, rceOf, statusMove, statusRemove, statusRename, statusSet, statusUse, reqOwns, resDays, resumeDraft, setAttachPanel, setCompareModal, setCompareSet, setConfirmDel, setDiffModal, setEditingRow, setHistory, setMonApvMine, setMonCustFilter, setMonDiscFilter, setMonMine, setMonPage, setMonReqFilter, setMonRevOpen, setMonSearch, setMonStatusFilter, setMonTypeFilter, setNewStatusInput, setRceReview, setRemarkDraft, setRemarksPanel, setShowStatusFilter, setShowStatusMgr, setStatusPanel, setUndoToast, setViewCE, showStatusFilter, showStatusMgr, showToast, sortedHistory, statusPanel, toggleSort, updateMon });
+  const HistPanel = () => MonitoringPanel({ estName, revDateFixes, fillRevDates, MON_PAGE_SIZE, STATUS_COLOR_MAP, SortIcon, addStatus, allStatuses, assignPanel, attachList, attachPanel, ceImportProgress, coOptions, compareModal, compareSet, confirmDel, currentUser, custOptions, deleteDraft, discOptions, editingRow, fillBlankDisc, getStatusColor, handleClone, handleLoad, handleRevise, handleSave, histBusy, history, importMonitoringXLSX, importProgress, importShicCeFiles, isAdmin, isRequestor, loadHist, loadMonData, monApvMine, monCustFilter, monDateField, setMonDateField, monDatePreset, setMonDatePreset, monDateFrom, setMonDateFrom, monDateTo, setMonDateTo, monData, monDiscFilter, monMine, monOf, monPage, monPageRows, monReqFilter, monRevOpen, monSearch, monSpIds, monStatusFilter, monTableWrapRef, monTopScrollRef, monTypeFilter, newStatusInput, openAssign, openAttachPanel, openForPrint, openRequest, openReview, rceOf, statusMove, statusRemove, statusRename, statusSet, statusUse, reqOwns, resDays, resumeDraft, setAttachPanel, setCompareModal, setCompareSet, setConfirmDel, setDiffModal, setEditingRow, setHistory, setMonApvMine, setMonCustFilter, setMonDiscFilter, setMonMine, setMonPage, setMonReqFilter, setMonRevOpen, setMonSearch, setMonStatusFilter, setMonTypeFilter, setNewStatusInput, setRceReview, setRemarkDraft, setRemarksPanel, setShowStatusFilter, setShowStatusMgr, setStatusPanel, setUndoToast, setViewCE, showStatusFilter, showStatusMgr, showToast, sortedHistory, statusPanel, toggleSort, updateMon });
   /* ---- Scope Library Editor (Scope Library tab) ---- */
   /* ScopeLibraryEditor's state, and ResEditor's, held by App.
 

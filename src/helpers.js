@@ -118,6 +118,31 @@ function nextCeNum(history, cePrefix, known) {
   (known || []).forEach(consider);
   return pfx + String(max + 1).padStart(4, '0');
 }
+/* CE Monitoring's date filter. A preset (or a custom from/to) becomes an inclusive range of YYYY-MM-DD strings; '' on either side
+   means open-ended. Weeks run Monday to Sunday. Dates are the local calendar day, the same day the table shows. */
+function monDateRange(preset, from, to, now) {
+  const n = now ? new Date(now) : new Date();
+  const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const day = (y, m, d) => new Date(y, m, d);
+  const y = n.getFullYear(), m = n.getMonth(), d = n.getDate();
+  switch (preset) {
+    case 'today': return [iso(day(y, m, d)), iso(day(y, m, d))];
+    case 'week': { const back = (n.getDay() + 6) % 7; return [iso(day(y, m, d - back)), iso(day(y, m, d - back + 6))]; }
+    case 'month': return [iso(day(y, m, 1)), iso(day(y, m + 1, 0))];
+    case 'last30': return [iso(day(y, m, d - 29)), iso(day(y, m, d))];
+    case 'year': return [y + '-01-01', y + '-12-31'];
+    case 'custom': { let a = from || '', b = to || ''; if (a && b && a > b) { const t = a; a = b; b = t; } return [a, b]; }
+    default: return ['', ''];
+  }
+}
+/* The YYYY-MM-DD a stored date stands for, or '' when there is none or it cannot be read. */
+function monDateKey(v) {
+  const s = String(v || '').trim();
+  if (!s) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const t = new Date(s);
+  return isNaN(t) ? '' : t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
+}
 /* A typed CE number that is far above every number in use this year is almost always a slipped key (11239 for 1239), and every New CE
    after it would count on from it. Returns null when the number looks fine, else {max, suggested}: the highest number others use and the
    number to offer instead -- the typed digits with one removed when that lands within reach of the highest, else the next free one.

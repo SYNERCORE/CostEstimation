@@ -47,7 +47,7 @@ console.log('\nfinding it:');
 ck('the row is badged REQUEST', has(/\}, 'REQUEST'\),/));
 ck('"Assigned to me" filters on the Estimator column',
   has(/if \(monMine && !ceeMatches\(meNames\(\), m\.ceeName \|\| m\.preparedBy \|\| e\.savedBy/));
-ck('and the list recomputes when it is toggled', has(/monCustFilter, monMine, (monApvMine, )?monSortCol, monSortDir]\);/));
+ck('and the list recomputes when it is toggled', has(/monCustFilter, (monDateField, monDatePreset, monDateFrom, monDateTo, )?monMine, (monApvMine, )?monSortCol, monSortDir]\);/));
 
 console.log('\nthe estimator can actually see it:');
 const db = fs.readFileSync('src/db.js', 'utf8');

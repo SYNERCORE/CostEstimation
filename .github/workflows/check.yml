@@ -541,5 +541,7 @@ jobs:
         run: node tools/test-ce-number-guard.js
       - name: CE Monitoring date filter
         run: node tools/test-monitoring-date-filter.js
+      - name: Days note on generated CE
+        run: node tools/test-days-note.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

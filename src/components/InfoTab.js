@@ -272,7 +272,13 @@ function InfoTab(ctx) {
       ...p,
       days: e.target.value
     }))
-  }))), /*#__PURE__*/React.createElement("div", {
+  }), /*#__PURE__*/React.createElement("select", {
+    'aria-label': 'What the days cover',
+    title: 'Printed beside the number of days on the CE, so the client knows what the days cover.',
+    style: { ...INP, marginTop: 6, fontSize: 11 },
+    value: info.daysNote || '',
+    onChange: e => setInfo(p => ({ ...p, daysNote: e.target.value }))
+  }, DAYS_NOTES.map(([v, t]) => React.createElement("option", { key: v, value: v }, v ? t : 'Days note: none'))))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: '1fr 1fr',

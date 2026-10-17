@@ -263,7 +263,7 @@ function makeHandleGenerateCE(getCtx) {
       <tr><td class="b nw">PROJECT DESCRIPTION:</td><td class="b c">${esc(info.description||'')}</td><td class="b nw">MATERIAL:</td><td>${esc(info.material||'')}</td></tr>
       <tr><td class="b nw">CLIENT NAME:</td><td>${esc(info.client||'')}</td><td class="b nw">CLIENT LOCATION:</td><td>${esc(info.location||'')}</td></tr>
       <tr><td class="b nw">ATTENTION:</td><td>${esc(info.attention||'SALES DEPARTMENT')}</td><td class="b">QUANTITY:</td><td>${esc(info.qty||1)} ${esc(qtyUom)}</td></tr>
-      <tr><td class="b nw">END USER:</td><td>${esc(info.endUser||'C/O SALES')}</td><td class="b">NO. OF DAYS:</td><td>${esc(info.days||'')} DAYS</td></tr>
+      <tr><td class="b nw">END USER:</td><td>${esc(info.endUser||'C/O SALES')}</td><td class="b">NO. OF DAYS:</td><td>${esc(daysPrinted(info))}</td></tr>
     </table>`;
 
     /* Cost summary -- only the sections this CE actually uses.
@@ -854,7 +854,7 @@ function makeHandleExportXLSX(getCtx) {
       if (info.material) a.row('MATERIAL:', wrapIn(info.material, 5, 105));
       a.row('CLIENT NAME:', info.client || '', '', 'CLIENT LOCATION:', wrapIn(info.location, 2, 42));
       a.row('ATTENTION:', info.attention || 'SALES DEPARTMENT', '', 'QUANTITY:', (info.qty || 1) + ' ' + qtyUom);
-      a.row('END USER:', info.endUser || 'C/O SALES', '', 'NO. OF DAYS:', (info.days || '') + ' DAYS');
+      a.row('END USER:', info.endUser || 'C/O SALES', '', 'NO. OF DAYS:', daysPrinted(info));
       a.row('DISCIPLINE:', info.projType || '', '', 'STATUS:', docStatus);
       a.blank();
       a.head('ITEM', 'DESCRIPTION', 'TOTAL COST');
@@ -1112,7 +1112,7 @@ function makeHandleExport(getCtx) {
      ['END USER:', info.endUser],
      ['RCE No.:', rceNo],
      ['QUANTITY:', (info.qty || 1) + ' ' + qtyUom],
-     ['NO. OF DAYS:', info.days],
+     ['NO. OF DAYS:', info.days ? daysPrinted(info) : info.days],
      ['STATUS:', docStatus]].forEach(([k, v]) => {
       if (v === '' || v === null || v === undefined) return;
       sum.push([S(k, 'label'), S(String(v), 'note', 5, wrapHt(v, TPL_LINE))]);

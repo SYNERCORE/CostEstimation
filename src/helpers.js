@@ -118,6 +118,27 @@ function nextCeNum(history, cePrefix, known) {
   (known || []).forEach(consider);
   return pfx + String(max + 1).padStart(4, '0');
 }
+/* What the No. of Days on a CE covers. The days are one number, so a client reading "2 DAYS" cannot tell whether travel to and from site
+   (mob/demob) or hauling the goods (pick-up/delivery) is inside them. The estimator picks one of these on Project Info and the printed
+   and exported CE says it next to the days. */
+const DAYS_NOTES = [
+  ['', 'No note'],
+  ['excl-md', 'Excl. Mob. & Demob.'],
+  ['incl-md', 'Incl. Mob. & Demob.'],
+  ['excl-pd', 'Excl. Pick-up & Delivery'],
+  ['incl-pd', 'Incl. Pick-up & Delivery'],
+  ['excl-both', 'Excl. Mob. & Demob. and Pick-up & Delivery'],
+  ['incl-both', 'Incl. Mob. & Demob. and Pick-up & Delivery']
+];
+function daysNoteText(code) {
+  const f = DAYS_NOTES.find(x => x[0] === code);
+  return f && f[0] ? f[1].toUpperCase() : '';
+}
+/* "2 DAYS" as before; with a note, "10 DAY/S (EXCL. MOB. & DEMOB.)". */
+function daysPrinted(info) {
+  const n = daysNoteText(info && info.daysNote);
+  return ((info && info.days) || '') + (n ? ' DAY/S (' + n + ')' : ' DAYS');
+}
 /* CE Monitoring's date filter. A preset (or a custom from/to) becomes an inclusive range of YYYY-MM-DD strings; '' on either side
    means open-ended. Weeks run Monday to Sunday. Dates are the local calendar day, the same day the table shows. */
 function monDateRange(preset, from, to, now) {
@@ -212,6 +233,7 @@ const BLANK_INFO = {
   material: "",
   qty: "1",
   days: "",
+  daysNote: "",
   companyId: null
 };
 const BLANK_MISC = {

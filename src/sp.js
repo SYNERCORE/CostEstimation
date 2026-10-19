@@ -79,9 +79,35 @@ function spNeedsSignIn(){return _spNeedsSignIn&&!!getSiteURL();}
 /* The one place that performs a user-initiated sign-in. Clears the flag on
    success so the banner disappears without a reload. */
 async function spSignIn(){
+  _spLastSignInError='';_spRedirecting=false;
   const tok=await getSPToken({interactive:true});
   if(tok){_spNeedsSignIn=false;try{window.dispatchEvent(new Event('shic-auth-ok'));}catch(_e){}}
+  /* Said out loud. Every failure on this path used to end in `return null` and a
+     console warning, so on a tablet the Sign in button did nothing at all and
+     there was nothing to tell anyone why. A redirect is not a failure: the page
+     is on its way to Microsoft. */
+  else if(!_spRedirecting&&_spLastSignInError)throw new Error(_spLastSignInError);
   return tok;
+}
+let _spLastSignInError='';
+let _spRedirecting=false;
+/* Phones, tablets and an installed app open a sign-in popup unreliably -- the
+   browser may refuse it, or put it behind the page -- so there the whole page
+   goes to Microsoft and comes back, which works everywhere. */
+function _spPreferRedirect(){
+  try{
+    const ua=navigator.userAgent||'';
+    if(/Android|iPhone|iPad|iPod|Mobile/i.test(ua))return true;
+    if((navigator.maxTouchPoints||0)>1&&/Macintosh/.test(ua))return true;   /* iPadOS says Macintosh */
+    return typeof matchMedia==='function'&&matchMedia('(display-mode: standalone)').matches;
+  }catch(_e){return false;}
+}
+/* Leaving the page: keep what is on screen first. The app saves its rolling
+   draft here, so the CE is offered back when the page returns. */
+async function _spGoRedirect(scope){
+  _spRedirecting=true;
+  try{if(typeof window._shicBeforeSignInRedirect==='function')await window._shicBeforeSignInRedirect();}catch(_e){logSwallowed('sp:_spGoRedirect',_e);}
+  await _spMsalApp.acquireTokenRedirect({scopes:[scope]});
 }
 async function _loadMSAL(){
   /* Try multiple CDNs */
@@ -140,15 +166,15 @@ async function getSPToken(opts){
 async function _getSPTokenNow(opts){
   const interactive=!!(opts&&opts.interactive);
   const cfg=getSPConfig();
-  if(!cfg.clientId){console.warn('SP: No Client ID configured');return null;}
+  if(!cfg.clientId){console.warn('SP: No Client ID configured');if(interactive)_spLastSignInError='No Microsoft Client ID is set up on this device. Ask your admin.';return null;}
   const su=getSiteURL();if(!su)return null;
   const scope=su.split('/').slice(0,3).join('/')+'/.default';
   if(_spToken&&Date.now()<_spExpiry-60000)return _spToken;
   /* Definitively offline: there is nothing to acquire, and attempting it only
      costs the caller an MSAL timeout on every single request. */
-  if(typeof navigator!=='undefined'&&navigator.onLine===false)return null;
+  if(typeof navigator!=='undefined'&&navigator.onLine===false){if(interactive)_spLastSignInError='This device is offline. Connect, then sign in.';return null;}
   const loaded=await _loadMSAL();
-  if(!loaded){console.error('MSAL failed to load from all CDNs');return null;}
+  if(!loaded){console.error('MSAL failed to load from all CDNs');if(interactive)_spLastSignInError='The Microsoft sign-in library could not be loaded. Check the connection and try again.';return null;}
   try{
     if(!_spMsalApp){
       _spMsalApp=new msal.PublicClientApplication({
@@ -165,32 +191,46 @@ async function _getSPTokenNow(opts){
     }
     const accts=_spMsalApp.getAllAccounts();
     let res;
-    try{
-      res=await _spMsalApp.acquireTokenSilent({scopes:[scope],account:accts[0]||null});
-    }catch(e){
-      if(!interactive){
-        /* Silent refresh failed and nobody asked to sign in. Report it as "no
-           token" so the caller falls back to local data, rather than hijacking
-           the page.
+    /* A person pressed Sign in. When the session is already known to be dead, or
+       there is no account to refresh, a silent attempt cannot succeed -- and it can
+       take ten seconds, which spends the tap's permission to open a window (a
+       browser allows one only for a few seconds after the tap). The popup was then
+       blocked on a tablet, MSAL threw empty_window_error, no branch below knew that
+       code, and nothing happened. */
+    const skipSilent=interactive&&(_spNeedsSignIn||!accts.length);
+    if(!skipSilent){
+      try{
+        res=await _spMsalApp.acquireTokenSilent({scopes:[scope],account:accts[0]||null});
+      }catch(e){
+        if(!interactive){
+          /* Silent refresh failed and nobody asked to sign in. Report it as "no
+             token" so the caller falls back to local data, rather than hijacking
+             the page.
 
-           But do NOT stop there: tokens expire routinely, and refusing to
-           prompt while offering no other way in left users online, connected,
-           and locked out of every list with only a console warning. Raise the
-           state so the UI can show a Sign in button. */
-        _spNeedsSignIn=true;
-        _spSilentFailedUntil=Date.now()+SP_SILENT_RETRY_MS;
-        try{window.dispatchEvent(new Event('shic-auth-required'));}catch(_e){}
-        return null;
+             But do NOT stop there: tokens expire routinely, and refusing to
+             prompt while offering no other way in left users online, connected,
+             and locked out of every list with only a console warning. Raise the
+             state so the UI can show a Sign in button. */
+          _spNeedsSignIn=true;
+          _spSilentFailedUntil=Date.now()+SP_SILENT_RETRY_MS;
+          try{window.dispatchEvent(new Event('shic-auth-required'));}catch(_e){}
+          return null;
+        }
       }
+    }
+    if(!res){
+      /* Interactive. A touch device or an installed app goes straight to the
+         full-page sign-in. */
+      if(_spPreferRedirect()){await _spGoRedirect(scope);return null;}
       try{
         res=await _spMsalApp.acquireTokenPopup({scopes:[scope]});
       }catch(popErr){
-        /* GitHub Pages COOP blocks popups &#8212; fall back to redirect */
-        if(popErr.errorCode==='popup_window_error'||popErr.message?.includes('window.closed')||popErr.message?.includes('interaction_in_progress')){
-          await _spMsalApp.acquireTokenRedirect({scopes:[scope]});
-          return null;
-        }
-        throw popErr;
+        /* Closed by the person: not a reason to take the page away from them. */
+        if(popErr&&popErr.errorCode==='user_cancelled'){_spLastSignInError='Sign-in was cancelled. Press Sign in to try again.';return null;}
+        /* Any other reason a popup could not do the job -- blocked
+           (empty_window_error), COOP on GitHub Pages (popup_window_error), one
+           already open -- falls back to the full-page sign-in. */
+        await _spGoRedirect(scope);return null;
       }
     }
     _spToken=res.accessToken;
@@ -200,6 +240,15 @@ async function _getSPTokenNow(opts){
     return _spToken;
   }catch(e){
     console.warn('SP token:',e.message||e);
+    _spRedirecting=false;
+    if(interactive){
+      const code=(e&&e.errorCode)||'';
+      /* A sign-in left half done on this tab blocks the next one until it is cleared. */
+      if(code==='interaction_in_progress'){
+        try{Object.keys(sessionStorage).filter(k=>/interaction\.status/.test(k)).forEach(k=>sessionStorage.removeItem(k));}catch(_e){logSwallowed('sp:interaction',_e);}
+        _spLastSignInError='An earlier sign-in was left unfinished and has been cleared. Press Sign in again.';
+      }else _spLastSignInError=String((e&&(e.errorMessage||e.message))||e||'unknown error').replace(/\s+/g,' ').slice(0,160)+(code?' ('+code+')':'');
+    }
     _spMsalApp=null;_spToken=null;
     return null;
   }

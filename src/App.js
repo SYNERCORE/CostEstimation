@@ -5129,6 +5129,13 @@ function App({
   const [importProgress, setImportProgress] = React.useState(null); // null | {done,total}
   const importMonitoringXLSX = makeImportMonitoringXLSX(() => ({ MON_KEY, currentUser, monData, setHistory, setImportProgress, setMonData, showToast }));
 
+  /* View on a request nobody has accepted: it has no costing yet, so the read-only CE viewer would draw an empty app. Show the request
+     as Sales logged it (the checklist card) instead; a real CE opens the viewer as before. */
+  const openViewCE = o => {
+    const e = o && typeof o.id === 'number' ? history.find(x => x.id === o.id) : null, i = (e && e.info) || {};
+    if (e && i.request && !i.acceptedCeNum && i.rce) { setViewCE(null); setViewRce(e.id); return; }
+    setViewCE(o);
+  };
   /* Invoked as HistPanel(), never as an element -- it is declared inside App,
      so as a component it takes a new identity on every App render and React
      remounts the whole panel each time. It holds no hooks, so nothing looked
@@ -5138,7 +5145,7 @@ function App({
      (Written without the element-creating call by name: the guard in
      tools/check-remounting-editors.js reads the source as text, and would
      take a mention of it here for the real thing.) */
-  const HistPanel = () => MonitoringPanel({ estName, revDateFixes, fillRevDates, MON_PAGE_SIZE, STATUS_COLOR_MAP, SortIcon, addStatus, allStatuses, assignPanel, attachList, attachPanel, ceImportProgress, coOptions, compareModal, compareSet, confirmDel, currentUser, custOptions, deleteDraft, discOptions, editingRow, fillBlankDisc, getStatusColor, handleClone, handleLoad, handleRevise, handleSave, histBusy, history, importMonitoringXLSX, importProgress, importShicCeFiles, isAdmin, isRequestor, loadHist, loadMonData, monApvMine, monCustFilter, monDateField, setMonDateField, monDatePreset, setMonDatePreset, monDateFrom, setMonDateFrom, monDateTo, setMonDateTo, monData, monDiscFilter, monMine, monOf, monPage, monPageRows, monReqFilter, monRevOpen, monSearch, monSpIds, monStatusFilter, monTableWrapRef, monTopScrollRef, monTypeFilter, newStatusInput, openAssign, openAttachPanel, openForPrint, openRequest, openReview, rceOf, statusMove, statusRemove, statusRename, statusSet, statusUse, reqOwns, resDays, resumeDraft, setAttachPanel, setCompareModal, setCompareSet, setConfirmDel, setDiffModal, setEditingRow, setHistory, setMonApvMine, setMonCustFilter, setMonDiscFilter, setMonMine, setMonPage, setMonReqFilter, setMonRevOpen, setMonSearch, setMonStatusFilter, setMonTypeFilter, setNewStatusInput, setRceReview, setRemarkDraft, setRemarksPanel, setShowStatusFilter, setShowStatusMgr, setStatusPanel, setUndoToast, setViewCE, showStatusFilter, showStatusMgr, showToast, sortedHistory, statusPanel, toggleSort, updateMon });
+  const HistPanel = () => MonitoringPanel({ estName, revDateFixes, fillRevDates, MON_PAGE_SIZE, STATUS_COLOR_MAP, SortIcon, addStatus, allStatuses, assignPanel, attachList, attachPanel, ceImportProgress, coOptions, compareModal, compareSet, confirmDel, currentUser, custOptions, deleteDraft, discOptions, editingRow, fillBlankDisc, getStatusColor, handleClone, handleLoad, handleRevise, handleSave, histBusy, history, importMonitoringXLSX, importProgress, importShicCeFiles, isAdmin, isRequestor, loadHist, loadMonData, monApvMine, monCustFilter, monDateField, setMonDateField, monDatePreset, setMonDatePreset, monDateFrom, setMonDateFrom, monDateTo, setMonDateTo, monData, monDiscFilter, monMine, monOf, monPage, monPageRows, monReqFilter, monRevOpen, monSearch, monSpIds, monStatusFilter, monTableWrapRef, monTopScrollRef, monTypeFilter, newStatusInput, openAssign, openAttachPanel, openForPrint, openRequest, openReview, rceOf, statusMove, statusRemove, statusRename, statusSet, statusUse, reqOwns, resDays, resumeDraft, setAttachPanel, setCompareModal, setCompareSet, setConfirmDel, setDiffModal, setEditingRow, setHistory, setMonApvMine, setMonCustFilter, setMonDiscFilter, setMonMine, setMonPage, setMonReqFilter, setMonRevOpen, setMonSearch, setMonStatusFilter, setMonTypeFilter, setNewStatusInput, setRceReview, setRemarkDraft, setRemarksPanel, setShowStatusFilter, setShowStatusMgr, setStatusPanel, setUndoToast, setViewCE: openViewCE, showStatusFilter, showStatusMgr, showToast, sortedHistory, statusPanel, toggleSort, updateMon });
   /* ---- Scope Library Editor (Scope Library tab) ---- */
   /* ScopeLibraryEditor's state, and ResEditor's, held by App.
 
@@ -5823,7 +5830,7 @@ remarksPanel && (() => {
 
 /* ── CE Monitoring -> View -> the request behind it ── */
 viewRce && (() => {
-  const _e = sortedHistory.find(x => x.id === viewRce);
+  const _e = history.find(x => x.id === viewRce);
   const _rce = _e && _e.info && _e.info.rce;
   if (!_rce) return null;
   return /*#__PURE__*/React.createElement("div", {
@@ -6032,7 +6039,7 @@ sigModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',ins
 
 /* ── Feature 9: Dashboard Tab ── */
 /* ── My Work: everything waiting on the signed-in user, in one place ── */
-tab === 'mywork' && MyWorkTab({ estName, currentUser, getStatusColor, handleLoad, isRequestor, meNames, monOf, monRows, mwOpen, mwQ, mwReqQ, myTodo, openRequest, openReview, reqDeadline, resumeDraft, setMwOpen, setMwQ, setMwReqQ, setRceReview, setTab, setViewCE, sharedDrafts }),
+tab === 'mywork' && MyWorkTab({ estName, currentUser, getStatusColor, handleLoad, isRequestor, meNames, monOf, monRows, mwOpen, mwQ, mwReqQ, myTodo, openRequest, openReview, reqDeadline, resumeDraft, setMwOpen, setMwQ, setMwReqQ, setRceReview, setTab, setViewCE: openViewCE, sharedDrafts }),
 
 tab === 'dashboard' && DashboardTab({ estName, allStatuses, dashAll, dashDisc, setDashDisc, dashQ, dashReqQ, getStatusColor, history, monOf, monRows, reqDeadline, setDashAll, setDashQ, setDashReqQ }), tab === 'info' && /*#__PURE__*/InfoTab({ ScopeBuilder, ceNums, history, addMode, aiLoad, ceType, companies, docBusy, docFile, docFilesOf, docPreview, docStatus, extractDocInfo, fileRef, handleAI, handleDocUpload, info, monData, openCeId, openMonStatus, pickCompany, provInfo, qtyUom, rceNo, removeDoc, scope, setAddMode, setDocFile, setDocPreview, setDocStatus, setInfo, setScope, updateMon }), tab === 'manpower' && /*#__PURE__*/ManpowerTab({ _mobTabs, _weight, ben, benefitRows, benefitsT, cfg, collapsedShifts, copyMenu, delRow, demobSubT, demobVehicles, demobVehiclesT, history, incOn, info, masterlist, mobCopy, mobSubT, mobVehicles, mobVehiclesT, mp, mpSub, mpTot, mpWage, mpWageParts, rowCost, rowShares, rr, setCollapsedShifts, setCopyMenu, setDemobVehicles, setMobCopy, setMobVehicles, setMp, setPicker, setRates, showToast, sowItems, sowLabels, syncCrewRows, syncMealRates, syncMealRows, toggleShift, updRow }), tab === 'tools' && /*#__PURE__*/React.createElement(ResTabM, {
     rows: tools,

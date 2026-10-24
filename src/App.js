@@ -5580,8 +5580,8 @@ reqForm && (() => {
   const missing = rceUnanswered(reqForm);
   const answered = RCE_ITEMS.length - missing.length;
   return /*#__PURE__*/React.createElement("div", {
-    style:{position:'fixed',inset:0,background:'#000b',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center',padding:16},
-    onClick:()=>{ if (!reqBusy) setReqForm(null); }
+    /* No click-outside close: a stray click on the backdrop used to discard a half-filled checklist. Cancel closes it. */
+    style:{position:'fixed',inset:0,background:'#000b',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}
   }, /*#__PURE__*/React.createElement("div", {
     style:{...CS, width:'min(760px,100%)', maxHeight:'92vh', overflow:'auto'}, onClick:e=>e.stopPropagation()
   },

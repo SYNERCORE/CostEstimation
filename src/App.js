@@ -3722,6 +3722,8 @@ function App({
     if (_defaultsUntouched()) applyCeDefaults(ceType, info.projType, true);
   }, [ceType, info.projType, ceDefaults]);
   const handleNew = () => {
+    /* A requestor raises requests, from CE Monitoring; a blank CE is the estimator's. Covers the button, Ctrl+N and the banners. */
+    if (isRequestor) { showToast("Costing is the estimator's. Raise a request from CE Monitoring (+ New Request).", true); return; }
     _ownNum.current = '';
     setCalc(null); setCalcOpen(false);
     setCeType('');

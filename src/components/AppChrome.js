@@ -712,7 +712,7 @@ function AppHeader(ctx) {
     }
   }, /*#__PURE__*/React.createElement(TopRefreshButton, null), /* The three work buttons share one height, radius and weight. Save is the one filled button (the main
      action); New is outlined; Resume carries the violet of drafts. */
-  /*#__PURE__*/React.createElement("button", {
+  !isRequestor && /*#__PURE__*/React.createElement("button", {
     className: "tb-btn",
     style: { ...btn('def', true), padding: '5px 12px', fontSize: 12, fontWeight: 700, borderRadius: 7, color: 'var(--text-primary)', borderColor: 'var(--border-strong)' },
     onClick: handleNew,

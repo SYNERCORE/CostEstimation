@@ -103,11 +103,13 @@ function runSpGet(opts) {
     login.indexOf('userListIsStale()') < login.indexOf('recordLoginFail(un);\n        setErr(\'Account not found.'),
     'a lockout over a network problem would be gratuitous');
   /* Order matters: the guard must sit BEFORE the popup/redirect branch. */
+  /* The redirect now lives in _spGoRedirect, so the guard is checked against its CALL site;
+     tools/test-signin-flow.js proves the behaviour (a background read never redirects). */
   ck('the guard precedes the redirect branch',
-    spCode.indexOf('if(!interactive)') < spCode.indexOf('acquireTokenRedirect'),
+    spCode.indexOf('if(!interactive)') < spCode.indexOf('await _spGoRedirect(scope)') && spCode.indexOf('await _spGoRedirect(scope)') > 0,
     'redirect is still reachable without opt-in');
   ck('does not attempt a token while definitively offline',
-    /navigator\.onLine===false\)return null/.test(sp));
+    /navigator\.onLine===false\)\{[^}]*return null/.test(sp));
 
   console.log('\nOnly a button the user just pressed may sign in interactively:');
   ck('Connect & Test opts in', /getSPToken\(\{interactive:true\}\)/.test(rd('src/components/FbSetupPanel.js')));

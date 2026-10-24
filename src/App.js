@@ -1014,6 +1014,17 @@ function App({
        writes it under the initial CE number, overwriting the real draft every
        3 minutes. */
     let _cleanupReconnect = null;
+    /* Signing in on a tablet takes the whole page to Microsoft and back. Before it
+       goes, the CE on screen is written to the rolling draft, which is offered back
+       when the page returns, so a sign-in never costs the work in front of you. */
+    window._shicBeforeSignInRedirect = async () => {
+      if (window !== window.top) return;
+      const live = _live.current;
+      if (live && live.hasUnsavedWork && live.hasUnsavedWork() && live.saveDraft) {
+        try { live.saveDraft(); } catch (_e) { logSwallowed('App:beforeSignIn', _e); }
+        await new Promise(r => setTimeout(r, 600));
+      }
+    };
     const autoTimer=setInterval(()=>{
       try{
         /* A copy of the app inside a View or xlsx frame is only there to draw

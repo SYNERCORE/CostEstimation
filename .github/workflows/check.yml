@@ -188,6 +188,8 @@ jobs:
         run: node tools/test-rce-uom-sil.js
       - name: Quantity calculators (babbitt, painting, welding)
         run: node tools/test-calculators.js
+      - name: Sign in to Microsoft on a tablet (popup blocked, full-page fallback)
+        run: node tools/test-signin-flow.js
       - name: Signed CEs leave For my approval
         run: node tools/test-apv-signed.js
       - name: Printed CE file name and signature date

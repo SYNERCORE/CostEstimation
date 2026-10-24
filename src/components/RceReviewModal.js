@@ -7,6 +7,7 @@
                      secure  -> returned to the requestor, to fill what is missing
                      decline -> rejected, with the reason on record
    mode 'update' : the requestor adds what was missing and sends it back.
+   mode 'add'    : whoever raised the request adds to it while it waits for review; saved in place, nothing is routed or re-sent.
 
    It only collects; the caller writes. onDone receives
    { items, otherRemarks, recommendation, declineReason, note }. */
@@ -88,7 +89,9 @@ function RceReviewModal({ rce, mode, title, busy, users, assignee, facts, loadFi
       React.createElement('div', { style: { color: MT, fontSize: 11, marginTop: 3 } },
         review
           ? 'Check what was sent against items 1-13, then decide item 14. Your answers replace the requestor\'s prefill.'
-          : 'This request came back. Fill what was missing, then send it back to Cost Estimation.'),
+          : mode === 'add'
+            ? 'Add or correct the answers and remarks. This only saves them on the request: nothing is sent or routed to anyone, and it stays where it is for review.'
+            : 'This request came back. Fill what was missing, then send it back to Cost Estimation.'),
       review && React.createElement('div', { style: { marginTop: 8, fontSize: 11, color: MT } }, 'Go through items 1-13, then press Accept, Return to requestor, or Decline at the bottom.'),
       !review && R.reviewNote && React.createElement('div', { style: { marginTop: 10, padding: '8px 10px', borderRadius: 6, border: '1px solid ' + ACC, fontSize: 11.5 } },
         React.createElement('b', null, 'Cost Estimation says: '), R.reviewNote),
@@ -167,5 +170,5 @@ function RceReviewModal({ rce, mode, title, busy, users, assignee, facts, loadFi
             React.createElement('button', { key: 'secure', style: { ...btn('def'), borderColor: ACC, color: ACC, opacity: rec && rec !== 'secure' ? .55 : 1 }, disabled: busy, title: 'Send it back to the requestor to fill in what is missing', onClick: () => submit('secure') }, 'Return to requestor'),
             React.createElement('button', { key: 'proceed', style: { ...btn('ok'), opacity: rec && rec !== 'proceed' ? .55 : 1 }, disabled: busy, title: 'Accept it for cost estimation and give it its CE number', onClick: () => submit('proceed') }, 'Accept the request')
           ]
-          : React.createElement('button', { style: btn('acc'), disabled: busy, onClick: () => submit() }, busy ? 'Saving…' : 'Send back to Cost Estimation'))));
+          : React.createElement('button', { style: btn('acc'), disabled: busy, onClick: () => submit() }, busy ? 'Saving…' : mode === 'add' ? 'Save details' : 'Send back to Cost Estimation'))));
 }

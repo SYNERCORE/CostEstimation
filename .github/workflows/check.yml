@@ -551,5 +551,7 @@ jobs:
         run: node tools/test-view-request.js
       - name: review backdrop
         run: node tools/test-rce-no-backdrop-close.js
+      - name: add details
+        run: node tools/test-add-details.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

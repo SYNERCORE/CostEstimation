@@ -111,11 +111,16 @@ function MyWorkTab(ctx) {
         return bits.length ? /*#__PURE__*/React.createElement("div", {style:{fontSize:10,opacity:.8}}, bits.join(' · ')) : null; })()),
     extra, actions);
   const viewBtn = x => typeof x.e.id === 'number' && /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setViewCE({id:x.e.id,ceNum:ceLabel(x.e)})}, "👁 View");
-  const loadBtn = x => (isRequestor && (x.e.info || {}).request && !(x.e.info || {}).acceptedCeNum && typeof x.e.id === 'number')
+  /* Whoever raised a request that is still waiting can add to it in place, whatever their role: saved as it is, nothing routed. */
+  const addBtn = x => { const i = x.e.info || {}, mine = meNames();
+    return (!isRequestor && i.request && !i.acceptedCeNum && i.reviewStatus !== 'declined' && typeof x.e.id === 'number' && x.m.receivedBy && mine.includes(String(x.m.receivedBy).trim().toUpperCase()))
+      ? /*#__PURE__*/React.createElement("button", {style:{...btn('info',true),marginRight:6},title:'Add or correct details on your request. It is only saved: nothing is sent or routed to anyone.',onClick:()=>openReview(x.e, 'add')}, "Add details") : null; };
+  const loadBtn0 = x => (isRequestor && (x.e.info || {}).request && !(x.e.info || {}).acceptedCeNum && typeof x.e.id === 'number')
     ? /*#__PURE__*/React.createElement("button", {style:btn('info',true),title:'Add what the Cost Estimation team asked for, then send it back',onClick:()=>openReview(x.e, 'update')}, "Update")
     : _unaccepted(x)
     ? /*#__PURE__*/React.createElement("button", {style:btn('ok',true),title:'Review the checklist and decide: proceed, secure the missing data first, or decline',onClick:()=>openReview(x.e, 'review')}, "Review")
     : /*#__PURE__*/React.createElement("button", {style:btn('acc',true),onClick:()=>handleLoad(x.e.data || x.e)}, "Load");
+  const loadBtn = x => { const a = addBtn(x); return a ? /*#__PURE__*/React.createElement(React.Fragment, null, a, loadBtn0(x)) : loadBtn0(x); };
   const section = (title, list, render, empty) => /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:'12px 14px'}},
     /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:13,marginBottom:6}}, title, /*#__PURE__*/React.createElement("span", {style:{marginLeft:6,fontSize:11,color:MT}}, '(' + list.length + ')')),
     list.length ? list.slice(0, 15).map(render) : /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,padding:'6px 0'}}, empty),

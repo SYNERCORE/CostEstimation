@@ -4496,7 +4496,7 @@ function App({
     const e = rceReview && rceReview.e, mode = rceReview && rceReview.mode;
     if (!e || typeof e.id !== 'number') return;
     if (mode === 'review' && isRequestor) { showToast('Only the Cost Estimation team can review a request.', true); return; }
-    if (mode === 'update' && !reqOwns(e.id, monData[e.id])) { showToast('You can only update a request you raised.', true); return; }
+    if ((mode === 'update' || mode === 'add') && !reqOwns(e.id, monData[e.id])) { showToast('You can only update a request you raised.', true); return; }
     const i0 = e.info || {}, who = currentUser.name || currentUser.username || '', now = new Date().toISOString();
     const rce = { ...(i0.rce || {}), items: p.items, otherRemarks: p.otherRemarks, recommendation: p.recommendation, declineReason: p.declineReason };
     const label = String(i0.requestNum || i0.ceNum || '');
@@ -4511,6 +4511,18 @@ function App({
           const _m = monData[e.id] || {};
           updateMon(e.id, { req: mkReq('accepted', [_m.receivedBy, newEst || curEst].filter(Boolean).join(', '), p.note, label) });
         }
+        return;
+      }
+      /* Add details: the raiser fills in more while the request waits. It is saved in place -- same review status, no notice, no re-routing. */
+      if (mode === 'add') {
+        const addInfo = { ...i0, rce };
+        const okp = await dbPatchCEInfo(e.id, addInfo);
+        if (!okp) { showToast('Not saved — SharePoint refused it.', true); return; }
+        const re = h => String(h.id) === String(e.id) ? { ...h, info: addInfo } : h;
+        setHistory(q => q.map(re));
+        try { LS.set('history', (LS.get('history') || []).map(re)); } catch (_e) { logSwallowed('App:saveReview', _e); }
+        auditLog('review_request', label + ' details added', currentUser?.username);
+        setRceReview(null); showToast('Details saved on request ' + label + '.');
         return;
       }
       const st = mode === 'update' ? 'resubmitted' : p.recommendation === 'decline' ? 'declined' : 'returned';

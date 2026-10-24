@@ -77,8 +77,8 @@ function RceReviewModal({ rce, mode, title, busy, users, assignee, facts, loadFi
     n && React.createElement('div', { style: { color: MT, fontSize: 10, marginTop: 2 } }, n));
 
   return React.createElement('div', {
-    style: { position: 'fixed', inset: 0, background: '#000b', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 },
-    onClick: () => { if (!busy) onClose(); }
+    style: { position: 'fixed', inset: 0, background: '#000b', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }
+    /* No click-outside close: it discarded the decision and remarks being typed. Cancel closes it. */
   },
     React.createElement('div', {
       onClick: e => e.stopPropagation(),

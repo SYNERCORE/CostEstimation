@@ -17,6 +17,7 @@
 const CALC_KINDS = [
   { id: 'babbitt', label: 'Babbitt', job: 'Bearing' },
   { id: 'painting', label: 'Painting', job: 'Surface' },
+  { id: 'coating', label: 'Coating (DFT)', job: 'Surface' },
   { id: 'welding', label: 'Welding', job: 'Shaft' },
   { id: 'cut1d', label: 'Bar cutting', job: 'Cut' },
   { id: 'cut2d', label: 'Sheet cutting', job: 'Layout' }
@@ -39,10 +40,11 @@ const CALC_DEFAULTS = {
     tin: { label: 'Tin ingot', v: 3.8, unit: 'kg' }
   }
 };
-const CALC_ROWS = { babbitt: ['babbitt'], painting: ['brush', 'spray'], welding: ['waste', 'smaw', 'tig', 'stub'], cut1d: [], cut2d: [] };
+const CALC_ROWS = { babbitt: ['babbitt'], painting: ['brush', 'spray'], coating: ['brush', 'spray'], welding: ['waste', 'smaw', 'tig', 'stub'], cut1d: [], cut2d: [] };
 const CALC_SOURCES = {
   babbitt: [['No published figure was found for babbitt pour waste.', null]],
   painting: [['Industrial Coatings Ltd', 'https://industrialcoatingsltd.com/pages/how-to-work-out-paint-coverage-for-protective-coatings']],
+  coating: [['Industrial Coatings Ltd', 'https://industrialcoatingsltd.com/pages/how-to-work-out-paint-coverage-for-protective-coatings']],
   welding: [['welding.org.au', 'https://welding.org.au/tools/weld-consumable-calculator/'],
     ['The Fabricator', 'https://www.thefabricator.com/thewelder/article/consumables/understanding-the-relationship-between-deposition-rate-deposition-efficiency-and-production-output'],
     ['MachineMFG', 'https://machinemfg.com/welding-rod-consumption']]
@@ -69,6 +71,15 @@ const CALC_FIELDS = {
     { id: 'sh', label: 'Sheet length', unit: 'mm', v: 2440 },
     { id: 'kerf', label: 'Cut width (saw or torch kerf)', unit: 'mm', v: 3, std: 1, hint: 'Lost at every cut' },
     { id: 'rot', label: 'Pieces may be turned 90 degrees', unit: '1 = yes, 0 = no', v: 1, hint: 'Say 0 when the grain or pattern matters' }],
+  coating: [
+    { id: 'area', label: 'Area to be coated', unit: 'm2', v: 80 },
+    { id: 'th', label: 'Thinner', unit: '%', v: 25, std: 1, hint: 'Share of all paint to buy' },
+    { id: 'vs1', label: 'Primer volume solids', unit: '%', v: 60, hint: 'From the data sheet' },
+    { id: 'd1', label: 'Primer dry film', unit: 'um', v: 75, hint: 'Specified DFT per coat' },
+    { id: 'vs2', label: 'Intermediate volume solids', unit: '%', v: 70 },
+    { id: 'd2', label: 'Intermediate dry film', unit: 'um', v: 125 },
+    { id: 'vs3', label: 'Topcoat volume solids', unit: '%', v: 55 },
+    { id: 'd3', label: 'Topcoat dry film', unit: 'um', v: 50 }],
   welding: [
     { id: 'dens', label: 'Density of weld metal', unit: 'g/cm3', v: 7.85, std: 1, hint: '7.85 carbon steel, about 8.0 stainless' },
     { id: 'd', label: 'Shaft diameter before welding', unit: 'mm', v: 500 },
@@ -144,7 +155,7 @@ function calcKindState(kind, std) {
   const st = { jobs: [calcNewJob(kind, 1)], act: 0, loss: {}, units: {} };
   CALC_ROWS[kind].forEach(k => { st.loss[k] = std.allow[k].pct; });
   if (kind === 'babbitt') Object.keys(std.units).forEach(k => { st.units[k] = std.units[k].v; });
-  if (kind === 'painting') { st.method = 'spray'; st.incl = false; }
+  if (kind === 'painting' || kind === 'coating') { st.method = 'spray'; st.incl = false; }
   return st;
 }
 
@@ -246,6 +257,22 @@ function calcRun(kind, job, st) {
         { k: 'top', d: 'Topcoat', u: 'L', net: a / v.p3, raw: tc }, { k: 'thin', d: 'Thinner', u: 'L', net: thN, raw: th }]
     };
   }
+  if (kind === 'coating') {
+    /* theoretical spread = volume solids % x 10 / dry film um, in m2 per litre; the loss allowance makes it practical */
+    const lo = st.incl ? 0 : L[st.method], a = v.area, rate = (s, t) => (s > 0 && t > 0 ? s * 10 / t : 0), need = r => (r > 0 ? a / r : 0);
+    const cs = [['Primer', 'cprimer', v.vs1, v.d1], ['Intermediate', 'cinter', v.vs2, v.d2], ['Topcoat', 'ctop', v.vs3, v.d3]].map(c => ({ l: c[0], k: c[1], r: rate(c[2], c[3]), vs: c[2], dft: c[3] }));
+    const rows = [], lines = []; let thN = 0, thB = 0;
+    cs.forEach(c => {
+      const n = need(c.r), b = calcBuy(n, lo); thN += n * v.th / 100; thB += b * v.th / 100;
+      rows.push({ l: c.l + ', theoretical spread', net: c.r, buy: c.r, u: 'm2/L', how: 'volume solids % x 10 / dry film thickness' });
+      rows.push({ l: c.l + ', wet film to apply', net: c.vs > 0 ? c.dft * 100 / c.vs : 0, buy: c.vs > 0 ? c.dft * 100 / c.vs : 0, u: 'um', how: 'dry film thickness / volume solids' });
+      rows.push({ l: c.l, net: n, buy: b, u: 'L', how: 'area / theoretical spread, then / (1 - loss)' });
+      lines.push({ k: c.k, d: c.l, u: 'L', net: n, raw: b });
+    });
+    rows.push({ l: 'Thinner', net: thN, buy: thB, u: 'L', how: 'thinner % x (primer + intermediate + topcoat to buy)' });
+    lines.push({ k: 'cthin', d: 'Thinner', u: 'L', net: thN, raw: thB });
+    return { rows, lines };
+  }
   if (kind === 'cut1d') {
     const c = calcCut1D(v.stock, v.kerf, job.pieces), total = c.placed;
     const d = (String(job.mat || '').trim() || 'Stock bar') + ', ' + calcG(v.stock) + ' mm';
@@ -325,7 +352,7 @@ function calcTypical(hist, key) {
 /* The values a calculator used, for the team history. */
 function calcUsed(kind, st) {
   const out = {};
-  if (kind === 'painting') { if (!st.incl) out[st.method] = st.loss[st.method]; return out; }
+  if (kind === 'painting' || kind === 'coating') { if (!st.incl) out[st.method] = st.loss[st.method]; return out; }
   CALC_ROWS[kind].forEach(k => { out[k] = st.loss[k]; });
   return out;
 }
@@ -502,10 +529,10 @@ function CalcDrawer(props) {
       h('thead', null, h('tr', null, ['Allowance', 'Standard', 'Range', 'Team typical', 'Using', 'Status'].map((t, i) => h('th', { key: t, className: i === 1 || i === 3 || i === 4 ? 'n' : '' }, t)))),
       h('tbody', null, rows.map(k => {
         const def = std.allow[k], using = st.loss[k], status = calcStatus(def, using), ty = calcTypical(hist, k);
-        const off = kind === 'painting' && st.method !== k;
+        const off = (kind === 'painting' || kind === 'coating') && st.method !== k;
         return h('tr', { key: k, style: off ? { opacity: .55 } : null },
           h('td', null,
-            kind === 'painting' ? h('label', { style: { display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' } },
+            (kind === 'painting' || kind === 'coating') ? h('label', { style: { display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' } },
               h('input', { type: 'radio', name: 'calc-method', checked: st.method === k, onChange: () => upd(s => { s.method = k; }) }), def.label) : def.label,
             tag(def.kind === 'src' ? 'published' : 'estimate', def.kind === 'src' ? 'var(--status-success)' : 'var(--brand-accent)')),
           h('td', { className: 'n' }, isAdmin && adminOn
@@ -519,7 +546,7 @@ function CalcDrawer(props) {
             onChange: e => { const n = Math.max(0, sv(num(e), def.unit)); upd(s => { s.loss[k] = n; }); } }), ' ' + dl(def.unit)),
           h('td', null, h('span', { className: 'calc-st ' + status[1] }, status[0])));
       })))),
-    kind === 'painting' ? h('label', { className: 'calc-chk' }, h('input', { type: 'checkbox', checked: !!st.incl, onChange: e => { const c = e.target.checked; upd(s => { s.incl = c; }); } }),
+    (kind === 'painting' || kind === 'coating') ? h('label', { className: 'calc-chk' }, h('input', { type: 'checkbox', checked: !!st.incl, onChange: e => { const c = e.target.checked; upd(s => { s.incl = c; }); } }),
       h('span', null, 'My spreading rates already include application loss. Use no extra loss.')) : null,
     h('p', { className: 'calc-foot' }, 'Sources: ', (CALC_SOURCES[kind] || []).map((s, i) => s[1] ? h('a', { key: i, href: s[1], target: '_blank', rel: 'noopener noreferrer' }, s[0] + (i < CALC_SOURCES[kind].length - 1 ? ', ' : '.')) : h('span', { key: i }, s[0]))),
     h('p', { className: 'calc-foot' }, 'Team typical is the median of what estimators used on their CEs, newest 30.'));

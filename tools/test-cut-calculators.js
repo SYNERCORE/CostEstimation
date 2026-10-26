@@ -48,5 +48,5 @@ ck('the Materials line carries the material and the stock length', ag.length ===
 st = X.calcKindState('cut2d', std); out = X.calcRun('cut2d', st.jobs[0], st);
 ag = X.calcAggregate('cut2d', st);
 ck('sheets give a line with the sheet size', ag.length === 1 && ag[0].d === 'Sheet, 1220 x 2440 mm' && ag[0].q >= 1);
-ck('both are offered as tabs', X.CALC_KINDS.map(k => k.id).join() === 'babbitt,painting,welding,cut1d,cut2d');
+ck('both are offered as tabs', X.CALC_KINDS.map(k => k.id).join() === 'babbitt,painting,coating,welding,cut1d,cut2d');
 process.exit(bad ? 1 : 0);

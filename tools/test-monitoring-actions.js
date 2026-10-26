@@ -26,7 +26,7 @@ for (const label of ["'⚑ Status')", "'💬 Remarks'", '"Load")', '"👁 View")
   const before = block.slice(Math.max(0, at - 700), at);
   ck('primary: ' + label, at > 0 && before.lastIndexOf('mon-pri') > before.lastIndexOf('React.createElement("button"') - 5 || before.lastIndexOf('mon-pri') > 0);
 }
-for (const label of ["'👤 Assign')", "'📎'", '"Clone")', '"Revise")', "'Sure?' : 'Del')", '"\\u2B07 xlsx (Planning)")', '"\\uD83D\\uDDA8 CE (no amounts)")']) {
+for (const label of ["'👤 Assign')", "'Attachments'", '"Clone")', '"Revise")', "'Sure?' : 'Del')", '"\\u2B07 xlsx (Planning)")', '"\\uD83D\\uDDA8 CE (no amounts)")']) {
   const at = block.indexOf(label);
   const start = block.lastIndexOf('createElement("button"', at) < 0 ? 0 : block.lastIndexOf('createElement("button"', at);
   ck('hidden until More: ' + label, at > 0 && block.slice(start, at).indexOf('mon-pri') < 0);

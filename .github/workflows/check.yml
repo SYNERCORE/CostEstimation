@@ -557,5 +557,7 @@ jobs:
         run: node tools/test-requestor-no-new-ce.js
       - name: coating dft
         run: node tools/test-coating-dft.js
+      - name: paint calculators
+        run: node tools/test-paint-calculators.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

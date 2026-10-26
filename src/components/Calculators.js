@@ -20,7 +20,11 @@ const CALC_KINDS = [
   { id: 'coating', label: 'Coating (DFT)', job: 'Surface' },
   { id: 'welding', label: 'Welding', job: 'Shaft' },
   { id: 'cut1d', label: 'Bar cutting', job: 'Cut' },
-  { id: 'cut2d', label: 'Sheet cutting', job: 'Layout' }
+  { id: 'cut2d', label: 'Sheet cutting', job: 'Layout' },
+  { id: 'area', label: 'Surface area', job: 'Item' },
+  { id: 'abrasive', label: 'Abrasive', job: 'Blast' },
+  { id: 'dewpoint', label: 'Dew point', job: 'Check' },
+  { id: 'tip', label: 'Airless tip', job: 'Spray' }
 ];
 
 /* kind: src = a published figure, est = our own estimate (shown as such).
@@ -40,11 +44,14 @@ const CALC_DEFAULTS = {
     tin: { label: 'Tin ingot', v: 3.8, unit: 'kg' }
   }
 };
-const CALC_ROWS = { babbitt: ['babbitt'], painting: ['brush', 'spray'], coating: ['brush', 'spray'], welding: ['waste', 'smaw', 'tig', 'stub'], cut1d: [], cut2d: [] };
+const CALC_ROWS = { babbitt: ['babbitt'], painting: ['brush', 'spray'], coating: ['brush', 'spray'], welding: ['waste', 'smaw', 'tig', 'stub'], cut1d: [], cut2d: [], area: [], abrasive: [], dewpoint: [], tip: [] };
 const CALC_SOURCES = {
   babbitt: [['No published figure was found for babbitt pour waste.', null]],
   painting: [['Industrial Coatings Ltd', 'https://industrialcoatingsltd.com/pages/how-to-work-out-paint-coverage-for-protective-coatings']],
   coating: [['Industrial Coatings Ltd', 'https://industrialcoatingsltd.com/pages/how-to-work-out-paint-coverage-for-protective-coatings']],
+  abrasive: [['No published figure fits every abrasive. The rate is an estimate: use your supplier figure for the abrasive and cleanliness grade.', null]],
+  dewpoint: [['Magnus formula for the dew point; the 3 C margin is the usual coating-specification rule (ISO 8502-4, SSPC-PA 1).', null]],
+  tip: [['Orifice flow from the spray pressure and paint density. An estimate for choosing a tip size; the fan width and the tip chart of your pump still decide the final tip.', null]],
   welding: [['welding.org.au', 'https://welding.org.au/tools/weld-consumable-calculator/'],
     ['The Fabricator', 'https://www.thefabricator.com/thewelder/article/consumables/understanding-the-relationship-between-deposition-rate-deposition-efficiency-and-production-output'],
     ['MachineMFG', 'https://machinemfg.com/welding-rod-consumption']]
@@ -80,6 +87,37 @@ const CALC_FIELDS = {
     { id: 'd2', label: 'Intermediate dry film', unit: 'um', v: 125 },
     { id: 'vs3', label: 'Topcoat volume solids', unit: '%', v: 55 },
     { id: 'd3', label: 'Topcoat dry film', unit: 'um', v: 50 }],
+  area: [
+    { id: 'tD', label: 'Tank diameter', unit: 'm', v: 10, hint: 'Leave 0 if there is no tank' },
+    { id: 'tH', label: 'Tank shell height', unit: 'm', v: 8 },
+    { id: 'tR', label: 'Tank roof (1 = coat, 0 = no)', unit: '1 or 0', v: 1, hint: 'Taken as a flat disc; add a few % for a cone roof' },
+    { id: 'tF', label: 'Tank floor (1 = coat, 0 = no)', unit: '1 or 0', v: 0 },
+    { id: 'pOD', label: 'Pipe outside diameter', unit: 'mm', v: 168, hint: 'Leave 0 if there is no pipe' },
+    { id: 'pL', label: 'Pipe length', unit: 'm', v: 50 },
+    { id: 'pIn', label: 'Pipe inside too (1 = yes, 0 = no)', unit: '1 or 0', v: 0 },
+    { id: 'plL', label: 'Plate length', unit: 'm', v: 2.4, hint: 'Leave 0 if there is no plate' },
+    { id: 'plW', label: 'Plate width', unit: 'm', v: 1.2 },
+    { id: 'plN', label: 'Number of plates', unit: 'pcs', v: 4 },
+    { id: 'plB', label: 'Both faces (1 = yes, 0 = one)', unit: '1 or 0', v: 1 },
+    { id: 'sA', label: 'Steel section surface area', unit: 'm2/m', v: 0.78, hint: 'Per metre of the section, from the section table (IPE 200 is about 0.78)' },
+    { id: 'sL', label: 'Steel section length', unit: 'm', v: 100 }],
+  abrasive: [
+    { id: 'area', label: 'Area to be blasted', unit: 'm2', v: 80 },
+    { id: 'rate', label: 'Abrasive used per m2', unit: 'kg/m2', v: 40, std: 1, hint: 'Estimate for open blasting with expendable abrasive. Use the supplier figure' },
+    { id: 'bag', label: 'Bag weight', unit: 'kg', v: 25, std: 1 },
+    { id: 'prod', label: 'Blasting rate', unit: 'm2/h', v: 8, std: 1, hint: 'Area cleaned per hour by one nozzle' }],
+  dewpoint: [
+    { id: 'air', label: 'Air temperature', unit: 'C', v: 30 },
+    { id: 'rh', label: 'Relative humidity', unit: '%', v: 80 },
+    { id: 'steel', label: 'Steel surface temperature', unit: 'C', v: 28, hint: 'Measure the steel, not the air' },
+    { id: 'gap', label: 'Steel must be above the dew point by', unit: 'C', v: 3, std: 1, hint: 'Usual specification: 3 C' }],
+  tip: [
+    { id: 'prod', label: 'Area to spray per hour', unit: 'm2/h', v: 100 },
+    { id: 'wft', label: 'Wet film to apply', unit: 'um', v: 125, hint: 'From the Coating (DFT) calculator' },
+    { id: 'eff', label: 'Transfer efficiency', unit: '%', v: 65, std: 1, hint: 'Share of the paint that lands on the steel' },
+    { id: 'bar', label: 'Pump pressure at the tip', unit: 'bar', v: 200, std: 1 },
+    { id: 'dens', label: 'Paint density', unit: 'kg/L', v: 1.3, hint: 'From the data sheet' },
+    { id: 'cd', label: 'Tip flow coefficient', unit: 'factor', v: 0.4, std: 1, hint: 'Estimate; about 0.4 for airless tips' }],
   welding: [
     { id: 'dens', label: 'Density of weld metal', unit: 'g/cm3', v: 7.85, std: 1, hint: '7.85 carbon steel, about 8.0 stainless' },
     { id: 'd', label: 'Shaft diameter before welding', unit: 'mm', v: 500 },
@@ -272,6 +310,55 @@ function calcRun(kind, job, st) {
     rows.push({ l: 'Thinner', net: thN, buy: thB, u: 'L', how: 'thinner % x (primer + intermediate + topcoat to buy)' });
     lines.push({ k: 'cthin', d: 'Thinner', u: 'L', net: thN, raw: thB });
     return { rows, lines };
+  }
+  if (kind === 'area') {
+    const PIv = Math.PI, on = x => (x > 0 ? 1 : 0), shell = PIv * v.tD * v.tH, roof = PIv * v.tD * v.tD / 4 * on(v.tR), floor = PIv * v.tD * v.tD / 4 * on(v.tF);
+    const pipe = PIv * v.pOD / 1000 * v.pL * (on(v.pIn) ? 2 : 1), plate = v.plL * v.plW * v.plN * (on(v.plB) ? 2 : 1), steel = v.sA * v.sL;
+    const rows = [
+      { l: 'Tank shell', net: shell, buy: shell, u: 'm2', how: 'pi x diameter x height' },
+      { l: 'Tank roof', net: roof, buy: roof, u: 'm2', how: 'pi x diameter x diameter / 4, as a flat disc' },
+      { l: 'Tank floor', net: floor, buy: floor, u: 'm2', how: 'pi x diameter x diameter / 4' },
+      { l: 'Pipe', net: pipe, buy: pipe, u: 'm2', how: 'pi x outside diameter x length (x 2 if the inside is coated too)' },
+      { l: 'Plate', net: plate, buy: plate, u: 'm2', how: 'length x width x number (x 2 for both faces)' },
+      { l: 'Steel sections', net: steel, buy: steel, u: 'm2', how: 'surface area per metre x length' }];
+    const tot = shell + roof + floor + pipe + plate + steel;
+    rows.push({ l: 'Total area to coat', net: tot, buy: tot, u: 'm2', how: 'all of the above. Type this into Painting, Coating or Abrasive' });
+    return { rows, lines: [] };
+  }
+  if (kind === 'abrasive') {
+    const kg = v.area * v.rate, bags = v.bag > 0 ? kg / v.bag : 0, hrs = v.prod > 0 ? v.area / v.prod : 0, dd = 'Blasting abrasive, ' + calcG(v.bag) + ' kg bag';
+    return {
+      rows: [
+        { l: 'Abrasive needed', net: kg, buy: kg, u: 'kg', how: 'area x abrasive per m2' },
+        { l: 'Bags to buy', net: bags, buy: calcUp(bags), u: 'bags', how: 'abrasive needed / bag weight, rounded up' },
+        { l: 'Blasting time, one nozzle', net: hrs, buy: hrs, u: 'h', how: 'area / blasting rate' }],
+      lines: bags > 0 ? [{ k: 'abr:' + dd, d: dd, u: 'pc', net: bags, raw: bags }] : []
+    };
+  }
+  if (kind === 'dewpoint') {
+    const a = 17.62, b = 243.12, rh = Math.min(Math.max(v.rh, 0.1), 100), g = Math.log(rh / 100) + a * v.air / (b + v.air), dew = b * g / (a - g), over = v.steel - dew, ok = over >= v.gap;
+    return {
+      rows: [
+        { l: 'Dew point', net: dew, buy: dew, u: 'C', how: 'Magnus formula from air temperature and relative humidity' },
+        { l: 'Steel above the dew point', net: over, buy: over, u: 'C', extra: ok ? 'OK to coat' : 'DO NOT COAT: needs ' + calcG(v.gap) + ' C or more', how: 'steel temperature - dew point, against the margin required' }],
+      lines: []
+    };
+  }
+  if (kind === 'tip') {
+    const eff = Math.max(v.eff, 1) / 100, vel = Math.sqrt(2 * v.bar * 1e5 / (Math.max(v.dens, 0.1) * 1000));
+    const qOf = dm => v.cd * Math.PI / 4 * dm * dm * vel * 60000;
+    const q = v.prod * v.wft / 1000 / 60 / eff, A = v.cd > 0 && vel > 0 ? q / 60000 / (v.cd * vel) : 0;
+    const dmm = Math.sqrt(4 * A / Math.PI) * 1000, thou = dmm / 0.0254, sizes = [7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 39, 43, 47, 51];
+    const pick = sizes.find(s => s >= thou - 1e-9) || sizes[sizes.length - 1], qt = qOf(pick * 0.0254 / 1000), made = v.wft > 0 ? qt * 60 * eff / (v.wft / 1000) : 0;
+    return {
+      rows: [
+        { l: 'Paint to spray', net: q, buy: q, u: 'L/min', how: 'area per hour x wet film / transfer efficiency' },
+        { l: 'Orifice needed, equivalent round hole', net: dmm, buy: dmm, u: 'mm', extra: calcF(thou, 1) + ' thousandths of an inch', how: 'flow = coefficient x area x sqrt(2 x pressure / density)' },
+        { l: 'Nearest standard tip at or above that', net: pick, buy: pick, u: 'thou in', extra: 'orifice 0.0' + (pick < 10 ? '0' : '') + pick + ' in', how: 'the next size up in the usual tip sizes' },
+        { l: 'Flow through that tip', net: qt, buy: qt, u: 'L/min', how: 'same flow formula at the tip size' },
+        { l: 'Area it can spray at this film', net: made, buy: made, u: 'm2/h', how: 'flow x 60 x transfer efficiency / wet film' }],
+      lines: []
+    };
   }
   if (kind === 'cut1d') {
     const c = calcCut1D(v.stock, v.kerf, job.pieces), total = c.placed;

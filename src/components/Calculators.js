@@ -16,15 +16,15 @@
 
 const CALC_KINDS = [
   { id: 'babbitt', label: 'Babbitt', job: 'Bearing' },
-  { id: 'painting', label: 'Painting', job: 'Surface' },
-  { id: 'coating', label: 'Coating (DFT)', job: 'Surface' },
+  { id: 'painting', label: 'Paint quantity', job: 'Surface', grp: 'Painting' },
+  { id: 'coating', label: 'Coating (DFT)', job: 'Surface', grp: 'Painting' },
   { id: 'welding', label: 'Welding', job: 'Shaft' },
   { id: 'cut1d', label: 'Bar cutting', job: 'Cut' },
   { id: 'cut2d', label: 'Sheet cutting', job: 'Layout' },
-  { id: 'area', label: 'Surface area', job: 'Item' },
-  { id: 'abrasive', label: 'Abrasive', job: 'Blast' },
-  { id: 'dewpoint', label: 'Dew point', job: 'Check' },
-  { id: 'tip', label: 'Airless tip', job: 'Spray' }
+  { id: 'area', label: 'Surface area', job: 'Item', grp: 'Painting' },
+  { id: 'abrasive', label: 'Abrasive', job: 'Blast', grp: 'Painting' },
+  { id: 'dewpoint', label: 'Dew point', job: 'Check', grp: 'Painting' },
+  { id: 'tip', label: 'Airless tip', job: 'Spray', grp: 'Painting' }
 ];
 
 /* kind: src = a published figure, est = our own estimate (shown as such).
@@ -669,7 +669,11 @@ function CalcDrawer(props) {
     h('div', { className: 'calc-hd' },
       h('b', { style: { fontSize: 14, flex: 1 } }, 'Quantity calculators'),
       h('div', { className: 'calc-tabs', role: 'group', 'aria-label': 'Units' }, ['metric', 'imperial'].map(u => h('button', { key: u, 'aria-pressed': (u === 'imperial') === imp, onClick: () => setUnits(u), title: u === 'imperial' ? 'Show and type English units (inches, feet, pounds, gallons)' : 'Show and type metric units' }, u === 'imperial' ? 'English' : 'Metric'))),
-      h('div', { className: 'calc-tabs', role: 'tablist' }, CALC_KINDS.map(k => h('button', { key: k.id, role: 'tab', 'aria-selected': k.id === kind, onClick: () => setTab(k.id) }, k.label))),
+      h('div', { className: 'calc-tabs', role: 'tablist' }, CALC_KINDS.filter((k, i) => !k.grp || CALC_KINDS.findIndex(x => x.grp === k.grp) === i).map(k => {
+        const lab = k.grp || k.label, on = k.grp ? kdef.grp === k.grp : k.id === kind;
+        return h('button', { key: lab, role: 'tab', 'aria-selected': on, onClick: () => setTab(k.id) }, lab);
+      })),
+      kdef.grp ? h('div', { className: 'calc-tabs calc-sub', role: 'tablist', 'aria-label': kdef.grp + ' calculators' }, CALC_KINDS.filter(k => k.grp === kdef.grp).map(k => h('button', { key: k.id, role: 'tab', 'aria-selected': k.id === kind, onClick: () => setTab(k.id) }, k.label))) : null,
       page ? null : h('button', { className: 'calc-x', 'aria-label': 'Close calculators', onClick: onClose }, '×')),
     h('div', { className: 'calc-bd' },
       jobsRow,

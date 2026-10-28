@@ -1208,7 +1208,7 @@ function App({
     if (apvMonWaitsOn(m, currentUser?.username)) return true;
     return ceeMatches(me, m.ceeName) || me.includes(String(m.receivedBy || '').trim().toUpperCase());
   };
-  const loadHist = makeLoadHist(() => ({ canSeeAll, currentUser, mineToSee, setCeNums, setHistBusy, setHistory }));
+  const loadHist = makeLoadHist(() => ({ canSeeAll, currentUser, mineToSee, monData: _monRef.current, setCeNums, setHistBusy, setHistory }));
   /* opts.deleted {section:[ids]} and opts.replaceTabs [sections] say what this
      caller means to REMOVE. Everything else the site holds is somebody else's
      work and is merged back in -- see dbSaveML. */
@@ -4740,9 +4740,10 @@ function App({
      once for each new set of such CEs. */
   const _assignedKey = React.useRef('');
   React.useEffect(() => {
-    if (canSeeAll) return;
     const have = new Set(history.map(h => String(h.id)));
-    const missing = Object.keys(monData || {}).filter(id => !have.has(String(id)) && mineToSee(id)).sort().join(',');
+    /* Someone who sees every CE still lacks the ones the list failed to bring, so the ones waiting on them are asked for again. */
+    const wanted = canSeeAll ? (id => apvMonWaitsOn(monData[id], currentUser && currentUser.username)) : mineToSee;
+    const missing = Object.keys(monData || {}).filter(id => !have.has(String(id)) && wanted(id)).sort().join(',');
     if (missing && missing !== _assignedKey.current) { _assignedKey.current = missing; loadHist(); }
   }, [monData, history, canSeeAll]);
   /* A draft is work in progress. Once the CE has been saved the work is in

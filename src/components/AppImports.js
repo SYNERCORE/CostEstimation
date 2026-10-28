@@ -639,6 +639,7 @@ function makeLoadHist(getCtx) {
       canSeeAll,
       currentUser,
       mineToSee,
+      monData,
       setCeNums,
       setHistBusy,
       setHistory
@@ -681,6 +682,16 @@ function makeLoadHist(getCtx) {
         } catch (_e) { effective = []; }
         setSyncStatus({ sp: 'connected' });
       }
+      /* The CEs waiting on this person are what they came to act on. If the full list could not be read, or came back without them,
+         fetch just those few by Id so they can still be opened and signed. */
+      try {
+        const me = currentUser && currentUser.username, have = new Set((effective || []).map(x => String(x.id)));
+        const need = Object.keys(monData || {}).filter(id => !have.has(String(id)) && apvMonWaitsOn(monData[id], me));
+        if (spAvail && need.length) {
+          const extra = await dbGetHistoryByIds(need);
+          if (extra.length) effective = (effective || []).concat(extra);
+        }
+      } catch (e) { console.warn('CEs waiting on you could not be fetched:', e.message); window.shicHistErr = e.message; }
       setHistory(effective);
       try{window.shicHistory=effective.map(function(e){return Object.assign({},e.data||{},e);});}catch(_e){logSwallowed('App:L1239',_e);}
       spLoadMLImports().then(function(imports){

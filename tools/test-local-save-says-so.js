@@ -35,7 +35,7 @@ ck('the Scope Library cache goes through lsPut in all three places', (db.match(/
 ck('a Monitoring edit goes through lsPut', app.indexOf("lsPut(MON_KEY, n, 'this Monitoring change')") > 0);
 ck('LS.set no longer ignores a non-quota failure', db.indexOf("logSwallowed('db:LS.set:' + k, e)") > 0);
 
-const f = db.indexOf('async function dbGetHistory');
+const f = db.indexOf('async function dbGetHistory(');
 const line = db.slice(f, db.indexOf('\n', f));
 ck('the history filter doubles an apostrophe in the username', line.indexOf("String(username||'').replace(/'/g,\"''\")") > 0 && line.indexOf("eq '${username}'") < 0);
 process.exit(bad ? 1 : 0);

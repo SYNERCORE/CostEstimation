@@ -451,7 +451,9 @@ function MonitoringPanel(ctx) {
       borderTopLeftRadius: 0,
       borderTopRightRadius: 0
     }
-  }, "No saved estimates yet. Save a CE to start monitoring."), !histBusy && sortedHistory.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null,
+  }, history.length > 0 ? "No CEs match the filters. Press Clear Filters to see them all."
+    : window.shicHistErr ? "The CE list could not be read from SharePoint (" + String(window.shicHistErr).slice(0, 160) + "). Press Refresh to try again."
+    : "No saved estimates yet. Save a CE to start monitoring."), !histBusy && sortedHistory.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null,
   /*#__PURE__*/React.createElement("div", {
     ref: monTopScrollRef,
     style: {overflowX: 'auto', overflowY: 'hidden', height: 13, background: SURF, border: `1px solid ${BDR}`, borderTop: 'none', borderBottom: 'none'},

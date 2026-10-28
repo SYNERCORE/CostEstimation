@@ -941,7 +941,9 @@ function App({
     {id: 'estimate', label: 'Estimate', ids: ['info', 'sow', 'sowbreak', 'manpower', 'tools', 'materials', 'ppe', 'misc', 'summary'], steps: true},
     {id: 'libraries', label: 'Libraries', ids: ['scopelib', 'masterlist']},
     {id: 'calculators', label: 'Calculators', ids: ['calculators']}
-  ].map(g => ({...g, tabs: g.ids.map(id => TABS.find(t => t.id === id)).filter(Boolean)})).filter(g => g.tabs.length);
+  ].map(g => ({...g, tabs: g.ids.map(id => TABS.find(t => t.id === id)).filter(Boolean)})).filter(g => g.tabs.length)
+    /* A requestor cannot start a CE, so the Estimate tab is empty until they open one of theirs from CE Monitoring or My Work. */
+    .filter(g => !(isRequestor && g.id === 'estimate' && !info.ceNum && g.ids.indexOf(tab) < 0));
   const _tabMemory = useRef({});
   /* The estimate cannot be worked on until Project Info says what it is for: the issuing
      company, the project type, the discipline and a description. They are listed all together, and

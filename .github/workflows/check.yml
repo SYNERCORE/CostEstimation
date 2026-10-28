@@ -563,5 +563,7 @@ jobs:
         run: node tools/test-paint-group.js
       - name: Waiting CEs rescued
         run: node tools/test-waiting-ces-rescued.js
+      - name: Requestor landing
+        run: node tools/test-requestor-landing.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

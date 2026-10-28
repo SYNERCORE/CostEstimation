@@ -32,5 +32,6 @@ const mk = (tol) => run(true, () => '', () => 'CEs', tol, { get: () => [] }, w);
   ck('App hands loadHist the monitoring rows', /monData: _monRef\.current/.test(app));
   ck('someone who sees every CE has the missing ones asked for again', /canSeeAll \? \(id => apvMonWaitsOn/.test(app));
   ck('the empty list says why, not "No saved estimates"', /No CEs match the filters/.test(mon) && /has no CE in SharePoint/.test(mon) && /could not be read from SharePoint/.test(mon));
+  ck('rows SharePoint confirmed have no CE can be cleared, after a confirmation', mon.includes('stale approval request') && mon.includes("uiConfirm('Clear the approval request") && mon.includes('r.asked.includes(id) && !r.found.includes'));
   process.exit(bad ? 1 : 0);
 })();

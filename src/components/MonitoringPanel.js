@@ -458,7 +458,21 @@ function MonitoringPanel(ctx) {
       return lost.length ? '  Waiting on you: ' + lost.map(id => 'row ' + id + ' (' + ((monData[id].jobTitle || monData[id].rceNo || monData[id].customer || 'no title')) + ')' + (heads.has(String(id)) ? ' is in the list but hidden by a filter' : ' has no CE in SharePoint')).join('; ') + '.' + (window.shicRescue ? ' Asked SharePoint for them directly: ' + (window.shicRescue.err ? 'failed (' + String(window.shicRescue.err).slice(0, 120) + ')' : window.shicRescue.found.length + ' of ' + window.shicRescue.asked.length + ' found') + '.' : '') : '';
     })() : '')
     : window.shicHistErr ? "The CE list could not be read from SharePoint (" + String(window.shicHistErr).slice(0, 160) + "). Press Refresh to try again."
-    : "No saved estimates yet. Save a CE to start monitoring."), !histBusy && sortedHistory.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null,
+    : "No saved estimates yet. Save a CE to start monitoring.",
+  /* Only rows SharePoint itself said have no CE (asked by Id and not found) are offered for clearing; a row whose CE merely failed to load is left alone. */
+  (() => {
+    const r = window.shicRescue, heads = new Set(history.map(h => String(h.id)));
+    const stale = monApvMine && r && !r.err ? Object.keys(monData || {}).filter(id => apvMonWaitsOn(monData[id], currentUser.username) && !heads.has(String(id)) && r.asked.includes(id) && !r.found.includes(String(id))) : [];
+    return stale.length ? /*#__PURE__*/React.createElement("div", {style: {marginTop: 12}}, /*#__PURE__*/React.createElement("button", {
+      style: btn('danger', true),
+      title: "These Monitoring rows say a CE is waiting on your signature, but SharePoint has no such CE",
+      onClick: async () => {
+        if (!await uiConfirm('Clear the approval request on ' + stale.length + ' Monitoring row(s) whose CE no longer exists (' + stale.join(', ') + ')?' + String.fromCharCode(10) + String.fromCharCode(10) + 'Only the "waiting for signature" mark is removed; the rows stay.')) return;
+        stale.forEach(id => updateMon(isNaN(id) ? id : Number(id), {apv: {state: 'none', signed: 0, total: 0, waiting: []}}));
+        showToast('Cleared ' + stale.length + ' stale approval request(s).');
+      }
+    }, "Clear " + stale.length + " stale approval request" + (stale.length === 1 ? "" : "s"))) : null;
+  })()), !histBusy && sortedHistory.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null,
   /*#__PURE__*/React.createElement("div", {
     ref: monTopScrollRef,
     style: {overflowX: 'auto', overflowY: 'hidden', height: 13, background: SURF, border: `1px solid ${BDR}`, borderTop: 'none', borderBottom: 'none'},

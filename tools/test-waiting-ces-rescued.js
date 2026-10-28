@@ -31,6 +31,6 @@ const mk = (tol) => run(true, () => '', () => 'CEs', tol, { get: () => [] }, w);
   ck('loadHist fetches the CEs waiting on the user when the list lacks them', /apvMonWaitsOn\(monData\[id\], me\)/.test(imp) && /dbGetHistoryByIds\(need\)/.test(imp));
   ck('App hands loadHist the monitoring rows', /monData: _monRef\.current/.test(app));
   ck('someone who sees every CE has the missing ones asked for again', /canSeeAll \? \(id => apvMonWaitsOn/.test(app));
-  ck('the empty list says why, not "No saved estimates"', /No CEs match the filters/.test(mon) && /could not be read from SharePoint/.test(mon));
+  ck('the empty list says why, not "No saved estimates"', /No CEs match the filters/.test(mon) && /has no CE in SharePoint/.test(mon) && /could not be read from SharePoint/.test(mon));
   process.exit(bad ? 1 : 0);
 })();

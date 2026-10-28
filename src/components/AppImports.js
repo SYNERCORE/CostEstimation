@@ -689,9 +689,10 @@ function makeLoadHist(getCtx) {
         const need = Object.keys(monData || {}).filter(id => !have.has(String(id)) && apvMonWaitsOn(monData[id], me));
         if (spAvail && need.length) {
           const extra = await dbGetHistoryByIds(need);
+          window.shicRescue = {asked: need, found: extra.map(x => String(x.id)), err: ''};
           if (extra.length) effective = (effective || []).concat(extra);
         }
-      } catch (e) { console.warn('CEs waiting on you could not be fetched:', e.message); window.shicHistErr = e.message; }
+      } catch (e) { console.warn('CEs waiting on you could not be fetched:', e.message); window.shicHistErr = e.message; window.shicRescue = {asked: [], found: [], err: e.message}; }
       setHistory(effective);
       try{window.shicHistory=effective.map(function(e){return Object.assign({},e.data||{},e);});}catch(_e){logSwallowed('App:L1239',_e);}
       spLoadMLImports().then(function(imports){

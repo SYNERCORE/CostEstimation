@@ -455,7 +455,7 @@ function MonitoringPanel(ctx) {
       /* The button counts monitoring rows; the list shows CEs. Say which waiting rows have no CE to show, and why. */
       const lost = Object.keys(monData || {}).filter(id => apvMonWaitsOn(monData[id], currentUser.username));
       const heads = new Set(history.map(h => String(h.id)));
-      return lost.length ? '  Waiting on you: ' + lost.map(id => 'row ' + id + ' (' + ((monData[id].jobTitle || monData[id].rceNo || monData[id].customer || 'no title')) + ')' + (heads.has(String(id)) ? ' is in the list but hidden by a filter' : ' has no CE in SharePoint')).join('; ') + '.' : '';
+      return lost.length ? '  Waiting on you: ' + lost.map(id => 'row ' + id + ' (' + ((monData[id].jobTitle || monData[id].rceNo || monData[id].customer || 'no title')) + ')' + (heads.has(String(id)) ? ' is in the list but hidden by a filter' : ' has no CE in SharePoint')).join('; ') + '.' + (window.shicRescue ? ' Asked SharePoint for them directly: ' + (window.shicRescue.err ? 'failed (' + String(window.shicRescue.err).slice(0, 120) + ')' : window.shicRescue.found.length + ' of ' + window.shicRescue.asked.length + ' found') + '.' : '') : '';
     })() : '')
     : window.shicHistErr ? "The CE list could not be read from SharePoint (" + String(window.shicHistErr).slice(0, 160) + "). Press Refresh to try again."
     : "No saved estimates yet. Save a CE to start monitoring."), !histBusy && sortedHistory.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null,

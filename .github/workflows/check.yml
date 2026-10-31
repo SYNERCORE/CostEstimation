@@ -567,5 +567,7 @@ jobs:
         run: node tools/test-requestor-landing.js
       - name: Requests sent status
         run: node tools/test-requests-sent-status.js
+      - name: Requests sent groups
+        run: node tools/test-requests-sent-groups.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

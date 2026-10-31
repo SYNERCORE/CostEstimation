@@ -151,6 +151,48 @@ function MyWorkTab(ctx) {
             g.count ? g.idx.filter(i => n[i] > 0).map(i => /*#__PURE__*/React.createElement(React.Fragment, {key:i}, items[i])) : /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:MT,padding:'2px 4px'}}, _mq.length ? 'Nothing here matches "' + mwQ + '".' : g.id === 'act' ? 'Nothing needs you right now.' : g.id === 'mine' ? 'No open CEs, drafts or approvals of yours.' : 'No requests or reviews waiting.')));
       }));
   };
+  /* Where a request stands for the person who sent it: still with the team, waiting on the requestor (sent back, or the team needs information),
+     or finished. A declined request is finished. */
+  const sentGroup = x => {
+    const i = x.e.info || {}, rs = i.request && !i.acceptedCeNum ? i.reviewStatus : '';
+    if (rs === 'declined') return 'closed';
+    if (rs === 'returned' || x.m.status === 'Waiting for Information') return 'action';
+    return ceIsOpen(x.m.status) ? 'open' : 'closed';
+  };
+  const reqRow = x => {
+          const _rs = x.e.info && x.e.info.request && !x.e.info.acceptedCeNum ? x.e.info.reviewStatus : '';
+          const st = _rs === 'returned' ? 'Returned to you' : _rs === 'resubmitted' ? 'Sent back to Cost Estimation' : (x.m.status || 'Pending'), col = _rs === 'returned' ? ACC : getStatusColor(st), still = !!(x.e.info && x.e.info.request);
+          const td = {padding:'7px 8px',borderBottom:'1px solid '+alpha(BDR,'44'),verticalAlign:'middle'};
+          return /*#__PURE__*/React.createElement("tr", {key: x.e.id},
+            /*#__PURE__*/React.createElement("td", {style:{...td,...MONO,fontWeight:700,whiteSpace:'nowrap'}}, ceLabel(x.e)),
+            /*#__PURE__*/React.createElement("td", {style:td}, (x.e.info && x.e.info.client) || x.m.customer || '—'),
+            /*#__PURE__*/React.createElement("td", {style:td}, x.m.jobTitle || (x.e.info && x.e.info.description) || '—'),
+            /*#__PURE__*/React.createElement("td", {style:td}, (x.e.info && x.e.info.projType) || x.m.designation || '—'),
+            /*#__PURE__*/React.createElement("td", {style:td}, estName(x.m.ceeName) || '—'),
+            /*#__PURE__*/React.createElement("td", {style:{...td,whiteSpace:'nowrap',fontSize:11,color:(() => { const d = ceDeadline(x.m.deadline, x.m.dateSubmitted, x.m.status); return d.late && !d.done ? ERR : MT; })()}}, dueWords(ceDeadline(x.m.deadline, x.m.dateSubmitted, x.m.status)) || '—'),
+            /*#__PURE__*/React.createElement("td", {style:td}, /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'2px 10px',borderRadius:12,fontSize:11,fontWeight:700,color:col,border:'1px solid '+col,background:alpha(col,'18')}}, st),
+              still && x.e.info.reviewStatus && /*#__PURE__*/React.createElement("div", {style:{fontSize:10,marginTop:3,color:x.e.info.reviewStatus === 'declined' ? ERR : MT}},
+                String(x.e.info.reviewStatus).toUpperCase() + (x.e.info.reviewNote ? ': ' + x.e.info.reviewNote : ''))),
+            /*#__PURE__*/React.createElement("td", {style:{...td,textAlign:'right',whiteSpace:'nowrap'}}, !isRequestor && addBtn(x), !isRequestor && viewBtn(x), isRequestor && still && !x.e.info.acceptedCeNum && x.e.info.reviewStatus !== 'declined' && typeof x.e.id === 'number' && /*#__PURE__*/React.createElement("button", {style:{...btn('info',true),marginRight:6},onClick:()=>setRceReview({e:x.e,mode:'update'})}, 'Update'), still ? /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'3px 12px',borderRadius:6,fontSize:11,fontWeight:800,color:'#fff',background:'#16a34a',letterSpacing:'.06em'}}, 'REQUEST') : (isRequestor ? viewBtn(x) : null)));
+        };
+  const reqTable = rows => /*#__PURE__*/React.createElement("table", {style:{width:'100%',borderCollapse:'collapse',fontSize:12}},
+        /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['RCE / CE NO.', 'CUSTOMER', 'JOB', 'DISCIPLINE', 'ASSIGNED TO', 'DUE', 'STATUS', ''].map((h, i) => /*#__PURE__*/React.createElement("th", {key: i, style:{textAlign:'left',padding:'6px 8px',fontSize:10,color:MT,letterSpacing:'.06em',borderBottom:'1px solid '+BDR}}, h)))),
+        /*#__PURE__*/React.createElement("tbody", null, rows.map(reqRow)));
+  const REQ_GROUPS = [
+    {id: 'open', label: 'Open requests', hint: 'With Cost Estimation'},
+    {id: 'action', label: 'Needs your action', hint: 'Sent back to you, or the team needs information from you', todo: true},
+    {id: 'closed', label: 'Closed / completed', hint: 'Submitted, approved, awarded, declined or cancelled'}];
+  const reqCount = id => sent.filter(x => sentGroup(x) === id).length;
+  const reqGroups = () => /*#__PURE__*/React.createElement("div", {style:{display:'flex',flexDirection:'column',gap:8}},
+    REQ_GROUPS.map(g => {
+      const all = reqCount(g.id), rows = sentShown.filter(x => sentGroup(x) === g.id);
+      return /*#__PURE__*/React.createElement("details", {key: g.id, open: g.id !== 'closed' && all > 0 || (_rqw.length > 0 && rows.length > 0), style:{border:'1px solid '+alpha(BDR,'88'),borderRadius:8,overflow:'hidden'}},
+        /*#__PURE__*/React.createElement("summary", {style:{cursor:'pointer',padding:'8px 10px',display:'flex',alignItems:'center',gap:8,fontWeight:700,fontSize:12,listStyle:'none'}, title: g.hint},
+          g.label,
+          /*#__PURE__*/React.createElement("span", {style:{minWidth:18,textAlign:'center',borderRadius:9,padding:'0 6px',fontSize:11,fontWeight:800,background:g.todo && all ? ACC : alpha(BDR,'66'),color:g.todo && all ? '#fff' : MT}}, _rqw.length ? rows.length + ' of ' + all : all),
+          /*#__PURE__*/React.createElement("span", {style:{fontWeight:400,fontSize:10,color:MT}}, g.hint)),
+        rows.length ? /*#__PURE__*/React.createElement("div", {style:{padding:'0 10px 8px',overflowX:'auto'}}, reqTable(rows)) : /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,padding:'2px 12px 10px'}}, all ? 'Nothing here matches the filter.' : 'None.'));
+    }));
   return /*#__PURE__*/React.createElement("div", {style:{display:'flex',flexDirection:'column',gap:12}},
     /*#__PURE__*/React.createElement("div", {style:{display:'flex',alignItems:'baseline',gap:10,flexWrap:'wrap'}},
       /*#__PURE__*/React.createElement("div", {style:{fontSize:18,fontWeight:800}}, 'Good ' + (now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening') + ', ' + String(currentUser.name || me).split(' ')[0]),
@@ -184,23 +226,6 @@ function MyWorkTab(ctx) {
       sent.length > 0 && /*#__PURE__*/React.createElement("div", {style:{display:'flex',gap:8,alignItems:'center',marginBottom:8}},
         /*#__PURE__*/React.createElement("input", {type:'search',value:mwReqQ,placeholder:'Filter my requests: RCE no., customer, job, estimator, status\u2026','aria-label':'Filter my requests',onChange:e=>setMwReqQ(e.target.value),style:{...INP,flex:1,maxWidth:420,fontSize:12,padding:'5px 10px'}}),
         mwReqQ && /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setMwReqQ('')}, 'Clear')),
-      sent.length ? /*#__PURE__*/React.createElement("table", {style:{width:'100%',borderCollapse:'collapse',fontSize:12}},
-        /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['RCE / CE NO.', 'CUSTOMER', 'JOB', 'DISCIPLINE', 'ASSIGNED TO', 'DUE', 'STATUS', ''].map((h, i) => /*#__PURE__*/React.createElement("th", {key: i, style:{textAlign:'left',padding:'6px 8px',fontSize:10,color:MT,letterSpacing:'.06em',borderBottom:'1px solid '+BDR}}, h)))),
-        /*#__PURE__*/React.createElement("tbody", null, sentShown.map(x => {
-          const _rs = x.e.info && x.e.info.request && !x.e.info.acceptedCeNum ? x.e.info.reviewStatus : '';
-          const st = _rs === 'returned' ? 'Returned to you' : _rs === 'resubmitted' ? 'Sent back to Cost Estimation' : (x.m.status || 'Pending'), col = _rs === 'returned' ? ACC : getStatusColor(st), still = !!(x.e.info && x.e.info.request);
-          const td = {padding:'7px 8px',borderBottom:'1px solid '+alpha(BDR,'44'),verticalAlign:'middle'};
-          return /*#__PURE__*/React.createElement("tr", {key: x.e.id},
-            /*#__PURE__*/React.createElement("td", {style:{...td,...MONO,fontWeight:700,whiteSpace:'nowrap'}}, ceLabel(x.e)),
-            /*#__PURE__*/React.createElement("td", {style:td}, (x.e.info && x.e.info.client) || x.m.customer || '—'),
-            /*#__PURE__*/React.createElement("td", {style:td}, x.m.jobTitle || (x.e.info && x.e.info.description) || '—'),
-            /*#__PURE__*/React.createElement("td", {style:td}, (x.e.info && x.e.info.projType) || x.m.designation || '—'),
-            /*#__PURE__*/React.createElement("td", {style:td}, estName(x.m.ceeName) || '—'),
-            /*#__PURE__*/React.createElement("td", {style:{...td,whiteSpace:'nowrap',fontSize:11,color:(() => { const d = ceDeadline(x.m.deadline, x.m.dateSubmitted, x.m.status); return d.late && !d.done ? ERR : MT; })()}}, dueWords(ceDeadline(x.m.deadline, x.m.dateSubmitted, x.m.status)) || '—'),
-            /*#__PURE__*/React.createElement("td", {style:td}, /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'2px 10px',borderRadius:12,fontSize:11,fontWeight:700,color:col,border:'1px solid '+col,background:alpha(col,'18')}}, st),
-              still && x.e.info.reviewStatus && /*#__PURE__*/React.createElement("div", {style:{fontSize:10,marginTop:3,color:x.e.info.reviewStatus === 'declined' ? ERR : MT}},
-                String(x.e.info.reviewStatus).toUpperCase() + (x.e.info.reviewNote ? ': ' + x.e.info.reviewNote : ''))),
-            /*#__PURE__*/React.createElement("td", {style:{...td,textAlign:'right',whiteSpace:'nowrap'}}, !isRequestor && addBtn(x), !isRequestor && viewBtn(x), isRequestor && still && !x.e.info.acceptedCeNum && x.e.info.reviewStatus !== 'declined' && typeof x.e.id === 'number' && /*#__PURE__*/React.createElement("button", {style:{...btn('info',true),marginRight:6},onClick:()=>setRceReview({e:x.e,mode:'update'})}, 'Update'), still ? /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'3px 12px',borderRadius:6,fontSize:11,fontWeight:800,color:'#fff',background:'#16a34a',letterSpacing:'.06em'}}, 'REQUEST') : (isRequestor ? viewBtn(x) : null)));
-        }))) : /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,padding:'6px 0'}}, 'You have not sent a request yet. Use + New Request in CE Monitoring.'),
+      sent.length ? reqGroups() : /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,padding:'6px 0'}}, 'You have not sent a request yet. Use + New Request in CE Monitoring.'),
       sent.length > 0 && sentShown.length === 0 && /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:MT,textAlign:'center',padding:'12px 0'}}, 'No request matches "' + mwReqQ + '".')));
 }

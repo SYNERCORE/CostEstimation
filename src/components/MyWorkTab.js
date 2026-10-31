@@ -132,6 +132,29 @@ function MyWorkTab(ctx) {
   /* Three labelled, collapsible groups instead of eight boxes, all on one page so nothing is hidden behind a tab. Each header carries a
      count, in red when something there needs the user. A group with something in it starts open and an empty one starts folded; a
      click on a header changes that, and the page remembers the choice for the visit. A list with nothing in it is left out. */
+  /* The same columns as the Requests I sent table, so every list on this page reads alike: what it is, for whom, who has it, when it is due, where it stands. */
+  const pill = (st, col) => /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'2px 10px',borderRadius:12,fontSize:11,fontWeight:700,whiteSpace:'nowrap',color:col,border:'1px solid '+col,background:alpha(col,'18')}}, st);
+  const TCELL = {padding:'7px 8px',borderBottom:'1px solid '+alpha(BDR,'44'),verticalAlign:'middle'};
+  const trow = (x, extra, actions) => {
+    const i = x.e.info || {}, d = ceDeadline(x.m.deadline, x.m.dateSubmitted, x.m.status);
+    const who = estName(String(x.m.ceeName || '').replace(/^Unassigned$/, '') || x.m.preparedBy || x.e.savedByName || x.e.savedBy || '');
+    return /*#__PURE__*/React.createElement("tr", {key: x.e.id},
+      /*#__PURE__*/React.createElement("td", {style:{...TCELL,...MONO,fontWeight:700,whiteSpace:'nowrap'}}, ceLabel(x.e)),
+      /*#__PURE__*/React.createElement("td", {style:TCELL}, i.client || x.m.customer || '—'),
+      /*#__PURE__*/React.createElement("td", {style:TCELL}, x.m.jobTitle || i.description || '—'),
+      /*#__PURE__*/React.createElement("td", {style:TCELL}, i.projType || x.m.designation || '—'),
+      /*#__PURE__*/React.createElement("td", {style:TCELL}, who || '—'),
+      /*#__PURE__*/React.createElement("td", {style:{...TCELL,whiteSpace:'nowrap',fontSize:11,color:d.late && !d.done ? ERR : MT}}, dueWords(d) || '—'),
+      /*#__PURE__*/React.createElement("td", {style:TCELL}, extra),
+      /*#__PURE__*/React.createElement("td", {style:{...TCELL,textAlign:'right',whiteSpace:'nowrap'}}, actions));
+  };
+  const tsection = (title, list, render, empty) => /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:'12px 14px',overflowX:'auto',gridColumn:'1 / -1'}},
+    /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:13,marginBottom:6}}, title, /*#__PURE__*/React.createElement("span", {style:{marginLeft:6,fontSize:11,color:MT}}, '(' + list.length + ')')),
+    list.length ? /*#__PURE__*/React.createElement("table", {style:{width:'100%',borderCollapse:'collapse',fontSize:12}},
+      /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['CE / RCE NO.', 'CUSTOMER', 'JOB', 'DISCIPLINE', 'ESTIMATOR', 'DUE', 'STATUS', ''].map((h, k) => /*#__PURE__*/React.createElement("th", {key: k, style:{textAlign:'left',padding:'6px 8px',fontSize:10,color:MT,letterSpacing:'.06em',borderBottom:'1px solid '+BDR}}, h)))),
+      /*#__PURE__*/React.createElement("tbody", null, list.slice(0, 15).map(render)))
+    : /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,padding:'6px 0'}}, empty),
+    list.length > 15 && /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,marginTop:4}}, '+' + (list.length - 15) + ' more in CE Monitoring'));
   const mwPanel = items => {
     const n = [fToSign.length, fReturned.length, fOpen.length, fDrafts.length, fInApproval.length, 0, isRequestor ? 0 : fAwaiting.length, isRequestor ? 0 : fForReview.length];
     const groups = [
@@ -217,18 +240,18 @@ function MyWorkTab(ctx) {
       /*#__PURE__*/React.createElement("input", {type:'search',value:mwQ,placeholder:'Filter my work: CE no., client, job, estimator, status\u2026','aria-label':'Filter my work',onChange:e=>setMwQ(e.target.value),style:{...INP,flex:1,maxWidth:420,fontSize:12,padding:'5px 10px'}}),
       mwQ && /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setMwQ('')}, 'Clear')),
     mwPanel([
-      section('✍ For my approval', fToSign, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT,whiteSpace:'nowrap'}}, apv(x).signed + '/' + apv(x).total + ' signed'), viewBtn(x)), 'No CE is waiting on your signature.'),
-      section('↩ Returned to me', fReturned, x => line(x, (x.e.info || {}).reviewNote && (x.e.info || {}).request ? /*#__PURE__*/React.createElement("span", {title: x.e.info.reviewNote, style:{fontSize:10,color:ACC,maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, 'Returned: ' + x.e.info.reviewNote) : null, loadBtn(x)), 'Nothing returned.'),
-      section('📂 My open CEs', fOpen, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,fontWeight:700,whiteSpace:'nowrap',color:x.dl.late ? ERR : x.dl.days != null && x.dl.days <= 3 ? 'var(--accent-orange, #F07F12)' : MT}}, (x.m.status || 'Draft') + ' · ' + x.dl.label), [draftOfOpen[x.e.id] && /*#__PURE__*/React.createElement(React.Fragment, {key:'ud'}, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,fontWeight:700,whiteSpace:'nowrap',color:'#F59E0B'},title:'Autosaved ' + new Date(draftOfOpen[x.e.id].savedAt).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) + ' -- newer than the saved CE until you Save'}, '✎ unsaved changes'), /*#__PURE__*/React.createElement("button", {style:btn('info',true),title:'Open the autosaved version',onClick:()=>resumeDraft(draftOfOpen[x.e.id])}, "Resume")), viewBtn(x), loadBtn(x)]), 'No open CEs assigned to you.'),
+      tsection('✍ For my approval', fToSign, x => trow(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT,whiteSpace:'nowrap'}}, apv(x).signed + '/' + apv(x).total + ' signed'), viewBtn(x)), 'No CE is waiting on your signature.'),
+      tsection('↩ Returned to me', fReturned, x => trow(x, (x.e.info || {}).reviewNote && (x.e.info || {}).request ? /*#__PURE__*/React.createElement("span", {title: x.e.info.reviewNote, style:{fontSize:10,color:ACC,maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, 'Returned: ' + x.e.info.reviewNote) : null, loadBtn(x)), 'Nothing returned.'),
+      tsection('📂 My open CEs', fOpen, x => trow(x, pill(x.m.status || 'Draft', getStatusColor(x.m.status || 'Draft')), [draftOfOpen[x.e.id] && /*#__PURE__*/React.createElement(React.Fragment, {key:'ud'}, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,fontWeight:700,whiteSpace:'nowrap',color:'#F59E0B'},title:'Autosaved ' + new Date(draftOfOpen[x.e.id].savedAt).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) + ' -- newer than the saved CE until you Save'}, '✎ unsaved changes'), /*#__PURE__*/React.createElement("button", {style:btn('info',true),title:'Open the autosaved version',onClick:()=>resumeDraft(draftOfOpen[x.e.id])}, "Resume")), viewBtn(x), loadBtn(x)]), 'No open CEs assigned to you.'),
       section('📝 My drafts', fDrafts, d => /*#__PURE__*/React.createElement("div", {key: d.draftId, style:{display:'flex',alignItems:'center',gap:8,padding:'6px 2px',borderBottom:'1px solid '+alpha(BDR,'44'),fontSize:12}},
         /*#__PURE__*/React.createElement("b", {style:{...MONO,fontSize:11}}, (d.info && d.info.ceNum) || 'Untitled'),
         /*#__PURE__*/React.createElement("span", {style:{flex:1,color:MT,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, ((d.info && d.info.client) || '') + ' · saved ' + new Date(d.savedAt).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})),
         /*#__PURE__*/React.createElement("button", {style:btn('acc',true),onClick:()=>resumeDraft(d)}, "Resume")), 'No saved drafts.'),
-      section('⏳ My CEs in approval', fInApproval, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT,whiteSpace:'nowrap'}}, apv(x).signed + '/' + apv(x).total + ' signed · waiting on ' + (apv(x).waiting || []).join(', ')), viewBtn(x)), 'None of your CEs are in approval.'),
+      tsection('⏳ My CEs in approval', fInApproval, x => trow(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT,whiteSpace:'nowrap'}}, apv(x).signed + '/' + apv(x).total + ' signed · waiting on ' + (apv(x).waiting || []).join(', ')), viewBtn(x)), 'None of your CEs are in approval.'),
       /* Index 5 stays empty: the list positions are what n[] and the groups' idx refer to. Requests I sent is its own table below. */
       null,
-      !isRequestor && fAwaiting.length > 0 && section('📥 Requests awaiting review', fAwaiting, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,whiteSpace:'nowrap',color:MT}}, (x.m.ceeName || 'Unassigned') + (((x.e.info || {}).reviewStatus) ? ' · ' + (x.e.info || {}).reviewStatus : '')), [viewBtn(x), /*#__PURE__*/React.createElement("button", {key:'rv',style:btn('ok',true),title:'Review the checklist and decide: proceed, secure the missing data first, or decline',onClick:()=>openReview(x.e, 'review')}, "Review")]), ''),
-      !isRequestor && fForReview.length > 0 && section('🔎 For review (status For Approval)', fForReview, x => line(x, null, viewBtn(x)), '')]),
+      !isRequestor && fAwaiting.length > 0 && tsection('📥 Requests awaiting review', fAwaiting, x => trow(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,whiteSpace:'nowrap',color:MT}}, (x.m.ceeName || 'Unassigned') + (((x.e.info || {}).reviewStatus) ? ' · ' + (x.e.info || {}).reviewStatus : '')), [viewBtn(x), /*#__PURE__*/React.createElement("button", {key:'rv',style:btn('ok',true),title:'Review the checklist and decide: proceed, secure the missing data first, or decline',onClick:()=>openReview(x.e, 'review')}, "Review")]), ''),
+      !isRequestor && fForReview.length > 0 && tsection('🔎 For review (status For Approval)', fForReview, x => trow(x, pill('For Approval', getStatusColor('For Approval')), viewBtn(x)), '')]),
     (isRequestor || sent.length > 0) && /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:'12px 14px',overflowX:'auto'}},
       /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:13,marginBottom:8}}, (isRequestor ? '📤 My requests' : '📤 Requests I sent'), /*#__PURE__*/React.createElement("span", {style:{marginLeft:6,fontSize:11,color:MT}}, _rqw.length ? '(' + sentShown.length + ' of ' + sent.length + ')' : '(' + sent.length + ')')),
       sent.length > 0 && /*#__PURE__*/React.createElement("div", {style:{display:'flex',gap:8,alignItems:'center',marginBottom:8}},

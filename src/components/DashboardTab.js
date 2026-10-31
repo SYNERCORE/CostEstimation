@@ -118,7 +118,7 @@ function DashboardTab(ctx) {
   const sumG = rs => rs.reduce((t, h) => t + N(h.grand || 0), 0);
   const statOf = rows => {
     const st = h => (monOf(h) || {}).status || 'Draft', by = f => rows.filter(h => f(st(h)));
-    const sub = by(s => s === 'Submitted'), awd = by(s => s === 'Awarded'), lost = by(s => s === 'No Quote' || s === 'Cancelled'), open = by(s => ceIsOpen(s));
+    const sub = by(s => s === 'Submitted' || s === 'Awarded'), awd = by(s => s === 'Awarded'), lost = by(s => s === 'No Quote' || s === 'Cancelled'), open = by(s => ceIsOpen(s));
     return {n: rows.length, value: sumG(rows), avg: rows.length ? sumG(rows) / rows.length : 0, sub, awd, lost, open, subV: sumG(sub), awdV: sumG(awd)};
   };
   const monthName = (m, long) => new Date(2000, m, 1).toLocaleString('default', {month: long ? 'long' : 'short'});
@@ -127,7 +127,8 @@ function DashboardTab(ctx) {
   const stLabel = (_sm !== '' ? monthName(Number(_sm), true) + ' ' : '') + (_sy === 'all' ? 'all years' : _sy);
   const pctVs = (a, b) => b ? Math.round((a - b) / b * 100) : null;
   const vsTxt = (a, b) => { const p = stPrev ? pctVs(a, b) : null; return p === null ? '' : (p > 0 ? '▲ ' : p < 0 ? '▼ ' : '') + Math.abs(p) + '% vs ' + (_sm !== '' ? monthName(Number(_sm)) + ' ' : '') + (Number(_sy) - 1); };
-  const awardBase = stNow.sub.length + stNow.awd.length;
+  /* An awarded CE was submitted first, so Submitted includes it and the award rate is of everything submitted. */
+  const awardBase = stNow.sub.length;
   /* One line per month of the year picked (or per year when every year is), so a month can be opened with a click. */
   const stBreak = _sm !== '' ? [] : (_sy === 'all' ? stYears.slice().reverse().map(y => ({key: String(y), label: String(y), pick: () => setDashYear && setDashYear(String(y)), s: statOf(stRows.filter(h => recvY(h) === y))}))
     : Array.from({length: 12}, (_, m) => ({key: String(m), label: monthName(m), future: Number(_sy) === thisYear && m > thisMonth, pick: () => setDashMonth && setDashMonth(String(m)), s: statOf(stRows.filter(h => inPeriod(h, _sy, String(m))))})));
@@ -149,8 +150,8 @@ function DashboardTab(ctx) {
       stCard('CEs received', stNow.n, vsTxt(stNow.n, stPrev && stPrev.n), INFO),
       stCard('Total value', '₱' + ph(stNow.value), vsTxt(stNow.value, stPrev && stPrev.value), OK),
       stCard('Average value', '₱' + ph(stNow.avg), '', ACC),
-      stCard('Submitted', stNow.sub.length, '₱' + ph(stNow.subV), INFO),
-      stCard('Awarded', stNow.awd.length, '₱' + ph(stNow.awdV) + (awardBase ? ' · ' + Math.round(100 * stNow.awd.length / awardBase) + '% of Submitted + Awarded' : ''), OK),
+      stCard('Submitted', stNow.sub.length, '₱' + ph(stNow.subV) + ' · includes Awarded', INFO),
+      stCard('Awarded', stNow.awd.length, '₱' + ph(stNow.awdV) + (awardBase ? ' · ' + Math.round(100 * stNow.awd.length / awardBase) + '% of Submitted' : ''), OK),
       stCard('No Quote / Cancelled', stNow.lost.length, '', stNow.lost.length ? ERR : MT),
       stCard('Still open', stNow.open.length, '₱' + ph(sumG(stNow.open)), ERR)),
     stBreak.length > 0 && /*#__PURE__*/React.createElement("div",{style:{overflowX:'auto',marginTop:14}},

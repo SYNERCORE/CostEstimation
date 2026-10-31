@@ -20,7 +20,9 @@ const run = (dashYear, dashMonth) => new Function('valHist', 'monOf', 'N', 'ceIs
   x => new Date(mon[x.id].dateRecv + 'T00:00:00'), 2026, 2, dashYear, dashMonth, () => {}, () => {});
 const y = run('2026', '');
 ck('this year counts its CEs and leaves a request nobody has accepted out', y.stNow.n === 4 && y.stNow.value === 4700);
-ck('submitted, awarded, lost and still open are counted apart', y.stNow.sub.length === 1 && y.stNow.awd.length === 1 && y.stNow.lost.length === 1 && y.stNow.open.length === 1);
+ck('an awarded CE counts as submitted too, so Submitted is Submitted plus Awarded', y.stNow.sub.length === 2 && y.stNow.subV === 4000);
+ck('the award rate is of everything submitted', d.includes('const awardBase = stNow.sub.length;') && d.includes("'% of Submitted'"));
+ck('awarded, lost and still open are counted apart', y.stNow.awd.length === 1 && y.stNow.lost.length === 1 && y.stNow.open.length === 1);
 ck('the average is the value over the CEs', y.stNow.avg === 4700 / 4);
 ck('last year is worked out for the comparison', y.stPrev.n === 3 && y.stPrev.value === 6100);
 ck('the comparison says how far up or down it is', y.vsTxt(y.stNow.n, y.stPrev.n) === '▲ 33% vs 2025' && y.vsTxt(y.stNow.value, y.stPrev.value) === '▼ 23% vs 2025');

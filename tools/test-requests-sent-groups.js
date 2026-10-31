@@ -16,7 +16,10 @@ ck('a request sent back to the requestor needs their action', sentGroup(row({ re
 ck('a CE waiting for information needs their action', sentGroup(row({}, 'Waiting for Information')) === 'action');
 ck('a request sent back to the team is open again', sentGroup(row({ request: true, reviewStatus: 'resubmitted' }, 'Pending')) === 'open');
 ck('a CE being worked on is open', sentGroup(row({}, 'Ongoing')) === 'open' && sentGroup(row({}, '')) === 'open');
-ck('submitted, awarded, no quote and cancelled are closed', ['Submitted', 'Approved', 'Awarded', 'No Quote', 'Cancelled', 'Superseded'].every(s => sentGroup(row({}, s)) === 'closed'));
+ck('approved, awarded, no quote and cancelled are closed', ['Approved', 'Awarded', 'No Quote', 'Cancelled', 'Superseded'].every(s => sentGroup(row({}, s)) === 'closed'));
+ck('a submitted estimate waits for acknowledgement of receipt', sentGroup(row({}, 'Submitted')) === 'action');
+ck('once receipt is acknowledged it is closed', sentGroup({ e: { info: {} }, m: { status: 'Submitted', ackAt: '2026-11-01T00:00:00Z' } }) === 'closed');
+ck('the button stamps who and when, then says so', src.includes('ackAt: new Date().toISOString(), ackBy:') && src.includes('Acknowledge receipt') && src.includes('acknowledged.'));
 ck('a declined request is closed', sentGroup(row({ request: true, reviewStatus: 'declined' }, 'Pending')) === 'closed');
 ck('a request that became a CE is judged by the CE status, not the old review state', sentGroup(row({ request: true, acceptedCeNum: 'X-1', reviewStatus: 'returned' }, 'Ongoing')) === 'open');
 ck('three groups with a count each', ["'Open requests'", "'Needs your action'", "'Closed / completed'"].every(s => src.includes(s)) && src.includes('const reqCount = id =>'));

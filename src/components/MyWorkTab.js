@@ -26,7 +26,9 @@ function MyWorkTab(ctx) {
     setRceReview,
     setTab,
     setViewCE,
-    sharedDrafts
+    sharedDrafts,
+    showToast,
+    updateMon
   } = ctx;
 
   const me = currentUser.username, names = meNames();
@@ -157,8 +159,11 @@ function MyWorkTab(ctx) {
     const i = x.e.info || {}, rs = i.request && !i.acceptedCeNum ? i.reviewStatus : '';
     if (rs === 'declined') return 'closed';
     if (rs === 'returned' || x.m.status === 'Waiting for Information') return 'action';
+    /* A submitted estimate is waiting for the requestor to say they have it. Acknowledging it stamps the row and closes it. */
+    if (x.m.status === 'Submitted' && !x.m.ackAt) return 'action';
     return ceIsOpen(x.m.status) ? 'open' : 'closed';
   };
+  const ackReceipt = x => { updateMon(x.e.id, {ackAt: new Date().toISOString(), ackBy: currentUser.name || currentUser.username}); showToast('Receipt of ' + ceLabel(x.e) + ' acknowledged.'); };
   const reqRow = x => {
           const _rs = x.e.info && x.e.info.request && !x.e.info.acceptedCeNum ? x.e.info.reviewStatus : '';
           const st = _rs === 'returned' ? 'Returned to you' : _rs === 'resubmitted' ? 'Sent back to Cost Estimation' : (x.m.status || 'Pending'), col = _rs === 'returned' ? ACC : getStatusColor(st), still = !!(x.e.info && x.e.info.request);
@@ -172,16 +177,17 @@ function MyWorkTab(ctx) {
             /*#__PURE__*/React.createElement("td", {style:{...td,whiteSpace:'nowrap',fontSize:11,color:(() => { const d = ceDeadline(x.m.deadline, x.m.dateSubmitted, x.m.status); return d.late && !d.done ? ERR : MT; })()}}, dueWords(ceDeadline(x.m.deadline, x.m.dateSubmitted, x.m.status)) || '—'),
             /*#__PURE__*/React.createElement("td", {style:td}, /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'2px 10px',borderRadius:12,fontSize:11,fontWeight:700,color:col,border:'1px solid '+col,background:alpha(col,'18')}}, st),
               still && x.e.info.reviewStatus && /*#__PURE__*/React.createElement("div", {style:{fontSize:10,marginTop:3,color:x.e.info.reviewStatus === 'declined' ? ERR : MT}},
-                String(x.e.info.reviewStatus).toUpperCase() + (x.e.info.reviewNote ? ': ' + x.e.info.reviewNote : ''))),
-            /*#__PURE__*/React.createElement("td", {style:{...td,textAlign:'right',whiteSpace:'nowrap'}}, !isRequestor && addBtn(x), !isRequestor && viewBtn(x), isRequestor && still && !x.e.info.acceptedCeNum && x.e.info.reviewStatus !== 'declined' && typeof x.e.id === 'number' && /*#__PURE__*/React.createElement("button", {style:{...btn('info',true),marginRight:6},onClick:()=>setRceReview({e:x.e,mode:'update'})}, 'Update'), still ? /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'3px 12px',borderRadius:6,fontSize:11,fontWeight:800,color:'#fff',background:'#16a34a',letterSpacing:'.06em'}}, 'REQUEST') : (isRequestor ? viewBtn(x) : null)));
+                String(x.e.info.reviewStatus).toUpperCase() + (x.e.info.reviewNote ? ': ' + x.e.info.reviewNote : '')),
+              x.m.ackAt && /*#__PURE__*/React.createElement("div", {style:{fontSize:10,marginTop:3,color:MT},title:'Receipt acknowledged by ' + (x.m.ackBy || '') },'Receipt acknowledged ' + new Date(x.m.ackAt).toLocaleDateString('en-PH',{month:'short',day:'numeric'}))),
+            /*#__PURE__*/React.createElement("td", {style:{...td,textAlign:'right',whiteSpace:'nowrap'}}, x.m.status === 'Submitted' && !x.m.ackAt && typeof x.e.id === 'number' && /*#__PURE__*/React.createElement("button", {style:{...btn('ok',true),marginRight:6},title:'Confirm that you have received the submitted estimate',onClick:()=>ackReceipt(x)}, "✓ Acknowledge receipt"), !isRequestor && addBtn(x), !isRequestor && viewBtn(x), isRequestor && still && !x.e.info.acceptedCeNum && x.e.info.reviewStatus !== 'declined' && typeof x.e.id === 'number' && /*#__PURE__*/React.createElement("button", {style:{...btn('info',true),marginRight:6},onClick:()=>setRceReview({e:x.e,mode:'update'})}, 'Update'), still ? /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'3px 12px',borderRadius:6,fontSize:11,fontWeight:800,color:'#fff',background:'#16a34a',letterSpacing:'.06em'}}, 'REQUEST') : (isRequestor ? viewBtn(x) : null)));
         };
   const reqTable = rows => /*#__PURE__*/React.createElement("table", {style:{width:'100%',borderCollapse:'collapse',fontSize:12}},
         /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['RCE / CE NO.', 'CUSTOMER', 'JOB', 'DISCIPLINE', 'ASSIGNED TO', 'DUE', 'STATUS', ''].map((h, i) => /*#__PURE__*/React.createElement("th", {key: i, style:{textAlign:'left',padding:'6px 8px',fontSize:10,color:MT,letterSpacing:'.06em',borderBottom:'1px solid '+BDR}}, h)))),
         /*#__PURE__*/React.createElement("tbody", null, rows.map(reqRow)));
   const REQ_GROUPS = [
     {id: 'open', label: 'Open requests', hint: 'With Cost Estimation'},
-    {id: 'action', label: 'Needs your action', hint: 'Sent back to you, or the team needs information from you', todo: true},
-    {id: 'closed', label: 'Closed / completed', hint: 'Submitted, approved, awarded, declined or cancelled'}];
+    {id: 'action', label: 'Needs your action', hint: 'Sent back to you, the team needs information from you, or a submitted estimate is waiting for you to acknowledge receipt', todo: true},
+    {id: 'closed', label: 'Closed / completed', hint: 'Receipt acknowledged, approved, awarded, declined or cancelled'}];
   const reqCount = id => sent.filter(x => sentGroup(x) === id).length;
   const reqGroups = () => /*#__PURE__*/React.createElement("div", {style:{display:'flex',flexDirection:'column',gap:8}},
     REQ_GROUPS.map(g => {

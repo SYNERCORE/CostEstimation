@@ -239,8 +239,29 @@ function DashboardTab(ctx) {
     /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT,marginBottom:4}},label),
     /* A big peso figure steps down in size so it stays inside its card instead of running into the next one. */
     /*#__PURE__*/React.createElement("div",{style:{fontSize:String(value).length>14?14:String(value).length>11?17:20,fontWeight:800,color:color||TX,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',...MONO},title:String(value)},value));
-  return /*#__PURE__*/React.createElement("div",{style:{padding:'0 0 24px'}},
-    /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:15,marginBottom:supersededN?4:16,color:ACC}}, "📊 Dashboard"),
+  /* PRINT THE WHOLE DASHBOARD: a copy of the page as it is now (same period, company and discipline), in the light theme, with the buttons and
+     pickers taken out, opened in its own window so the app around it stays as it is. */
+  const printDashboard = () => {
+    const root = document.querySelector('.dash-root');
+    if (!root) return;
+    const copy = root.cloneNode(true);
+    copy.querySelectorAll('.dash-noprint, .dash-disc-toggle, button, select, input').forEach(n => n.remove());
+    copy.querySelectorAll('*').forEach(n => { n.style.maxHeight = 'none'; });
+    const scope = [_dc, _dd].filter(Boolean).join(' · ') || 'All companies, Mechanical and Electrical';
+    const styles = Array.from(document.head.querySelectorAll('style,link[rel="stylesheet"]')).map(n => n.outerHTML).join('');
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write('<!doctype html><html data-theme="light"><head><meta charset="utf-8"><title>Dashboard - ' + new Date().toLocaleDateString('en-PH') + '</title>' + styles
+      + '<style>html,body{background:#fff!important;color:#000;height:auto!important;overflow:visible!important}body{margin:12mm}@media print{body{margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}.dash-stats,.dash-disc{break-inside:avoid}}</style></head><body>'
+      + '<div style="font:12px Arial,sans-serif;color:#444;margin-bottom:8px">' + scope.replace(/&/g, '&amp;').replace(/</g, '&lt;') + ' · Printed ' + new Date().toLocaleDateString('en-PH', {year: 'numeric', month: 'long', day: 'numeric'}) + '</div>'
+      + copy.outerHTML + '</body></html>');
+    w.document.close();
+    setTimeout(() => { try { w.focus(); w.print(); } catch (_e) { /* the window was closed */ } }, 500);
+  };
+  return /*#__PURE__*/React.createElement("div",{className:'dash-root',style:{padding:'0 0 24px'}},
+    /*#__PURE__*/React.createElement("div",{style:{display:'flex',alignItems:'center',gap:10,marginBottom:supersededN?4:16}},
+      /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:15,color:ACC}}, "📊 Dashboard"),
+      /*#__PURE__*/React.createElement("button",{type:'button',className:'dash-noprint',style:{...btn('def',true),marginLeft:'auto'},title:'Print the whole Dashboard',onClick:printDashboard}, '🖨 Print Dashboard')),
     /* Said out loud, because a figure that quietly drops is a figure nobody
        trusts: these numbers moved the day revisions stopped being counted. */
     supersededN > 0 && /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT,marginBottom:16}},

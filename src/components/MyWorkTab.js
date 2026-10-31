@@ -110,18 +110,8 @@ function MyWorkTab(ctx) {
         const bits = [d, who && ('Estimator: ' + who), rce && ('RCE ' + rce), x.m.receivedBy && ('from ' + x.m.receivedBy), rcv && ('recv ' + rcv)].filter(Boolean);
         return bits.length ? /*#__PURE__*/React.createElement("div", {style:{fontSize:10,opacity:.8}}, bits.join(' · ')) : null; })()),
     extra, actions);
-  /* Where a request I sent stands, readable at a glance: a coloured pill for the stage, then who has it and how long is left. */
-  const sentStatus = x => {
-    const i = x.e.info || {}, open = i.request && !i.acceptedCeNum, rs = open ? i.reviewStatus : '';
-    const st = rs === 'declined' ? 'Declined' : rs === 'returned' ? 'Returned to you' : rs === 'resubmitted' ? 'Sent back to Cost Estimation' : (x.m.status || (open ? 'Awaiting review' : 'Accepted'));
-    const col = rs === 'declined' ? ERR : rs === 'returned' ? ACC : getStatusColor(st);
-    const dl = ceDeadline(x.m.deadline, x.m.dateSubmitted, x.m.status);
-    const who = x.m.ceeName ? 'with ' + estName(x.m.ceeName) : (open ? 'not yet assigned' : '');
-    const when = !dl || dl.days == null ? (dl && dl.done ? 'closed' : '') : dl.done ? (dl.late ? 'submitted late' : 'submitted on time') : dl.days < 0 ? Math.abs(dl.days) + ' days overdue' : dl.days === 0 ? 'due today' : 'due in ' + dl.days + ' day' + (dl.days === 1 ? '' : 's');
-    return /*#__PURE__*/React.createElement("span", {style:{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2,flexShrink:0,maxWidth:230}, title: [st, who, when, rs && i.reviewNote ? i.reviewNote : ''].filter(Boolean).join(' · ')},
-      /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'2px 10px',borderRadius:12,fontSize:11,fontWeight:700,whiteSpace:'nowrap',color:col,border:'1px solid '+col,background:alpha(col,'18')}}, st),
-      /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:dl && dl.late && !dl.done ? ERR : MT,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'100%'}}, [who, when].filter(Boolean).join(' · ')));
-  };
+  /* Time left on a CE or request, in words. */
+  const dueWords = dl => !dl || dl.days == null ? (dl && dl.done ? 'closed' : '') : dl.done ? (dl.late ? 'submitted late' : 'submitted on time') : dl.days < 0 ? Math.abs(dl.days) + ' days overdue' : dl.days === 0 ? 'due today' : 'due in ' + dl.days + ' day' + (dl.days === 1 ? '' : 's');
   const viewBtn = x => typeof x.e.id === 'number' && /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setViewCE({id:x.e.id,ceNum:ceLabel(x.e)})}, "👁 View");
   /* Whoever raised a request that is still waiting can add to it in place, whatever their role: saved as it is, nothing routed. */
   const addBtn = x => { const i = x.e.info || {}, mine = meNames();
@@ -141,11 +131,11 @@ function MyWorkTab(ctx) {
      count, in red when something there needs the user. A group with something in it starts open and an empty one starts folded; a
      click on a header changes that, and the page remembers the choice for the visit. A list with nothing in it is left out. */
   const mwPanel = items => {
-    const n = [fToSign.length, fReturned.length, fOpen.length, fDrafts.length, fInApproval.length, isRequestor ? 0 : fSent.length, isRequestor ? 0 : fAwaiting.length, isRequestor ? 0 : fForReview.length];
+    const n = [fToSign.length, fReturned.length, fOpen.length, fDrafts.length, fInApproval.length, 0, isRequestor ? 0 : fAwaiting.length, isRequestor ? 0 : fForReview.length];
     const groups = [
       {id: 'act', label: '\u26A1 Needs my action', idx: [0, 1, 6], urgent: true},
       {id: 'mine', label: '\uD83D\uDCC2 My CEs and drafts', idx: [2, 4, 3]},
-      {id: 'req', label: '\uD83D\uDCE4 Requests and reviews', idx: [5, 7]}
+      {id: 'req', label: '\uD83D\uDCE4 Requests for review', idx: [7], info: true}
     ].map(g => ({...g, count: g.idx.reduce((t, i) => t + n[i], 0)})).filter(g => g.id !== 'req' || !isRequestor);
     return /*#__PURE__*/React.createElement("div", {style:{display:'flex',flexDirection:'column',gap:8}},
       groups.map(g => {
@@ -156,7 +146,7 @@ function MyWorkTab(ctx) {
             style:{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'10px 14px',background:'transparent',border:'none',cursor:'pointer',color:TX,fontSize:13,fontWeight:700,textAlign:'left'}},
             /*#__PURE__*/React.createElement("span", {style:{color:MT,fontSize:11,width:12}}, isOpen ? '\u25BE' : '\u25B8'),
             g.label,
-            /*#__PURE__*/React.createElement("span", {style:{minWidth:18,textAlign:'center',borderRadius:9,padding:'0 6px',fontSize:11,fontWeight:800,background:g.count ? (g.urgent ? ERR : ACC) : alpha(BDR,'66'),color:g.count ? '#fff' : MT}}, g.count)),
+            /*#__PURE__*/React.createElement("span", {style:{minWidth:18,textAlign:'center',borderRadius:9,padding:'0 6px',fontSize:11,fontWeight:800,background:g.count && !g.info ? (g.urgent ? ERR : ACC) : alpha(BDR,'66'),color:g.count && !g.info ? '#fff' : MT}}, g.count)),
           isOpen && /*#__PURE__*/React.createElement("div", {style:{padding:'0 12px 12px',display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(380px,1fr))',gap:12}},
             g.count ? g.idx.filter(i => n[i] > 0).map(i => /*#__PURE__*/React.createElement(React.Fragment, {key:i}, items[i])) : /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:MT,padding:'2px 4px'}}, _mq.length ? 'Nothing here matches "' + mwQ + '".' : g.id === 'act' ? 'Nothing needs you right now.' : g.id === 'mine' ? 'No open CEs, drafts or approvals of yours.' : 'No requests or reviews waiting.')));
       }));
@@ -187,16 +177,15 @@ function MyWorkTab(ctx) {
         /*#__PURE__*/React.createElement("span", {style:{flex:1,color:MT,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, ((d.info && d.info.client) || '') + ' · saved ' + new Date(d.savedAt).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})),
         /*#__PURE__*/React.createElement("button", {style:btn('acc',true),onClick:()=>resumeDraft(d)}, "Resume")), 'No saved drafts.'),
       section('⏳ My CEs in approval', fInApproval, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT,whiteSpace:'nowrap'}}, apv(x).signed + '/' + apv(x).total + ' signed · waiting on ' + (apv(x).waiting || []).join(', ')), viewBtn(x)), 'None of your CEs are in approval.'),
-      !isRequestor && fSent.length > 0 && section('📤 Requests I sent', fSent, x => line(x, sentStatus(x), viewBtn(x)), 'You have not sent a request yet. Use + New Request in CE Monitoring.'),
       !isRequestor && fAwaiting.length > 0 && section('📥 Requests awaiting review', fAwaiting, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,whiteSpace:'nowrap',color:MT}}, (x.m.ceeName || 'Unassigned') + (((x.e.info || {}).reviewStatus) ? ' · ' + (x.e.info || {}).reviewStatus : '')), [viewBtn(x), /*#__PURE__*/React.createElement("button", {key:'rv',style:btn('ok',true),title:'Review the checklist and decide: proceed, secure the missing data first, or decline',onClick:()=>openReview(x.e, 'review')}, "Review")]), ''),
       !isRequestor && fForReview.length > 0 && section('🔎 For review (status For Approval)', fForReview, x => line(x, null, viewBtn(x)), '')]),
-    isRequestor && /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:'12px 14px',overflowX:'auto'}},
-      /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:13,marginBottom:8}}, '📤 My requests', /*#__PURE__*/React.createElement("span", {style:{marginLeft:6,fontSize:11,color:MT}}, _rqw.length ? '(' + sentShown.length + ' of ' + sent.length + ')' : '(' + sent.length + ')')),
+    (isRequestor || sent.length > 0) && /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:'12px 14px',overflowX:'auto'}},
+      /*#__PURE__*/React.createElement("div", {style:{fontWeight:700,fontSize:13,marginBottom:8}}, (isRequestor ? '📤 My requests' : '📤 Requests I sent'), /*#__PURE__*/React.createElement("span", {style:{marginLeft:6,fontSize:11,color:MT}}, _rqw.length ? '(' + sentShown.length + ' of ' + sent.length + ')' : '(' + sent.length + ')')),
       sent.length > 0 && /*#__PURE__*/React.createElement("div", {style:{display:'flex',gap:8,alignItems:'center',marginBottom:8}},
         /*#__PURE__*/React.createElement("input", {type:'search',value:mwReqQ,placeholder:'Filter my requests: RCE no., customer, job, estimator, status\u2026','aria-label':'Filter my requests',onChange:e=>setMwReqQ(e.target.value),style:{...INP,flex:1,maxWidth:420,fontSize:12,padding:'5px 10px'}}),
         mwReqQ && /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setMwReqQ('')}, 'Clear')),
       sent.length ? /*#__PURE__*/React.createElement("table", {style:{width:'100%',borderCollapse:'collapse',fontSize:12}},
-        /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['RCE / CE NO.', 'CUSTOMER', 'JOB', 'DISCIPLINE', 'ASSIGNED TO', 'STATUS', ''].map((h, i) => /*#__PURE__*/React.createElement("th", {key: i, style:{textAlign:'left',padding:'6px 8px',fontSize:10,color:MT,letterSpacing:'.06em',borderBottom:'1px solid '+BDR}}, h)))),
+        /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['RCE / CE NO.', 'CUSTOMER', 'JOB', 'DISCIPLINE', 'ASSIGNED TO', 'DUE', 'STATUS', ''].map((h, i) => /*#__PURE__*/React.createElement("th", {key: i, style:{textAlign:'left',padding:'6px 8px',fontSize:10,color:MT,letterSpacing:'.06em',borderBottom:'1px solid '+BDR}}, h)))),
         /*#__PURE__*/React.createElement("tbody", null, sentShown.map(x => {
           const _rs = x.e.info && x.e.info.request && !x.e.info.acceptedCeNum ? x.e.info.reviewStatus : '';
           const st = _rs === 'returned' ? 'Returned to you' : _rs === 'resubmitted' ? 'Sent back to Cost Estimation' : (x.m.status || 'Pending'), col = _rs === 'returned' ? ACC : getStatusColor(st), still = !!(x.e.info && x.e.info.request);
@@ -207,10 +196,11 @@ function MyWorkTab(ctx) {
             /*#__PURE__*/React.createElement("td", {style:td}, x.m.jobTitle || (x.e.info && x.e.info.description) || '—'),
             /*#__PURE__*/React.createElement("td", {style:td}, (x.e.info && x.e.info.projType) || x.m.designation || '—'),
             /*#__PURE__*/React.createElement("td", {style:td}, estName(x.m.ceeName) || '—'),
+            /*#__PURE__*/React.createElement("td", {style:{...td,whiteSpace:'nowrap',fontSize:11,color:(() => { const d = ceDeadline(x.m.deadline, x.m.dateSubmitted, x.m.status); return d.late && !d.done ? ERR : MT; })()}}, dueWords(ceDeadline(x.m.deadline, x.m.dateSubmitted, x.m.status)) || '—'),
             /*#__PURE__*/React.createElement("td", {style:td}, /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'2px 10px',borderRadius:12,fontSize:11,fontWeight:700,color:col,border:'1px solid '+col,background:alpha(col,'18')}}, st),
               still && x.e.info.reviewStatus && /*#__PURE__*/React.createElement("div", {style:{fontSize:10,marginTop:3,color:x.e.info.reviewStatus === 'declined' ? ERR : MT}},
                 String(x.e.info.reviewStatus).toUpperCase() + (x.e.info.reviewNote ? ': ' + x.e.info.reviewNote : ''))),
-            /*#__PURE__*/React.createElement("td", {style:{...td,textAlign:'right'}}, still && !x.e.info.acceptedCeNum && x.e.info.reviewStatus !== 'declined' && typeof x.e.id === 'number' && /*#__PURE__*/React.createElement("button", {style:{...btn('info',true),marginRight:6},onClick:()=>setRceReview({e:x.e,mode:'update'})}, 'Update'), still ? /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'3px 12px',borderRadius:6,fontSize:11,fontWeight:800,color:'#fff',background:'#16a34a',letterSpacing:'.06em'}}, 'REQUEST') : viewBtn(x)));
+            /*#__PURE__*/React.createElement("td", {style:{...td,textAlign:'right',whiteSpace:'nowrap'}}, !isRequestor && addBtn(x), !isRequestor && viewBtn(x), isRequestor && still && !x.e.info.acceptedCeNum && x.e.info.reviewStatus !== 'declined' && typeof x.e.id === 'number' && /*#__PURE__*/React.createElement("button", {style:{...btn('info',true),marginRight:6},onClick:()=>setRceReview({e:x.e,mode:'update'})}, 'Update'), still ? /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'3px 12px',borderRadius:6,fontSize:11,fontWeight:800,color:'#fff',background:'#16a34a',letterSpacing:'.06em'}}, 'REQUEST') : (isRequestor ? viewBtn(x) : null)));
         }))) : /*#__PURE__*/React.createElement("div", {style:{fontSize:11,color:MT,padding:'6px 0'}}, 'You have not sent a request yet. Use + New Request in CE Monitoring.'),
       sent.length > 0 && sentShown.length === 0 && /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:MT,textAlign:'center',padding:'12px 0'}}, 'No request matches "' + mwReqQ + '".')));
 }

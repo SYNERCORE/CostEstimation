@@ -39,10 +39,10 @@ ck('delete stays admin-only', /isAdmin \|\| \(e\._draft && e\.savedBy === curren
 
 console.log(NL + 'My Work table:');
 ck('requestors get a table of their requests', app.indexOf("'📤 My requests'") > 0);
-ck('with the six columns', ["'RCE / CE NO.', 'CUSTOMER', 'JOB', 'DISCIPLINE', 'ASSIGNED TO', 'STATUS'"].every(c => app.indexOf(c) > 0));
+ck('with the six columns', ["'RCE / CE NO.', 'CUSTOMER', 'JOB', 'DISCIPLINE', 'ASSIGNED TO', 'DUE', 'STATUS'"].every(c => app.indexOf(c) > 0));
 ck('REQUEST badge while still a request, View after',
-  app.indexOf("still ? /*#__PURE__*/React.createElement(\"span\"") > 0 && app.indexOf(": viewBtn(x)))") > 0);
-ck('the card is no longer shown to requestors', app.indexOf("!isRequestor && fSent.length > 0 && section('📤 Requests I sent'") > 0);
+  app.indexOf("still ? /*#__PURE__*/React.createElement(\"span\"") > 0 && app.indexOf(": (isRequestor ? viewBtn(x) : null)))") > 0);
+ck('the card is no longer shown to requestors', app.indexOf("g.id !== 'req' || !isRequestor") > 0);
 
 ck('the My Work button is New Request for a requestor, the CE editor for everyone else',
   app.indexOf('onClick:openRequest,title:"Log a request for estimation') > 0 && app.indexOf('isRequestor ? "➕ New Request" : "➕ Go to the CE editor"') > 0);

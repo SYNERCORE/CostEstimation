@@ -6,7 +6,7 @@ const app = require('./lib/appsrc').plus(fs.readFileSync(path.join(__dirname, '.
 let bad = 0;
 const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
 ck('it parses', (() => { try { new Function(app); return true; } catch (e) { console.log(e.message); return false; } })());
-ck('the three tabs', ["Needs my action'", "My CEs and drafts'", "Requests and reviews'"].every(k => app.indexOf(k) > 0));
+ck('the three tabs', ["Needs my action'", "My CEs and drafts'", "Requests for review'"].every(k => app.indexOf(k) > 0));
 ck('each header carries a count, red for the one that needs action', app.indexOf("g.urgent ? ERR : ACC") > 0 && app.indexOf("count: g.idx.reduce") > 0);
 ck('a group with something in it starts open, an empty one folded, and a click changes that', app.indexOf('mwOpen[g.id] != null ? mwOpen[g.id] : g.count > 0') > 0 && app.indexOf('const [mwOpen, setMwOpen] = useState({})') > 0 && app.indexOf('setMwOpen(p => ({...p, [g.id]: !isOpen}))') > 0);
 ck('no tabs: every group is on the page at once', app.indexOf("role:'tablist'") < 0 && app.indexOf('mwTab') < 0);

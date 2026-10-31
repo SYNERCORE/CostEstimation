@@ -22,8 +22,8 @@ ck('finds her requests whatever their status, case-insensitively', out.indexOf(1
 ck('not other people\'s, nor rows with no requester, nor drafts', out.length === 2);
 ck('it is keyed on receivedBy, not savedBy, so it survives the estimator\'s save', line.indexOf('savedBy') < 0);
 ck('the card stays for others who have sent one; requestors get the My requests table',
-  app.indexOf("!isRequestor && fSent.length > 0 && section('📤 Requests I sent'") > 0);
-ck('and shows who it is with', require('fs').readFileSync('src/components/MyWorkTab.js', 'utf8').includes("'with ' + estName(x.m.ceeName)"));
+  app.indexOf('(isRequestor || sent.length > 0) &&') > 0);
+ck('and shows who it is with', require('fs').readFileSync('src/components/MyWorkTab.js', 'utf8').includes('estName(x.m.ceeName)'));
 const sp = require('fs').readFileSync(require('path').join(__dirname, '..', 'src', 'sp.js'), 'utf8');
 ck('the generic SPException code is NOT mistaken for the throttle', sp.indexOf('|-2146232832') < 0);
 console.log(bad ? bad + ' FAILURE(S)' : 'requests sent OK');

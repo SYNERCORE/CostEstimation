@@ -565,5 +565,7 @@ jobs:
         run: node tools/test-waiting-ces-rescued.js
       - name: Requestor landing
         run: node tools/test-requestor-landing.js
+      - name: Requests sent status
+        run: node tools/test-requests-sent-status.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

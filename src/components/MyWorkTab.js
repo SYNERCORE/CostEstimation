@@ -110,6 +110,18 @@ function MyWorkTab(ctx) {
         const bits = [d, who && ('Estimator: ' + who), rce && ('RCE ' + rce), x.m.receivedBy && ('from ' + x.m.receivedBy), rcv && ('recv ' + rcv)].filter(Boolean);
         return bits.length ? /*#__PURE__*/React.createElement("div", {style:{fontSize:10,opacity:.8}}, bits.join(' · ')) : null; })()),
     extra, actions);
+  /* Where a request I sent stands, readable at a glance: a coloured pill for the stage, then who has it and how long is left. */
+  const sentStatus = x => {
+    const i = x.e.info || {}, open = i.request && !i.acceptedCeNum, rs = open ? i.reviewStatus : '';
+    const st = rs === 'declined' ? 'Declined' : rs === 'returned' ? 'Returned to you' : rs === 'resubmitted' ? 'Sent back to Cost Estimation' : (x.m.status || (open ? 'Awaiting review' : 'Accepted'));
+    const col = rs === 'declined' ? ERR : rs === 'returned' ? ACC : getStatusColor(st);
+    const dl = ceDeadline(x.m.deadline, x.m.dateSubmitted, x.m.status);
+    const who = x.m.ceeName ? 'with ' + estName(x.m.ceeName) : (open ? 'not yet assigned' : '');
+    const when = !dl || dl.days == null ? (dl && dl.done ? 'closed' : '') : dl.done ? (dl.late ? 'submitted late' : 'submitted on time') : dl.days < 0 ? Math.abs(dl.days) + ' days overdue' : dl.days === 0 ? 'due today' : 'due in ' + dl.days + ' day' + (dl.days === 1 ? '' : 's');
+    return /*#__PURE__*/React.createElement("span", {style:{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2,flexShrink:0,maxWidth:230}, title: [st, who, when, rs && i.reviewNote ? i.reviewNote : ''].filter(Boolean).join(' · ')},
+      /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'2px 10px',borderRadius:12,fontSize:11,fontWeight:700,whiteSpace:'nowrap',color:col,border:'1px solid '+col,background:alpha(col,'18')}}, st),
+      /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:dl && dl.late && !dl.done ? ERR : MT,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'100%'}}, [who, when].filter(Boolean).join(' · ')));
+  };
   const viewBtn = x => typeof x.e.id === 'number' && /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setViewCE({id:x.e.id,ceNum:ceLabel(x.e)})}, "👁 View");
   /* Whoever raised a request that is still waiting can add to it in place, whatever their role: saved as it is, nothing routed. */
   const addBtn = x => { const i = x.e.info || {}, mine = meNames();
@@ -175,8 +187,7 @@ function MyWorkTab(ctx) {
         /*#__PURE__*/React.createElement("span", {style:{flex:1,color:MT,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, ((d.info && d.info.client) || '') + ' · saved ' + new Date(d.savedAt).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})),
         /*#__PURE__*/React.createElement("button", {style:btn('acc',true),onClick:()=>resumeDraft(d)}, "Resume")), 'No saved drafts.'),
       section('⏳ My CEs in approval', fInApproval, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT,whiteSpace:'nowrap'}}, apv(x).signed + '/' + apv(x).total + ' signed · waiting on ' + (apv(x).waiting || []).join(', ')), viewBtn(x)), 'None of your CEs are in approval.'),
-      !isRequestor && fSent.length > 0 && section('📤 Requests I sent', fSent, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,whiteSpace:'nowrap',color:MT}},
-        (x.m.status || 'Pending') + (x.m.ceeName ? ' · with ' + estName(x.m.ceeName) : '')), viewBtn(x)), 'You have not sent a request yet. Use + New Request in CE Monitoring.'),
+      !isRequestor && fSent.length > 0 && section('📤 Requests I sent', fSent, x => line(x, sentStatus(x), viewBtn(x)), 'You have not sent a request yet. Use + New Request in CE Monitoring.'),
       !isRequestor && fAwaiting.length > 0 && section('📥 Requests awaiting review', fAwaiting, x => line(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,whiteSpace:'nowrap',color:MT}}, (x.m.ceeName || 'Unassigned') + (((x.e.info || {}).reviewStatus) ? ' · ' + (x.e.info || {}).reviewStatus : '')), [viewBtn(x), /*#__PURE__*/React.createElement("button", {key:'rv',style:btn('ok',true),title:'Review the checklist and decide: proceed, secure the missing data first, or decline',onClick:()=>openReview(x.e, 'review')}, "Review")]), ''),
       !isRequestor && fForReview.length > 0 && section('🔎 For review (status For Approval)', fForReview, x => line(x, null, viewBtn(x)), '')]),
     isRequestor && /*#__PURE__*/React.createElement("div", {style:{background:CARD,border:'1px solid '+BDR,borderRadius:10,padding:'12px 14px',overflowX:'auto'}},

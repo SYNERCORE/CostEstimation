@@ -136,6 +136,37 @@ function DashboardTab(ctx) {
     /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT,marginBottom:3}}, label),
     /*#__PURE__*/React.createElement("div",{style:{fontSize:String(value).length>14?14:String(value).length>11?16:19,fontWeight:800,color:color||TX,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',...MONO},title:String(value)}, value),
     sub ? /*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:MT,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'},title:sub}, sub) : null);
+  /* PRINT: a plain black-on-white page of the figures on screen (the period, the cards, and the month / year lines), opened in its own window so
+     the app's dark theme and controls stay out of it. */
+  const printStats = () => {
+    const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const peso = v => '₱' + ph(v);
+    const cards = [
+      ['CEs received', stNow.n, vsTxt(stNow.n, stPrev && stPrev.n)],
+      ['Total value', peso(stNow.value), vsTxt(stNow.value, stPrev && stPrev.value)],
+      ['Average value', peso(stNow.avg), ''],
+      ['Submitted', stNow.sub.length, peso(stNow.subV) + ' · includes Awarded'],
+      ['Awarded', stNow.awd.length, peso(stNow.awdV) + (awardBase ? ' · ' + Math.round(100 * stNow.awd.length / awardBase) + '% of Submitted' : '')],
+      ['No Quote / Cancelled', stNow.lost.length, ''],
+      ['Still open', stNow.open.length, peso(sumG(stNow.open))]];
+    const scope = [_dc, _dd].filter(Boolean).join(' · ');
+    const head = [_sy === 'all' ? 'Year' : 'Month', 'CEs', 'Value', 'Submitted', 'Awarded', 'No Quote / Cancelled', 'Still open'];
+    const rows = stBreak.filter(r => !r.future).map(r => '<tr><td>' + esc(r.label) + '</td><td>' + r.s.n + '</td><td>' + esc(peso(r.s.value)) + '</td><td>' + r.s.sub.length + '</td><td>' + r.s.awd.length + '</td><td>' + r.s.lost.length + '</td><td>' + r.s.open.length + '</td></tr>').join('');
+    const html = '<!doctype html><html><head><meta charset="utf-8"><title>CE Statistics - ' + esc(stLabel) + '</title><style>'
+      + 'body{font-family:Arial,Helvetica,sans-serif;color:#000;margin:18mm 14mm}h1{font-size:18px;margin:0 0 2px}.sub{font-size:12px;color:#444;margin-bottom:14px}'
+      + '.cards{display:flex;flex-wrap:wrap;gap:8px}.card{border:1px solid #999;border-radius:4px;padding:8px 12px;width:150px;box-sizing:border-box}.card b{display:block;font-size:18px;margin:2px 0}.card span{font-size:10px;color:#444}'
+      + 'table{width:100%;border-collapse:collapse;margin-top:16px;font-size:12px}th,td{border-bottom:1px solid #bbb;padding:5px 8px;text-align:right}th:first-child,td:first-child{text-align:left}th{font-size:10px;text-transform:uppercase;letter-spacing:.05em}'
+      + '@media print{body{margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>'
+      + '<h1>CE Statistics · ' + esc(stLabel) + '</h1><div class="sub">' + esc(scope ? scope + ' · ' : '') + 'Printed ' + esc(new Date().toLocaleDateString('en-PH', {year: 'numeric', month: 'long', day: 'numeric'})) + '</div>'
+      + '<div class="cards">' + cards.map(c => '<div class="card"><span>' + esc(c[0]) + '</span><b>' + esc(c[1]) + '</b><span>' + esc(c[2]) + '&nbsp;</span></div>').join('') + '</div>'
+      + (rows ? '<table><thead><tr>' + head.map(h => '<th>' + esc(h) + '</th>').join('') + '</tr></thead><tbody>' + rows + '</tbody></table>' : '')
+      + '</body></html>';
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => { try { w.focus(); w.print(); } catch (_e) { /* the window was closed */ } }, 300);
+  };
   const stSel = {...INP, fontSize:12, width:'auto', padding:'4px 8px'};
   const statsCard = /*#__PURE__*/React.createElement("div",{className:'dash-stats',style:{...CS,marginBottom:20}},
     /*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:12}},
@@ -145,7 +176,8 @@ function DashboardTab(ctx) {
         stYears.map(y => /*#__PURE__*/React.createElement("option",{key:y,value:String(y)}, y + (y === thisYear ? ' (this year)' : ''))), /*#__PURE__*/React.createElement("option",{value:'all'}, 'All years')),
       /*#__PURE__*/React.createElement("span",{style:{fontSize:11,color:MT}}, 'Month'),
       /*#__PURE__*/React.createElement("select",{'aria-label':'Statistics month',style:stSel,value:_sm,disabled:_sy === 'all',onChange:e=>setDashMonth && setDashMonth(e.target.value)},
-        /*#__PURE__*/React.createElement("option",{value:''}, 'Whole year'), Array.from({length: 12}, (_, m) => /*#__PURE__*/React.createElement("option",{key:m,value:String(m)}, monthName(m, true))))),
+        /*#__PURE__*/React.createElement("option",{value:''}, 'Whole year'), Array.from({length: 12}, (_, m) => /*#__PURE__*/React.createElement("option",{key:m,value:String(m)}, monthName(m, true)))),
+      /*#__PURE__*/React.createElement("button",{type:'button',style:btn('def',true),title:'Print these statistics',onClick:printStats}, '🖨 Print')),
     /*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:10,flexWrap:'wrap'}},
       stCard('CEs received', stNow.n, vsTxt(stNow.n, stPrev && stPrev.n), INFO),
       stCard('Total value', '₱' + ph(stNow.value), vsTxt(stNow.value, stPrev && stPrev.value), OK),

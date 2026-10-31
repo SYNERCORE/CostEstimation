@@ -575,5 +575,7 @@ jobs:
         run: node tools/test-dashboard-company.js
       - name: Dashboard statistics
         run: node tools/test-dashboard-statistics.js
+      - name: Dashboard statistics print
+        run: node tools/test-dashboard-statistics-print.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

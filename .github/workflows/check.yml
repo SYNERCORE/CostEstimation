@@ -569,5 +569,7 @@ jobs:
         run: node tools/test-requests-sent-status.js
       - name: Requests sent groups
         run: node tools/test-requests-sent-groups.js
+      - name: My Work list positions
+        run: node tools/test-mywork-list-positions.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

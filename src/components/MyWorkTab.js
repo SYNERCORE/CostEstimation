@@ -133,6 +133,10 @@ function MyWorkTab(ctx) {
      count, in red when something there needs the user. A group with something in it starts open and an empty one starts folded; a
      click on a header changes that, and the page remembers the choice for the visit. A list with nothing in it is left out. */
   /* The same columns as the Requests I sent table, so every list on this page reads alike: what it is, for whom, who has it, when it is due, where it stands. */
+  /* The approvers, which are not the estimators in the Estimator column: how many have signed, then who still has to. */
+  const apvStatus = x => /*#__PURE__*/React.createElement("span", {style:{display:'flex',flexDirection:'column',gap:2,fontSize:11,color:MT}, title:'Approvers who have not signed yet'},
+    /*#__PURE__*/React.createElement("span", {style:{whiteSpace:'nowrap'}}, (apv(x).signed || 0) + '/' + (apv(x).total || 0) + ' approvals signed'),
+    (apv(x).waiting || []).length > 0 && /*#__PURE__*/React.createElement("span", {style:{fontSize:10}}, 'waiting on ' + estName((apv(x).waiting || []).join(', '))));
   const pill = (st, col) => /*#__PURE__*/React.createElement("span", {style:{display:'inline-block',padding:'2px 10px',borderRadius:12,fontSize:11,fontWeight:700,whiteSpace:'nowrap',color:col,border:'1px solid '+col,background:alpha(col,'18')}}, st);
   const TCELL = {padding:'7px 8px',borderBottom:'1px solid '+alpha(BDR,'44'),verticalAlign:'middle'};
   const trow = (x, extra, actions) => {
@@ -240,7 +244,7 @@ function MyWorkTab(ctx) {
       /*#__PURE__*/React.createElement("input", {type:'search',value:mwQ,placeholder:'Filter my work: CE no., client, job, estimator, status\u2026','aria-label':'Filter my work',onChange:e=>setMwQ(e.target.value),style:{...INP,flex:1,maxWidth:420,fontSize:12,padding:'5px 10px'}}),
       mwQ && /*#__PURE__*/React.createElement("button", {style:btn('def',true),onClick:()=>setMwQ('')}, 'Clear')),
     mwPanel([
-      tsection('✍ For my approval', fToSign, x => trow(x, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:MT,whiteSpace:'nowrap'}}, apv(x).signed + '/' + apv(x).total + ' signed'), viewBtn(x)), 'No CE is waiting on your signature.'),
+      tsection('✍ For my approval', fToSign, x => trow(x, apvStatus(x), viewBtn(x)), 'No CE is waiting on your signature.'),
       tsection('↩ Returned to me', fReturned, x => trow(x, (x.e.info || {}).reviewNote && (x.e.info || {}).request ? /*#__PURE__*/React.createElement("span", {title: x.e.info.reviewNote, style:{fontSize:10,color:ACC,maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, 'Returned: ' + x.e.info.reviewNote) : null, loadBtn(x)), 'Nothing returned.'),
       tsection('📂 My open CEs', fOpen, x => trow(x, pill(x.m.status || 'Draft', getStatusColor(x.m.status || 'Draft')), [draftOfOpen[x.e.id] && /*#__PURE__*/React.createElement(React.Fragment, {key:'ud'}, /*#__PURE__*/React.createElement("span", {style:{fontSize:10,fontWeight:700,whiteSpace:'nowrap',color:'#F59E0B'},title:'Autosaved ' + new Date(draftOfOpen[x.e.id].savedAt).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) + ' -- newer than the saved CE until you Save'}, '✎ unsaved changes'), /*#__PURE__*/React.createElement("button", {style:btn('info',true),title:'Open the autosaved version',onClick:()=>resumeDraft(draftOfOpen[x.e.id])}, "Resume")), viewBtn(x), loadBtn(x)]), 'No open CEs assigned to you.'),
       section('📝 My drafts', fDrafts, d => /*#__PURE__*/React.createElement("div", {key: d.draftId, style:{display:'flex',alignItems:'center',gap:8,padding:'6px 2px',borderBottom:'1px solid '+alpha(BDR,'44'),fontSize:12}},

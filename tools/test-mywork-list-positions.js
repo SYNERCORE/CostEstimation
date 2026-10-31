@@ -15,4 +15,5 @@ ck('n[] has eight entries and a zero at 5', !!n && n[1].split(/,(?![^(]*\))/).le
 ck('Needs my action reads 0, 1 and 6; Requests for review reads 7', src.includes("idx: [0, 1, 6], urgent: true") && src.includes('idx: [7], info: true'));
 ck('every list but My drafts is a table with the same columns', body.split("tsection('").length - 1 === 6 && body.includes("section('📝 My drafts'"));
 ck('the table has the shared columns', src.includes("['CE / RCE NO.', 'CUSTOMER', 'JOB', 'DISCIPLINE', 'ESTIMATOR', 'DUE', 'STATUS', '']"));
+ck('For my approval says who has signed and who is still to sign, apart from the estimators', src.includes('approvals signed') && src.includes("'waiting on ' + estName((apv(x).waiting") && src.includes("fToSign, x => trow(x, apvStatus(x)"));
 process.exit(bad ? 1 : 0);

@@ -20,6 +20,6 @@ ck('SY3 keeps only SY3', mk('SY3', '').byDisc && hs.filter(mk('SY3', '').byDisc)
 ck('SHIC keeps only SHIC', hs.filter(mk('SHIC', '').byDisc).map(h => h.id).join() === '1,4');
 ck('company and discipline narrow together', hs.filter(mk('SY3', 'Electrical').byDisc).map(h => h.id).join() === '5');
 ck('the Company buttons are listed from the CEs that exist', d.includes('const coList = [...new Set(liveOnly(monRows).map(coOf))].sort()') && d.includes("'All companies'"));
-ck('the choice lives in App and is passed in', app.includes("const [dashCo, setDashCo] = useState('')") && app.includes('dashAll, dashCo, setDashCo, dashDisc'));
+ck('the choice lives in App and is passed in', app.includes("const [dashCo, setDashCo] = useState('')") && app.includes('dashAll, dashCo, setDashCo, dashYear'));
 ck('Total CEs follows the company too', d.includes("_dd || _dc ? liveHist.length : history.length"));
 process.exit(bad ? 1 : 0);

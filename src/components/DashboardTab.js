@@ -11,6 +11,10 @@ function DashboardTab(ctx) {
     dashAll,
     dashCo,
     setDashCo,
+    dashYear,
+    setDashYear,
+    dashMonth,
+    setDashMonth,
     dashDisc,
     setDashDisc,
     dashQ,
@@ -104,6 +108,60 @@ function DashboardTab(ctx) {
   const recvDate = h => { const r = (monOf(h) || {}).dateRecv; return /^\d{4}-\d{2}-\d{2}$/.test(r || '') ? new Date(r + 'T00:00:00') : new Date(h.savedAt || 0); };
   const monthTotals = months.map(m=>({...m,total:valHist.filter(h=>{const d=recvDate(h);return d.getMonth()===m.month&&d.getFullYear()===m.year;}).reduce((s,h)=>s+N(h.grand||0),0)}));
   const maxBar = Math.max(...monthTotals.map(m=>m.total),1);
+  /* STATISTICS for a chosen period. It follows the Company and Mechanical / Electrical choices, and counts CEs by the date they were received (the
+     same date as the trend below). A request nobody has accepted is not a CE yet, and a superseded revision is not counted (valHist). */
+  const _sy = dashYear || String(thisYear), _sm = dashMonth == null ? '' : String(dashMonth);
+  const stRows = valHist.filter(h => !isUnacceptedReq(h) && !h._draft);
+  const recvY = h => recvDate(h).getFullYear(), recvM = h => recvDate(h).getMonth();
+  const stYears = [...new Set(stRows.map(recvY).filter(y => y > 2000).concat([thisYear]))].sort((a, b) => b - a);
+  const inPeriod = (h, y, m) => (y === 'all' || recvY(h) === Number(y)) && (m === '' || recvM(h) === Number(m));
+  const sumG = rs => rs.reduce((t, h) => t + N(h.grand || 0), 0);
+  const statOf = rows => {
+    const st = h => (monOf(h) || {}).status || 'Draft', by = f => rows.filter(h => f(st(h)));
+    const sub = by(s => s === 'Submitted'), awd = by(s => s === 'Awarded'), lost = by(s => s === 'No Quote' || s === 'Cancelled'), open = by(s => ceIsOpen(s));
+    return {n: rows.length, value: sumG(rows), avg: rows.length ? sumG(rows) / rows.length : 0, sub, awd, lost, open, subV: sumG(sub), awdV: sumG(awd)};
+  };
+  const monthName = (m, long) => new Date(2000, m, 1).toLocaleString('default', {month: long ? 'long' : 'short'});
+  const stNow = statOf(stRows.filter(h => inPeriod(h, _sy, _sm)));
+  const stPrev = _sy !== 'all' ? statOf(stRows.filter(h => inPeriod(h, String(Number(_sy) - 1), _sm))) : null;
+  const stLabel = (_sm !== '' ? monthName(Number(_sm), true) + ' ' : '') + (_sy === 'all' ? 'all years' : _sy);
+  const pctVs = (a, b) => b ? Math.round((a - b) / b * 100) : null;
+  const vsTxt = (a, b) => { const p = stPrev ? pctVs(a, b) : null; return p === null ? '' : (p > 0 ? '▲ ' : p < 0 ? '▼ ' : '') + Math.abs(p) + '% vs ' + (_sm !== '' ? monthName(Number(_sm)) + ' ' : '') + (Number(_sy) - 1); };
+  const awardBase = stNow.sub.length + stNow.awd.length;
+  /* One line per month of the year picked (or per year when every year is), so a month can be opened with a click. */
+  const stBreak = _sm !== '' ? [] : (_sy === 'all' ? stYears.slice().reverse().map(y => ({key: String(y), label: String(y), pick: () => setDashYear && setDashYear(String(y)), s: statOf(stRows.filter(h => recvY(h) === y))}))
+    : Array.from({length: 12}, (_, m) => ({key: String(m), label: monthName(m), future: Number(_sy) === thisYear && m > thisMonth, pick: () => setDashMonth && setDashMonth(String(m)), s: statOf(stRows.filter(h => inPeriod(h, _sy, String(m))))})));
+  const stCard = (label, value, sub, color) => /*#__PURE__*/React.createElement("div",{style:{background:SURF,border:'1px solid '+BDR,borderRadius:8,padding:'12px 16px',flex:'1 1 150px',minWidth:0,overflow:'hidden'}},
+    /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT,marginBottom:3}}, label),
+    /*#__PURE__*/React.createElement("div",{style:{fontSize:String(value).length>14?14:String(value).length>11?16:19,fontWeight:800,color:color||TX,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',...MONO},title:String(value)}, value),
+    sub ? /*#__PURE__*/React.createElement("div",{style:{fontSize:10,color:MT,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'},title:sub}, sub) : null);
+  const stSel = {...INP, fontSize:12, width:'auto', padding:'4px 8px'};
+  const statsCard = /*#__PURE__*/React.createElement("div",{className:'dash-stats',style:{...CS,marginBottom:20}},
+    /*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:12}},
+      /*#__PURE__*/React.createElement("div",{style:{fontWeight:700,fontSize:13}}, '📅 Statistics · ' + stLabel + (_dc ? ' · ' + _dc : '') + (_dd ? ' · ' + _dd : '')),
+      /*#__PURE__*/React.createElement("span",{style:{fontSize:11,color:MT,marginLeft:'auto'}}, 'Year'),
+      /*#__PURE__*/React.createElement("select",{'aria-label':'Statistics year',style:stSel,value:_sy,onChange:e=>{ setDashYear && setDashYear(e.target.value); if (e.target.value === 'all' && setDashMonth) setDashMonth(''); }},
+        stYears.map(y => /*#__PURE__*/React.createElement("option",{key:y,value:String(y)}, y + (y === thisYear ? ' (this year)' : ''))), /*#__PURE__*/React.createElement("option",{value:'all'}, 'All years')),
+      /*#__PURE__*/React.createElement("span",{style:{fontSize:11,color:MT}}, 'Month'),
+      /*#__PURE__*/React.createElement("select",{'aria-label':'Statistics month',style:stSel,value:_sm,disabled:_sy === 'all',onChange:e=>setDashMonth && setDashMonth(e.target.value)},
+        /*#__PURE__*/React.createElement("option",{value:''}, 'Whole year'), Array.from({length: 12}, (_, m) => /*#__PURE__*/React.createElement("option",{key:m,value:String(m)}, monthName(m, true))))),
+    /*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:10,flexWrap:'wrap'}},
+      stCard('CEs received', stNow.n, vsTxt(stNow.n, stPrev && stPrev.n), INFO),
+      stCard('Total value', '₱' + ph(stNow.value), vsTxt(stNow.value, stPrev && stPrev.value), OK),
+      stCard('Average value', '₱' + ph(stNow.avg), '', ACC),
+      stCard('Submitted', stNow.sub.length, '₱' + ph(stNow.subV), INFO),
+      stCard('Awarded', stNow.awd.length, '₱' + ph(stNow.awdV) + (awardBase ? ' · ' + Math.round(100 * stNow.awd.length / awardBase) + '% of Submitted + Awarded' : ''), OK),
+      stCard('No Quote / Cancelled', stNow.lost.length, '', stNow.lost.length ? ERR : MT),
+      stCard('Still open', stNow.open.length, '₱' + ph(sumG(stNow.open)), ERR)),
+    stBreak.length > 0 && /*#__PURE__*/React.createElement("div",{style:{overflowX:'auto',marginTop:14}},
+      /*#__PURE__*/React.createElement("table",{style:{width:'100%',borderCollapse:'collapse',fontSize:12}},
+        /*#__PURE__*/React.createElement("thead",null, /*#__PURE__*/React.createElement("tr",null, [_sy === 'all' ? 'YEAR' : 'MONTH', 'CEs', 'VALUE', 'SUBMITTED', 'AWARDED', 'NO QUOTE / CANCELLED', 'STILL OPEN'].map((h, i) => /*#__PURE__*/React.createElement("th",{key:i,style:{textAlign:i?'right':'left',padding:'6px 8px',fontSize:10,color:MT,letterSpacing:'.06em',borderBottom:'1px solid '+BDR}}, h)))),
+        /*#__PURE__*/React.createElement("tbody",null, stBreak.map(r => { const td = {padding:'6px 8px',textAlign:'right',borderBottom:'1px solid '+alpha(BDR,'44'),opacity:r.future?.45:1};
+          return /*#__PURE__*/React.createElement("tr",{key:r.key,style:{cursor:'pointer'},title:'Open ' + r.label,onClick:r.pick},
+            /*#__PURE__*/React.createElement("td",{style:{...td,textAlign:'left',fontWeight:700}}, r.label),
+            /*#__PURE__*/React.createElement("td",{style:{...td,...MONO}}, r.s.n), /*#__PURE__*/React.createElement("td",{style:{...td,...MONO}}, '₱' + ph(r.s.value)),
+            /*#__PURE__*/React.createElement("td",{style:{...td,...MONO}}, r.s.sub.length), /*#__PURE__*/React.createElement("td",{style:{...td,...MONO}}, r.s.awd.length),
+            /*#__PURE__*/React.createElement("td",{style:{...td,...MONO}}, r.s.lost.length), /*#__PURE__*/React.createElement("td",{style:{...td,...MONO}}, r.s.open.length)); })))));
   /* Mechanical and Electrical monitored apart: each CE and request goes to the discipline on its record (the project type, or the Monitoring
      Discipline). Anything else, or blank, is counted under "No discipline" so the two cards always add up with the figures above. */
   const discRows = liveRows.map(h => ({h, m: monOf(h)}));
@@ -173,6 +231,7 @@ function DashboardTab(ctx) {
       coList.length > 1 && /*#__PURE__*/React.createElement("span",{style:{fontSize:11,color:MT,marginLeft:14}}, 'Company:'),
       coList.length > 1 && [''].concat(coList).map(k => /*#__PURE__*/React.createElement("button",{key:'co'+(k||'all'),'data-on':_dc===k?'1':'0','aria-pressed':_dc===k,style:{...btn(_dc===k?'acc':'def',true),borderRadius:14,padding:'3px 14px'},onClick:()=>setDashCo && setDashCo(k)}, k || 'All companies')),
       (_dd || _dc) && /*#__PURE__*/React.createElement("span",{style:{fontSize:11,color:MT}}, 'Every figure and list below is ' + [_dc, _dd].filter(Boolean).join(' · ') + ' only.')),
+    statsCard,
     /* Mechanical and Electrical, each on its own */
     !_dd && /*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:12,flexWrap:'wrap',marginBottom:discNone?4:20}}, discCard('Mechanical','#38BDF8'), discCard('Electrical','#F59E0B')),
     !_dd && discNone > 0 && /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT,marginBottom:20}}, discNone + ' open CE or overdue request' + (discNone === 1 ? '' : 's') + ' have no Mechanical or Electrical discipline set, so they are in neither card: ' + discLeftTxt + '.'),

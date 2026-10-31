@@ -979,6 +979,9 @@ function App({
   const [dashDisc, setDashDisc] = useState('');
   /* Which issuing company the Dashboard shows: '' is every company, else the CE number prefix (SHIC, SY3 ...). */
   const [dashCo, setDashCo] = useState('');
+  /* The Dashboard's Statistics card: a year ('all' for every year) and a month ('' for the whole year, else 0-11). */
+  const [dashYear, setDashYear] = useState(String(new Date().getFullYear()));
+  const [dashMonth, setDashMonth] = useState('');
   const [dashQ, setDashQ] = useState('');
   const [dashReqQ, setDashReqQ] = useState('');
   useEffect(() => { if (!isRequestor && tab === "info" && infoMissing.length) setPiGate(true); }, [tab]);
@@ -6060,7 +6063,7 @@ sigModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',ins
 /* ── My Work: everything waiting on the signed-in user, in one place ── */
 tab === 'mywork' && MyWorkTab({ estName, currentUser, getStatusColor, handleLoad, isRequestor, meNames, monOf, monRows, mwOpen, mwQ, mwReqQ, myTodo, openRequest, openReview, reqDeadline, resumeDraft, setMwOpen, setMwQ, setMwReqQ, setRceReview, setTab, setViewCE: openViewCE, sharedDrafts, showToast, updateMon }),
 
-tab === 'dashboard' && DashboardTab({ estName, allStatuses, dashAll, dashCo, setDashCo, dashDisc, setDashDisc, dashQ, dashReqQ, getStatusColor, history, monOf, monRows, reqDeadline, setDashAll, setDashQ, setDashReqQ }), tab === 'info' && /*#__PURE__*/InfoTab({ ScopeBuilder, ceNums, history, addMode, aiLoad, ceType, companies, docBusy, docFile, docFilesOf, docPreview, docStatus, extractDocInfo, fileRef, handleAI, handleDocUpload, info, monData, openCeId, openMonStatus, pickCompany, provInfo, qtyUom, rceNo, removeDoc, scope, setAddMode, setDocFile, setDocPreview, setDocStatus, setInfo, setScope, updateMon }), tab === 'manpower' && /*#__PURE__*/ManpowerTab({ _mobTabs, _weight, ben, benefitRows, benefitsT, cfg, collapsedShifts, copyMenu, delRow, demobSubT, demobVehicles, demobVehiclesT, history, incOn, info, masterlist, mobCopy, mobSubT, mobVehicles, mobVehiclesT, mp, mpSub, mpTot, mpWage, mpWageParts, rowCost, rowShares, rr, setCollapsedShifts, setCopyMenu, setDemobVehicles, setMobCopy, setMobVehicles, setMp, setPicker, setRates, showToast, sowItems, sowLabels, syncCrewRows, syncMealRates, syncMealRows, toggleShift, updRow }), tab === 'tools' && /*#__PURE__*/React.createElement(ResTabM, {
+tab === 'dashboard' && DashboardTab({ estName, allStatuses, dashAll, dashCo, setDashCo, dashYear, setDashYear, dashMonth, setDashMonth, dashDisc, setDashDisc, dashQ, dashReqQ, getStatusColor, history, monOf, monRows, reqDeadline, setDashAll, setDashQ, setDashReqQ }), tab === 'info' && /*#__PURE__*/InfoTab({ ScopeBuilder, ceNums, history, addMode, aiLoad, ceType, companies, docBusy, docFile, docFilesOf, docPreview, docStatus, extractDocInfo, fileRef, handleAI, handleDocUpload, info, monData, openCeId, openMonStatus, pickCompany, provInfo, qtyUom, rceNo, removeDoc, scope, setAddMode, setDocFile, setDocPreview, setDocStatus, setInfo, setScope, updateMon }), tab === 'manpower' && /*#__PURE__*/ManpowerTab({ _mobTabs, _weight, ben, benefitRows, benefitsT, cfg, collapsedShifts, copyMenu, delRow, demobSubT, demobVehicles, demobVehiclesT, history, incOn, info, masterlist, mobCopy, mobSubT, mobVehicles, mobVehiclesT, mp, mpSub, mpTot, mpWage, mpWageParts, rowCost, rowShares, rr, setCollapsedShifts, setCopyMenu, setDemobVehicles, setMobCopy, setMobVehicles, setMp, setPicker, setRates, showToast, sowItems, sowLabels, syncCrewRows, syncMealRates, syncMealRows, toggleShift, updRow }), tab === 'tools' && /*#__PURE__*/React.createElement(ResTabM, {
     rows: tools,
     set: setTools,
     total: toolsT,

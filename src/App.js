@@ -4463,6 +4463,42 @@ function App({
       items: {}, recommendation: '', otherRemarks: '', declineReason: '' });
     dbGetUsers().then(u => setReqUsers((u || []).filter(x => x.status !== 'pending' && x.status !== 'disabled' && x.status !== 'rejected'))).catch(_e=>logSwallowed('App:L5170',_e));
   };
+  /* An admin corrects the number of a saved CE. The CE keeps its id, so everything attached to it follows; the new number must be free
+     in both company sequences, and a CE that is out for approval, approved, or has revisions is left alone (Revise handles those). */
+  const renameCeNum = async e => {
+    if (!isAdmin) { showToast('Only an admin can change a CE number.', true); return false; }
+    const i0 = e.info || {}, old = String(i0.ceNum || e.ceNum || '').trim();
+    if (e._draft || typeof e.id !== 'number') { showToast('Save the CE first - an unsaved draft has no record to renumber.', true); return false; }
+    if (i0.request && !i0.acceptedCeNum) { showToast('This request has no CE number yet. Accept it to give it one.', true); return false; }
+    if (e._isRev || (e._revs || []).length) { showToast(old + ' has revisions. They are numbered from it, so they would be split from it. Renumber it only while it has none.', true); return false; }
+    const st = ((monData[e.id] || {}).apv || {}).state || '';
+    if (st === 'pending' || st === 'approved' || st === 'superseded') { showToast(old + ' is ' + (st === 'pending' ? 'out for approval' : st) + ' and its number is already on signed paper. Use Revise instead.', true); return false; }
+    const NL = String.fromCharCode(10);
+    const ans = await uiPrompt('Change the CE number of ' + old + NL + NL + 'The estimate, its approvals, attachments and Monitoring row stay with it. The old number is kept in the CE\'s record and the audit log.',
+      {value: old, ok: 'Change number', required: true,
+       validate: v => /^[A-Z0-9\-_\/\.]{2,30}$/.test(String(v).toUpperCase()) ? '' : 'CE Number must be 2–30 characters, letters/numbers/dashes only.'});
+    if (ans === null) return false;
+    const newNum = String(ans).trim().toUpperCase();
+    if (newNum === old.toUpperCase()) return false;
+    if (!/^[A-Z0-9\-_\/\.]{2,30}$/.test(newNum)) { showToast('CE Number must be 2–30 characters, letters/numbers/dashes only.', true); return false; }
+    const taken = (await dbFindCEByNum(newNum).catch(() => null)) || (await dbFindCESeqClash(newNum, ceNums.filter(n => String(n).toUpperCase() !== old.toUpperCase())).catch(() => null));
+    if (taken) { showToast('CE Number "' + newNum + '" is already taken' + (taken.ceNum && taken.ceNum !== newNum ? ' as ' + taken.ceNum : '') + '. Next free: ' + nextCeNum(history, (newNum.split('-CE-')[0] || null), [...ceNums, newNum]), true); return false; }
+    const res = await dbRenameCE(e.id, old, newNum, currentUser?.username || '');
+    if (!res || !res.ok) { showToast('Number not changed - ' + ((res && res.reason) || 'SharePoint refused it') + '.', true); return false; }
+    const re = h => String(h.id) === String(e.id) ? { ...h, ceNum: newNum, info: { ...(h.info || {}), ceNum: newNum } } : h;
+    setHistory(p => p.map(re));
+    try { LS.set('history', (LS.get('history') || []).map(re)); } catch (_e) { logSwallowed('App:renameCeNum', _e); }
+    setCeNums(p => [...p.filter(n => String(n).toUpperCase() !== old.toUpperCase()), newNum]);
+    /* If this very CE is open in the editor, its number box follows, or the next Save would write it back under the old number. */
+    if (_ownNum.current === old) {
+      _ownNum.current = newNum;
+      if (_loadedAt.current.num === old) _loadedAt.current = { ..._loadedAt.current, num: newNum };
+      setInfo(p => String(p.ceNum || '').trim() === old ? { ...p, ceNum: newNum } : p);
+    }
+    auditLog('change_ce_number', old + ' -> ' + newNum, currentUser?.username);
+    showToast(old + ' is now ' + newNum + '.');
+    return true;
+  };
   /* The Cost Estimation team accepts a request: only now does it get a CE
      number. The request row keeps its place (same id, same attachments, same
      Monitoring row) and is renamed from its RCE No. to the CE number. */
@@ -5167,7 +5203,7 @@ function App({
      (Written without the element-creating call by name: the guard in
      tools/check-remounting-editors.js reads the source as text, and would
      take a mention of it here for the real thing.) */
-  const HistPanel = () => MonitoringPanel({ estName, revDateFixes, fillRevDates, MON_PAGE_SIZE, STATUS_COLOR_MAP, SortIcon, addStatus, allStatuses, assignPanel, attachList, attachPanel, ceImportProgress, coOptions, compareModal, compareSet, confirmDel, currentUser, custOptions, deleteDraft, discOptions, editingRow, fillBlankDisc, getStatusColor, handleClone, handleLoad, handleRevise, handleSave, histBusy, history, importMonitoringXLSX, importProgress, importShicCeFiles, isAdmin, isRequestor, loadHist, loadMonData, monApvMine, monCustFilter, monDateField, setMonDateField, monDatePreset, setMonDatePreset, monDateFrom, setMonDateFrom, monDateTo, setMonDateTo, monData, monDiscFilter, monMine, monOf, monPage, monPageRows, monReqFilter, monRevOpen, monSearch, monSpIds, monStatusFilter, monTableWrapRef, monTopScrollRef, monTypeFilter, newStatusInput, openAssign, openAttachPanel, openForPrint, openRequest, openReview, rceOf, statusMove, statusRemove, statusRename, statusSet, statusUse, reqOwns, resDays, resumeDraft, setAttachPanel, setCompareModal, setCompareSet, setConfirmDel, setDiffModal, setEditingRow, setHistory, setMonApvMine, setMonCustFilter, setMonDiscFilter, setMonMine, setMonPage, setMonReqFilter, setMonRevOpen, setMonSearch, setMonStatusFilter, setMonTypeFilter, setNewStatusInput, setRceReview, setRemarkDraft, setRemarksPanel, setShowStatusFilter, setShowStatusMgr, setStatusPanel, setUndoToast, setViewCE: openViewCE, showStatusFilter, showStatusMgr, showToast, sortedHistory, statusPanel, toggleSort, updateMon });
+  const HistPanel = () => MonitoringPanel({ renameCeNum, estName, revDateFixes, fillRevDates, MON_PAGE_SIZE, STATUS_COLOR_MAP, SortIcon, addStatus, allStatuses, assignPanel, attachList, attachPanel, ceImportProgress, coOptions, compareModal, compareSet, confirmDel, currentUser, custOptions, deleteDraft, discOptions, editingRow, fillBlankDisc, getStatusColor, handleClone, handleLoad, handleRevise, handleSave, histBusy, history, importMonitoringXLSX, importProgress, importShicCeFiles, isAdmin, isRequestor, loadHist, loadMonData, monApvMine, monCustFilter, monDateField, setMonDateField, monDatePreset, setMonDatePreset, monDateFrom, setMonDateFrom, monDateTo, setMonDateTo, monData, monDiscFilter, monMine, monOf, monPage, monPageRows, monReqFilter, monRevOpen, monSearch, monSpIds, monStatusFilter, monTableWrapRef, monTopScrollRef, monTypeFilter, newStatusInput, openAssign, openAttachPanel, openForPrint, openRequest, openReview, rceOf, statusMove, statusRemove, statusRename, statusSet, statusUse, reqOwns, resDays, resumeDraft, setAttachPanel, setCompareModal, setCompareSet, setConfirmDel, setDiffModal, setEditingRow, setHistory, setMonApvMine, setMonCustFilter, setMonDiscFilter, setMonMine, setMonPage, setMonReqFilter, setMonRevOpen, setMonSearch, setMonStatusFilter, setMonTypeFilter, setNewStatusInput, setRceReview, setRemarkDraft, setRemarksPanel, setShowStatusFilter, setShowStatusMgr, setStatusPanel, setUndoToast, setViewCE: openViewCE, showStatusFilter, showStatusMgr, showToast, sortedHistory, statusPanel, toggleSort, updateMon });
   /* ---- Scope Library Editor (Scope Library tab) ---- */
   /* ScopeLibraryEditor's state, and ResEditor's, held by App.
 

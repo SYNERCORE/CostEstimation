@@ -40,6 +40,7 @@ function MonitoringPanel(ctx) {
     importProgress,
     importShicCeFiles,
     isAdmin,
+    renameCeNum,
     isRequestor,
     loadHist,
     loadMonData,
@@ -665,7 +666,13 @@ function MonitoringPanel(ctx) {
       title: 'Unsaved draft by ' + (e.savedByName || e.savedBy || 'someone') + ' — Load to pick it up',
       style: {marginLeft: 5, fontSize: 8, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 8, background: '#8B5CF622', color: 'var(--accent-violet)', border: '1px solid #8B5CF644'}
     }, 'UNSAVED'),
-    e.info?.request && !e._draft && /*#__PURE__*/React.createElement("span", {
+    /* Admin, in Edit mode: correct the CE number in place (see renameCeNum in App.js for what it refuses). */
+    isAdmin && editingRow === e.id && !e._draft && !e._isRev && typeof e.id === 'number' && /*#__PURE__*/React.createElement("button", {
+      style: {...btn('def', true), marginLeft: 5, fontSize: 9, padding: '1px 7px'},
+      title: 'Change this CE number (admin). The estimate, approvals and attachments stay with it.',
+      onClick: () => renameCeNum(e)
+    }, '✎ No.'),
+    e.info?.request && !e._draft &&/*#__PURE__*/React.createElement("span", {
       title: e.info.acceptedCeNum ? 'Accepted as ' + e.info.acceptedCeNum + ', not costed yet — Load it to build the estimate' : 'Logged request, not accepted yet — it is known by its RCE No. until the Cost Estimation team accepts it',
       style: {marginLeft: 5, fontSize: 8, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 8, background: alpha(OK, '22'), color: OK, border: '1px solid ' + alpha(OK, '44')}
     }, 'REQUEST'),

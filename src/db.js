@@ -303,6 +303,36 @@ async function dbPatchCEInfo(ceId,info){
   }catch(e){console.warn('dbPatchCEInfo:',e.message);return false;}
 }
 
+/* An admin corrects a saved CE's number. The CE row is renamed in place -- same id, so its lines, Monitoring row, approvals and attachments
+   (all keyed by id) stay with it. The number is rewritten everywhere it is stored: the CE title, the number inside the saved header (read
+   fresh from SharePoint, because the list in memory carries only part of it), the Monitoring row's title and shicCENum, and the offline copy.
+   Returns {ok} or {ok:false, reason}. */
+async function dbRenameCE(ceId,oldNum,newNum,by){
+  if(!(USE_SP||getSiteURL()))return{ok:false,reason:'SharePoint is not connected'};
+  try{
+    const numId=Number(ceId);
+    const r=await spGet(spList('CEs'),`Id eq ${numId}`,'Id,Title,shicInfo');
+    if(!r.length)return{ok:false,reason:'the CE is not on the site'};
+    if(String(r[0].Title||'').trim().toUpperCase()!==String(oldNum||'').trim().toUpperCase())return{ok:false,reason:'it is now '+r[0].Title+', not '+oldNum+' - reload the list'};
+    let info={};try{info=r[0].shicInfo?JSON.parse(r[0].shicInfo)||{}:{};}catch(_e){info={};}
+    const was=Array.isArray(info.previousCeNums)?info.previousCeNums:[];
+    info={...info,ceNum:newNum,previousCeNums:[...was,{num:String(oldNum),by:by||'',at:new Date().toISOString()}]};
+    if(info.acceptedCeNum&&String(info.acceptedCeNum).toUpperCase()===String(oldNum).toUpperCase())info.acceptedCeNum=newNum;
+    await spWithRetry(()=>spPatch(spList('CEs'),r[0].Id,{Title:newNum,shicInfo:JSON.stringify(info)}));
+    /* The CE is renamed whether or not the Monitoring row follows: it is found by CE id, so a title or number that lags changes nothing
+       but what the list's own view shows. shicCENum is missing on a site that has not been repaired, so retry without it. */
+    try{
+      const rows=await _monRowsFor(numId,oldNum);
+      for(const m of rows){
+        try{await spWithRetry(()=>spPatch(spList('Monitoring'),m.Id,{Title:newNum,shicCENum:newNum}));}
+        catch(_e){await spWithRetry(()=>spPatch(spList('Monitoring'),m.Id,{Title:newNum}));}
+      }
+    }catch(e){logSwallowed('db:dbRenameCE',e);}
+    try{const loc=await _ceLoadLocal(numId);if(loc)await cePut({...loc,info:{...(loc.info||{}),ceNum:newNum},ceNum:newNum});}catch(e){logSwallowed('db:dbRenameCE',e);}
+    return{ok:true};
+  }catch(e){console.warn('dbRenameCE:',e.message);return{ok:false,reason:e.message};}
+}
+
 /* The Cost Estimation team accepts a request: it stops being known by its RCE
    No. and gets a CE number. The CE row is renamed in place -- same id, so its
    Monitoring row, attachments and history stay with it -- and its Monitoring

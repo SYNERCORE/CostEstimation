@@ -1,0 +1,25 @@
+/* The Dashboard can be narrowed to one issuing company. Run: node tools/test-dashboard-company.js */
+'use strict';
+const fs = require('fs'), path = require('path');
+const d = fs.readFileSync(path.join(__dirname, '..', 'src/components/DashboardTab.js'), 'utf8').replace(/\r\n/g, '\n');
+const app = fs.readFileSync(path.join(__dirname, '..', 'src/App.js'), 'utf8');
+const help = fs.readFileSync(path.join(__dirname, '..', 'src/helpers.js'), 'utf8');
+let bad = 0;
+const ck = (n, c) => { console.log((c ? '  PASS  ' : '  FAIL  ') + n); if (!c) bad++; };
+const a = d.indexOf('  const coOf = h =>'), b = d.indexOf('  const allHist');
+const pf = help.slice(help.indexOf('function ceNumPrefix'), help.indexOf('\n}', help.indexOf('function ceNumPrefix')) + 2);
+const mon = { 1: {}, 2: {}, 3: { companyDesig: 'sy3' }, 4: {}, 5: { designation: 'Electrical' } };
+const mk = (dashCo, dashDisc) => new Function('monOf', 'dashCo', 'dashDisc', pf + '\nconst _dd = dashDisc || "";\nconst discOf = x => { const dd = String(x.m.designation || "").toLowerCase(); return /electr/.test(dd) ? "Electrical" : /mechan/.test(dd) ? "Mechanical" : ""; };\n' + d.slice(a, b).replace(/^.*liveOnly.*$/m, '') + '\nreturn {coOf, byDisc};')(h => mon[h.id] || {}, dashCo, dashDisc);
+const hs = [{ id: 1, info: { ceNum: 'SHIC-CE-2026-0001' } }, { id: 2, info: { ceNum: 'SY3-CE-2026-0002' } }, { id: 3, ceNum: 'RCE-9', info: {} }, { id: 4, info: {} }, { id: 5, info: { ceNum: 'SY3-CE-2026-0005' } }];
+const all = mk('', '');
+ck('the company is the CE number prefix', all.coOf(hs[0]) === 'SHIC' && all.coOf(hs[1]) === 'SY3');
+ck('a request with no number uses the company on its Monitoring row', all.coOf(hs[2]) === 'SY3');
+ck('with nothing at all it is SHIC, as in CE Monitoring', all.coOf(hs[3]) === 'SHIC');
+ck('All companies keeps everything', hs.every(all.byDisc));
+ck('SY3 keeps only SY3', mk('SY3', '').byDisc && hs.filter(mk('SY3', '').byDisc).map(h => h.id).join() === '2,3,5');
+ck('SHIC keeps only SHIC', hs.filter(mk('SHIC', '').byDisc).map(h => h.id).join() === '1,4');
+ck('company and discipline narrow together', hs.filter(mk('SY3', 'Electrical').byDisc).map(h => h.id).join() === '5');
+ck('the Company buttons are listed from the CEs that exist', d.includes('const coList = [...new Set(liveOnly(monRows).map(coOf))].sort()') && d.includes("'All companies'"));
+ck('the choice lives in App and is passed in', app.includes("const [dashCo, setDashCo] = useState('')") && app.includes('dashAll, dashCo, setDashCo, dashDisc'));
+ck('Total CEs follows the company too', d.includes("_dd || _dc ? liveHist.length : history.length"));
+process.exit(bad ? 1 : 0);

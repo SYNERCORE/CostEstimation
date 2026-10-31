@@ -571,5 +571,7 @@ jobs:
         run: node tools/test-requests-sent-groups.js
       - name: My Work list positions
         run: node tools/test-mywork-list-positions.js
+      - name: Dashboard company
+        run: node tools/test-dashboard-company.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

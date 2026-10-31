@@ -9,6 +9,8 @@ function DashboardTab(ctx) {
   const {
     allStatuses,
     dashAll,
+    dashCo,
+    setDashCo,
     dashDisc,
     setDashDisc,
     dashQ,
@@ -32,8 +34,12 @@ function DashboardTab(ctx) {
   /* The Mechanical / Electrical toggle: when one is picked every figure and list on this page is of that discipline alone. */
   const discOf = x => { const i = x.h.info || {}, d = String(x.m.designation || x.m.discipline || i.discipline || i.projType || '').toLowerCase(); return /electr/.test(d) ? 'Electrical' : /mechan/.test(d) ? 'Mechanical' : ''; };
   const _dd = dashDisc || '';
-  const byDisc = h => !_dd || discOf({h, m: monOf(h)}) === _dd;
+  /* The issuing company: the prefix of the CE number, else the company on the Monitoring row, else SHIC -- the same rule the Company column in CE Monitoring uses. */
+  const coOf = h => ceNumPrefix((h.info && h.info.ceNum) || h.ceNum) || String((monOf(h) || {}).companyDesig || '').toUpperCase() || 'SHIC';
+  const _dc = dashCo || '';
+  const byDisc = h => (!_dd || discOf({h, m: monOf(h)}) === _dd) && (!_dc || coOf(h) === _dc);
   const allHist = liveOnly(history), liveHist = allHist.filter(byDisc), liveRows = liveOnly(monRows).filter(byDisc);
+  const coList = [...new Set(liveOnly(monRows).map(coOf))].sort();
   /* The money figures leave out Superseded CEs: a replaced estimate is not value that can still come in. */
   const valHist = liveHist.filter(h => ((monOf(h) || {}).status || '') !== 'Superseded');
   const supersededN = history.length - allHist.length;
@@ -154,7 +160,7 @@ function DashboardTab(ctx) {
       kpiCard('CEs This Month', monthHist.length, INFO),
       kpiCard('Value This Month', '₱'+ph(totalThis), OK),
       kpiCard('Avg CE Value', '₱'+ph(avgVal), ACC),
-      kpiCard('Total CEs', _dd ? liveHist.length : history.length, MT),
+      kpiCard('Total CEs', _dd || _dc ? liveHist.length : history.length, MT),
       kpiCard('Open CEs', openCEs.length, ERR),
       /* What the Cost Estimation team has to decide on. Returned ones are with their requestors, so they are named but not counted. */
       kpiCard('Requests Awaiting Review' + (reqReturnedN ? ' (' + reqReturnedN + ' returned)' : ''), reqAwaitingN, reqAwaitingN ? ACC : MT),
@@ -163,7 +169,10 @@ function DashboardTab(ctx) {
     /*#__PURE__*/React.createElement("div",{className:'dash-disc-toggle',style:{display:'flex',gap:6,alignItems:'center',marginBottom:14,flexWrap:'wrap'}},
       /*#__PURE__*/React.createElement("span",{style:{fontSize:11,color:MT}}, 'Show:'),
       [['', 'All'], ['Mechanical', '⚙ Mechanical'], ['Electrical', '⚡ Electrical']].map(([k, l]) => /*#__PURE__*/React.createElement("button",{key:k||'all','data-on':_dd===k?'1':'0','aria-pressed':_dd===k,style:{...btn(_dd===k?'acc':'def',true),borderRadius:14,padding:'3px 14px'},onClick:()=>setDashDisc && setDashDisc(k)}, l)),
-      _dd && /*#__PURE__*/React.createElement("span",{style:{fontSize:11,color:MT}}, 'Every figure and list below is ' + _dd + ' only.')),
+      /* Company: each issuing company on its own, or all together. */
+      coList.length > 1 && /*#__PURE__*/React.createElement("span",{style:{fontSize:11,color:MT,marginLeft:14}}, 'Company:'),
+      coList.length > 1 && [''].concat(coList).map(k => /*#__PURE__*/React.createElement("button",{key:'co'+(k||'all'),'data-on':_dc===k?'1':'0','aria-pressed':_dc===k,style:{...btn(_dc===k?'acc':'def',true),borderRadius:14,padding:'3px 14px'},onClick:()=>setDashCo && setDashCo(k)}, k || 'All companies')),
+      (_dd || _dc) && /*#__PURE__*/React.createElement("span",{style:{fontSize:11,color:MT}}, 'Every figure and list below is ' + [_dc, _dd].filter(Boolean).join(' · ') + ' only.')),
     /* Mechanical and Electrical, each on its own */
     !_dd && /*#__PURE__*/React.createElement("div",{style:{display:'flex',gap:12,flexWrap:'wrap',marginBottom:discNone?4:20}}, discCard('Mechanical','#38BDF8'), discCard('Electrical','#F59E0B')),
     !_dd && discNone > 0 && /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:MT,marginBottom:20}}, discNone + ' open CE or overdue request' + (discNone === 1 ? '' : 's') + ' have no Mechanical or Electrical discipline set, so they are in neither card: ' + discLeftTxt + '.'),

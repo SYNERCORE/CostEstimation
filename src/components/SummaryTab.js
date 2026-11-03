@@ -2,6 +2,15 @@
 
    Moved out of App.js unchanged. Invoked as SummaryTab({...}) from the render of App, never as an element: it holds no hooks,
    and everything it reads comes in through ctx. */
+/* Move one signatory card to another slot. A line linked to a user with no step typed takes its step from its position, so
+   each one is given its current step first: moving a card changes the printed order, never when that person signs. */
+function moveSignatory(list, from, to) {
+  if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return list;
+  const fixed = list.map((x, i) => x.user && !x.step ? { ...x, step: i + 1 } : x);
+  const [m] = fixed.splice(from, 1);
+  fixed.splice(to, 0, m);
+  return fixed;
+}
 function SummaryTab(ctx) {
   const {
     _defaultsUntouched,
@@ -1231,8 +1240,28 @@ function SummaryTab(ctx) {
       border: `1px solid ${BDR}`,
       textAlign: 'center',
       position: 'relative'
+    },
+    onDragOver: apvLocked ? undefined : e => { if (e.dataTransfer.types.includes('text/x-signatory')) e.preventDefault(); },
+    onDrop: apvLocked ? undefined : e => {
+      const f = parseInt(e.dataTransfer.getData('text/x-signatory'), 10);
+      if (Number.isNaN(f)) return;
+      e.preventDefault();
+      setApprovers(p => moveSignatory(p, f, i));
     }
-  }, /*#__PURE__*/React.createElement("input", {
+  }, !apvLocked && approvers.length > 1 && /*#__PURE__*/React.createElement("div", {
+    style: {position: 'absolute', top: 2, left: 3, display: 'flex', alignItems: 'center', gap: 2, fontSize: 11, lineHeight: 1, color: MT}
+  }, /*#__PURE__*/React.createElement("span", {
+    draggable: true, className: 'sig-grip',
+    title: 'Drag to move this signatory',
+    onDragStart: e => { e.dataTransfer.setData('text/x-signatory', String(i)); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setDragImage(e.currentTarget.parentNode.parentNode, 20, 10); },
+    style: {cursor: 'grab', opacity: 0.6, padding: '1px 3px', userSelect: 'none'}
+  }, '⠿'), i > 0 && /*#__PURE__*/React.createElement("button", {
+    title: 'Move earlier', onClick: () => setApprovers(p => moveSignatory(p, i, i - 1)),
+    style: {background: 'none', border: 'none', color: MT, cursor: 'pointer', fontSize: 10, padding: '1px 2px', opacity: 0.7}
+  }, '◀'), i < approvers.length - 1 && /*#__PURE__*/React.createElement("button", {
+    title: 'Move later', onClick: () => setApprovers(p => moveSignatory(p, i, i + 1)),
+    style: {background: 'none', border: 'none', color: MT, cursor: 'pointer', fontSize: 10, padding: '1px 2px', opacity: 0.7}
+  }, '▶')), /*#__PURE__*/React.createElement("input", {
     style: {
       ...INP,
       textAlign: 'center',

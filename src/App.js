@@ -3462,6 +3462,21 @@ function App({
        saw it appear and vanish. */
     { const newer = apvNewerRevision(info.ceNum);
       if (newer) { showToast(info.ceNum + ' has been revised — ' + newer + ' is the latest. Load ' + newer + ' and submit that.', true); return; } }
+    /* The header goes to the approvers as it will print. Check it first, and make the days say what they cover: "10 DAYS" alone does not
+       tell the client whether mob/demob or pick-up and delivery are inside them. */
+    if (!info.daysNote) {
+      const pick = await uiPrompt('What do the ' + (info.days || '?') + ' day(s) cover?\n\nThe printed CE says "' + daysPrinted(info) + '" and does not say whether travel to and from site (mob / demob) or hauling the goods (pick-up / delivery) is inside them. Choose, then press Submit for approval again.',
+        {choices: DAYS_NOTES.filter(x => x[0]).map(x => x[1]), ok: 'Set and continue', cancel: 'Go back'});
+      const f = pick && DAYS_NOTES.find(x => x[1] === pick);
+      if (!f) return;
+      setInfo(p => ({...p, daysNote: f[0]}));
+      showToast('Days set to "' + daysNoteText(f[0]) + '". Check them, then press Submit for approval again.');
+      return;
+    }
+    if (!await uiConfirm(['Check these details before ' + info.ceNum + ' is routed', '',
+      ...apvDetailsText(info, {ceTypeLabel: ceTypeLabel(ceType), rceNo, qtyUom}).map(l => '  ' + l), '',
+      'This is what the approvers will sign and the client will read. Change it on Project Info if anything is wrong.'].join('\n'),
+      {ok: 'Details are correct', cancel: 'Go back', danger: false})) return;
     const me = _apvMe();
     /* Submitted again after a Return, with the figures and the wording exactly
        as they were signed: the signatures already given still count, and only

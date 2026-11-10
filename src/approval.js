@@ -285,3 +285,14 @@ function apvResume(ce, prev) {
   if (!a.figSig || apvFigSig(ce) !== a.figSig) return {};
   return {...(a.lines || {})};
 }
+/* The printed header of a CE, as lines, for the "check these details" step before routing. The days read exactly as they print, so a
+   missing note (do the days include mob/demob? pick-up and delivery?) is visible. o: {ceTypeLabel, rceNo, qtyUom}. */
+function apvDetailsText(info, o) {
+  const i = info || {}, x = o || {}, v = s => String(s == null ? '' : s).trim() || '\u2014';
+  return [
+    ['CE No.', v(i.ceNum)], ['RCE No.', v(x.rceNo)], ['CE type', v(x.ceTypeLabel)], ['Project type', v(i.projType)],
+    ['Client', v(i.client)], ['Description', v(i.description)], ['Material', v(i.material)], ['Location', v(i.location)],
+    ['Attention', v(i.attention)], ['End user', v(i.endUser)], ['Quantity', v((i.qty || 1) + ' ' + (x.qtyUom || ''))],
+    ['No. of days', i.days ? daysPrinted(i) : '\u2014']
+  ].map(r => r[0] + ': ' + r[1]);
+}

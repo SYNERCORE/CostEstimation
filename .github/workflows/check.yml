@@ -583,5 +583,7 @@ jobs:
         run: node tools/test-change-ce-number.js
       - name: Signatory reorder
         run: node tools/test-signatory-reorder.js
+      - name: Routing details check
+        run: node tools/test-routing-details.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

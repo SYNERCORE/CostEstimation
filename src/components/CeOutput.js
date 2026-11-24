@@ -298,7 +298,7 @@ function makeHandleGenerateCE(getCtx) {
       ${hlRows.length && !noAmt ? `<tr><td colspan="3" class="c b" style="background:#ddd;font-size:7.5pt">HIGHLIGHTED COSTS (already included above)</td></tr>` + hlRows.map(r=>`<tr class="tot"><td colspan="2" class="b r">${esc(hlLabel(r).toUpperCase())}:</td><td class="r b">${fmt(hlAmt(r))}</td></tr>`).join('') : ''}
       ${servicesSummary.on && servicesSummary.ok && !noAmt ? `<tr><td colspan="3" class="c b" style="background:#ddd">SERVICES</td></tr>
       ${servicesSummary.lines.map(l=>`<tr><td colspan="2" class="b r">${esc(l.label.toUpperCase())}:</td><td class="r">${fmt(l.v)}</td></tr>`).join('')}
-      ${Math.abs(servicesSummary.other) >= 0.005 ? `<tr><td colspan="2" class="b r">OTHER MISC. TO THE PROJECT:</td><td class="r">${fmt(servicesSummary.other)}</td></tr>` : ''}
+      ${Math.abs(servicesSummary.other) >= 0.005 ? `<tr><td colspan="2" class="b r">OTHER WORKS TO THE PROJECT:</td><td class="r">${fmt(servicesSummary.other)}</td></tr>` : ''}
       <tr class="tot"><td colspan="2" class="b r" style="font-size:9pt">SERVICES TOTAL AMOUNT:</td><td class="r b" style="font-size:9pt">${fmt(servicesSummary.total)}</td></tr>` : ''}
     </table>`;
 
@@ -879,7 +879,7 @@ function makeHandleExportXLSX(getCtx) {
         a.blank();
         a.title('SERVICES', CS_W);
         servicesSummary.lines.forEach(l => a.row('', l.label.toUpperCase() + ':', a.money(l.v)));
-        if (Math.abs(servicesSummary.other) >= 0.005) a.row('', 'OTHER MISC. TO THE PROJECT:', a.money(servicesSummary.other));
+        if (Math.abs(servicesSummary.other) >= 0.005) a.row('', 'OTHER WORKS TO THE PROJECT:', a.money(servicesSummary.other));
         a.total('', 'SERVICES TOTAL AMOUNT:', a.money(servicesSummary.total));
       }
       /* Notes, including the breakdown notes, exactly as the CE prints them. */
@@ -1152,7 +1152,7 @@ function makeHandleExport(getCtx) {
       sum.push([]);
       sum.push([S('SERVICES', 'secbar', 6)]);
       servicesSummary.lines.forEach(l => sum.push([S('', 'tdc'), S(l.label.toUpperCase() + ':', 'td', 4), null, null, null, null, S(N(l.v), 'tdn')]));
-      if (Math.abs(servicesSummary.other) >= 0.005) sum.push([S('', 'tdc'), S('OTHER MISC. TO THE PROJECT:', 'td', 4), null, null, null, null, S(N(servicesSummary.other), 'tdn')]);
+      if (Math.abs(servicesSummary.other) >= 0.005) sum.push([S('', 'tdc'), S('OTHER WORKS TO THE PROJECT:', 'td', 4), null, null, null, null, S(N(servicesSummary.other), 'tdn')]);
       sum.push([S('', 'totlbl'), S('SERVICES TOTAL AMOUNT:', 'totlbl', 4), null, null, null, null, S(N(servicesSummary.total), 'tot')]);
     }
     const sowNotes = (sowItems || []).filter(x => String(x.note || '').trim());

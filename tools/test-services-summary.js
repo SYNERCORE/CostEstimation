@@ -4,7 +4,7 @@
  * WELDING WORKS, MECHANICAL WORKS -- under the cost summary.
  *
  * A main scope item names its service group; its sub-items come with it.
- * "Other misc. to the project" is the remainder of the grand total, so the
+ * "Other works to the project" is the remainder of the grand total, so the
  * services always add back to the cost total. The CE this was modelled on
  * (SHIC-CE-2026-1078) was built by hand in Excel and its services came to
  * exactly P2,800,000 less than its total -- the one mistake this block must

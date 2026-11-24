@@ -1960,7 +1960,7 @@ function App({
      items may share one group, and the lines print in the order their first
      item appears in the scope.
 
-     "Other misc. to the project" is whatever the named services do not
+     "Other works to the project" is whatever the named services do not
      carry: unlinked rows, mob/demob, anything costed to an ungrouped item.
      It is the remainder of the grand total rather than a sum of its own, so
      the services always add back to the cost total. The one way that can

@@ -585,5 +585,7 @@ jobs:
         run: node tools/test-signatory-reorder.js
       - name: Routing details check
         run: node tools/test-routing-details.js
+      - name: Other works label
+        run: node tools/test-other-works-label.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

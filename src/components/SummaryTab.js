@@ -224,7 +224,7 @@ function SummaryTab(ctx) {
       /*#__PURE__*/React.createElement("span", {style:{color:MT,fontSize:11}}, "— restate the total by service (Sand Blasting Works, Welding Works...) under the cost summary")
     ),
     /*#__PURE__*/React.createElement("div", {style:{color:MT,fontSize:10,marginBottom:6,fontStyle:'italic'}},
-      "Name each main scope item's service group on the SOW Breakdown tab. Whatever no group carries prints as Other misc. to the project, so the services always add up to the Grand Total."),
+      "Name each main scope item's service group on the SOW Breakdown tab. Whatever no group carries prints as Other works to the project, so the services always add up to the Grand Total."),
     info.showServices && (servicesSummary.lines.length === 0
       ? /*#__PURE__*/React.createElement("div", {style:{color:ACC,fontSize:11}}, "No scope item has a service group yet, so nothing will print. ",
           /*#__PURE__*/React.createElement("button", {style:{...btn('def',true),fontSize:10}, onClick:()=>setTab('sowbreak')}, "Go to SOW Breakdown"))
@@ -236,7 +236,7 @@ function SummaryTab(ctx) {
               /*#__PURE__*/React.createElement("td", {style:{padding:'2px 4px'}}, l.label.toUpperCase(), /*#__PURE__*/React.createElement("span", {style:{color:MT,fontSize:10}}, "  (scope " + l.items.map(id => sowLabels[id] || '').join(', ') + ")")),
               /*#__PURE__*/React.createElement("td", {style:{...MONO,textAlign:'right',padding:'2px 4px'}}, "₱" + ph(l.v)))),
             /*#__PURE__*/React.createElement("tr", null,
-              /*#__PURE__*/React.createElement("td", {style:{padding:'2px 4px',color:MT}}, "OTHER MISC. TO THE PROJECT"),
+              /*#__PURE__*/React.createElement("td", {style:{padding:'2px 4px',color:MT}}, "OTHER WORKS TO THE PROJECT"),
               /*#__PURE__*/React.createElement("td", {style:{...MONO,textAlign:'right',padding:'2px 4px',color:servicesSummary.ok?TX:ERR}}, "₱" + ph(servicesSummary.other))),
             /*#__PURE__*/React.createElement("tr", {style:{borderTop:'1px solid ' + BDR,fontWeight:700}},
               /*#__PURE__*/React.createElement("td", {style:{padding:'2px 4px'}}, "SERVICES TOTAL AMOUNT"),

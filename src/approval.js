@@ -290,7 +290,7 @@ function apvResume(ce, prev) {
 function apvDetailsText(info, o) {
   const i = info || {}, x = o || {}, v = s => String(s == null ? '' : s).trim() || '\u2014';
   return [
-    ['CE No.', v(i.ceNum)], ['RCE No.', v(x.rceNo)], ['Project type', v(x.ceTypeLabel)], ['Discipline', v(i.projType)],
+    ['CE No.', v(i.ceNum)], ['RCE No.', v(x.rceNo)], ['CE type', v(x.ceTypeLabel)], ['Project type', v(i.projType)],
     ['Client', v(i.client)], ['Description', v(i.description)], ['Material', v(i.material)], ['Location', v(i.location)],
     ['Attention', v(i.attention)], ['End user', v(i.endUser)], ['Quantity', v((i.qty || 1) + ' ' + (x.qtyUom || ''))],
     ['No. of days', i.days ? daysPrinted(i) : '\u2014']

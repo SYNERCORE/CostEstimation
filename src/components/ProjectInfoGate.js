@@ -1,5 +1,6 @@
-/* The END USER line names the Sales Agent the estimate goes through, as "C/O NAME". The names offered are every
-   Requestor account plus the extra names an admin keeps for agents who have no account. */
+/* The ATTENTION line names the Sales Agent the estimate goes through. (END USER is the client and stays "C/O SALES"
+   unless the sales rep gives one.) The names offered are every Requestor account plus the extra names an admin keeps
+   for agents who have no account. */
 const SALES_AGENTS_KEY = 'sales_agents';
 function salesAgentNames(users, extra) {
   const seen = {}, out = [];
@@ -10,25 +11,25 @@ function salesAgentNames(users, extra) {
     });
   return out.sort((a, b) => a.localeCompare(b));
 }
-/* Not trimmed at the end, so a name can be typed with its spaces. */
-function endUserFor(name) {
-  const s = String(name || '').toUpperCase().replace(/^\s*C\/O\s*/, '');
-  return s.trim() ? 'C/O ' + s : '';
+/* In capitals, as the line has always printed. Not trimmed, so a name can be typed with its spaces. */
+function attentionFor(name) {
+  const s = String(name || '').toUpperCase();
+  return s.trim() ? s : '';
 }
-/* The old default, "C/O SALES", names the department and not an agent. */
-function isSalesAgentEndUser(v) {
+/* The old default, "SALES DEPARTMENT", names the department and not an agent. */
+function isSalesAgent(v) {
   const t = String(v || '').trim();
-  return !!t && !/^(c\/o\s*)?sales( department)?$/i.test(t);
+  return !!t && !/^(c\/o\s*)?sales(\s+(department|dept\.?))?$/i.test(t);
 }
 /* No hooks, so it is called as a plain function. With no names listed yet it becomes a text box, so nobody is stuck.
    A value that is not on the list (an older CE, an imported one) stays selected and is not changed by being shown. */
 function SalesAgentSelect({ value, agents, onChange, style }) {
   const h = React.createElement, v = value || '', list = agents || [];
-  const label = 'End user (sales agent)';
-  if (!list.length) return h('input', { style, 'aria-label': label, value: v.replace(/^C\/O /, ''), placeholder: 'Sales agent’s name', onChange: e => onChange(endUserFor(e.target.value)) });
-  const opts = list.map(n => ({ v: endUserFor(n), t: n }));
+  const label = 'Attention (sales agent)';
+  if (!list.length) return h('input', { style, 'aria-label': label, value: v, placeholder: 'Sales agent’s name', onChange: e => onChange(attentionFor(e.target.value)) });
+  const opts = list.map(n => ({ v: attentionFor(n), t: n }));
   const hit = opts.find(o => o.v === v.trim().toUpperCase());
-  if (v && !hit) opts.unshift({ v, t: v + (isSalesAgentEndUser(v) ? ' (not on the list)' : ' (no agent named)') });
+  if (v && !hit) opts.unshift({ v, t: v + (isSalesAgent(v) ? ' (not on the list)' : ' (no agent named)') });
   return h('select', { style, 'aria-label': label, value: hit ? hit.v : v, onChange: e => onChange(e.target.value) },
     h('option', { value: '', disabled: true }, '— Select sales agent —'), opts.map(o => h('option', { key: o.v, value: o.v }, o.t)));
 }
@@ -52,9 +53,9 @@ function SalesAgentsPanel() {
   };
   const add = () => { const t = typed.trim(); if (!t) return; setTyped(''); change(l => l.concat(t)); };
   return h('div', null,
-    h('div', { style: { fontWeight: 700, fontSize: 13 } }, 'Sales Agents (End User list)'),
+    h('div', { style: { fontWeight: 700, fontSize: 13 } }, 'Sales Agents (Attention list)'),
     h('div', { style: { color: MT, fontSize: 11, margin: '4px 0 8px', lineHeight: 1.5 } },
-      'The End User dropdown on a CE lists every Requestor account, plus the names added here for agents without an account. From accounts now: ' + (accounts.join(', ') || 'none') + '.'),
+      'The Attention dropdown on a CE lists every Requestor account, plus the names added here for agents without an account. From accounts now: ' + (accounts.join(', ') || 'none') + '.'),
     h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 } },
       (names || []).map(n => h('span', { key: n, style: { display: 'inline-flex', gap: 6, alignItems: 'center', border: '1px solid ' + BDR, borderRadius: 6, padding: '3px 8px', fontSize: 12 } }, n,
         h('button', { style: { background: 'none', border: 'none', color: ERR, cursor: 'pointer' }, 'aria-label': 'Remove ' + n, onClick: () => change(l => l.filter(x => x !== n)) }, '×')))),
@@ -72,7 +73,7 @@ function SalesAgentsPanel() {
 
    It only edits through the callbacks it is given; the same four values live on Project
    Info and in the top bar, so nothing is stored here. */
-function ProjectInfoGate({ missing, companies, companyId, client, endUser, agents, ceType, ceTypes, projType, description, onCompany, onClient, onEndUser, onType, onDiscipline, onDescription, onCancel, onContinue }) {
+function ProjectInfoGate({ missing, companies, companyId, client, attention, agents, ceType, ceTypes, projType, description, onCompany, onClient, onAttention, onType, onDiscipline, onDescription, onCancel, onContinue }) {
   const h = React.createElement;
   /* The red marks and the list of what is missing wait until the person has started filling in, so a fresh form is not already an error. */
   const [touched, setTouched] = React.useState(false);
@@ -96,8 +97,8 @@ function ProjectInfoGate({ missing, companies, companyId, client, endUser, agent
         (companies || []).map(c => ({ v: String(c.id), t: c.name + (c.sub ? ' — ' + c.sub : '') }))))),
       h('div', { style: { marginTop: 12 } }, L('Client Name', true, !String(client || '').trim(),
         h('input', { style: { ...INP, ...(String(client || '').trim() || !touched ? {} : { borderColor: ERR }) }, value: client || '', placeholder: 'Who the estimate is for', onChange: e => T(onClient)(e.target.value) }))),
-      h('div', { style: { marginTop: 12 } }, L('End User (Sales Agent)', true, !String(endUser || '').trim(),
-        SalesAgentSelect({ value: endUser, agents, onChange: T(onEndUser), style: { ...INP, ...(String(endUser || '').trim() || !touched ? {} : { borderColor: ERR }) } })),
+      h('div', { style: { marginTop: 12 } }, L('Attention (Sales Agent)', true, !String(attention || '').trim(),
+        SalesAgentSelect({ value: attention, agents, onChange: T(onAttention), style: { ...INP, ...(String(attention || '').trim() || !touched ? {} : { borderColor: ERR }) } })),
         (agents || []).length ? null : h('div', { style: { color: MT, fontSize: 10, marginTop: 4 } }, 'No sales agents are listed yet, so type the name. An admin can add the list in the Users tab.')),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12, marginTop: 12 } },
         L('Project Type', true, !ceType, sel(!ceType, ceType || '', onType, '— Select project type —', (ceTypes || []).map(c => ({ v: c.k, t: c.label })))),

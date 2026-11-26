@@ -952,7 +952,7 @@ function App({
   const infoMissing = isRequestor ? [] : [
     (info.companyId == null || info.companyId === '') ? 'Issuing Company' : '',
     !String(info.client || '').trim() ? 'Client Name' : '',
-    !String(info.endUser || '').trim() ? 'End User' : '',
+    !String(info.attention || '').trim() ? 'Attention' : '',
     !String(ceType || '').trim() ? 'Project Type' : '',
     !String(info.projType || '').trim() ? 'Discipline' : '',
     !String(info.description || '').trim() ? 'Project Description' : ''
@@ -986,7 +986,7 @@ function App({
   const [dashQ, setDashQ] = useState('');
   const [dashReqQ, setDashReqQ] = useState('');
   useEffect(() => { if (!isRequestor && tab === "info" && infoMissing.length) setPiGate(true); }, [tab]);
-  /* The End User dropdown's names, read again on the way into Project Info or Summary so an agent just added shows up. */
+  /* The Attention dropdown's names, read again on the way into Project Info or Summary so an agent just added shows up. */
   const [salesAgents, setSalesAgents] = useState([]);
   useEffect(() => {
     Promise.all([dbGetUsers(), dbGetCompanyKey(SALES_AGENTS_KEY)])
@@ -3472,8 +3472,8 @@ function App({
       if (newer) { showToast(info.ceNum + ' has been revised — ' + newer + ' is the latest. Load ' + newer + ' and submit that.', true); return; } }
     /* The header goes to the approvers as it will print. Check it first, and make the days say what they cover: "10 DAYS" alone does not
        tell the client whether mob/demob or pick-up and delivery are inside them. */
-    if (!isSalesAgentEndUser(info.endUser)) {
-      await uiAlert('The END USER line ' + (String(info.endUser || '').trim() ? 'still reads "' + info.endUser + '"' : 'is blank') + ', which names no Sales Agent.\n\nChoose the agent on Project Info under End User, then press Submit for approval again.');
+    if (!isSalesAgent(info.attention)) {
+      await uiAlert('The ATTENTION line ' + (String(info.attention || '').trim() ? 'still reads "' + info.attention + '"' : 'is blank') + ', which names no Sales Agent.\n\nChoose the agent on Project Info under Attention, then press Submit for approval again.');
       return;
     }
     if (!info.daysNote) {
@@ -4653,7 +4653,7 @@ function App({
           companyId: isNaN(f.companyId) ? f.companyId : Number(f.companyId),
           description: String(f.description || '').trim(), projType: f.projType || BLANK_INFO.projType,
           /* Filled in only when Assigned sales is a listed agent: an estimator logging a request is not one. */
-          endUser: endUserFor(salesAgents.find(n => n.toUpperCase() === String(f.assignedSales || '').trim().toUpperCase())),
+          attention: attentionFor(salesAgents.find(n => n.toUpperCase() === String(f.assignedSales || '').trim().toUpperCase())),
           status: 'DRAFT', request: true, requestNum: ceNum, rceNo: ceNum,
           /* info is stored whole as one JSON column, so the checklist rides
              along with it and needs no new SharePoint column of its own. */
@@ -5646,7 +5646,7 @@ statusPanel && (() => {
 
 /* ── The five things a CE needs before it is estimated ── */
 piGate && tab === "info" && !isRequestor && /*#__PURE__*/React.createElement(ProjectInfoGate, {
-  missing: infoMissing, companies, companyId: info.companyId, client: info.client, endUser: info.endUser, agents: salesAgents, onEndUser: v => setInfo(p => ({ ...p, endUser: v })), ceType, projType: info.projType, description: info.description,
+  missing: infoMissing, companies, companyId: info.companyId, client: info.client, attention: info.attention, agents: salesAgents, onAttention: v => setInfo(p => ({ ...p, attention: v })), ceType, projType: info.projType, description: info.description,
   ceTypes: Object.keys(CE_CFG).map(k => ({ k, label: ceTypeLabel(k) })),
   onCompany: pickCompany, onClient: v => setInfo(p => ({ ...p, client: v })), onType: setCeType, onDiscipline: v => setInfo(p => ({ ...p, projType: v })), onDescription: v => setInfo(p => ({ ...p, description: v })),
   onCancel: () => { setPiGate(false); setTab('mywork'); }, onContinue: continueGate

@@ -184,8 +184,8 @@
     assert('BLANK_INFO has ceNum', typeof BLANK_INFO.ceNum === 'string');
     assert('BLANK_INFO has date', /^\d{4}-\d{2}-\d{2}$/.test(BLANK_INFO.date));
     assert('BLANK_INFO.qty is string "1"', BLANK_INFO.qty === '1');
-    assertEqual('BLANK_INFO.attention default', BLANK_INFO.attention, 'SALES DEPARTMENT');
-    assertEqual('BLANK_INFO.endUser starts blank: a sales agent is chosen', BLANK_INFO.endUser, '');
+    assertEqual('BLANK_INFO.attention starts blank: a sales agent is chosen', BLANK_INFO.attention, '');
+    assertEqual('BLANK_INFO.endUser default', BLANK_INFO.endUser, 'C/O SALES');
     assert('BLANK_INFO.status set', !!BLANK_INFO.status);
     assert('BLANK_INFO.companyId is null', BLANK_INFO.companyId === null);
   }

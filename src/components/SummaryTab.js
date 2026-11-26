@@ -630,7 +630,8 @@ function SummaryTab(ctx) {
     }
   }, "ATTENTION:"), /*#__PURE__*/React.createElement("td", {
     style: TDS
-  }, /*#__PURE__*/React.createElement("input", {
+  }, SalesAgentSelect({
+    agents: ctx.salesAgents,
     style: {
       ...INP,
       border: 'none',
@@ -639,10 +640,10 @@ function SummaryTab(ctx) {
       fontSize: 11,
       width: '100%'
     },
-    value: info.attention || 'SALES DEPARTMENT',
-    onChange: e => setInfo(p => ({
+    value: info.attention,
+    onChange: v => setInfo(p => ({
       ...p,
-      attention: e.target.value
+      attention: v
     }))
   })), /*#__PURE__*/React.createElement("td", {
     style: {
@@ -677,8 +678,7 @@ function SummaryTab(ctx) {
     }
   }, "END USER:"), /*#__PURE__*/React.createElement("td", {
     style: TDS
-  }, SalesAgentSelect({
-    agents: ctx.salesAgents,
+  }, /*#__PURE__*/React.createElement("input", {
     style: {
       ...INP,
       border: 'none',
@@ -686,10 +686,10 @@ function SummaryTab(ctx) {
       padding: '1px 4px',
       fontSize: 11
     },
-    value: info.endUser,
-    onChange: v => setInfo(p => ({
+    value: info.endUser || 'C/O SALES',
+    onChange: e => setInfo(p => ({
       ...p,
-      endUser: v
+      endUser: e.target.value
     }))
   })))))), /*#__PURE__*/React.createElement("div", {
     style: {

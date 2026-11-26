@@ -222,9 +222,10 @@ const BLANK_INFO = {
   date: new Date().toISOString().slice(0, 10),
   client: "",
   location: "",
-  attention: "SALES DEPARTMENT",
-  /* Blank until a Sales Agent is chosen. CEs saved before keep their "C/O SALES". */
-  endUser: "",
+  /* Blank until the Sales Agent is chosen. CEs saved before keep their "SALES DEPARTMENT". */
+  attention: "",
+  /* The client's end user; "C/O SALES" unless the sales rep gives one. */
+  endUser: "C/O SALES",
   /* Blank until chosen: a preset of Electrical went out on CEs nobody had
      decided the discipline of. Saving requires it. */
   projType: "",

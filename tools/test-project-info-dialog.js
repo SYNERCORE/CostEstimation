@@ -15,7 +15,7 @@ let touchedNow = false;
 const render = p => new Function('React', 'MT', 'ERR', 'OK', 'INP', 'BDR', 'TX', 'btn', comp + NL + 'return ProjectInfoGate;')(
   { createElement: ce, useState: v => [touchedNow, () => {}] }, 'm', 'e', 'o', {}, 'b', 't', () => ({}))(p);
 const all = (n, out = []) => { if (n && typeof n === 'object') { out.push(n); (n.kids || []).forEach(k => all(k, out)); } return out; };
-const base = { agents: ['Maria Reyes'], attention: '', onAttention() {}, missing: ['Issuing Company', 'Client Name', 'Project Type', 'Discipline', 'Project Description'], companies: [{ id: 1, name: 'SYNERCORE' }], companyId: '', client: '', ceType: '', ceTypes: [{ k: 'onsite', label: 'Onsite' }], projType: '', description: '',
+const base = { agents: ['Maria Reyes'], endUser: '', onEndUser() {}, missing: ['Issuing Company', 'Client Name', 'Project Type', 'Discipline', 'Project Description'], companies: [{ id: 1, name: 'SYNERCORE' }], companyId: '', client: '', ceType: '', ceTypes: [{ k: 'onsite', label: 'Onsite' }], projType: '', description: '',
   onCompany() {}, onClient() {}, onType() {}, onDiscipline() {}, onDescription() {}, onCancel() {}, onContinue() {} };
 const buttons = t => all(t).filter(n => n.type === 'button');
 let t = render(base);
@@ -24,7 +24,7 @@ ck('Continue is disabled while anything is missing', cont && cont.props.disabled
 ck('a fresh form is not already an error: no red list yet', !all(t).some(n => n.kids && n.kids.join('').indexOf('Still needed') >= 0) && all(t).some(n => n.kids && n.kids.join('').indexOf('All six are required.') >= 0));
 touchedNow = true; t = render(base);
 ck('once the person has started filling in, it names what is still needed', all(t).some(n => n.kids && n.kids.join('').indexOf('Still needed: Issuing Company, Client Name, Project Type, Discipline, Project Description.') >= 0));
-ck('it asks for all six, Attention as a dropdown of sales agents', all(t).filter(n => n.type === 'select').length === 4 && all(t).filter(n => n.type === 'input').length === 1 && all(t).filter(n => n.type === 'textarea').length === 1);
+ck('it asks for all six, the End User as a dropdown of sales agents', all(t).filter(n => n.type === 'select').length === 4 && all(t).filter(n => n.type === 'input').length === 1 && all(t).filter(n => n.type === 'textarea').length === 1);
 touchedNow = false;
 t = render({ ...base, missing: [], companyId: 1, client: 'HEDCOR', ceType: 'onsite', projType: 'Civil', description: 'x' });
 ck('Continue opens once all six are in', buttons(t).find(b => b.kids.join('').indexOf('Continue') >= 0).props.disabled === false);

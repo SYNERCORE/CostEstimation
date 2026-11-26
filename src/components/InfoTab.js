@@ -286,22 +286,22 @@ function InfoTab(ctx) {
     }
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     style: LBL
-  }, "Attention (Sales Agent) *"), SalesAgentSelect({
+  }, "Attention"), /*#__PURE__*/React.createElement("input", {
     style: INP,
     value: info.attention,
-    agents: ctx.salesAgents,
-    onChange: v => setInfo(p => ({
+    onChange: e => setInfo(p => ({
       ...p,
-      attention: v
+      attention: e.target.value
     }))
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     style: LBL
-  }, "End User"), /*#__PURE__*/React.createElement("input", {
+  }, "End User (Sales Agent) *"), SalesAgentSelect({
     style: INP,
     value: info.endUser,
-    onChange: e => setInfo(p => ({
+    agents: ctx.salesAgents,
+    onChange: v => setInfo(p => ({
       ...p,
-      endUser: e.target.value
+      endUser: v
     }))
   })))), /*#__PURE__*/React.createElement("div", {
     style: {

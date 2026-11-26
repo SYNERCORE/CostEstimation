@@ -589,5 +589,7 @@ jobs:
         run: node tools/test-other-works-label.js
       - name: routing details check
         run: node tools/test-routing-details.js
+      - name: sales agent as end user
+        run: node tools/test-sales-agent-end-user.js
       - name: Every workflow step runs here
         run: node tools/check-ci-steps.js

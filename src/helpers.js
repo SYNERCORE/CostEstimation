@@ -223,7 +223,8 @@ const BLANK_INFO = {
   client: "",
   location: "",
   attention: "SALES DEPARTMENT",
-  endUser: "C/O SALES",
+  /* Blank until a Sales Agent is chosen. CEs saved before keep their "C/O SALES". */
+  endUser: "",
   /* Blank until chosen: a preset of Electrical went out on CEs nobody had
      decided the discipline of. Saving requires it. */
   projType: "",

@@ -952,6 +952,7 @@ function App({
   const infoMissing = isRequestor ? [] : [
     (info.companyId == null || info.companyId === '') ? 'Issuing Company' : '',
     !String(info.client || '').trim() ? 'Client Name' : '',
+    !String(info.endUser || '').trim() ? 'End User' : '',
     !String(ceType || '').trim() ? 'Project Type' : '',
     !String(info.projType || '').trim() ? 'Discipline' : '',
     !String(info.description || '').trim() ? 'Project Description' : ''
@@ -985,6 +986,13 @@ function App({
   const [dashQ, setDashQ] = useState('');
   const [dashReqQ, setDashReqQ] = useState('');
   useEffect(() => { if (!isRequestor && tab === "info" && infoMissing.length) setPiGate(true); }, [tab]);
+  /* The End User dropdown's names, read again on the way into Project Info or Summary so an agent just added shows up. */
+  const [salesAgents, setSalesAgents] = useState([]);
+  useEffect(() => {
+    Promise.all([dbGetUsers(), dbGetCompanyKey(SALES_AGENTS_KEY)])
+      .then(([u, x]) => setSalesAgents(salesAgentNames(u, x && x.names)))
+      .catch(e => logSwallowed('App:salesAgents', e));
+  }, [currentUser && currentUser.username, tab === 'info' || tab === 'summary']);
   /* Continue is where a new CE gets its number, if it has not claimed one already: a fresh editor
      starts on a placeholder, and a CE that was opened or saved keeps the number it has. */
   const continueGate = () => {
@@ -3464,6 +3472,10 @@ function App({
       if (newer) { showToast(info.ceNum + ' has been revised — ' + newer + ' is the latest. Load ' + newer + ' and submit that.', true); return; } }
     /* The header goes to the approvers as it will print. Check it first, and make the days say what they cover: "10 DAYS" alone does not
        tell the client whether mob/demob or pick-up and delivery are inside them. */
+    if (!isSalesAgentEndUser(info.endUser)) {
+      await uiAlert('The END USER line ' + (String(info.endUser || '').trim() ? 'still reads "' + info.endUser + '"' : 'is blank') + ', which names no Sales Agent.\n\nChoose the agent on Project Info under End User, then press Submit for approval again.');
+      return;
+    }
     if (!info.daysNote) {
       const pick = await uiPrompt('What do the ' + (info.days || '?') + ' day(s) cover?\n\nThe printed CE says "' + daysPrinted(info) + '" and does not say whether travel to and from site (mob / demob) or hauling the goods (pick-up / delivery) is inside them. Choose, then press Submit for approval again.',
         {choices: DAYS_NOTES.filter(x => x[0]).map(x => x[1]), ok: 'Set and continue', cancel: 'Go back'});
@@ -4640,6 +4652,8 @@ function App({
         info: { ...BLANK_INFO, ceNum, date: f.dateRecv || BLANK_INFO.date, client: f.client.trim(),
           companyId: isNaN(f.companyId) ? f.companyId : Number(f.companyId),
           description: String(f.description || '').trim(), projType: f.projType || BLANK_INFO.projType,
+          /* Filled in only when Assigned sales is a listed agent: an estimator logging a request is not one. */
+          endUser: endUserFor(salesAgents.find(n => n.toUpperCase() === String(f.assignedSales || '').trim().toUpperCase())),
           status: 'DRAFT', request: true, requestNum: ceNum, rceNo: ceNum,
           /* info is stored whole as one JSON column, so the checklist rides
              along with it and needs no new SharePoint column of its own. */
@@ -5632,7 +5646,7 @@ statusPanel && (() => {
 
 /* ── The five things a CE needs before it is estimated ── */
 piGate && tab === "info" && !isRequestor && /*#__PURE__*/React.createElement(ProjectInfoGate, {
-  missing: infoMissing, companies, companyId: info.companyId, client: info.client, ceType, projType: info.projType, description: info.description,
+  missing: infoMissing, companies, companyId: info.companyId, client: info.client, endUser: info.endUser, agents: salesAgents, onEndUser: v => setInfo(p => ({ ...p, endUser: v })), ceType, projType: info.projType, description: info.description,
   ceTypes: Object.keys(CE_CFG).map(k => ({ k, label: ceTypeLabel(k) })),
   onCompany: pickCompany, onClient: v => setInfo(p => ({ ...p, client: v })), onType: setCeType, onDiscipline: v => setInfo(p => ({ ...p, projType: v })), onDescription: v => setInfo(p => ({ ...p, description: v })),
   onCancel: () => { setPiGate(false); setTab('mywork'); }, onContinue: continueGate
@@ -6114,7 +6128,7 @@ sigModal && /*#__PURE__*/React.createElement("div", {style:{position:'fixed',ins
 /* ── My Work: everything waiting on the signed-in user, in one place ── */
 tab === 'mywork' && MyWorkTab({ estName, currentUser, getStatusColor, handleLoad, isRequestor, meNames, monOf, monRows, mwOpen, mwQ, mwReqQ, myTodo, openRequest, openReview, reqDeadline, resumeDraft, setMwOpen, setMwQ, setMwReqQ, setRceReview, setTab, setViewCE: openViewCE, sharedDrafts, showToast, updateMon }),
 
-tab === 'dashboard' && DashboardTab({ estName, allStatuses, dashAll, dashCo, setDashCo, dashYear, setDashYear, dashMonth, setDashMonth, dashDisc, setDashDisc, dashQ, dashReqQ, getStatusColor, history, monOf, monRows, reqDeadline, setDashAll, setDashQ, setDashReqQ }), tab === 'info' && /*#__PURE__*/InfoTab({ ScopeBuilder, ceNums, history, addMode, aiLoad, ceType, companies, docBusy, docFile, docFilesOf, docPreview, docStatus, extractDocInfo, fileRef, handleAI, handleDocUpload, info, monData, openCeId, openMonStatus, pickCompany, provInfo, qtyUom, rceNo, removeDoc, scope, setAddMode, setDocFile, setDocPreview, setDocStatus, setInfo, setScope, updateMon }), tab === 'manpower' && /*#__PURE__*/ManpowerTab({ _mobTabs, _weight, ben, benefitRows, benefitsT, cfg, collapsedShifts, copyMenu, delRow, demobSubT, demobVehicles, demobVehiclesT, history, incOn, info, masterlist, mobCopy, mobSubT, mobVehicles, mobVehiclesT, mp, mpSub, mpTot, mpWage, mpWageParts, rowCost, rowShares, rr, setCollapsedShifts, setCopyMenu, setDemobVehicles, setMobCopy, setMobVehicles, setMp, setPicker, setRates, showToast, sowItems, sowLabels, syncCrewRows, syncMealRates, syncMealRows, toggleShift, updRow }), tab === 'tools' && /*#__PURE__*/React.createElement(ResTabM, {
+tab === 'dashboard' && DashboardTab({ estName, allStatuses, dashAll, dashCo, setDashCo, dashYear, setDashYear, dashMonth, setDashMonth, dashDisc, setDashDisc, dashQ, dashReqQ, getStatusColor, history, monOf, monRows, reqDeadline, setDashAll, setDashQ, setDashReqQ }), tab === 'info' && /*#__PURE__*/InfoTab({ ScopeBuilder, ceNums, history, salesAgents, addMode, aiLoad, ceType, companies, docBusy, docFile, docFilesOf, docPreview, docStatus, extractDocInfo, fileRef, handleAI, handleDocUpload, info, monData, openCeId, openMonStatus, pickCompany, provInfo, qtyUom, rceNo, removeDoc, scope, setAddMode, setDocFile, setDocPreview, setDocStatus, setInfo, setScope, updateMon }), tab === 'manpower' && /*#__PURE__*/ManpowerTab({ _mobTabs, _weight, ben, benefitRows, benefitsT, cfg, collapsedShifts, copyMenu, delRow, demobSubT, demobVehicles, demobVehiclesT, history, incOn, info, masterlist, mobCopy, mobSubT, mobVehicles, mobVehiclesT, mp, mpSub, mpTot, mpWage, mpWageParts, rowCost, rowShares, rr, setCollapsedShifts, setCopyMenu, setDemobVehicles, setMobCopy, setMobVehicles, setMp, setPicker, setRates, showToast, sowItems, sowLabels, syncCrewRows, syncMealRates, syncMealRows, toggleShift, updRow }), tab === 'tools' && /*#__PURE__*/React.createElement(ResTabM, {
     rows: tools,
     set: setTools,
     total: toolsT,
@@ -6169,7 +6183,7 @@ tab === 'dashboard' && DashboardTab({ estName, allStatuses, dashAll, dashCo, set
        was never handed the reader. */
     readFile: resStable.readFile,
     masterlist, showToast: resStable.showToast, setPicker
-  }), tab === 'misc' && /*#__PURE__*/MiscTab({ ceType, masterlist, misc, miscT, mp, setMisc, setPicker, showToast, syncMealRates, syncMealRows }), tab === 'summary' && /*#__PURE__*/SummaryTab({ _defaultsUntouched, _mobTabs, addlCosts, aiSuggest, applyCeDefaults, approvers, apvBar, apvLocked, apvState, apvUsers, busyBtn, busyOp, ceDefaults, ceLayoutKey, ceType, cfg, collectZeroCost, demobVehicles, docFile, grand, handleExport, handleExportXLSX, handleGenerateCEWithCheck, handlePrintPreview, handleSave, handleSaveRevision, history, hlAmt, hlKeys, hlLabel, hlMissing, hlPick, hlPickQ, hlSources, info, isRequestor, loadSharedDrafts, margin, mats, misc, mkNote, mobVehicles, mp, notes, perJob, perJobNames, perJobT, ppe, qtyMulOn, qtyN, saveDraft, scopeBreakdown, servicesSummary, setAddlCosts, setAiSuggest, setApprovers, setCeType, setDraftsOpen, setHlPick, setHlPickQ, setInfo, setMargin, setNotes, setSigModal, setTab, setVerifyNotes, sharedDrafts, showToast, showUnitP, sowItems, sowLabels, sowUnassignedCount, summaryDot, summaryRows, syncRatesFromML, tools, unitP, verifyNotes, visSigs, attachFromSummary })), /* Live Totals describe the CE being built, so they show on its estimating
+  }), tab === 'misc' && /*#__PURE__*/MiscTab({ ceType, masterlist, misc, miscT, mp, setMisc, setPicker, showToast, syncMealRates, syncMealRows }), tab === 'summary' && /*#__PURE__*/SummaryTab({ _defaultsUntouched, salesAgents, _mobTabs, addlCosts, aiSuggest, applyCeDefaults, approvers, apvBar, apvLocked, apvState, apvUsers, busyBtn, busyOp, ceDefaults, ceLayoutKey, ceType, cfg, collectZeroCost, demobVehicles, docFile, grand, handleExport, handleExportXLSX, handleGenerateCEWithCheck, handlePrintPreview, handleSave, handleSaveRevision, history, hlAmt, hlKeys, hlLabel, hlMissing, hlPick, hlPickQ, hlSources, info, isRequestor, loadSharedDrafts, margin, mats, misc, mkNote, mobVehicles, mp, notes, perJob, perJobNames, perJobT, ppe, qtyMulOn, qtyN, saveDraft, scopeBreakdown, servicesSummary, setAddlCosts, setAiSuggest, setApprovers, setCeType, setDraftsOpen, setHlPick, setHlPickQ, setInfo, setMargin, setNotes, setSigModal, setTab, setVerifyNotes, sharedDrafts, showToast, showUnitP, sowItems, sowLabels, sowUnassignedCount, summaryDot, summaryRows, syncRatesFromML, tools, unitP, verifyNotes, visSigs, attachFromSummary })), /* Live Totals describe the CE being built, so they show on its estimating
      screens only -- on My Work, Monitoring, the Dashboard and the libraries they
      read ₱0.00 or another CE's figures and take a quarter of the width. */
   LiveTotalsSidebar({ TAB_GROUPS, cfg, demobSubT, grand, history, masterlist, matsT, miscT, mobSubT, mpTot, ppeT, provInfo, railSlim, rr, setApiKeyInput, setShowApiKey, setTab, tab, toggleRail, toolsT, unitP })));

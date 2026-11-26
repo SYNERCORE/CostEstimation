@@ -677,7 +677,8 @@ function SummaryTab(ctx) {
     }
   }, "END USER:"), /*#__PURE__*/React.createElement("td", {
     style: TDS
-  }, /*#__PURE__*/React.createElement("input", {
+  }, SalesAgentSelect({
+    agents: ctx.salesAgents,
     style: {
       ...INP,
       border: 'none',
@@ -685,10 +686,10 @@ function SummaryTab(ctx) {
       padding: '1px 4px',
       fontSize: 11
     },
-    value: info.endUser || 'C/O SALES',
-    onChange: e => setInfo(p => ({
+    value: info.endUser,
+    onChange: v => setInfo(p => ({
       ...p,
-      endUser: e.target.value
+      endUser: v
     }))
   })))))), /*#__PURE__*/React.createElement("div", {
     style: {

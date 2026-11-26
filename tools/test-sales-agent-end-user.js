@@ -35,6 +35,35 @@ ck('it is one of the required items that hold the estimate shut', app.includes("
 const fn = app.slice(app.indexOf('const apvSubmit = async'), app.indexOf('const apvWithdraw'));
 ck('routing stops while the line names no agent, before anything is saved', fn.indexOf('!isSalesAgentEndUser(info.endUser)') > 0 && fn.indexOf('!isSalesAgentEndUser(info.endUser)') < fn.indexOf('apvPersist(apv'));
 ck('a request is prefilled only when Assigned sales is a listed agent', app.includes('endUser: endUserFor(salesAgents.find('));
+const info = rd('src/components/InfoTab.js'), sum = rd('src/components/SummaryTab.js');
 ck('Project Info and the Summary sheet use the same dropdown', rd('src/components/InfoTab.js').includes('SalesAgentSelect({') && rd('src/components/SummaryTab.js').includes('SalesAgentSelect({') && !rd('src/components/SummaryTab.js').includes("info.endUser || 'C/O SALES'"));
 ck('an admin keeps the extra names in the Users tab', rd('src/components/AdminPanel.js').includes('SalesAgentsPanel'));
-process.exit(bad ? 1 : 0);
+/* Adding an agent from the dropdown. */
+(async () => {
+  let store = { names: ['Ben Santos'] }, saves = 0, ok = true;
+  const a = new Function('React', 'isRequestorRole', 'dbGetCompanyKey', 'dbSaveCompanyKey', gate + '\nreturn { salesAgentAdd, SalesAgentSelect };')(
+    { createElement: ce }, r => r === 'requestor', async () => store, async (k, v) => { saves++; if (ok) store = v; return ok; });
+  let r = await a.salesAgentAdd('  c/o  Hedesa   Macahia ', ['Maria Reyes']);
+  ck('a new name is tidied, added to the shared list and kept with the others', r.added && r.shared && r.name === 'Hedesa Macahia' && store.names.join('|') === 'Ben Santos|Hedesa Macahia');
+  const before = saves;
+  r = await a.salesAgentAdd('maria reyes', ['Maria Reyes']);
+  const r2 = await a.salesAgentAdd('BEN SANTOS', []);
+  ck('a name already offered is picked as it stands, not added twice', !r.added && r.name === 'Maria Reyes' && !r2.added && r2.name === 'Ben Santos' && saves === before);
+  ck('blank or "Sales" is not an agent and saves nothing', await a.salesAgentAdd('  ', []) === null && await a.salesAgentAdd('C/O Sales', []) === null && saves === before);
+  ok = false;
+  r = await a.salesAgentAdd('Mari Carandang', []);
+  ck('a SharePoint refusal is reported', r.added && !r.shared);
+
+  let asked = null, changed = null;
+  const sel = a.SalesAgentSelect({ value: '', agents: ['Ben Santos'], onChange: v => { changed = v; }, onAddAgent: pick => { asked = pick; } });
+  ck('the add entry is last in the dropdown', opts(sel)[opts(sel).length - 1] === '__add_agent__');
+  sel.props.onChange({ target: { value: '__add_agent__' } });
+  ck('choosing it asks for a name and never writes the entry onto the CE', typeof asked === 'function' && changed === null);
+  const plain = a.SalesAgentSelect({ value: '', agents: ['Ben Santos'], onChange() {} });
+  ck('without the right to add there is no add entry', !opts(plain).includes('__add_agent__'));
+  const empty = a.SalesAgentSelect({ value: '', agents: [], onChange() {}, onAddAgent() {} });
+  ck('with nobody listed an admin still gets the dropdown, to add the first', empty.type === 'select');
+  ck('only admins and the owner are given it, in all three places', app.split('onAddAgent: isAdmin ? addSalesAgent : null').length - 1 === 3);
+  ck('both tabs hand it to the dropdown', [info, sum].every(t => t.includes('onAddAgent: ctx.onAddAgent,')));
+  process.exit(bad ? 1 : 0);
+})();

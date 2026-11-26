@@ -679,6 +679,7 @@ function SummaryTab(ctx) {
     style: TDS
   }, SalesAgentSelect({
     agents: ctx.salesAgents,
+    onAddAgent: ctx.onAddAgent,
     style: {
       ...INP,
       border: 'none',

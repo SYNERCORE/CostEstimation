@@ -299,6 +299,7 @@ function InfoTab(ctx) {
     style: INP,
     value: info.endUser,
     agents: ctx.salesAgents,
+    onAddAgent: ctx.onAddAgent,
     onChange: v => setInfo(p => ({
       ...p,
       endUser: v
